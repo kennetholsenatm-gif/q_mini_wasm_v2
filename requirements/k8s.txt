@@ -2,7 +2,7 @@
 kubernetes>=27.0.0
 docker>=5.0.0
 docker-compose>=2.20.0
-terraform>=1.8.0
+opentofu>=1.8.0
 
 # API & Services
 pydantic>=2.5.0
