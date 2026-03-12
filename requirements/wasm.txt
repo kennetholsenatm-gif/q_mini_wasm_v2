@@ -1,0 +1,3 @@
+# WASM Execution Engine (from white paper)
+wasmtime>=40.0.0
+pywasm>=3.0.0

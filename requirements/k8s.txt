@@ -1,0 +1,33 @@
+# Kubernetes & Cloud Deployment (from white paper)
+kubernetes>=27.0.0
+docker>=5.0.0
+docker-compose>=2.20.0
+terraform>=1.8.0
+
+# API & Services
+pydantic>=2.5.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+httpx>=0.25.0
+orjson>=4.2.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+asgi-lifespan>=1.2.0
+
+# Database & Celery
+sqlalchemy>=2.0.0
+alembic>=1.12.0
+psycopg2-binary>=2.9.0
+redis>=5.0.0
+celery>=5.3.0
+flower>=1.0.0
+
+# Monitoring
+prometheus-client>=0.17.0
+grafana-api>=0.0.1
+
+# Cloud Resources
+requests>=2.31
+boto3>=1.28
+google-cloud>=1.33
+azure-core>=1.28

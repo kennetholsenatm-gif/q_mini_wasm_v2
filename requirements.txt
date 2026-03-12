@@ -1,91 +1,9 @@
-# Core
-torch>=2.0
-pennylane>=0.28
-pennylane-qiskit>=0.28
-pennylane-aer>=0.28
+# Q-Mini-WASM Hybrid Architecture Dependencies
+# Included from separated requirements files
 
-# Quantum
-qiskit-aer>=0.12
-qiskit-ibmq-provider>=0.20
-
-# WASM
-wasmtime>=14.0
-pywasm>=3.0
-
-# Intel GPU (when available)
-sycl>=2023.1
-intel-oneapi-dpcpp-python>=2023.1
-
-# Testing & Security
-pytest>=7.4
-pytest-cov>=4.1
-bandit>=1.7
-safety>=2.3
-trivy>=0.45
-
-# Development
-black>=23.7.0
-flake8>=6.0.0
-mypy>=1.4.0
-
-# Documentation
-mkdocs>=1.5.0
-mkdocs-material>=9.0.0
-
-# Infrastructure
-terraform>=1.8.0
-docker>=5.0.0
-docker-compose>=2.20.0
-
-# Monitoring
-prometheus-client>=0.17.0
-grafana-api>=0.0.1
-
-# Cloud Research
-requests>=2.31
-boto3>=1.28
-google-cloud>=1.33
-azure-core>=1.28
-
-# Additional Dependencies
-numpy>=1.24.0
-pandas>=2.0.0
-matplotlib>=3.7.0
-scipy>=1.10.0
-sympy>=1.12.0
-networkx>=3.1.0
-scikit-learn>=1.3.0
-tqdm>=4.65.0
-rich>=13.7.0
-click>=8.1.0
-python-dotenv>=1.0.0
-loguru>=0.7.0
-pydantic>=2.5.0
-fastapi>=0.104.0
-uvicorn>=0.24.0
-httpx>=0.25.0
-orjson>=4.2.0
-pydantic-settings>=2.1.0
-python-multipart>=0.0.6
-sqlalchemy>=2.0.0
-alembic>=1.12.0
-psycopg2-binary>=2.9.0
-redis>=5.0.0
-celery>=5.3.0
-flower>=1.0.0
-pytest-asyncio>=0.21.0
-asgi-lifespan>=1.2.0
-httpx>=0.25.0
-orjson>=4.2.0
-pydantic>=2.5.0
-fastapi>=0.104.0
-uvicorn>=0.24.0
-python-multipart>=0.0.6
-sqlalchemy>=2.0.0
-alembic>=1.12.0
-psycopg2-binary>=2.9.0
-redis>=5.0.0
-celery>=5.3.0
-flower>=1.0.0
-pytest-asyncio>=0.21.0
-asgi-lifespan>=1.2.0
+-r requirements/core.txt
+-r requirements/quantum.txt
+-r requirements/hardware.txt
+-r requirements/wasm.txt
+-r requirements/dev.txt
+-r requirements/k8s.txt
