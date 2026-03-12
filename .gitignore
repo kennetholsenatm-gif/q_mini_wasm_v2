@@ -1,0 +1,287 @@
+# SSH Keys
+ssh_key
+ssh_key.pub
+
+# Quantum API Keys
+ibm_api_key
+qiskit_token
+quantum_credentials
+
+# Terraform State Files
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+
+# Encrypted Secrets
+secrets.enc.json
+
+# Build Artifacts
+*.pyc
+__pycache__/
+*.log
+*.out
+*.tmp
+
+# IDE Configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Virtual Environments
+venv/
+env/
+.venv/
+ENV/
+
+# Distribution Files
+dist/
+build/
+*.egg-info/
+*.whl
+*.tar.gz
+
+# Testing
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Docker
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+docker-compose*.yaml
+
+# Logs
+logs/
+*.log
+
+# Temporary Files
+*.tmp
+*.temp
+.cache/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Database Files
+*.db
+*.sqlite3
+*.sqlite
+
+# Media Files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.avi
+
+# Documentation
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+
+# Configuration Files
+*.ini
+*.conf
+*.cfg
+*.yaml
+*.yml
+
+# Backup Files
+*.bak
+*.backup
+*.old
+
+# System Files
+*.pid
+*.seed
+*.pid.lock
+
+# IDE Files
+*.sublime-workspace
+*.sublime-project
+*.code-workspace
+
+# Package Manager Files
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Quantum Simulation Files
+*.qasm
+*.qc
+*.qobj
+*.result
+
+# WASM Cache
+.wasm_cache/
+wasm_cache/
+
+# Intel oneAPI Files
+*.dpcpp
+*.sycl
+*.intel
+
+# Cloud Configuration
+*.cloud
+cloud_config/
+cloud_secrets/
+
+# ML Model Files
+*.pth
+*.pt
+*.onnx
+*.model
+
+# Coverage Reports
+.coverage
+coverage.xml
+htmlcov/
+
+# Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# PyCharm Files
+.idea/
+*.iml
+*.iws
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Python
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer
+*.command
+*.sh
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+.venv
+env/
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
