@@ -1,5 +1,4 @@
 # Core
-python>=3.8
 torch>=2.0
 pennylane>=0.28
 pennylane-qiskit>=0.28
