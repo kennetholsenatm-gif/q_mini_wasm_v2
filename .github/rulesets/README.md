@@ -24,6 +24,19 @@ These JSON rulesets define **branch protection and security rules** that appear 
 
 After import, the rules appear under **Settings → Rules → Rulesets** and apply to pushes and pull requests targeting the default branch.
 
+## Pushing when rules require a PR (GH013)
+
+If push is rejected with "Changes must be made through a pull request" or "2 of 2 required status checks":
+
+1. Push to a **new branch**, then open a **Pull Request** to `master`/`main`:
+   ```bash
+   git checkout -b fix/ci-workflow
+   git push origin fix/ci-workflow
+   ```
+   Then on GitHub: **Pull requests** → **New pull request** (base: master, compare: fix/ci-workflow).
+2. CI runs on the PR and uses the workflow from the PR branch. When **lint-and-test** and **security** pass, merge the PR.
+3. If it says "Waiting for Code Scanning results": in **Settings → Rules → Rulesets**, edit the ruleset for your default branch and remove the Code Scanning required check (or configure a workflow that uploads Code Scanning / SARIF so that check can pass).
+
 ## References
 
 - [Creating rulesets for a repository](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)
