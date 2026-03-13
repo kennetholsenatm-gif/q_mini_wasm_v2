@@ -59,6 +59,7 @@ jobs:
         run: echo '{"coverage": "0%"}' > coverage.xml
 
       - name: Upload coverage
+        uses: actions/upload-artifact@v7
         uses: actions/upload-artifact@v4
         if: hashFiles('coverage.xml') != ''
         with:
@@ -102,6 +103,8 @@ jobs:
         continue-on-error: true
 
       - name: Upload Bandit report
+        uses: actions/upload-artifact@v7
+        if: always()
         uses: actions/upload-artifact@v4
         if: hashFiles('bandit-report.json') != ''
         continue-on-error: true
@@ -110,6 +113,8 @@ jobs:
           path: bandit-report.json
 
       - name: Upload pip-audit report
+        uses: actions/upload-artifact@v7
+        if: always()
         uses: actions/upload-artifact@v4
         if: hashFiles('pip-audit-report.json') != ''
         continue-on-error: true
