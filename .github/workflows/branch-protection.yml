@@ -9,6 +9,8 @@ on:
       - master
       - develop
 
+permissions: {}
+
 jobs:
   protect-branches:
     runs-on: ubuntu-latest
