@@ -1,2 +1,3 @@
 # Core Machine Learning & Hybrid Architecture Dependencies
-torch>=2.9.0
+# Use torch>=2.0 so CI and local installs resolve (2.9+ may not be on all indexes)
+torch>=2.0.0

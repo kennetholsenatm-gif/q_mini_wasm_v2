@@ -4,6 +4,9 @@
 # Requires repo secret ADD_TO_PROJECT_TOKEN (PAT with project scope)
 name: Add to project
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 on:
   issues:
     types: [opened]
@@ -36,6 +39,7 @@ jobs:
             const projectId = result?.user?.projectV2?.id;
             if (!projectId) throw new Error('Could not find project (check ADD_TO_PROJECT_TOKEN and project number)');
             core.setOutput('project_id', projectId);
+        continue-on-error: true
 
       - name: Add issue to project
         if: github.event_name == 'issues' && secrets.ADD_TO_PROJECT_TOKEN != '' && steps.project.outputs.project_id != ''
@@ -53,6 +57,7 @@ jobs:
               }
             `, { projectId, contentId });
             core.notice('Issue added to LLM Modeling practice (project #3)');
+        continue-on-error: true
 
       - name: Add pull request to project
         if: github.event_name == 'pull_request' && secrets.ADD_TO_PROJECT_TOKEN != '' && steps.project.outputs.project_id != ''
@@ -70,6 +75,7 @@ jobs:
               }
             `, { projectId, contentId });
             core.notice('Pull request added to LLM Modeling practice (project #3)');
+        continue-on-error: true
 
       - name: Skip (no ADD_TO_PROJECT_TOKEN)
         if: secrets.ADD_TO_PROJECT_TOKEN == ''

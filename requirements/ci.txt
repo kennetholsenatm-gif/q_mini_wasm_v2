@@ -4,6 +4,6 @@
 -r requirements/dev.txt
 # Minimal quantum for HybridQuantumMoE (default.qubit)
 pennylane>=0.28
-# WASM for WasmExecutor
--r requirements/wasm.txt
-# Omit: hardware.txt (sycl, intel-oneapi), k8s.txt, full quantum backends
+# WASM: wasmtime only (pywasm>=2 requires Python 3.12; CI uses 3.11)
+wasmtime>=14.0.0
+# Omit: hardware.txt, k8s.txt, full quantum backends, pywasm

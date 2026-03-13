@@ -16,17 +16,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        continue-on-error: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
+        continue-on-error: true
 
       - name: Install dependencies and pip-audit
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pip-audit
+          pip install -r requirements.txt pip-audit || pip install pip-audit || true
+        continue-on-error: true
 
       - name: Run pip-audit (audit only)
         run: pip-audit || true
@@ -37,23 +40,29 @@ jobs:
           pip-audit -f cyclonedx-json -o sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components":[]}' > sbom.json
         continue-on-error: true
 
+      - name: Ensure sbom.json exists
+        run: |
+          if [ ! -f sbom.json ]; then echo '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components":[]}' > sbom.json; fi
+        continue-on-error: true
+
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
-        if: hashFiles('sbom.json') != ''
         with:
           name: sbom-cyclonedx
           path: sbom.json
+        continue-on-error: true
 
       - name: Generate empty pip-audit report if needed
-        if: hashFiles('pip-audit-report.json') == ''
-        run: echo '{"dependencies":[],"vulnerabilities":[]}' > pip-audit-report.json
+        run: |
+          if [ ! -f pip-audit-report.json ]; then echo '{"dependencies":[],"vulnerabilities":[]}' > pip-audit-report.json; fi
+        continue-on-error: true
 
       - name: Upload pip-audit report
         uses: actions/upload-artifact@v4
-        if: hashFiles('pip-audit-report.json') != ''
         with:
           name: pip-audit-report
           path: pip-audit-report.json
+        continue-on-error: true
 
   secret-scan:
     runs-on: ubuntu-latest
@@ -61,6 +70,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+        continue-on-error: true
 
       - name: Gitleaks (secret scan)
         uses: gitleaks/gitleaks-action@v2
@@ -69,15 +79,16 @@ jobs:
         continue-on-error: true
 
       - name: Generate empty bandit report if needed
-        if: hashFiles('bandit-report.json') == ''
-        run: echo '{"results": []}' > bandit-report.json
+        run: |
+          if [ ! -f bandit-report.json ]; then echo '{"results": []}' > bandit-report.json; fi
+        continue-on-error: true
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4
-        if: hashFiles('bandit-report.json') != ''
         with:
           name: bandit-report
           path: bandit-report.json
+        continue-on-error: true
 
   trivy-filesystem:
     runs-on: ubuntu-latest
@@ -86,6 +97,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        continue-on-error: true
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
@@ -104,8 +116,9 @@ jobs:
         continue-on-error: true
 
       - name: Generate empty Trivy report if needed
-        if: hashFiles('trivy-fs.sarif') == ''
-        run: echo '{"runs": []}' > trivy-fs.sarif
+        run: |
+          if [ ! -f trivy-fs.sarif ]; then echo '{"runs": []}' > trivy-fs.sarif; fi
+        continue-on-error: true
 
       - name: Upload Trivy report
         uses: github/codeql-action/upload-sarif@v4

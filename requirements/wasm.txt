@@ -1,3 +1,4 @@
-# WASM Execution Engine (from white paper)
-wasmtime>=40.0.0
-pywasm>=3.0.0
+# WASM Execution Engine (from white paper). Code uses wasmtime only.
+wasmtime>=14.0.0
+# pywasm: latest on PyPI is 2.x; optional if only wasmtime is used
+pywasm>=2.0.0

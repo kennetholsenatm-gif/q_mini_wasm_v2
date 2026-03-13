@@ -3,6 +3,9 @@
 # View:   https://github.com/users/kennetholsenatm-gif/projects/3/views/1
 name: Failed run to issue
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 on:
   workflow_run:
     workflows: ["CI", "Security"]
@@ -44,6 +47,7 @@ jobs:
             core.setOutput('issue_node_id', issue.node_id);
             core.setOutput('issue_number', issue.number);
             core.setOutput('issue_url', issue.html_url);
+        continue-on-error: true
 
       - name: Get project ID
         id: project
@@ -62,6 +66,7 @@ jobs:
             const projectId = result?.user?.projectV2?.id;
             if (!projectId) throw new Error('Could not find project (check ADD_TO_PROJECT_TOKEN and project number)');
             core.setOutput('project_id', projectId);
+        continue-on-error: true
 
       - name: Add issue to project
         id: add_to_project
@@ -80,6 +85,7 @@ jobs:
               }
             `, { projectId, contentId });
             core.notice('Failed-run issue added to project #3');
+        continue-on-error: true
 
       - name: Summary
         run: |

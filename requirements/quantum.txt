@@ -1,12 +1,9 @@
-# Quantum Circuit Libraries (from white paper)
-pennylane>=0.44.1
-pennylane-qiskit>=0.44.1
-pennylane-cirq>=0.28          # Google's Cirq simulator
-pennylane-forest>=0.28        # Rigetti's Forest simulator
-pennylane-qulacs>=0.28        # Qulacs simulator
-pennylane-qiskit-aer>=0.28    # Qiskit Aer simulator
-
-# Quantum Optimization & Simulation
-pennylane-aer-simulator>=0.28 # Alternative to pennylane-aer
-pennylane-lightning>=0.44     # Fast simulator optimized for Intel/hardware
-pennylane-default-simulator>=0.44 # Built-in simulator
+# Quantum Circuit Libraries (from white paper). Core uses default.qubit; plugins optional.
+pennylane>=0.28.0
+pennylane-qiskit>=0.28.0
+# Optional backends (install if needed; may have platform-specific deps)
+pennylane-cirq>=0.22
+pennylane-qulacs>=0.22
+pennylane-lightning>=0.28
+# Built-in simulator (shipped with pennylane)
+# pennylane-forest, pennylane-qiskit-aer, pennylane-aer-simulator: add if needed
