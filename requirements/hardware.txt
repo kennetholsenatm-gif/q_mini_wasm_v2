@@ -1,3 +1,7 @@
-# Intel ARC/SYCL Hardware Mapping (from white paper)
+# Intel ARC (XPU) / SYCL Hardware Mapping (from white paper)
+# AI training uses Intel ARC via PyTorch XPU; CUDA is not used.
+# Install PyTorch with XPU: https://pytorch.org/docs/stable/notes/get_start_xpu.html
 sycl>=2023.1
 intel-oneapi-dpcpp-python>=2023.1
+# Optional: Intel Extension for PyTorch for Intel ARC (if not using PyTorch built-in XPU)
+# intel-extension-for-pytorch>=2.0.0

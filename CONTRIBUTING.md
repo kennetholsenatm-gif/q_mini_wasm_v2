@@ -67,10 +67,9 @@ mypy qminiwasm/
 ```
 
 ### Vulnerability Management
-- Report vulnerabilities to security@example.com
-- Do not disclose vulnerabilities publicly
-- Follow responsible disclosure practices
-- Update dependencies regularly
+- **Report vulnerabilities** via [GitHub Security Advisories](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories/new) (private); do not open public issues or disclose publicly. See [SECURITY.md](SECURITY.md#reporting-a-vulnerability) for full details.
+- Follow responsible disclosure practices; we will acknowledge and work with you on a fix and coordinated disclosure.
+- Keep dependencies updated; [Dependabot](.github/dependabot.yml) is enabled for this repository.
 
 ## Pull Request Process
 
@@ -133,7 +132,7 @@ We use Semantic Versioning (SemVer):
 ## Security Incident Response
 
 ### Reporting
-- Report security issues to security@example.com
+- Report security issues via [GitHub Security Advisories](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories/new) (see [SECURITY.md](SECURITY.md#reporting-a-vulnerability)).
 - Do not use public GitHub issues for vulnerabilities
 - Follow responsible disclosure practices
 
@@ -216,7 +215,7 @@ We appreciate all contributions, including:
 ## Contact Information
 
 - Project Maintainer: maintainer@example.com
-- Security Team: security@example.com
+- Security: report via [GitHub Security Advisories](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories/new); see [SECURITY.md](SECURITY.md).
 - Community Support: community@example.com
 
 ## Revision History
