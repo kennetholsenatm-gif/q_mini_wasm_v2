@@ -15,11 +15,11 @@ jobs:
   dependency-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         continue-on-error: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -67,7 +67,7 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
         continue-on-error: true
@@ -96,7 +96,7 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         continue-on-error: true
 
       - name: Run Trivy filesystem scan
@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('trivy-fs.sarif') != ''
+        if: hashFiles('trivy-fs.sarif') != ''
         with:
           sarif_file: "trivy-fs.sarif"
         continue-on-error: true
