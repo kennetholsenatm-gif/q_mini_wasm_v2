@@ -1,0 +1,91 @@
+# When CI or Security workflow fails, create an issue and add it to project #3
+# Project: https://github.com/users/kennetholsenatm-gif/projects/3
+# View:   https://github.com/users/kennetholsenatm-gif/projects/3/views/1
+name: Failed run to issue
+
+on:
+  workflow_run:
+    workflows: ["CI", "Security"]
+    types: [completed]
+    branches: [main, master]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create-issue-and-add-to-project:
+    if: github.event.workflow_run.conclusion == 'failure' && github.repository == 'kennetholsenatm-gif/LLM_Pract'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create issue for failed run
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const body = [
+              '## Failed workflow run',
+              '',
+              `- **Workflow:** ${run.name}`,
+              `- **Run:** [#${run.run_number}](${run.html_url})`,
+              `- **Branch:** \`${run.head_branch}\``,
+              `- **Event:** ${run.event}`,
+              `- **Triggered by:** @${run.actor?.login || 'unknown'}`,
+              '',
+              `View the [run logs](${run.html_url}) to fix the failure.`,
+            ].join('\n');
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Workflow failed: ${run.name} #${run.run_number}`,
+              body,
+            });
+            core.setOutput('issue_node_id', issue.node_id);
+            core.setOutput('issue_number', issue.number);
+            core.setOutput('issue_url', issue.html_url);
+
+      - name: Get project ID
+        id: project
+        if: secrets.ADD_TO_PROJECT_TOKEN != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
+          script: |
+            const result = await github.graphql(`
+              query {
+                user(login: "kennetholsenatm-gif") {
+                  projectV2(number: 3) { id }
+                }
+              }
+            `);
+            const projectId = result?.user?.projectV2?.id;
+            if (!projectId) throw new Error('Could not find project (check ADD_TO_PROJECT_TOKEN and project number)');
+            core.setOutput('project_id', projectId);
+
+      - name: Add issue to project
+        id: add_to_project
+        if: steps.create.outputs.issue_node_id != '' && secrets.ADD_TO_PROJECT_TOKEN != '' && steps.project.outputs.project_id != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
+          script: |
+            const projectId = '${{ steps.project.outputs.project_id }}';
+            const contentId = '${{ steps.create.outputs.issue_node_id }}';
+            await github.graphql(`
+              mutation($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                  item { id }
+                }
+              }
+            `, { projectId, contentId });
+            core.notice('Failed-run issue added to project #3');
+
+      - name: Summary
+        run: |
+          echo "Created issue #${{ steps.create.outputs.issue_number }}: ${{ steps.create.outputs.issue_url }}"
+          if [ "${{ steps.add_to_project.outcome }}" = "skipped" ] || [ "${{ steps.add_to_project.outcome }}" = "" ]; then
+            echo "::notice title=Project not updated::Issue was NOT added to project #3. Add repo secret ADD_TO_PROJECT_TOKEN (PAT with project scope) in Settings → Secrets and variables → Actions so failed-run issues appear at https://github.com/users/kennetholsenatm-gif/projects/3"
+          else
+            echo "Issue was added to project https://github.com/users/kennetholsenatm-gif/projects/3"
+          fi

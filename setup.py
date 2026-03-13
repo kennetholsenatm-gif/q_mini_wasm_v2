@@ -96,6 +96,11 @@ setup(
             "sycl>=2023.1",
             "intel-oneapi-dpcpp-python>=2023.1",
         ],
+        "arc": [
+            "sycl>=2023.1",
+            "intel-oneapi-dpcpp-python>=2023.1",
+        ],
+        "intel-quantum": [],
         "cloud": [
             "requests>=2.31",
             "boto3>=1.28",

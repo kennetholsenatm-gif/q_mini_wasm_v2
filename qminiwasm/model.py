@@ -9,13 +9,22 @@ The implementation follows the white paper's specifications for:
 - WASM execution wrapper
 - Quantum-classical hybrid inference
 - Model interface methods
+
+AI training uses Intel ARC (XPU) when available; CUDA is not used.
 """
+
+import logging
+from typing import Dict, List, Tuple
+
+import torch
 
 from .quantum.router import HybridQuantumMoE
 from .layers.ternary import TernaryWASMExpert
 from .wasm.engine import WasmExecutor
 from .hardware.sycl_stubs import SYCLHardware
+from .hardware.device import get_device
 from .data.pipeline import DataPipeline
+
 
 class QMiniWASM:
     """QMiniWASM: Top-Level Model Interface for Q-Mini-WASM Architecture
@@ -34,18 +43,22 @@ class QMiniWASM:
     - Model interface methods
     """
 
-    def __init__(self):
-        """Initialize the QMiniWASM model."""
+    def __init__(self, device=None):
+        """Initialize the QMiniWASM model.
+
+        Args:
+            device: Optional torch.device; if None, uses Intel ARC (XPU) when available else CPU.
+        """
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        self.device = device if device is not None else get_device()
         # Initialize all components
-        self.quantum_router = HybridQuantumMoE()
-        self.ternary_expert = TernaryWASMExpert(4096, 4096)
+        self.quantum_router = HybridQuantumMoE().to(self.device)
+        self.ternary_expert = TernaryWASMExpert(4096, 4096).to(self.device)
         self.wasm_executor = WasmExecutor()
         self.sycl_hardware = SYCLHardware()
         self.data_pipeline = DataPipeline()
-
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        self.logger.info("QMiniWASM model initialized")
+        self.logger.info("QMiniWASM model initialized on %s", self.device)
 
     def execute_wasm(self, wasm_code: bytes, func_name: str, args: List[int]) -> Tuple[int, Dict]:
         """Execute WASM code using the WASM execution engine.
@@ -98,6 +111,7 @@ class QMiniWASM:
             Output tensor of shape (batch_size, d_model)
         """
         try:
+            hidden_states = hidden_states.to(self.device)
             # Perform quantum routing
             routed_output = self.quantum_router(hidden_states)
 

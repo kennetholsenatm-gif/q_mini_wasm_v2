@@ -1,7 +1,15 @@
 # Security Documentation
 
 ## Overview
-This document outlines the security practices, policies, and compliance measures implemented in the Q-Mini-WASM project following NIST SP 800-53, CMMC2.0, and STIG standards.
+This document outlines the security practices, policies, and compliance measures implemented in the Q-Mini-WASM project following NIST SP 800-53, CMMC2.0, and STIG standards. It is the **Security policy** for this repository and appears on the [Security tab](https://github.com/kennetholsenatm-gif/LLM_Pract/security). That tab also shows **Security advisories** (reported and published vulnerabilities), **Dependabot** (dependency alerts; see [.github/dependabot.yml](.github/dependabot.yml)), and—when enabled—code scanning.
+
+## Reporting a vulnerability
+**Do not report security vulnerabilities in public issues.** Please report them privately so we can fix and disclose them in a coordinated way.
+
+- **Preferred:** [Open a private security advisory](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories/new) on this repository. Maintainers will be notified and can work with you on a fix and disclosure.
+- **Alternative:** Use the contact or process described in [CONTRIBUTING.md](CONTRIBUTING.md#vulnerability-management) if you cannot use GitHub advisories.
+
+We will acknowledge your report and work with you on next steps. Thank you for helping keep this project secure.
 
 ## How We Implement This
 
@@ -16,6 +24,7 @@ Implementation artifacts in this repository:
 | **Dependency scanning** | CI and security workflow run `pip-audit`; [.github/dependabot.yml](.github/dependabot.yml) for dependency and GitHub Actions updates. |
 | **Secret detection** | Pre-commit: detect-secrets (baseline [.secrets.baseline](.secrets.baseline)); CI/security: Gitleaks. |
 | **Local DevSecOps workflow** | [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) – full local workflow (tests, Bandit, Safety, Semgrep, STIG checks, reports). |
+| **Repository rulesets** | [.github/rulesets/](.github/rulesets/) – branch protection and security rules; import JSON via **Settings → Rules → Rulesets** so default branch requires PRs and CI. |
 | **Compliance evidence** | CI and script produce Bandit/pip-audit reports and compliance-report.md / stig-report.md; retain as artifacts for audits. |
 
 Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability scanning); pip-audit → **RA-5** (dependency vulnerabilities); pre-commit and CI gates → **CM-3** (change control), **AC-3** (access enforcement); audit logs in GitHub Actions → **AU-2**, **AU-3**.
@@ -256,9 +265,9 @@ Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability sc
 - Security Operations: see CONTRIBUTING and repository settings.
 
 ### Reporting
-- Security vulnerabilities: please report via [GitHub Security Advisories](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories) or the contact in CONTRIBUTING; do not use public issues for vulnerabilities.
-- Security incidents: same as above.
-- Security questions: open a discussion or see CONTRIBUTING.
+- **Security vulnerabilities:** Report via [GitHub Security Advisories](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories) — use [Create a new advisory](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories/new). Do not use public issues.
+- **Security incidents:** Same as above.
+- **Security questions:** Open a [Discussion](https://github.com/kennetholsenatm-gif/LLM_Pract/discussions) or see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Revision History
 
