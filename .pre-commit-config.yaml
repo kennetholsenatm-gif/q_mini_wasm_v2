@@ -55,3 +55,11 @@ repos:
         args: ["--baseline", ".secrets.baseline"]
         exclude: (\.lock|requirements.*\.txt|\.json)$
         pass_filenames: false
+
+  - repo: https://github.com/kynan/branch-validator
+    rev: v1.0.0
+    hooks:
+      - id: branch-validator
+        args:
+          - --pattern=^(master|develop|feature/.*|bugfix/.*|release/.*|security/.*|dev/.*)$
+          - --message="Branch name must follow GitFlow conventions: master, develop, feature/, bugfix/, release/, security/, or dev/"
