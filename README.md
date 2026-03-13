@@ -1,5 +1,7 @@
 # Q-Mini-WASM
 
+[![CI](https://github.com/kennetholsenatm-gif/LLM_Pract/actions/workflows/ci.yml/badge.svg)](https://github.com/kennetholsenatm-gif/LLM_Pract/actions/workflows/ci.yml)
+
 Q-Mini-WASM is a quantum computing framework that combines WebAssembly (WASM) with quantum machine learning capabilities. This project demonstrates DevSecOps principles with comprehensive security scanning, compliance checks, and automated testing.
 
 ## Overview
@@ -55,46 +57,59 @@ pip install -r requirements.txt
 pre-commit install
 
 # Run security scan
-bandit -r src/
+bandit -r qminiwasm/
 safety check
 ```
 
 ### Running the Application
 ```bash
 # Run tests
-pytest tests/ --cov=src --cov-report=html
+pytest tests/ --cov=qminiwasm --cov-report=html
 
-# Start development server
-python src/main.py
+# Verify package
+python -c "import qminiwasm; print(qminiwasm.__version__)"
 
-# Run complete workflow
-./scripts/devsecops-workflow.sh
+# Run complete workflow (Windows PowerShell)
+pwsh -File scripts/devsecops-workflow.ps1
 ```
 
 ## Project Structure
 
 ```
-q-mini-wasm/
-├── src/                 # Application source code
-├── tests/              # Test suites
-├── scripts/           # Automation scripts
-├── docs/             # Documentation
-├── monitoring/       # Monitoring configuration
-├── terraform/        # Infrastructure as code
-├── .github/workflows/ # CI/CD pipelines
-├── .pre-commit-config.yaml # Pre-commit hooks
-├── SECURITY.md       # Security documentation
-├── CONTRIBUTING.md   # Contribution guidelines
-└── README.md         # This file
+LLM_Pract/
+├── qminiwasm/           # Application source (Python package)
+├── tests/               # Test suites
+├── scripts/             # Automation scripts (e.g. devsecops-workflow.ps1)
+├── docs/                # Documentation
+├── requirements/        # Split dependency files
+├── .github/workflows/   # CI/CD pipelines
+├── .pre-commit-config.yaml  # Pre-commit hooks
+├── SECURITY.md          # Security documentation
+├── CONTRIBUTING.md      # Contribution guidelines
+└── README.md            # This file
 ```
 
 ## Security Features
 
+### DevSecOps Implementation
+- **CI**: [.github/workflows/ci.yml](.github/workflows/ci.yml) – lint (Black, Flake8), MyPy, tests, Bandit, pip-audit; optional Semgrep.
+- **Security workflow**: [.github/workflows/security.yml](.github/workflows/security.yml) – weekly/release: dependency audit, Gitleaks (secrets), Trivy, SBOM.
+- **Pre-commit**: [.pre-commit-config.yaml](.pre-commit-config.yaml) – Black, Flake8, MyPy, Bandit, detect-secrets.
+- **Configs**: [pyproject.toml](pyproject.toml) (Bandit, Black, Flake8), [.semgrep.yml](.semgrep.yml), [.secrets.baseline](.secrets.baseline).
+- **Local workflow**: [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) – full local DevSecOps run (tests, scans, STIG, reports).
+- **Dependabot**: [.github/dependabot.yml](.github/dependabot.yml) – weekly pip and GitHub Actions updates.
+- See [SECURITY.md](SECURITY.md) for policies and control mapping; [CONTRIBUTING.md](CONTRIBUTING.md) for branch protection and checks.
+
+### GitHub Actions and Projects
+- **Actions show workflows**: Push this repo (including `.github/workflows/`) to the default branch (e.g. `main`) so the **Actions** tab lists CI and Security.
+- **Trigger a run**: Push a commit to `main`/`master` or open a PR to trigger CI; or go to **Actions** → **CI** or **Security** → **Run workflow** to run manually.
+- **Projects**: The repo can have a GitHub Project (e.g. "LLM Modeling practice"). Add issues or PRs to the project from the project board (**Add item**) or from each issue/PR (sidebar **Projects**); use the project’s **Workflows** to auto-add new issues/PRs.
+
 ### Automated Security Scanning
-- **Bandit**: Python security linter
-- **Safety**: Dependency vulnerability scanner
-- **Semgrep**: Code analysis tool
-- **Trivy**: Container security scanner
+- **Bandit**: Python security linter (config in pyproject.toml)
+- **pip-audit / Safety**: Dependency vulnerability scanning
+- **Semgrep**: Code analysis (--config=auto in CI)
+- **Trivy**: Filesystem/container scan in security workflow
 
 ### Compliance Checks
 - **STIG Compliance**: Security Technical Implementation Guides
@@ -118,12 +133,12 @@ All commits must pass:
 - Type checking (MyPy)
 
 ### CI/CD Pipeline
-Automated pipeline includes:
-- Security scanning
-- Quality checks
-- STIG compliance
-- Build and deployment
-- Monitoring setup
+Automated pipeline (see [.github/workflows/](.github/workflows/)) includes:
+- Lint (Black, Flake8) and type check (MyPy)
+- Unit tests with coverage
+- SAST (Bandit), dependency scan (pip-audit/safety), optional Semgrep
+- Optional: secret scanning, Trivy (when using containers)
+- Branch protection: require CI to pass before merging (see [CONTRIBUTING.md](CONTRIBUTING.md))
 
 ### Testing
 Comprehensive test suite:
@@ -204,7 +219,7 @@ This project is licensed under the MIT License.
 
 ## Security
 
-Report security vulnerabilities to security@example.com. Please do not use public GitHub issues for reporting vulnerabilities.
+Report security vulnerabilities via [GitHub Security Advisories](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories) or the contact in [CONTRIBUTING.md](CONTRIBUTING.md). Do not use public GitHub issues for vulnerabilities.
 
 ## Support
 

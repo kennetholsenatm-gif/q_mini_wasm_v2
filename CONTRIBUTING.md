@@ -55,15 +55,15 @@ All commits must pass the following security checks:
 Before submitting a pull request, run:
 ```bash
 # Security scan
-bandit -r src/
+bandit -r qminiwasm/
 safety check
-semgrep --config=auto .
+semgrep --config=auto qminiwasm/
 
 # Code quality
-black --check src/
-isort --check src/
-flake8 src/
-mypy src/
+black --check qminiwasm/ tests/
+isort --check qminiwasm/ tests/
+flake8 qminiwasm/ tests/
+mypy qminiwasm/
 ```
 
 ### Vulnerability Management
@@ -91,7 +91,7 @@ git checkout -b feature/your-feature-name
 pre-commit run --all-files
 
 # Run full test suite
-pytest tests/ --cov=src --cov-report=xml
+pytest tests/ --cov=qminiwasm --cov-report=xml
 ```
 
 ### 4. Submit Pull Request

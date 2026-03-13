@@ -1,0 +1,3 @@
+# Semgrep: CI uses --config=auto. Add project-specific rules below.
+# https://semgrep.dev/docs/writing-rules/overview/
+rules: []

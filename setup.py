@@ -103,11 +103,7 @@ setup(
             "azure-core>=1.28",
         ],
     },
-    entry_points={
-        "console_scripts": [
-            "llm-pract=llm_pract.cli:main",
-        ],
-    },
+    # Entry point reserved until qminiwasm.cli is implemented
     python_requires=">=3.8",
     classifiers=[
         "Development Status :: 3 - Alpha",

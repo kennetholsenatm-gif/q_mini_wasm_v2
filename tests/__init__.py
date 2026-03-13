@@ -12,6 +12,8 @@ Key Components:
 - TestWasmEngine: Tests for WASM execution engine
 """
 
-from .test_qminiwasm import TestQMiniWASM
-
-__all__ = ["TestQMiniWASM"]
+try:
+    from .test_qminiwasm import TestQMiniWASM
+    __all__ = ["TestQMiniWASM"]
+except ImportError:
+    __all__ = []

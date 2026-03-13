@@ -3,6 +3,23 @@
 ## Overview
 This document outlines the security practices, policies, and compliance measures implemented in the Q-Mini-WASM project following NIST SP 800-53, CMMC2.0, and STIG standards.
 
+## How We Implement This
+
+Implementation artifacts in this repository:
+
+| Control / Practice | Implementation |
+|-------------------|----------------|
+| **CI/CD and gates** | [.github/workflows/ci.yml](.github/workflows/ci.yml) – lint, tests, Bandit, pip-audit; branch protection should require CI to pass (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
+| **Scheduled security scans** | [.github/workflows/security.yml](.github/workflows/security.yml) – weekly and on release: pip-audit, Gitleaks (secrets), Trivy filesystem; SBOM (CycloneDX) artifact. |
+| **Shift-left (pre-commit)** | [.pre-commit-config.yaml](.pre-commit-config.yaml) – Black, Flake8, MyPy, Bandit, detect-secrets. |
+| **SAST / code scanning** | [pyproject.toml](pyproject.toml) `[tool.bandit]`; [.semgrep.yml](.semgrep.yml); CI runs Bandit on `qminiwasm/`, optional Semgrep. |
+| **Dependency scanning** | CI and security workflow run `pip-audit`; [.github/dependabot.yml](.github/dependabot.yml) for dependency and GitHub Actions updates. |
+| **Secret detection** | Pre-commit: detect-secrets (baseline [.secrets.baseline](.secrets.baseline)); CI/security: Gitleaks. |
+| **Local DevSecOps workflow** | [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) – full local workflow (tests, Bandit, Safety, Semgrep, STIG checks, reports). |
+| **Compliance evidence** | CI and script produce Bandit/pip-audit reports and compliance-report.md / stig-report.md; retain as artifacts for audits. |
+
+Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability scanning); pip-audit → **RA-5** (dependency vulnerabilities); pre-commit and CI gates → **CM-3** (change control), **AC-3** (access enforcement); audit logs in GitHub Actions → **AU-2**, **AU-3**.
+
 ## Security Controls
 
 ### Access Control (AC)
@@ -234,14 +251,14 @@ This document outlines the security practices, policies, and compliance measures
 ## Contact Information
 
 ### Security Team
-- Security Officer: security@example.com
-- Incident Response: incident@example.com
-- Security Operations: securityops@example.com
+- Security Officer: see [CONTRIBUTING.md](CONTRIBUTING.md) for current contact or open a private security advisory on GitHub.
+- Incident Response: report via repository security advisories or the contact listed in CONTRIBUTING.
+- Security Operations: see CONTRIBUTING and repository settings.
 
 ### Reporting
-- Security vulnerabilities: security@example.com
-- Security incidents: incident@example.com
-- Security questions: security@example.com
+- Security vulnerabilities: please report via [GitHub Security Advisories](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories) or the contact in CONTRIBUTING; do not use public issues for vulnerabilities.
+- Security incidents: same as above.
+- Security questions: open a discussion or see CONTRIBUTING.
 
 ## Revision History
 
