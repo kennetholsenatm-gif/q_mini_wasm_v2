@@ -3,6 +3,8 @@
 # Runs tofu init, plan, and (on default branch) apply in the matching provider module.
 # Credentials: set VAULT_ADDR, VAULT_TOKEN (and provider-specific secrets) in repo secrets.
 name: OpenTofu Infra
+permissions:
+  contents: read
 
 on:
   push:
