@@ -36,8 +36,10 @@ async def post_deploy_desired(body: DeployDesiredRequest) -> DeployDesiredRespon
             region=body.region,
             metadata=body.metadata,
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except OSError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to write desired config: {e}")
+        raise HTTPException(status_code=500, detail="Failed to write desired config")
     return DeployDesiredResponse(
         job="opentofu",
         status="pending",

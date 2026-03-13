@@ -73,6 +73,15 @@ def _safe_backend_id_for_filename(backend: str) -> str | None:
     return None
 
 
+def _path_under_base(resolved_path: Path, resolved_base: Path) -> bool:
+    """Return True if resolved_path is under resolved_base (no path traversal)."""
+    try:
+        resolved_path.relative_to(resolved_base)
+        return True
+    except ValueError:
+        return False
+
+
 def _persist_credentials(backend: str, credentials: dict[str, str]) -> None:
     """Optionally write credentials to a file for the job. Never log values."""
     cred_dir = os.environ.get("WUI_CREDENTIALS_DIR")
@@ -80,11 +89,13 @@ def _persist_credentials(backend: str, credentials: dict[str, str]) -> None:
         return
     safe_backend = _safe_backend_id_for_filename(backend)
     if safe_backend is None:
-        # Backend id is not safe to use as a filename component; skip persistence.
         return
-    path = Path(cred_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    filepath = path / f"{safe_backend}.env"
+    base_dir = Path(cred_dir).resolve()
+    base_dir.mkdir(parents=True, exist_ok=True)
+    # Build path from resolved base + sanitized name only; then verify no escape.
+    filepath = (base_dir / f"{safe_backend}.env").resolve()
+    if not _path_under_base(filepath, base_dir):
+        return
     lines = [f"{k}={v}" for k, v in credentials.items() if v]
     if lines:
         filepath.write_text("\n".join(lines), encoding="utf-8")
