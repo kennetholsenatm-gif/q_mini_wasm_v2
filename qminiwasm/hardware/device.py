@@ -1,17 +1,15 @@
-"""Device selection for Intel ARC (XPU) and CPU.
+"""Device selection for Intel ARC (XPU), NVIDIA CUDA, and CPU.
 
-This module provides device selection that prefers Intel ARC / Intel XPU for AI training
-instead of CUDA. It aligns with Intel's quantum and AI stack:
-https://www.intel.com/content/www/us/en/research/quantum-computing.html
-
-Use get_device() to obtain the best available device for tensors and model training.
+This module provides a unified device dispatcher for AI training and inference.
+It supports Intel ARC (XPU), NVIDIA CUDA, and CPU. When accelerator is not
+specified, behavior is driven by env PREFER_XPU and PREFER_CUDA.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Union
+from typing import Literal, Union
 
 import torch
 
@@ -25,6 +23,13 @@ try:
 except ImportError:
     pass
 
+AcceleratorType = Literal["cuda", "xpu", "cpu"]
+
+
+def _cuda_available() -> bool:
+    """Return True if CUDA is available."""
+    return getattr(torch.cuda, "is_available", lambda: False)()
+
 
 def _xpu_available() -> bool:
     """Return True if Intel XPU (e.g. Intel ARC) is available."""
@@ -35,34 +40,80 @@ def _xpu_available() -> bool:
 
 
 def get_device(
-    prefer_xpu: Union[bool, None] = None,
-    device_index: Union[int, None] = None,
+    accelerator: AcceleratorType | None = None,
+    device_index: int | None = None,
+    *,
+    prefer_xpu: bool | None = None,
 ) -> torch.device:
     """Return the best available device for training and inference.
 
-    Prefers Intel ARC (XPU) over CPU. CUDA is not used; this project targets
-    Intel ARC for AI training per Intel quantum/AI stack.
+    When accelerator is specified, that type is used (with fallback to CPU if
+    unavailable). When accelerator is None, env PREFER_XPU and PREFER_CUDA
+    are used; prefer_xpu (or legacy kwarg) overrides env for backward compatibility.
 
     Args:
-        prefer_xpu: If True, use Intel XPU when available; if False, use CPU. If None, use env PREFER_XPU (default 1).
-        device_index: Optional XPU device index (e.g. 0 for first GPU). Ignored on CPU.
+        accelerator: "cuda", "xpu", or "cpu". If None, use env / prefer_xpu.
+        device_index: Device index for cuda or xpu (e.g. 0). Ignored on CPU.
+        prefer_xpu: Legacy: If True, use XPU; if False, prefer CPU (or CUDA if only that is set). If None, use env.
 
     Returns:
-        torch.device: "xpu:index" if XPU is available and prefer_xpu, else "cpu".
+        torch.device: cuda:index, xpu:index, or cpu.
     """
-    if prefer_xpu is None:
-        prefer_xpu = os.environ.get("PREFER_XPU", "1").strip().lower() in ("1", "true", "yes")
-    if prefer_xpu and _xpu_available():
-        idx = device_index if device_index is not None else 0
+    idx = device_index if device_index is not None else 0
+
+    if accelerator is not None:
+        if accelerator == "cuda":
+            if _cuda_available():
+                dev = torch.device(f"cuda:{idx}")
+                logger.info("Using CUDA device for training/inference: %s", dev)
+                return dev
+            logger.info("CUDA requested but not available; using CPU")
+            return torch.device("cpu")
+        if accelerator == "xpu":
+            if _xpu_available():
+                dev = torch.device(f"xpu:{idx}")
+                logger.info("Using Intel XPU (ARC) device for training/inference: %s", dev)
+                return dev
+            logger.info("XPU requested but not available; using CPU")
+            return torch.device("cpu")
+        if accelerator == "cpu":
+            return torch.device("cpu")
+        raise ValueError(f"Unknown accelerator: {accelerator}")
+
+    # Legacy / env-driven: prefer_xpu takes precedence over env if explicitly set
+    use_xpu = prefer_xpu
+    if use_xpu is None:
+        use_xpu = os.environ.get("PREFER_XPU", "1").strip().lower() in ("1", "true", "yes")
+    use_cuda = os.environ.get("PREFER_CUDA", "0").strip().lower() in ("1", "true", "yes")
+    if prefer_xpu is False:
+        use_xpu = False
+
+    if use_xpu and _xpu_available():
         dev = torch.device(f"xpu:{idx}")
         logger.info("Using Intel XPU (ARC) device for training/inference: %s", dev)
         return dev
-    logger.info("Using CPU device (Intel XPU not available or not preferred)")
+    if use_cuda and _cuda_available():
+        dev = torch.device(f"cuda:{idx}")
+        logger.info("Using CUDA device for training/inference: %s", dev)
+        return dev
+    logger.info("Using CPU device")
     return torch.device("cpu")
 
 
-def get_device_name() -> str:
-    """Return a human-readable device name (e.g. 'Intel ARC (XPU:0)' or 'CPU')."""
-    if _xpu_available():
-        return "Intel ARC (XPU)"
+def get_device_name(device: torch.device | None = None) -> str:
+    """Return a human-readable device name for the given or current device.
+
+    Args:
+        device: If None, infer from get_device() with default args.
+
+    Returns:
+        e.g. "NVIDIA CUDA (cuda:0)", "Intel ARC (XPU)", or "CPU".
+    """
+    if device is None:
+        device = get_device()
+    if device.type == "cuda":
+        name = getattr(torch.cuda, "get_device_name", lambda i: "NVIDIA GPU")(device.index or 0)
+        return f"{name} (cuda:{device.index or 0})"
+    if device.type == "xpu":
+        return f"Intel ARC (XPU:{device.index or 0})"
     return "CPU"

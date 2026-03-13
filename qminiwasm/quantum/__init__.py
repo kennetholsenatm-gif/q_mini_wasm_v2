@@ -7,12 +7,12 @@ Approximate Optimization Algorithm (QAOA) to solve the routing problem with perf
 Key Components:
 - HybridQuantumMoE: Main quantum MoE router class
 - quantum_router_circuit: PennyLane quantum circuit implementation
+- get_backend: Quantum backend factory (PennyLane / IBM / Intel QS) for the interconnect
 - Intel Quantum: Optional Intel Quantum SDK / Intel QS integration (intel_backend)
-- QAOA parameterizations: Quantum circuit parameters for optimization
-- Dense Angle Embedding: Dimensionality reduction for NISQ encoding
 """
 
 from .router import HybridQuantumMoE
+from .backend_registry import get_backend
 from . import intel_backend
 
-__all__ = ["HybridQuantumMoE", "intel_backend"]
+__all__ = ["HybridQuantumMoE", "get_backend", "intel_backend"]

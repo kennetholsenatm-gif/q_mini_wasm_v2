@@ -1,8 +1,92 @@
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+
+# ----- Hardware -----
+
+class AcceleratorType(str, Enum):
+    cuda = "cuda"
+    xpu = "xpu"
+    cpu = "cpu"
+
+
+class HardwareOption(BaseModel):
+    id: str = Field(description="Accelerator id: cuda, xpu, cpu.")
+    name: str = Field(description="Human-readable name.")
+
+
+class HardwareCurrent(BaseModel):
+    accelerator: str = Field(description="Current accelerator: cuda, xpu, cpu.")
+    device_index: int = Field(default=0, description="Device index.")
+    device_name: str = Field(description="Human-readable device name.")
+
+
+class HardwareCurrentUpdate(BaseModel):
+    accelerator: AcceleratorType
+    device_index: int = 0
+
+
+# ----- Quantum backend -----
+
+class QuantumBackendInfo(BaseModel):
+    id: str = Field(description="Backend id.")
+    name: str = Field(description="Human-readable name.")
+    required_env_vars: List[str] = Field(default_factory=list, description="Env var names for credentials (no values).")
+
+
+class QuantumConfigResponse(BaseModel):
+    backend: str = Field(description="Current backend id.")
+    simulator_name: Optional[str] = None
+
+
+class QuantumConfigUpdate(BaseModel):
+    backend: str = Field(description="Backend id: ibm_quantum, intel_qs, penny_lane.")
+    credentials: Dict[str, str] = Field(default_factory=dict, description="API keys / tokens; never logged.")
+
+
+class QuantumVerifyResponse(BaseModel):
+    ok: bool
+    message: Optional[str] = None
+
+
+# ----- Circuits (PQC) -----
+
+class CircuitPreset(BaseModel):
+    num_qubits: int
+    qaoa_layers: int
+    diff_method: str = "parameter-shift"
+
+
+class CircuitCurrentResponse(BaseModel):
+    num_qubits: int
+    qaoa_layers: int
+    diff_method: str
+
+
+class CircuitCurrentUpdate(BaseModel):
+    num_qubits: int = Field(ge=1, le=32, description="Number of qubits.")
+    qaoa_layers: int = Field(ge=1, le=20, description="QAOA layers.")
+    diff_method: str = Field(default="parameter-shift", description="parameter-shift or finite-diff.")
+
+
+# ----- Deployment (OpenTofu) -----
+
+class DeployDesiredRequest(BaseModel):
+    provider_id: str = Field(description="Provider identifier (e.g. lambda, runpod).")
+    instance_type: Optional[str] = None
+    region: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DeployDesiredResponse(BaseModel):
+    job: str = "opentofu"
+    status: str = "pending"
+    config_path: Optional[str] = None
+
+
+# ----- Providers (existing) -----
 
 class ProviderType(str, Enum):
     lambda_cloud = "lambda"
