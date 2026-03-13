@@ -1,0 +1,26 @@
+# Sync the wiki/ directory to the GitHub Wiki
+# https://github.com/kennetholsenatm-gif/LLM_Pract/wiki
+name: Sync wiki
+
+on:
+  push:
+    branches: [main, master]
+    paths: ['wiki/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy wiki
+        uses: spenserblack/actions-wiki@v1
+        with:
+          path: wiki
+          token: ${{ secrets.WIKI_DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}
