@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import re
 
 from fastapi import APIRouter, HTTPException
 
@@ -64,14 +65,26 @@ async def get_quantum_config() -> QuantumConfigResponse:
     return QuantumConfigResponse(backend=backend, simulator_name=sim, credentials_configured=creds)
 
 
+def _safe_backend_id_for_filename(backend: str) -> str | None:
+    """Return a sanitized backend id safe for use in filenames, or None if invalid."""
+    # Allow only simple tokens to avoid path traversal or special characters in filenames.
+    if re.fullmatch(r"[A-Za-z0-9_-]+", backend):
+        return backend
+    return None
+
+
 def _persist_credentials(backend: str, credentials: dict[str, str]) -> None:
     """Optionally write credentials to a file for the job. Never log values."""
     cred_dir = os.environ.get("WUI_CREDENTIALS_DIR")
     if not cred_dir or not credentials:
         return
+    safe_backend = _safe_backend_id_for_filename(backend)
+    if safe_backend is None:
+        # Backend id is not safe to use as a filename component; skip persistence.
+        return
     path = Path(cred_dir)
     path.mkdir(parents=True, exist_ok=True)
-    filepath = path / f"{backend}.env"
+    filepath = path / f"{safe_backend}.env"
     lines = [f"{k}={v}" for k, v in credentials.items() if v]
     if lines:
         filepath.write_text("\n".join(lines), encoding="utf-8")
