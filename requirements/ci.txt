@@ -1,0 +1,9 @@
+# CI-only: lint, test, and security scan without heavy/optional deps
+# Use this in GitHub Actions to avoid install failures from hardware/k8s/quantum backends.
+-r requirements/core.txt
+-r requirements/dev.txt
+# Minimal quantum for HybridQuantumMoE (default.qubit)
+pennylane>=0.28
+# WASM for WasmExecutor
+-r requirements/wasm.txt
+# Omit: hardware.txt (sycl, intel-oneapi), k8s.txt, full quantum backends
