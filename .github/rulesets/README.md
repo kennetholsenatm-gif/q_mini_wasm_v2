@@ -37,6 +37,18 @@ If push is rejected with "Changes must be made through a pull request" or "2 of 
 2. CI runs on the PR and uses the workflow from the PR branch. When **lint-and-test** and **security** pass, merge the PR.
 3. If it says "Waiting for Code Scanning results": in **Settings → Rules → Rulesets**, edit the ruleset for your default branch and remove the Code Scanning required check (or configure a workflow that uploads Code Scanning / SARIF so that check can pass).
 
+## Unblocking PR merge (review, checks, Code Scanning)
+
+If merging is blocked by **"Review required"**, **"Some checks haven't completed"**, or **"Waiting for Code Scanning results"**:
+
+| Blocker | What to do |
+|--------|------------|
+| **At least 1 approving review required** | If you're the only collaborator: go to **Settings → Rules → Rulesets**, open the ruleset that targets `master`/`main`, edit the **Pull request** rule and set **Required approving reviews** to **0**, then save. Or add a collaborator and have them approve the PR. |
+| **lint-and-test / security — Waiting for status** | Wait for the CI run on the PR to finish (Actions tab). If it failed, fix the workflow and push again; if it never ran, trigger **Run workflow** for CI on the PR branch. |
+| **Waiting for Code Scanning results** | **Settings → Rules → Rulesets** → edit the ruleset for your default branch → under **Required status checks**, remove **"Code Scanning"** (or any check that never runs). Keep only **lint-and-test** and **security**. Save. Then the PR will only need those two checks to pass. |
+
+After fixing the ruleset (review count and/or Code Scanning), the PR can be merged once **lint-and-test** and **security** are green and, if you left review required, after approval.
+
 ## References
 
 - [Creating rulesets for a repository](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)
