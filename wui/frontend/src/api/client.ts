@@ -41,6 +41,7 @@ export interface QuantumBackendInfo {
 export interface QuantumConfig {
   backend: string;
   simulator_name?: string;
+  credentials_configured?: Record<string, boolean>;
 }
 
 export interface QuantumConfigUpdate {
@@ -88,7 +89,55 @@ export interface DeployDesiredResponse {
   config_path?: string;
 }
 
+export interface TfvarPreset {
+  id: string;
+  label: string;
+  provider_id: string;
+  instance_type?: string;
+  region?: string;
+}
+
+export interface DeployTfvarsResponse {
+  files: string[];
+  presets: TfvarPreset[];
+}
+
 export const deployApi = {
+  getTfvars: () => request<DeployTfvarsResponse>("/api/deploy/tfvars"),
   postDesired: (body: DeployDesiredRequest) =>
     request<DeployDesiredResponse>("/api/deploy/desired", { method: "POST", body: JSON.stringify(body) }),
+};
+
+export interface JobConfig {
+  accelerator: string;
+  device_index: number;
+  quantum_backend: string;
+  num_qubits: number;
+  qaoa_layers: number;
+  diff_method: string;
+  epochs: number;
+  batch_size: number;
+}
+
+export const jobConfigApi = {
+  getJobConfig: () => request<JobConfig>("/api/job-config"),
+};
+
+export interface TrainingEstimateResponse {
+  estimated_seconds: number;
+  message?: string;
+}
+
+export const trainingApi = {
+  getEstimate: (params?: {
+    accelerator?: string;
+    quantum_backend?: string;
+    num_qubits?: number;
+    qaoa_layers?: number;
+    epochs?: number;
+    batch_size?: number;
+  }) => {
+    const search = params ? new URLSearchParams(params as Record<string, string>).toString() : "";
+    return request<TrainingEstimateResponse>(`/api/training/estimate${search ? `?${search}` : ""}`);
+  },
 };

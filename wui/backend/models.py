@@ -39,6 +39,10 @@ class QuantumBackendInfo(BaseModel):
 class QuantumConfigResponse(BaseModel):
     backend: str = Field(description="Current backend id.")
     simulator_name: Optional[str] = None
+    credentials_configured: Dict[str, bool] = Field(
+        default_factory=dict,
+        description="Per-env-var flag that credential is set (no values returned).",
+    )
 
 
 class QuantumConfigUpdate(BaseModel):
@@ -84,6 +88,37 @@ class DeployDesiredResponse(BaseModel):
     job: str = "opentofu"
     status: str = "pending"
     config_path: Optional[str] = None
+
+
+class TfvarPreset(BaseModel):
+    id: str = Field(description="Preset id.")
+    label: str = Field(description="Display label.")
+    provider_id: str = Field(description="Provider identifier.")
+    instance_type: Optional[str] = None
+    region: Optional[str] = None
+
+
+class DeployTfvarsResponse(BaseModel):
+    files: List[str] = Field(default_factory=list, description="Existing tfvars filenames.")
+    presets: List[TfvarPreset] = Field(default_factory=list, description="Preconfigured presets.")
+
+
+# ----- Job config (aggregate for training job) -----
+
+class JobConfigResponse(BaseModel):
+    accelerator: str = Field(description="Accelerator: cuda, xpu, cpu.")
+    device_index: int = Field(default=0)
+    quantum_backend: str = Field(description="Quantum backend id.")
+    num_qubits: int = Field(description="QAOA num_qubits.")
+    qaoa_layers: int = Field(description="QAOA layers.")
+    diff_method: str = Field(description="parameter-shift or finite-diff.")
+    epochs: int = Field(default=10, description="Training epochs.")
+    batch_size: int = Field(default=32, description="Training batch size.")
+
+
+class TrainingEstimateResponse(BaseModel):
+    estimated_seconds: float = Field(description="Estimated training duration in seconds.")
+    message: Optional[str] = Field(default=None, description="Human-readable estimate (e.g. ~5 min).")
 
 
 # ----- Providers (existing) -----

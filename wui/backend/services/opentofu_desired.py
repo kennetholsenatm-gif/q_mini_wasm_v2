@@ -42,3 +42,18 @@ def write_desired_tfvars(
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return basename, path
+
+
+def list_desired_tfvars() -> list[str]:
+    """List basenames of *.tfvars.json and *.tfvars in the desired dir. Empty if dir missing/unreadable."""
+    desired_dir = get_desired_dir()
+    if not desired_dir.exists() or not desired_dir.is_dir():
+        return []
+    try:
+        files = []
+        for p in desired_dir.iterdir():
+            if p.is_file() and (p.name.endswith(".tfvars.json") or p.name.endswith(".tfvars")):
+                files.append(p.name)
+        return sorted(files)
+    except OSError:
+        return []

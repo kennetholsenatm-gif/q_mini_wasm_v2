@@ -4,7 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import hardware_router, quantum_router, circuits_router, deploy_router
+from .routers import (
+    hardware_router,
+    quantum_router,
+    circuits_router,
+    deploy_router,
+    job_config_router,
+    training_router,
+)
 
 
 def create_app() -> FastAPI:
@@ -45,6 +52,8 @@ def create_app() -> FastAPI:
     app.include_router(quantum_router)
     app.include_router(circuits_router)
     app.include_router(deploy_router)
+    app.include_router(job_config_router)
+    app.include_router(training_router)
 
     static_dir = os.environ.get("STATIC_DIR", "")
     if static_dir and os.path.isdir(static_dir):

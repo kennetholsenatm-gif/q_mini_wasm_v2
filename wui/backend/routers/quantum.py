@@ -1,5 +1,8 @@
 """Quantum backend and API credentials API."""
 
+import os
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 
 from ..models import (
@@ -11,6 +14,8 @@ from ..models import (
 
 # In-memory: current backend id (no raw credentials stored in memory for safety)
 _quantum_backend: str | None = None
+# Which credential keys have been set (no values stored)
+_credentials_configured: dict[str, bool] = {}
 
 QUANTUM_BACKENDS = [
     QuantumBackendInfo(
@@ -39,6 +44,15 @@ async def get_quantum_backends() -> list[QuantumBackendInfo]:
     return QUANTUM_BACKENDS
 
 
+def _get_credentials_configured(backend: str) -> dict[str, bool]:
+    """Return per-key booleans for required env vars of the current backend."""
+    backends_by_id = {b.id: b for b in QUANTUM_BACKENDS}
+    info = backends_by_id.get(backend)
+    if not info or not info.required_env_vars:
+        return {}
+    return {k: _credentials_configured.get(k, False) for k in info.required_env_vars}
+
+
 @router.get("/config", response_model=QuantumConfigResponse)
 async def get_quantum_config() -> QuantumConfigResponse:
     """Return current backend id and non-secret config. No API keys."""
@@ -46,7 +60,25 @@ async def get_quantum_config() -> QuantumConfigResponse:
     s = get_settings()
     backend = _quantum_backend if _quantum_backend is not None else s.quantum_backend
     sim = "default.qubit" if backend == "penny_lane" else None
-    return QuantumConfigResponse(backend=backend, simulator_name=sim)
+    creds = _get_credentials_configured(backend)
+    return QuantumConfigResponse(backend=backend, simulator_name=sim, credentials_configured=creds)
+
+
+def _persist_credentials(backend: str, credentials: dict[str, str]) -> None:
+    """Optionally write credentials to a file for the job. Never log values."""
+    cred_dir = os.environ.get("WUI_CREDENTIALS_DIR")
+    if not cred_dir or not credentials:
+        return
+    path = Path(cred_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    filepath = path / f"{backend}.env"
+    lines = [f"{k}={v}" for k, v in credentials.items() if v]
+    if lines:
+        filepath.write_text("\n".join(lines), encoding="utf-8")
+        try:
+            filepath.chmod(0o600)
+        except OSError:
+            pass
 
 
 @router.put("/config", response_model=QuantumConfigResponse)
@@ -55,13 +87,16 @@ async def put_quantum_config(body: QuantumConfigUpdate) -> QuantumConfigResponse
     valid = {b.id for b in QUANTUM_BACKENDS}
     if body.backend not in valid:
         raise HTTPException(status_code=400, detail=f"Unknown backend: {body.backend}")
-    global _quantum_backend
+    global _quantum_backend, _credentials_configured
     _quantum_backend = body.backend
-    # In production: write body.credentials to Vault or inject into runtime env.
-    # Here we do not store raw credentials in process memory.
+    for k, v in (body.credentials or {}).items():
+        if v and isinstance(v, str) and v.strip():
+            _credentials_configured[k] = True
+    _persist_credentials(body.backend, body.credentials or {})
     return QuantumConfigResponse(
         backend=body.backend,
         simulator_name="default.qubit" if body.backend == "penny_lane" else None,
+        credentials_configured=_get_credentials_configured(body.backend),
     )
 
 
@@ -78,8 +113,11 @@ async def post_quantum_verify() -> QuantumVerifyResponse:
             dev = qml.device("default.qubit", wires=2)
             assert dev is not None
             return QuantumVerifyResponse(ok=True, message="PennyLane default.qubit OK")
-        except ImportError as e:
-            return QuantumVerifyResponse(ok=False, message=f"PennyLane not installed: {e}")
+        except ImportError:
+            return QuantumVerifyResponse(
+                ok=False,
+                message="PennyLane not installed in this environment. Configure PennyLane for the training job; the engine will use it at runtime.",
+            )
         except Exception as e:
             return QuantumVerifyResponse(ok=False, message=str(e))
     if backend == "ibm_quantum":

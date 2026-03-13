@@ -7,6 +7,11 @@ export function QuantumBackendConfig() {
   const [verifyResult, setVerifyResult] = useState<{ ok: boolean; message?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [credSaving, setCredSaving] = useState(false);
+  const [ibmApiKey, setIbmApiKey] = useState("");
+  const [ibmUrl, setIbmUrl] = useState("");
+  const [intelQsPython, setIntelQsPython] = useState("");
+  const [intelSdkPath, setIntelSdkPath] = useState("");
 
   useEffect(() => {
     Promise.all([quantumApi.getBackends(), quantumApi.getConfig()])
@@ -25,6 +30,25 @@ export function QuantumBackendConfig() {
       setConfig(updated);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveCredentials = async () => {
+    if (!config) return;
+    setCredSaving(true);
+    try {
+      const credentials: Record<string, string> = {};
+      if (config.backend === "ibm_quantum") {
+        if (ibmApiKey.trim()) credentials.IBM_QUANTUM_API_KEY = ibmApiKey.trim();
+        if (ibmUrl.trim()) credentials.IBM_QUANTUM_URL = ibmUrl.trim();
+      } else if (config.backend === "intel_qs") {
+        if (intelQsPython.trim()) credentials.INTEL_QS_PYTHON = intelQsPython.trim();
+        if (intelSdkPath.trim()) credentials.INTEL_QUANTUM_SDK_PATH = intelSdkPath.trim();
+      }
+      const updated = await quantumApi.setConfig({ backend: config.backend, credentials });
+      setConfig(updated);
+    } finally {
+      setCredSaving(false);
     }
   };
 
@@ -60,6 +84,79 @@ export function QuantumBackendConfig() {
           </label>
         ))}
       </div>
+      {config?.backend === "penny_lane" && (
+        <p className="muted">
+          PennyLane (default.qubit) will be used for the training job with the circuit settings below.
+        </p>
+      )}
+      {config?.backend === "ibm_quantum" && (
+        <div className="form credential-form">
+          <label>
+            <span>IBM Quantum API Key</span>
+            <input
+              type="password"
+              value={ibmApiKey}
+              onChange={(e) => setIbmApiKey(e.target.value)}
+              placeholder="Set and save (not echoed back)"
+            />
+          </label>
+          <label>
+            <span>IBM Quantum URL (optional)</span>
+            <input
+              type="text"
+              value={ibmUrl}
+              onChange={(e) => setIbmUrl(e.target.value)}
+              placeholder="https://quantum-computing.ibm.com/api"
+            />
+          </label>
+          {config.credentials_configured && (
+            <p className="muted">
+              Configured:{" "}
+              {Object.entries(config.credentials_configured)
+                .filter(([, v]) => v)
+                .map(([k]) => k)
+                .join(", ") || "none"}
+            </p>
+          )}
+          <button type="button" onClick={handleSaveCredentials} disabled={credSaving} className="btn">
+            Save credentials
+          </button>
+        </div>
+      )}
+      {config?.backend === "intel_qs" && (
+        <div className="form credential-form">
+          <label>
+            <span>INTEL_QS_PYTHON</span>
+            <input
+              type="text"
+              value={intelQsPython}
+              onChange={(e) => setIntelQsPython(e.target.value)}
+              placeholder="Path or command"
+            />
+          </label>
+          <label>
+            <span>INTEL_QUANTUM_SDK_PATH</span>
+            <input
+              type="text"
+              value={intelSdkPath}
+              onChange={(e) => setIntelSdkPath(e.target.value)}
+              placeholder="SDK path"
+            />
+          </label>
+          {config.credentials_configured && (
+            <p className="muted">
+              Configured:{" "}
+              {Object.entries(config.credentials_configured)
+                .filter(([, v]) => v)
+                .map(([k]) => k)
+                .join(", ") || "none"}
+            </p>
+          )}
+          <button type="button" onClick={handleSaveCredentials} disabled={credSaving} className="btn">
+            Save credentials
+          </button>
+        </div>
+      )}
       {config && (
         <p className="current">
           Current: <strong>{config.backend}</strong>

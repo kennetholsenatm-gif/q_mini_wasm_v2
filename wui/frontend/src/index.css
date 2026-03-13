@@ -67,6 +67,18 @@ body {
   color: #a5f3fc;
 }
 
+.job-config-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+.job-config-list li {
+  margin-bottom: 0.25rem;
+}
+.credential-form {
+  margin-top: 1rem;
+}
+
 .form label {
   display: block;
   margin-bottom: 1rem;

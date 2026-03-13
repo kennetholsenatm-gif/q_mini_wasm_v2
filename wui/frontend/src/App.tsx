@@ -1,6 +1,8 @@
 import { HardwareConfig } from "./views/HardwareConfig";
 import { QuantumBackendConfig } from "./views/QuantumBackendConfig";
 import { CircuitConfig } from "./views/CircuitConfig";
+import { JobConfigSummary } from "./views/JobConfigSummary";
+import { TrainingEstimate } from "./views/TrainingEstimate";
 import { DeployConfig } from "./views/DeployConfig";
 
 function App() {
@@ -14,6 +16,8 @@ function App() {
         <HardwareConfig />
         <QuantumBackendConfig />
         <CircuitConfig />
+        <JobConfigSummary />
+        <TrainingEstimate />
         <DeployConfig />
       </main>
     </div>
