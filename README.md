@@ -113,6 +113,7 @@ The [GitHub Wiki](https://github.com/kennetholsenatm-gif/LLM_Pract/wiki) is popu
 ### GitHub Actions and Projects
 - **Actions show workflows**: Push this repo (including `.github/workflows/`) to the default branch (e.g. `main`) so the **Actions** tab lists CI and Security.
 - **Trigger a run**: Push a commit to `main`/`master` or open a PR to trigger CI; or go to **Actions** → **CI** or **Security** → **Run workflow** to run manually.
+- **Re-runs use the same commit**: If a run fails, "Re-run" does not use your latest code. You must **push a new commit** to trigger a new run; then open the **newest** run at the top of the [Actions](https://github.com/kennetholsenatm-gif/LLM_Pract/actions) list (not the old run). The fixed CI is in `.github/workflows/ci.yml` (v2) and `requirements/ci.txt`.
 - **Projects + Actions**: [LLM Modeling practice (project #3)](https://github.com/users/kennetholsenatm-gif/projects/3) · [View 1](https://github.com/users/kennetholsenatm-gif/projects/3/views/1) is integrated with [Actions](https://github.com/kennetholsenatm-gif/LLM_Pract/actions):
   - [add-to-project](.github/workflows/add-to-project.yml): new issues and PRs (targeting `main`/`master`) are added to the project automatically.
   - [failed-run-to-issue](.github/workflows/failed-run-to-issue.yml): when **CI** or **Security** fails, an [issue](https://github.com/kennetholsenatm-gif/LLM_Pract/issues) is created and added to project #3.
