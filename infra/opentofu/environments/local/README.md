@@ -13,44 +13,38 @@ Install before running:
 | **Kind** | Creates the local Kubernetes cluster. `go install sigs.k8s.io/kind@latest` or use your package manager. |
 | **kubectl** | Optional but recommended to verify pods and access the cluster. |
 
-## Commands (script-based cluster)
+## Commands
 
-### 1. Create the Kind cluster
+### Easiest: one command from repo root
 
-From the **repository root**:
+```bash
+make -C infra/opentofu local-up
+```
+
+This checks dependencies (Docker, Kind, OpenTofu), creates the Kind cluster if it does not exist, and runs `tofu init` and `tofu apply` using `terraform.tfvars.example` by default (no copy required). To tear down: `make -C infra/opentofu local-down`.
+
+### Manual steps (create cluster, then apply)
+
+**1. Create the Kind cluster** (from repository root):
 
 ```bash
 make -C infra/opentofu/modules/cluster/kind kind-create
 ```
 
-Or from this directory:
+Or from this directory: `../../modules/cluster/kind/create-cluster.sh`. This writes kubeconfig to `infra/opentofu/environments/local/kubeconfig`.
+
+**2. Apply OpenTofu** (from repo root or from this directory):
 
 ```bash
-../../modules/cluster/kind/create-cluster.sh
-```
-
-This creates a cluster named `qminiwasm-local` with host ports 80 and 443 exposed and writes kubeconfig to `infra/opentofu/environments/local/kubeconfig`.
-
-Set kubeconfig for the next step:
-
-```bash
-export KUBECONFIG="$(pwd)/infra/opentofu/environments/local/kubeconfig"
-```
-
-(Or `cd infra/opentofu/environments/local` and use `kube_config_path = "./kubeconfig"` in tfvars.)
-
-### 2. Apply OpenTofu (addons + workloads)
-
-```bash
+export KUBECONFIG="$(pwd)/infra/opentofu/environments/local/kubeconfig"   # from repo root
 cd infra/opentofu/environments/local
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set teleport_values_file path and optional enable_wui
+# Optional: cp terraform.tfvars.example terraform.tfvars and edit (e.g. teleport_values_file, enable_wui)
 tofu init
 tofu plan
 tofu apply
 ```
 
-This installs NGINX Ingress (host 80/443) and Teleport (and optionally qminiwasm-wui).
+If you do not create `terraform.tfvars`, use the example as the var file: `tofu apply -var-file=terraform.tfvars.example`.
 
 ### 3. Verify
 
@@ -83,5 +77,5 @@ See [../prod/README.md](../prod/README.md).
 
 ## Cleanup
 
-- Delete the Kind cluster: `make -C infra/opentofu/modules/cluster/kind kind-delete`
-- OpenTofu destroy (optional): from `environments/local`, run `tofu destroy` to remove Helm releases; the cluster remains until you run `kind delete cluster`.
+- **One command:** `make -C infra/opentofu local-down` (runs `tofu destroy` then deletes the Kind cluster).
+- **Manual:** from `environments/local`, run `tofu destroy` to remove Helm releases; then `make -C infra/opentofu/modules/cluster/kind kind-delete` to remove the cluster.

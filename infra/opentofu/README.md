@@ -17,8 +17,12 @@ This directory contains OpenTofu (Terraform-compatible) configurations for infra
 
 ## Quick start (local dev)
 
-1. **Dependencies:** Docker, OpenTofu, Kind, kubectl.
-2. **Create cluster:** `make -C modules/cluster/kind kind-create` (from repo root); then `export KUBECONFIG=.../environments/local/kubeconfig`.
-3. **Deploy:** `cd environments/local && tofu init && tofu apply` (after copying `terraform.tfvars.example` to `terraform.tfvars` and setting `teleport_values_file`).
+**One command** (from repo root):
 
-Full steps: [environments/local/README.md](environments/local/README.md).
+```bash
+make -C infra/opentofu local-up
+```
+
+This checks Docker/Kind/OpenTofu, creates the Kind cluster if needed, and applies OpenTofu (NGINX Ingress + Teleport). No need to copy `terraform.tfvars`—defaults use `terraform.tfvars.example`. To tear down: `make -C infra/opentofu local-down`.
+
+**Dependencies:** Docker, OpenTofu, Kind (kubectl optional). Full steps and overrides: [environments/local/README.md](environments/local/README.md).
