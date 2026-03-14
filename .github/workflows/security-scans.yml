@@ -1,0 +1,98 @@
+# Security scans: Bandit, Trivy, OpenSCAP (PR and push to main).
+# Runs pip install -e .[security], bandit, trivy, and run_openscap_scan.py; uploads OpenSCAP HTML report.
+name: Security Scans
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install project and security extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/security.txt 2>/dev/null || pip install bandit pip-audit click loguru
+          pip install -e . --no-deps 2>/dev/null || true
+
+      - name: Run Bandit
+        run: bandit -r qminiwasm/ -f json -o bandit-report.json || true
+        continue-on-error: true
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt -f json -o pip-audit-report.json || true
+        continue-on-error: true
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+        continue-on-error: true
+
+      - name: Install OpenSCAP (scanner and utils)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenscap8 openscap-utils
+          oscap --version || true
+
+      - name: Fetch SCAP content (ComplianceAsCode)
+        run: |
+          mkdir -p scap-content
+          SSG_VERSION="0.1.80"
+          curl -fsSL "https://github.com/ComplianceAsCode/content/releases/download/v${SSG_VERSION}/scap-security-guide-${SSG_VERSION}.zip" -o ssg.zip || true
+          if [ -f ssg.zip ]; then unzip -q -o ssg.zip -d scap-content; fi
+          echo "OSCAP_CONTENT_PATH=$(pwd)/scap-content" >> "$GITHUB_ENV"
+        continue-on-error: true
+
+      - name: Run OpenSCAP scan
+        run: |
+          python scripts/security/run_openscap_scan.py \
+            --report-html openscap_report.html \
+            --results-arf openscap_results.arf.xml \
+            --no-fail-on-critical || true
+        env:
+          OSCAP_CONTENT_PATH: ${{ env.OSCAP_CONTENT_PATH }}
+        continue-on-error: true
+
+      - name: Upload OpenSCAP HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: openscap-report
+          path: openscap_report.html
+          if-no-files-found: ignore
+        if: always()
+        continue-on-error: true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+        continue-on-error: true
+
+      - name: Upload pip-audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+        continue-on-error: true

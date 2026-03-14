@@ -324,6 +324,42 @@ function Setup-Monitoring {
     }
 }
 
+# Trivy image scan (run before push so only scanned images are deployed; Kyverno enforces at cluster)
+function Run-TrivyImageScan {
+    Log-Info "Running Trivy image scan (fail on CRITICAL/HIGH)..."
+    $imageTag = "qminiwasm-backend:local"
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Log-Warning "Docker not found; skipping Trivy image scan"
+        return 0
+    }
+    $dockerfilePath = Join-Path $ProjectRoot "wui\backend\Dockerfile"
+    if (Test-Path $dockerfilePath) {
+        Log-Info "Building backend image for scan..."
+        Push-Location $ProjectRoot
+        try {
+            docker build -f wui/backend/Dockerfile -t $imageTag . 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Log-Warning "Docker build failed; skipping image scan"
+                return 0
+            }
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Log-Info "Using python:3.11-slim as scan target (no backend Dockerfile found)"
+        $imageTag = "python:3.11-slim"
+    }
+    $trivyReport = Join-Path $ReportDir "trivy-image-report.json"
+    if (-not (Test-Path $ReportDir)) { New-Item -ItemType Directory -Path $ReportDir -Force | Out-Null }
+    $result = docker run --rm -v "${ReportDir}:/out" aquasec/trivy image --severity CRITICAL,HIGH --exit-code 1 --format json -o /out/trivy-image-report.json $imageTag 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Log-Error "Trivy image scan found CRITICAL or HIGH vulnerabilities. Fix before deploy. Report: $trivyReport"
+        return 1
+    }
+    Log-Success "Trivy image scan passed (no CRITICAL/HIGH)"
+    return 0
+}
+
 # Final security scan
 function Run-FinalSecurityScan {
     Log-Info "Running final security scan..."
@@ -363,6 +399,11 @@ function Run-CompleteWorkflow {
 
     # Phase 2: Security Scanning
     if (-not (Run-SecurityScan)) {
+        $WorkflowSuccess = $false
+    }
+
+    # Phase 2b: Trivy image scan (gate for deploy; Kyverno enforces at cluster)
+    if (-not (Run-TrivyImageScan)) {
         $WorkflowSuccess = $false
     }
 

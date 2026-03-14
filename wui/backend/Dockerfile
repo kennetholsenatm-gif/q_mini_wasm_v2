@@ -1,7 +1,8 @@
 # WUI Application Backend (FastAPI). Build from repo root: docker build -f wui/backend/Dockerfile .
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
-RUN groupadd -r app --gid 1000 && useradd -r -u 1000 -g app -d /app -s /sbin/nologin -c "WUI app" app
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r app --gid 1000 && useradd -r -u 1000 -g app -d /app -s /sbin/nologin -c "WUI app" app
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

@@ -65,6 +65,11 @@ setup(
             "google-cloud>=1.33",
             "azure-core>=1.28",
         ],
+        "security": [
+            "bandit>=1.7.0",
+            "safety>=2.3.0",
+            "pip-audit>=2.6.0",
+        ],
     },
     # Entry point reserved until qminiwasm.cli is implemented
     python_requires=">=3.8",

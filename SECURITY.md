@@ -26,6 +26,9 @@ Implementation artifacts in this repository:
 | **Local DevSecOps workflow** | [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) – full local workflow (tests, Bandit, Safety, Semgrep, STIG checks, reports). |
 | **Repository rulesets** | [.github/rulesets/](.github/rulesets/) – branch protection and security rules; import JSON via **Settings → Rules → Rulesets** so default branch requires PRs and CI. |
 | **Compliance evidence** | CI and script produce Bandit/pip-audit reports and compliance-report.md / stig-report.md; retain as artifacts for audits. |
+| **Admission control** | [infra/kyverno/](infra/kyverno/) – Kyverno policies (STIG baseline, Trivy scan gate); [infra/opentofu/kyverno/](infra/opentofu/kyverno/) for deploy. |
+| **Runtime security** | [infra/falco/](infra/falco/) – Falco + Falcosidekick (ELK/Splunk); custom rules for shell, filesystem, privilege escalation. |
+| **Trivy image scan** | [.github/workflows/ci.yml](.github/workflows/ci.yml) job `trivy-image`; [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) `Run-TrivyImageScan` before push. |
 
 Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability scanning); pip-audit → **RA-5** (dependency vulnerabilities); pre-commit and CI gates → **CM-3** (change control), **AC-3** (access enforcement); audit logs in GitHub Actions → **AU-2**, **AU-3**.
 
@@ -76,6 +79,33 @@ When Teleport is deployed (see [infra/teleport/](infra/teleport/) and [scripts/t
 - **AU-2 / AU-3 (Audit Events and Content):** Teleport emits login, session, and command execution events as structured audit data. These events can be forwarded to an ELK Stack or Splunk endpoint (configured via environment or secrets, not in the repository) for continuous monitoring and audit review (AU-2, AU-3).
 
 IdP configuration (OIDC client secret) and audit sink configuration (ELK/Splunk endpoint and credentials) are not stored in the repository and are supplied via secrets or environment at deployment time.
+
+### Admission Control and Runtime Security (Kyverno and Falco)
+
+We enforce **deploy gates** and **runtime security** so that only successfully scanned images can be deployed and containers are monitored in real time. This supports NIST RA-5, CM-3, AC-3, and STIG baselines.
+
+**Admission control (Kyverno)**  
+[Kyverno](https://kyverno.io/) runs as an admission controller in the cluster. It enforces:
+
+- **Trivy scan gate:** Workloads (Pods, Deployments, etc.) must have the annotation `trivy.scan/passed: "true"`. CI runs Trivy image scan and fails the pipeline on CRITICAL or HIGH vulnerabilities; only images that pass are eligible for this annotation when deploying. Optionally, use Trivy SBOM attestation and Kyverno image verification (cosign attestors) so the cluster only accepts attested images.
+- **Kubernetes STIG baseline:** Pods must run as non-root (`runAsNonRoot: true`), set `allowPrivilegeEscalation: false`, and use a read-only root filesystem where applicable. This aligns with least privilege (AC-6) and configuration baselines (CM-2).
+
+Policies and Helm values are in [infra/kyverno/](infra/kyverno/). OpenTofu can deploy Kyverno and the policies when [infra/opentofu/desired/kyverno-*.tfvars.json](infra/opentofu/desired/kyverno-main.tfvars.json) is present. Blocked deployment attempts are logged by the API server and can be forwarded to ELK/Splunk for audit (AU-2, AU-3).
+
+**Runtime security (Falco)**  
+[Falco](https://falco.org/) provides defense-in-depth by detecting at runtime:
+
+- Shell/terminal execution inside containers  
+- Writes to sensitive directories (e.g. `/etc`, `/bin`)  
+- Privilege escalation attempts (e.g. sudo, su)  
+- Unexpected network connections or sensitive port binding  
+
+Custom rules are in [infra/falco/](infra/falco/). Falco output is structured (JSON). [Falcosidekick](https://github.com/falcosecurity/falcosidekick) forwards events to ELK Stack or Splunk (configure endpoint and credentials via environment or secrets, not in the repository) for continuous monitoring and SIEM (AU/SI controls).
+
+**Summary**  
+- **Shift-left:** Trivy scans images in CI and in the local [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) before push.  
+- **Cluster boundary:** Kyverno blocks workloads that have not passed the scan (annotation) or that violate the STIG baseline.  
+- **Runtime:** Falco detects malicious or risky behavior in running containers; events are sent to ELK/Splunk for analysis and alerting.
 
 ## Security Policies
 
