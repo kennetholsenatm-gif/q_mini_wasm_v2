@@ -15,7 +15,7 @@ The project uses GitHub Actions for automated CI/CD with these workflows:
 - **Type Checking**: MyPy
 - **Testing**: Unit tests with coverage (pytest, coverage.xml)
 - **Security**: Bandit SAST, pip-audit dependency scanning
-- **Trivy image**: Builds `wui/backend/Dockerfile`, runs Trivy with CRITICAL/HIGH severity; uploads SARIF and SBOM (CycloneDX). Image scan can be gated in-cluster via Kyverno.
+- **Trivy image**: Builds `wui/backend/Dockerfile`, runs Trivy with CRITICAL/HIGH severity and `ignore-unfixed` (only fixable vulns fail the job); uploads SARIF and SBOM (CycloneDX). Accepted risks can be listed in [.trivyignore](.trivyignore). Image scan can be gated in-cluster via Kyverno.
 
 #### Security Scans Workflow (`.github/workflows/security-scans.yml`)
 - **Trigger**: Push and pull requests to `main`/`master`

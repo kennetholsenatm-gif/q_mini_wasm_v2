@@ -28,7 +28,7 @@ Implementation artifacts in this repository:
 | **Compliance evidence** | CI and script produce Bandit/pip-audit reports and compliance-report.md / stig-report.md; retain as artifacts for audits. |
 | **Admission control** | [infra/kyverno/](infra/kyverno/) – Kyverno policies (STIG baseline, Trivy scan gate); [infra/opentofu/kyverno/](infra/opentofu/kyverno/) for deploy. |
 | **Runtime security** | [infra/falco/](infra/falco/) – Falco + Falcosidekick (ELK/Splunk); custom rules for shell, filesystem, privilege escalation. |
-| **Trivy image scan** | [.github/workflows/ci.yml](.github/workflows/ci.yml) job `trivy-image`; [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) `Run-TrivyImageScan` before push. |
+| **Trivy image scan** | [.github/workflows/ci.yml](.github/workflows/ci.yml) job `trivy-image`; [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) `Run-TrivyImageScan` before push. The scan uses `ignore-unfixed` (only fixable CRITICAL/HIGH fail the pipeline); accepted risks can be listed in [.trivyignore](.trivyignore). |
 
 Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability scanning); pip-audit → **RA-5** (dependency vulnerabilities); pre-commit and CI gates → **CM-3** (change control), **AC-3** (access enforcement); audit logs in GitHub Actions → **AU-2**, **AU-3**.
 
@@ -87,7 +87,7 @@ We enforce **deploy gates** and **runtime security** so that only successfully s
 **Admission control (Kyverno)**  
 [Kyverno](https://kyverno.io/) runs as an admission controller in the cluster. It enforces:
 
-- **Trivy scan gate:** Workloads (Pods, Deployments, etc.) must have the annotation `trivy.scan/passed: "true"`. CI runs Trivy image scan and fails the pipeline on CRITICAL or HIGH vulnerabilities; only images that pass are eligible for this annotation when deploying. Optionally, use Trivy SBOM attestation and Kyverno image verification (cosign attestors) so the cluster only accepts attested images.
+- **Trivy scan gate:** Workloads (Pods, Deployments, etc.) must have the annotation `trivy.scan/passed: "true"`. CI runs Trivy image scan and fails the pipeline on CRITICAL or HIGH vulnerabilities that have a fix available (`ignore-unfixed`); accepted risks may be listed in [.trivyignore](.trivyignore). Only images that pass are eligible for this annotation when deploying. Optionally, use Trivy SBOM attestation and Kyverno image verification (cosign attestors) so the cluster only accepts attested images.
 - **Kubernetes STIG baseline:** Pods must run as non-root (`runAsNonRoot: true`), set `allowPrivilegeEscalation: false`, and use a read-only root filesystem where applicable. This aligns with least privilege (AC-6) and configuration baselines (CM-2).
 
 Policies and Helm values are in [infra/kyverno/](infra/kyverno/). OpenTofu can deploy Kyverno and the policies when [infra/opentofu/desired/kyverno-*.tfvars.json](infra/opentofu/desired/kyverno-main.tfvars.json) is present. Blocked deployment attempts are logged by the API server and can be forwarded to ELK/Splunk for audit (AU-2, AU-3).
