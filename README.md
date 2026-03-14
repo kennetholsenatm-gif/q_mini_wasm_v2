@@ -48,7 +48,7 @@ Q-Mini-WASM provides a secure, scalable platform for quantum computing applicati
 ### Prerequisites
 - Python 3.11+
 - Git
-- Docker (for development)
+- Docker (for development). On Windows, ensure Docker is on your PATH or set `DOCKER_PATH` in `.env` (e.g. `C:\Program Files\Docker\Docker\resources\bin`). Use the repo root (e.g. `C:\GitHub\LLM_Pract`) as the build context for `docker build`.
 - GitHub account
 
 ### Installation
