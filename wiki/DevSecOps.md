@@ -2,27 +2,28 @@
 
 ## Overview
 
-Q-Mini-WASM implements a comprehensive DevSecOps framework that integrates security practices throughout the entire development lifecycle. This approach ensures that security is not an afterthought but a fundamental aspect of the development process, from initial code commit to production deployment.
+Q-Mini-WASM implements a comprehensive DevSecOps framework that integrates security practices throughout the entire development lifecycle, from initial code commit to production deployment. The platform also includes infrastructure-as-code (Packer, OpenTofu), container-based data and security stacks, and Kubernetes admission/runtime controls.
 
 ## CI/CD Pipeline Architecture
 
 ### GitHub Actions Workflows
 
-The project utilizes GitHub Actions for automated CI/CD with the following key workflows:
+The project uses GitHub Actions for automated CI/CD with these workflows:
 
 #### CI Workflow (`.github/workflows/ci.yml`)
-- **Linting**: Black code formatting and Flake8 linting
-- **Type Checking**: MyPy static type analysis
-- **Testing**: Comprehensive unit test execution with coverage reporting
-- **Security Scanning**: Bandit SAST and pip-audit dependency scanning
-- **Optional**: Semgrep code analysis for advanced security patterns
+- **Linting**: Black, Flake8
+- **Type Checking**: MyPy
+- **Testing**: Unit tests with coverage (pytest, coverage.xml)
+- **Security**: Bandit SAST, pip-audit dependency scanning
+- **Trivy image**: Builds `wui/backend/Dockerfile`, runs Trivy with CRITICAL/HIGH severity; uploads SARIF and SBOM (CycloneDX). Image scan can be gated in-cluster via Kyverno.
+
+#### Security Scans Workflow (`.github/workflows/security-scans.yml`)
+- **Trigger**: Push and pull requests to `main`/`master`
+- **Steps**: Install security deps (`requirements/security.txt` or bandit, pip-audit, click, loguru), run Bandit, pip-audit, Trivy filesystem scan, and **OpenSCAP** via `scripts/security/run_openscap_scan.py`
+- **Artifacts**: OpenSCAP HTML report, Bandit and pip-audit reports (uploaded when present)
 
 #### Security Workflow (`.github/workflows/security.yml`)
-- **Scheduled Scans**: Weekly security assessments
-- **Dependency Auditing**: pip-audit for vulnerability detection
-- **Secret Detection**: Gitleaks for hardcoded secret identification
-- **Filesystem Scanning**: Trivy for container and filesystem security
-- **SBOM Generation**: CycloneDX Software Bill of Materials
+- **Scheduled / release**: Dependency audit (pip-audit), Gitleaks (secrets), Trivy, SBOM (CycloneDX)
 
 ## Pre-commit Hooks
 
@@ -51,10 +52,10 @@ The project implements shift-left security through pre-commit hooks that run aut
 - **Custom Rules**: Project-specific security rules and patterns
 
 ### Dependency Security
-- **pip-audit**: Python package vulnerability scanning
-- **Safety**: Dependency vulnerability database checking
-- **Dependabot**: Automated dependency updates and security patches
-- **SBOM Generation**: Software Bill of Materials for compliance
+- **pip-audit**: Python package vulnerability scanning (primary)
+- **Safety**: Listed in `requirements/security.txt`; optional
+- **Dependabot**: Automated dependency updates (`.github/dependabot.yml`)
+- **SBOM Generation**: Trivy CycloneDX in CI; usable for attestation and Kyverno verifyImages
 
 ### Secret Detection
 - **Gitleaks**: Git history secret scanning
@@ -176,25 +177,47 @@ pwsh -File scripts/devsecops-workflow.ps1
 - **Training Completion Rates**: Security training participation rates
 - **Policy Adherence Rates**: Compliance with security policies
 
+## Infrastructure and Stacks (Code-Aligned)
+
+### Host Appliance (Packer / QEMU)
+- **Location:** `infra/image-builder/`
+- **Purpose:** Golden AlmaLinux 9 QCOW2 with K3s and STIG-like hardening (SSH, chrony, firewalld). Used for tactical edge host baseline.
+- **Docs:** [infra/image-builder/README.md](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/infra/image-builder/README.md)
+
+### Data Stack (Event-Driven)
+- **Location:** `containers/data-stack/`
+- **Components:** PostgreSQL (pgvector), RabbitMQ, Apache NiFi; all with `deploy.resources`. Optional mTLS for Postgres via Vault PKI (`postgres-mtls.conf`).
+- **Docs:** [containers/data-stack/README.md](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/containers/data-stack/README.md)
+
+### Security Stack (Zero Trust / PQC)
+- **Location:** `containers/security-stack/`
+- **Components:** Keycloak (FIDO2/Passkeys, OIDC for Teleport), Vault (PKI, short-lived mTLS certs), Envoy (TLS 1.3, PQC-ready curves).
+- **Docs:** [containers/security-stack/README.md](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/containers/security-stack/README.md)
+
+### Kubernetes / OpenTofu
+- **Location:** `infra/opentofu/` (Kubernetes provider, Helm releases for Teleport, Kyverno, Falco), `infra/teleport/`, `infra/kyverno/`, `infra/falco/`
+- **Admission:** Kyverno policies (e.g. pod-security-stig, image-scan-gate). Runtime: Falco.
+- **Deployment:** See `.github/workflows/opentofu-infra.yml` and `infra/opentofu/desired/*.tfvars.json`.
+
+### OpenSCAP Compliance
+- **Script:** `scripts/security/run_openscap_scan.py` — runs `oscap xccdf eval`, produces HTML report and ARF; can fail on critical/kernel-memory findings.
+- **CI:** Run in Security Scans workflow; report uploaded as artifact. Optional inference image: `docker/Dockerfile.inference` includes OpenSCAP scanner.
+
 ## Security Architecture
 
 ### Network Security
-- **Firewalls and IDS**: Network boundary protection
-- **Network Segmentation**: Logical network isolation
-- **VPN Access Control**: Secure remote access management
-- **DDoS Protection**: Distributed denial of service mitigation
+- **Firewalls**: firewalld on Packer-built image; container stacks use internal bridge networks and minimal exposed ports.
+- **Zero Trust**: Teleport for infrastructure access (ephemeral certs); Keycloak OIDC + WebAuthn for human identity.
+- **TLS / PQC:** Envoy with TLS 1.3 and ML-KEM/Kyber-ready curves for security stack front-end.
 
 ### Application Security
-- **Input Validation**: Comprehensive input sanitization
-- **Output Encoding**: Secure output handling
-- **Authentication and Authorization**: Robust access control
-- **Session Management**: Secure session handling and timeout
+- **Authentication:** Keycloak (Passkeys); Teleport for SSH/Kubernetes.
+- **Machine Identity:** Vault PKI for short-lived client certs (mTLS to Postgres).
+- **Containers:** Non-root, securityContext (allowPrivilegeEscalation false, drop ALL) in Helm chart and Dockerfiles.
 
 ### Data Security
-- **Encryption at Rest**: Data encryption for stored data
-- **Encryption in Transit**: Data encryption for network transmission
-- **Data Masking**: Sensitive data obfuscation
-- **Secure Key Management**: Cryptographic key lifecycle management
+- **Encryption in Transit:** TLS 1.3 at proxy; optional mTLS for database (Vault-issued certs).
+- **Secrets:** No hardcoded secrets; `.env` and Vault for credentials; `.env` in `.gitignore`.
 
 ## Continuous Improvement
 

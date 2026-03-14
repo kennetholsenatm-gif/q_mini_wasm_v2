@@ -4,6 +4,8 @@
 
 Q-Mini-WASM is a quantum computing framework that combines WebAssembly (WASM) with quantum machine learning capabilities. This project demonstrates DevSecOps principles with comprehensive security scanning, compliance checks, and automated testing.
 
+**New to deployment?** See **[Greenfield Deployment Guide](docs/Greenfield-Deployment.md)** for a step-by-step, zero-to-hero deployment on a clean, air-gapped ruggedized node (Packer golden image → Security Stack → Data Stack → Application).
+
 ## Overview
 
 Q-Mini-WASM provides a secure, scalable platform for quantum computing applications with:
@@ -52,8 +54,8 @@ Q-Mini-WASM provides a secure, scalable platform for quantum computing applicati
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/q-mini-wasm.git
-cd q-mini-wasm
+git clone https://github.com/kennetholsenatm-gif/LLM_Pract.git
+cd LLM_Pract
 
 # Install dependencies
 pip install -r requirements.txt
@@ -79,18 +81,41 @@ python -c "import qminiwasm; print(qminiwasm.__version__)"
 pwsh -File scripts/devsecops-workflow.ps1
 ```
 
+## Platform Architecture
+
+The repository includes four main pillars:
+
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| **Host appliance** | [infra/image-builder/](infra/image-builder/) | Packer + QEMU: build hardened AlmaLinux 9 QCOW2 golden image with K3s and STIG-like hardening (tactical edge). |
+| **Data stack** | [containers/data-stack/](containers/data-stack/) | Event-driven pipeline: PostgreSQL (pgvector), RabbitMQ, Apache NiFi; vertically scalable, air-gap-friendly. |
+| **Security stack** | [containers/security-stack/](containers/security-stack/) | Zero Trust / PQC-ready: Keycloak (FIDO2/Passkeys), Vault (PKI/mTLS), Envoy (TLS 1.3 + ML-KEM). |
+| **Application** | [qminiwasm/](qminiwasm/), [wui/](wui/), [charts/](charts/) | Core engine, FastAPI/React WUI, Helm chart for Kubernetes. |
+
+Optional Kubernetes/OpenTofu: [infra/opentofu/](infra/opentofu/) (Teleport, Kyverno, Falco), [infra/teleport/](infra/teleport/), [infra/kyverno/](infra/kyverno/), [infra/falco/](infra/falco/). See [docs/Greenfield-Deployment.md](docs/Greenfield-Deployment.md) for full deployment order.
+
 ## Project Structure
 
 ```
 LLM_Pract/
-├── qminiwasm/           # Application source (Python package)
+├── qminiwasm/           # Core Python package (quantum, WASM, hardware)
+├── wui/                 # Web UI: FastAPI backend, React frontend
+├── charts/              # Helm chart (qminiwasm-wui)
+├── containers/          # Docker Compose stacks
+│   ├── data-stack/      # PostgreSQL, RabbitMQ, NiFi (EDA)
+│   └── security-stack/  # Keycloak, Vault, Envoy (Zero Trust / PQC)
+├── infra/               # Infrastructure as Code
+│   ├── image-builder/   # Packer + QEMU (AlmaLinux 9 golden image)
+│   ├── opentofu/        # OpenTofu: Kubernetes, Teleport, Kyverno, Falco
+│   ├── teleport/        # Teleport Helm values and roles
+│   ├── kyverno/         # Kyverno policies
+│   └── falco/           # Falco runtime security
+├── scripts/             # Automation (devsecops-workflow.ps1, security/run_openscap_scan.py)
 ├── tests/               # Test suites
-├── scripts/             # Automation scripts (e.g. devsecops-workflow.ps1)
 ├── wiki/                # Wiki source (synced to GitHub Wiki)
-├── docs/                # Documentation
+├── docs/                # Documentation (DockerOS standard, Greenfield guide)
 ├── requirements/        # Split dependency files
 ├── .github/workflows/   # CI/CD pipelines
-├── .pre-commit-config.yaml  # Pre-commit hooks
 ├── SECURITY.md          # Security documentation
 ├── CONTRIBUTING.md      # Contribution guidelines
 └── README.md            # This file
