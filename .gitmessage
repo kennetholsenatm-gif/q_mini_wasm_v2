@@ -1,37 +1,14 @@
-# Type:   (feat, fix, docs, style, refactor, test, chore, security)
-# Scope:  (module name, component, or area affected)
-# Issue:  (GitHub issue number, if applicable)
-# Security: (security-related changes, if any)
-
-# Example:
-# feat(auth): add JWT token validation
-# fix(database): resolve connection timeout issue
-# docs(api): update authentication documentation
-# security(crypto): fix timing attack vulnerability
-
-# Commit message format:
 # <type>(<scope>): <description>
-
-# Description should:
-# - Be written in imperative mood
-# - Be concise but descriptive
-# - Reference issue numbers if applicable
-# - Include security impact if relevant
-
-# Security-related commits should include:
-# - Type: security
-# - Detailed description of vulnerability
-# - CVSS score if available
-# - References to CVEs or advisories
-
-# Example security commit:
-# security(auth): fix SQL injection vulnerability
-# Fixes SQL injection in user authentication endpoint
-# CVSS: 9.8 - Critical
-# References: CVE-2024-1234
-
-# Before committing, ensure:
-# - All tests pass
-# - Security scans are clean
-# - Documentation is updated
-# - No secrets or credentials are exposed
+#
+# Types: feat, fix, docs, style, refactor, test, chore, security
+# Scope: module or area (e.g. wui, quantum, ci)
+# Use imperative mood, lowercase after subject. Optionally add:
+# Refs #123 | Fixes #123 | Security: brief impact
+#
+# Examples:
+#   feat(wui): add local hardware execution mode
+#   fix(quantum): resolve path injection in credential persist
+#   docs(api): update auth section
+#   security(auth): fix SQL injection in login (CVSS 9.8)
+#
+# Leave the first line above as your subject; delete these comment lines before committing.

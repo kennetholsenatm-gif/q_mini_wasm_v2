@@ -9,6 +9,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type ExecutionMode = "local" | "hpc";
+
+export interface HpcConnectionDetails {
+  endpoint_url?: string;
+  auth_token?: string;
+  cluster_id?: string;
+  node_id?: string;
+}
+
 export interface HardwareOption {
   id: string;
   name: string;
@@ -18,11 +27,19 @@ export interface HardwareCurrent {
   accelerator: string;
   device_index: number;
   device_name: string;
+  execution_mode?: ExecutionMode;
+  hpc_connection?: HpcConnectionDetails | null;
+  local_accelerator?: "cuda" | "xpu" | "cpu" | null;
+  simulated_quantum?: boolean;
 }
 
 export interface HardwareCurrentUpdate {
   accelerator: "cuda" | "xpu" | "cpu";
   device_index?: number;
+  execution_mode?: ExecutionMode;
+  hpc_connection?: HpcConnectionDetails | null;
+  local_accelerator?: "cuda" | "xpu" | "cpu" | null;
+  simulated_quantum?: boolean;
 }
 
 export const hardwareApi = {
@@ -42,11 +59,27 @@ export interface QuantumConfig {
   backend: string;
   simulator_name?: string;
   credentials_configured?: Record<string, boolean>;
+  endpoint_url?: string | null;
+  provider?: string | null;
 }
 
 export interface QuantumConfigUpdate {
   backend: string;
   credentials?: Record<string, string>;
+  endpoint_url?: string | null;
+  provider?: string | null;
+}
+
+export interface TransferConfig {
+  transfer_batch_size: number;
+  serialization_format: string;
+  polling_interval_seconds: number;
+}
+
+export interface TransferConfigUpdate {
+  transfer_batch_size?: number;
+  serialization_format?: string;
+  polling_interval_seconds?: number;
 }
 
 export const quantumApi = {
@@ -55,6 +88,9 @@ export const quantumApi = {
   setConfig: (body: QuantumConfigUpdate) =>
     request<QuantumConfig>("/api/quantum/config", { method: "PUT", body: JSON.stringify(body) }),
   verify: () => request<{ ok: boolean; message?: string }>("/api/quantum/verify", { method: "POST" }),
+  getTransferConfig: () => request<TransferConfig>("/api/quantum/transfer-config"),
+  setTransferConfig: (body: TransferConfigUpdate) =>
+    request<TransferConfig>("/api/quantum/transfer-config", { method: "PUT", body: JSON.stringify(body) }),
 };
 
 export interface CircuitPreset {
@@ -111,17 +147,32 @@ export const deployApi = {
 export interface JobConfig {
   accelerator: string;
   device_index: number;
+  execution_mode?: string;
   quantum_backend: string;
   num_qubits: number;
   qaoa_layers: number;
   diff_method: string;
+  num_trainable_parameters?: number;
   epochs: number;
   batch_size: number;
+  transfer_config?: TransferConfig | null;
 }
 
 export const jobConfigApi = {
   getJobConfig: () => request<JobConfig>("/api/job-config"),
 };
+
+export interface TrainingConfig {
+  num_trainable_parameters: number;
+  epochs: number;
+  batch_size: number;
+}
+
+export interface TrainingConfigUpdate {
+  num_trainable_parameters?: number;
+  epochs?: number;
+  batch_size?: number;
+}
 
 export interface TrainingEstimateResponse {
   estimated_seconds: number;
@@ -129,6 +180,9 @@ export interface TrainingEstimateResponse {
 }
 
 export const trainingApi = {
+  getConfig: () => request<TrainingConfig>("/api/training/config"),
+  setConfig: (body: TrainingConfigUpdate) =>
+    request<TrainingConfig>("/api/training/config", { method: "PUT", body: JSON.stringify(body) }),
   getEstimate: (params?: {
     accelerator?: string;
     quantum_backend?: string;
@@ -136,6 +190,7 @@ export const trainingApi = {
     qaoa_layers?: number;
     epochs?: number;
     batch_size?: number;
+    num_trainable_parameters?: number;
   }) => {
     const search = params ? new URLSearchParams(params as Record<string, string>).toString() : "";
     return request<TrainingEstimateResponse>(`/api/training/estimate${search ? `?${search}` : ""}`);

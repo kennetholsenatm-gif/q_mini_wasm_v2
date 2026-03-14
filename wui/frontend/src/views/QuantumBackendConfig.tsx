@@ -12,12 +12,17 @@ export function QuantumBackendConfig() {
   const [ibmUrl, setIbmUrl] = useState("");
   const [intelQsPython, setIntelQsPython] = useState("");
   const [intelSdkPath, setIntelSdkPath] = useState("");
+  const [ionqApiKey, setIonqApiKey] = useState("");
+  const [endpointUrl, setEndpointUrl] = useState("");
+  const [provider, setProvider] = useState<string>("");
 
   useEffect(() => {
     Promise.all([quantumApi.getBackends(), quantumApi.getConfig()])
       .then(([b, c]) => {
         setBackends(b);
         setConfig(c);
+        setEndpointUrl(c.endpoint_url ?? "");
+        setProvider(c.provider ?? "");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -26,7 +31,28 @@ export function QuantumBackendConfig() {
     setSaving(true);
     setVerifyResult(null);
     try {
-      const updated = await quantumApi.setConfig({ backend: backendId, credentials: {} });
+      const updated = await quantumApi.setConfig({
+        backend: backendId,
+        credentials: {},
+        endpoint_url: endpointUrl || undefined,
+        provider: provider || undefined,
+      });
+      setConfig(updated);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveConnectionDetails = async () => {
+    if (!config) return;
+    setSaving(true);
+    try {
+      const updated = await quantumApi.setConfig({
+        backend: config.backend,
+        credentials: {},
+        endpoint_url: endpointUrl.trim() || undefined,
+        provider: provider || undefined,
+      });
       setConfig(updated);
     } finally {
       setSaving(false);
@@ -44,8 +70,15 @@ export function QuantumBackendConfig() {
       } else if (config.backend === "intel_qs") {
         if (intelQsPython.trim()) credentials.INTEL_QS_PYTHON = intelQsPython.trim();
         if (intelSdkPath.trim()) credentials.INTEL_QUANTUM_SDK_PATH = intelSdkPath.trim();
+      } else if (config.backend === "ionq") {
+        if (ionqApiKey.trim()) credentials.IONQ_API_KEY = ionqApiKey.trim();
       }
-      const updated = await quantumApi.setConfig({ backend: config.backend, credentials });
+      const updated = await quantumApi.setConfig({
+        backend: config.backend,
+        credentials,
+        endpoint_url: endpointUrl.trim() || undefined,
+        provider: provider || undefined,
+      });
       setConfig(updated);
     } finally {
       setCredSaving(false);
@@ -83,6 +116,30 @@ export function QuantumBackendConfig() {
             )}
           </label>
         ))}
+      </div>
+      <div className="form">
+        <h3>Connection details</h3>
+        <label>
+          <span>Endpoint URL (optional)</span>
+          <input
+            type="url"
+            value={endpointUrl}
+            onChange={(e) => setEndpointUrl(e.target.value)}
+            placeholder="https://quantum.example.com/api"
+          />
+        </label>
+        <label>
+          <span>Provider</span>
+          <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+            <option value="">— Select —</option>
+            <option value="ibm">IBM</option>
+            <option value="ionq">IonQ</option>
+            <option value="intel">Intel</option>
+          </select>
+        </label>
+        <button type="button" onClick={handleSaveConnectionDetails} className="btn" disabled={saving}>
+          Save connection details
+        </button>
       </div>
       {config?.backend === "penny_lane" && (
         <p className="muted">
@@ -141,6 +198,31 @@ export function QuantumBackendConfig() {
               value={intelSdkPath}
               onChange={(e) => setIntelSdkPath(e.target.value)}
               placeholder="SDK path"
+            />
+          </label>
+          {config.credentials_configured && (
+            <p className="muted">
+              Configured:{" "}
+              {Object.entries(config.credentials_configured)
+                .filter(([, v]) => v)
+                .map(([k]) => k)
+                .join(", ") || "none"}
+            </p>
+          )}
+          <button type="button" onClick={handleSaveCredentials} disabled={credSaving} className="btn">
+            Save credentials
+          </button>
+        </div>
+      )}
+      {config?.backend === "ionq" && (
+        <div className="form credential-form">
+          <label>
+            <span>IonQ API Key</span>
+            <input
+              type="password"
+              value={ionqApiKey}
+              onChange={(e) => setIonqApiKey(e.target.value)}
+              placeholder="Set and save (not echoed back)"
             />
           </label>
           {config.credentials_configured && (

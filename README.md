@@ -60,6 +60,7 @@ pip install -r requirements.txt
 
 # Install pre-commit hooks
 pre-commit install
+pre-commit install --hook-type commit-msg   # Validate conventional commit messages
 
 # Run security scan
 bandit -r qminiwasm/
@@ -140,6 +141,12 @@ The [GitHub Wiki](https://github.com/kennetholsenatm-gif/LLM_Pract/wiki) is popu
 ## Development Workflow
 
 ### Pre-commit Hooks
+Install both hook types so commit messages are validated:
+- `pre-commit install` – code quality (Black, Flake8, etc.)
+- `pre-commit install --hook-type commit-msg` – conventional commit format
+
+Commit messages must follow: **type(scope): description** (e.g. `feat(wui): add local hardware`). Template: [.gitmessage](.gitmessage). Types: feat, fix, docs, style, refactor, test, chore, security.
+
 All commits must pass:
 - Code formatting (Black, isort)
 - Security scanning (Bandit, Safety)
