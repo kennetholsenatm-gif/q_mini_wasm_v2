@@ -62,9 +62,14 @@ Dockerfile*
 !containers/nginx/Dockerfile
 !containers/wui/Dockerfile
 !containers/wui/Dockerfile.almalinux
+!docker/Dockerfile.inference
 docker-compose*.yml
 docker-compose*.yaml
 !docker-compose.yml
+
+# OpenSCAP scan outputs
+openscap_report.html
+openscap_results.arf.xml
 
 # Logs
 logs/

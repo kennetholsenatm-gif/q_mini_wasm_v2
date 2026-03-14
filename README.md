@@ -101,6 +101,7 @@ LLM_Pract/
 ### DevSecOps Implementation
 - **CI**: [.github/workflows/ci.yml](.github/workflows/ci.yml) – lint (Black, Flake8), MyPy, tests, Bandit, pip-audit; optional Semgrep.
 - **Security workflow**: [.github/workflows/security.yml](.github/workflows/security.yml) – weekly/release: dependency audit, Gitleaks (secrets), Trivy, SBOM.
+- **Security Scans**: [.github/workflows/security-scans.yml](.github/workflows/security-scans.yml) – on PR/push to main: Bandit, Trivy, OpenSCAP; uploads OpenSCAP HTML report.
 - **Pre-commit**: [.pre-commit-config.yaml](.pre-commit-config.yaml) – Black, Flake8, MyPy, Bandit, detect-secrets.
 - **Configs**: [pyproject.toml](pyproject.toml) (Bandit, Black, Flake8), [.semgrep.yml](.semgrep.yml), [.secrets.baseline](.secrets.baseline).
 - **Local workflow**: [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) – full local DevSecOps run (tests, scans, STIG, reports).
@@ -131,6 +132,31 @@ The [GitHub Wiki](https://github.com/kennetholsenatm-gif/LLM_Pract/wiki) is popu
 - **CMMC2.0**: Cybersecurity Maturity Model Certification
 - **NIST SP 800-53**: Security control implementation
 - **File Permissions**: Automated security hardening
+
+### Security & Compliance (OpenSCAP)
+
+OpenSCAP is integrated to audit **low-level hardware configuration** and **container/host security posture** required by the Q-Mini-WASM execution engine (Intel ARC kernel drivers, WASM sandboxing, and Kubernetes deployments). It enforces baselines such as CIS benchmarks and NIST frameworks.
+
+- **Inference image:** [docker/Dockerfile.inference](docker/Dockerfile.inference) includes the OpenSCAP scanner (`libopenscap8`, `openscap-utils`) so compliance scans can run inside the container or against a host that uses this stack.
+- **Automation:** [scripts/security/run_openscap_scan.py](scripts/security/run_openscap_scan.py) provides a CLI to run `oscap xccdf eval`, produce an HTML report and ARF (Asset Reporting Format) XML, and exit non-zero when critical or kernel/memory-related violations are found (important for Intel driver paging).
+- **CI:** The [Security Scans](.github/workflows/security-scans.yml) workflow (on PRs and pushes to `main`) installs security deps (`pip install -e .[security]`), runs Bandit and Trivy, then runs the OpenSCAP script and uploads `openscap_report.html` as an artifact.
+
+**Run the OpenSCAP scanner locally:**
+
+1. Install the scanner and content (Debian/Ubuntu):
+   ```bash
+   sudo apt-get install -y libopenscap8 openscap-utils
+   ```
+   For SCAP Security Guide content, download a [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content) release and set `OSCAP_CONTENT_PATH` to the unpacked directory.
+
+2. Install the project with the security extra and run the script:
+   ```bash
+   pip install -e ".[security]"
+   python scripts/security/run_openscap_scan.py --report-html openscap_report.html --results-arf openscap_results.arf.xml
+   ```
+   Use `--content-path /path/to/scap-security-guide` if content is not under `OSCAP_CONTENT_PATH`. Use `--no-fail-on-critical` to generate reports without failing on critical findings.
+
+3. Open `openscap_report.html` to review compliance regressions (kernel parameters, memory settings, and other CIS/NIST checks).
 
 ### Security Policies
 - No hardcoded secrets allowed
