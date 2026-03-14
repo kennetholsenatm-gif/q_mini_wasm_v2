@@ -5,8 +5,10 @@
 kube_config_path = "./kubeconfig"
 
 teleport_chart_version = "16.1.0"
-# Path to infra/teleport/teleport-values.yaml (from repo root: ../../../teleport/teleport-values.yaml)
-teleport_values_file   = "../../../teleport/teleport-values.yaml"
+# Local auth (no OIDC): use teleport-values-local.yaml so auth starts. For OIDC use teleport-values.yaml and create connector.
+teleport_values_file   = "../../../teleport/teleport-values-local.yaml"
+# teleport_timeout       = 900
+# teleport_wait_for_jobs = false   # false for local when OIDC connector not created yet (lets local-up complete)
 
 enable_wui = false
 # When enable_wui = true, set path to charts/qminiwasm-wui (from repo root: ../../../../charts/qminiwasm-wui)

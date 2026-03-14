@@ -26,3 +26,5 @@ make -C infra/opentofu local-up
 This checks Docker/Kind/OpenTofu, creates the Kind cluster if needed, and applies OpenTofu (NGINX Ingress + Teleport). No need to copy `terraform.tfvars`—defaults use `terraform.tfvars.example`. To tear down: `make -C infra/opentofu local-down`.
 
 **Dependencies:** Docker, OpenTofu, Kind (kubectl optional). Full steps and overrides: [environments/local/README.md](environments/local/README.md).
+
+**Windows:** Run `make local-up` from **Git Bash** (or WSL) so `bash` is available for the cluster-ensure script. Ensure Docker Desktop is running and that `docker`, `kind`, and `tofu` are on your PATH (e.g. add `C:\Program Files\Docker\Docker\resources\bin` if needed).

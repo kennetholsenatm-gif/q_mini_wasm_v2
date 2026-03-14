@@ -20,6 +20,24 @@ variable "teleport_values_file" {
   description = "Path to Teleport Helm values file (absolute or relative to caller)"
 }
 
+variable "teleport_timeout" {
+  type        = number
+  default     = 600
+  description = "Helm install/upgrade timeout in seconds for Teleport (default 10 min)"
+}
+
+variable "teleport_wait_for_jobs" {
+  type        = bool
+  default     = true
+  description = "If true, wait for Helm hook jobs to complete. Set false for local dev when OIDC is not configured yet."
+}
+
+variable "teleport_wait" {
+  type        = bool
+  default     = true
+  description = "If true, wait for Teleport pods to be ready. Set false for local dev to let local-up complete and fix Teleport (e.g. OIDC) afterward."
+}
+
 variable "enable_wui" {
   type        = bool
   default     = false

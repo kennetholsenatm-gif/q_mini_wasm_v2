@@ -1,8 +1,7 @@
 # Kubernetes & Cloud Deployment (from white paper)
 kubernetes>=28.0.0
 docker>=5.0.0
-# docker-compose: use "pip install docker-compose" (v2.x) or the standalone CLI
-docker-compose>=2.20.0
+# Docker Compose V2: use the Docker CLI plugin (docker compose), not pip. Install via Docker Desktop or: https://docs.docker.com/compose/install/
 # OpenTofu (optional; may require separate binary)
 # opentofu: no canonical PyPI package; omit or install via system/conda
 
@@ -11,7 +10,7 @@ pydantic>=2.5.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
 httpx>=0.25.0
-orjson>=4.2.0
+orjson>=3.11.0
 pydantic-settings>=2.1.0
 python-multipart>=0.0.6
 asgi-lifespan>=1.2.0
@@ -31,5 +30,5 @@ grafana-api>=0.0.1
 # Cloud Resources
 requests>=2.31
 boto3>=1.28
-google-cloud>=1.33
+google-cloud>=0.34.0
 azure-core>=1.28
