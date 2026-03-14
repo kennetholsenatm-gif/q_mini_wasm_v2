@@ -30,7 +30,7 @@ Q-Mini-WASM is a quantum computing framework that combines WebAssembly (WASM) wi
 
 ## Getting Started
 
-New to Q-Mini-WASM? Start with our [Project Overview](Overview) to understand the architecture and capabilities, then follow our [Development Workflow](Development) guide to set up your development environment.
+New to Q-Mini-WASM? Start with our [Project Overview](Overview) to understand the architecture and capabilities (including the [Tactical Edge End-to-End Architecture](Overview#tactical-edge-end-to-end-architecture) diagram), then follow our [Development Workflow](Development) guide to set up your development environment.
 
 ## Security First
 

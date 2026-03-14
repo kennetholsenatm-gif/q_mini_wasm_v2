@@ -140,6 +140,82 @@ flowchart TB
     Packer --> host
 ```
 
+## Tactical Edge End-to-End Architecture
+
+The following diagram shows the full path from CI/NetOps provisioning through far-edge devices to the tactical edge node (SDN, security stack, data stack, and application stack), including WireGuard SASE and Solace Agent Mesh A2A communication.
+
+```mermaid
+flowchart TB
+    subgraph CI["Provisioning & NetOps (CI/CD Pipeline)"]
+        direction LR
+        Packer["Packer + Ansible\n(Builds QCOW2 Image & SBOM)"]
+        NetBox["NetBox + Netdisco\n(Network Source of Truth & IPAM)"]
+    end
+
+    subgraph FarEdge["Far Edge Device (IoT/Sensor/Drone)"]
+        direction TB
+        Incus["Incus Orchestrator (LXC)"]
+        subgraph LXC["LXC System Containers"]
+            direction LR
+            SASE["SASE Proxy\n(WireGuard + Envoy)"]
+            IDS["Security IDS\n(Wazuh Agent)"]
+            AIAgent["AI Agent Runtime\n(Solace Agent Mesh)"]
+        end
+        AIAgent -->|Local Tool Call| IDS
+        AIAgent -->|Filtered Local API| SASE
+    end
+
+    subgraph HostNode["Tactical Edge Node (Ruggedized Hardware)"]
+        direction TB
+        OS["AlmaLinux 9 Host OS\n(Hardened Golden Image)"]
+
+        subgraph SDN["SDN & Network Fabric"]
+            VyOS["VyOS Router\n(BGP EVPN / VXLAN)"]
+            OVS["AsterNOS / Open vSwitch\n(VXLAN VTEP)"]
+        end
+
+        subgraph Security["Security & Zero Trust Stack"]
+            Ingress["Envoy / NGINX Ingress\n(Post-Quantum TLS 1.3 ML-KEM)"]
+            Vault["HashiCorp Vault\n(PKI & Dynamic Secrets)"]
+            Keycloak["Keycloak IAM\n(FIDO2/Passkeys)"]
+            Teleport["Teleport\n(Cert-based Access Proxy)"]
+        end
+
+        subgraph DataStack["Event & Data Stack"]
+            Solace["Solace PubSub+\n(Event Broker & Agent Orchestrator)"]
+            NiFi["Apache NiFi\n(Data Routing & Flow)"]
+            DB[("PostgreSQL\n(pgvector)")]
+        end
+
+        subgraph AppStack["Core Application Stack"]
+            Backend["FastAPI WUI Backend\n(QminiWASM Engine)"]
+            Frontend["React Web UI"]
+        end
+
+        VyOS --- OVS
+        OVS --- Ingress
+
+        Ingress --> Frontend
+        Ingress --> Backend
+        Ingress --> Solace
+
+        Backend <-->|Publishes/Subscribes Events| Solace
+        NiFi <-->|Subscribes & Transforms| Solace
+        NiFi -->|Writes Final State (mTLS)| DB
+        Backend -->|Direct Query (mTLS)| DB
+
+        Teleport -.->|OIDC Trust| Keycloak
+        Backend -.->|Requests Short-Lived Cert| Vault
+        NiFi -.->|Requests Short-Lived Cert| Vault
+    end
+
+    Packer -.->|Deploys to| HostNode
+    NetBox -.->|Ansible Dynamic Inventory| VyOS
+
+    SASE <===>|Encrypted WireGuard SASE Tunnel| VyOS
+    AIAgent <.->|Async A2A Comm (Guaranteed Delivery)| Solace
+```
+
 ## Development Philosophy
 
 ### Security-First Approach
