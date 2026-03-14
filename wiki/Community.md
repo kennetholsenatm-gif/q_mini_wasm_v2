@@ -175,7 +175,7 @@ Q-Mini-WASM fosters a vibrant and inclusive community of quantum computing enthu
 
 ## Getting Involved
 
-Ready to join our community? Follow our [Development Workflow](Development.md) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
+Ready to join our community? Follow our [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
 
 ---
 
