@@ -1,7 +1,7 @@
 # WUI Application Backend (FastAPI). Build from repo root: docker build -f wui/backend/Dockerfile .
 # Base: AlmaLinux 9 per DockerOS standard (https://hub.docker.com/_/almalinux)
 # Rebuild regularly so base image and dnf update pull latest security patches (Trivy/Code Scanning).
-FROM almalinux:9
+FROM almalinux:9.7-20260129
 
 RUN dnf update -y --setopt=install_weak_deps=False \
     && dnf install -y --setopt=install_weak_deps=False python3.11 python3.11-pip \

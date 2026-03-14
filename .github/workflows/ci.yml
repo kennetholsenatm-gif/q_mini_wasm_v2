@@ -158,6 +158,19 @@ jobs:
         continue-on-error: true  # e.g. forks or when security-events not granted
         with:
           sarif_file: "trivy-image.sarif"
+      - name: Trivy image report (table) for fixing remaining findings
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/out" aquasec/trivy image \
+            --severity CRITICAL,HIGH --vuln-type os,library --ignore-unfixed \
+            --format table --output /out/trivy-image-report.txt \
+            qminiwasm-backend:${{ github.sha }} || true
+      - name: Upload Trivy image report
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('trivy-image-report.txt') != ''
+        with:
+          name: trivy-image-report
+          path: trivy-image-report.txt
+        continue-on-error: true
       - name: Trivy image SBOM (for attestation / Kyverno verifyImages)
         run: |
           docker run --rm -v "${{ github.workspace }}:/out" aquasec/trivy image --format cyclonedx --output /out/trivy-image-sbom.json qminiwasm-backend:${{ github.sha }} || true
