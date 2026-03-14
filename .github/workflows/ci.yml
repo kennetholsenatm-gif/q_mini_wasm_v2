@@ -128,3 +128,35 @@ jobs:
           name: pip-audit-report
           path: pip-audit-report.json
         continue-on-error: true
+
+  # Trivy image scan: gate images so only CRITICAL/HIGH-clean images can be deployed (Kyverno enforces at cluster).
+  # Add annotation trivy.scan/passed=true to workloads after this job passes; or use cosign attestation + Kyverno verifyImages.
+  trivy-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build backend image for scan
+        run: docker build -f wui/backend/Dockerfile -t qminiwasm-backend:${{ github.sha }} .
+      - name: Run Trivy image scan (fail on CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "qminiwasm-backend:${{ github.sha }}"
+          format: "sarif"
+          output: "trivy-image.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          vuln-type: "os,library"
+      - name: Upload Trivy image SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-image.sarif') != ''
+        with:
+          sarif_file: "trivy-image.sarif"
+      - name: Trivy image SBOM (for attestation / Kyverno verifyImages)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/out" aquasec/trivy image --format cyclonedx --output /out/trivy-image-sbom.json qminiwasm-backend:${{ github.sha }} || true
+      - name: Upload Trivy image SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-sbom
+          path: trivy-image-sbom.json
+        continue-on-error: true
