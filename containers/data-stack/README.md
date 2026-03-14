@@ -81,9 +81,18 @@ All services use an internal bridge network (`data-stack-internal`); only the po
 - **Minimal exposed ports:** Only NiFi (8080), RabbitMQ AMQP (5672) and Management (15672), and optionally Postgres (5432) are published; internal traffic stays on `data-stack-internal`.
 - **Internal DNS:** Services reach each other by hostname: `postgres`, `rabbitmq`, `nifi` on the same network.
 
-## Optional: Solace PubSub+ instead of RabbitMQ
+## Solace PubSub+ and Solace Agent Mesh
 
-For a Solace PubSub+ Standard Edition backbone, replace the `rabbitmq` service with the `solace/solace-pubsub-standard` image and configure the appropriate ports and env vars. The WUI and NiFi would then use Solace clients and configuration instead of AMQP to RabbitMQ. Licensing and air-gap image availability apply.
+The stack includes **Solace PubSub+** (`solace-pubsub`) and **Solace Agent Mesh** (`solace-agent-mesh`) **alongside** RabbitMQ and NiFi:
+
+- **solace-pubsub:** Event broker (SMF 55555, WebSocket 8008, SEMP 8080). Used by Agent Mesh and optional event-driven clients. Set `SOLACE_ADMIN_PASSWORD` in `.env` (or inject from Vault).
+- **solace-agent-mesh:** Orchestrator + Gateway for event-driven, Agent-to-Agent (A2A) AI workflows. Connects to `solace-pubsub` via `SOLACE_BROKER_URL`, `SOLACE_BROKER_PASSWORD`, etc. Web UI on port 8000. Edge agents (see [infra/edge-gateway/](../../infra/edge-gateway/)) connect to the same broker over VPN and self-register via Agent Cards for task routing.
+
+Credentials must be set via environment (e.g. `.env` or Vault); see `.env.example` for variable names.
+
+## Optional: Solace-only backbone (no RabbitMQ)
+
+For a Solace-only event backbone, you could remove or disable the `rabbitmq` service and use Solace for all event traffic; NiFi and the WUI would then use Solace clients. The default compose keeps both RabbitMQ and Solace so existing AMQP flows and Agent Mesh can coexist.
 
 ## Files
 

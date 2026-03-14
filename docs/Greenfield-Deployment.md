@@ -14,9 +14,9 @@ Step-by-step, zero-to-hero guide for deploying Q-Mini-WASM on a **completely cle
 
 ## Step 1: Build the Host Appliance (Packer / QEMU)
 
-Build the AlmaLinux 9 golden image that will run the rest of the stack. This image includes K3s, basic STIG-like hardening, and is suitable for tactical edge.
+Build the AlmaLinux 9 golden image that will run the rest of the stack. This image is provisioned with an **Ansible playbook** (not a shell script): `site.yml` with roles **os_hardening** (STIG-like) and **container_runtime** (K3s). The image includes K3s, basic hardening, and is suitable for tactical edge.
 
-1. **On the build host**, install Packer and QEMU (see [infra/image-builder/README.md](../infra/image-builder/README.md)).
+1. **On the build host**, install Packer, QEMU, and Ansible (see [infra/image-builder/README.md](../infra/image-builder/README.md)).
 
 2. **From the repo root:**
    ```bash
@@ -27,11 +27,17 @@ Build the AlmaLinux 9 golden image that will run the rest of the stack. This ima
    packer build -var "ssh_password=YourSecurePassword" .
    ```
 
-3. **Output:** `infra/image-builder/packer/output-almalinux9/almalinux9-golden.qcow2`.
+3. **Output:** `infra/image-builder/packer/output-almalinux9/almalinux9-golden.qcow2`. After the build, an **SBOM (SPDX)** for the QCOW2 is written to `infra/image-builder/packer/artifacts/sbom-qcow2.json`. Optionally, pass `-var "sbom_container_images=[\"qminiwasm-backend:latest\"]"` to also generate SPDX for container images into `artifacts/`.
 
-4. **Deploy the QCOW2** to your ruggedized node using your hypervisor or cloud (e.g. copy to the node and run with KVM/libvirt). Boot the VM; it will have AlmaLinux 9, K3s (or Docker if you changed the provision script), SSH (use `admin` after disabling root login), chrony, and firewalld configured.
+4. **Deploy the QCOW2** to your ruggedized node using your hypervisor or cloud (e.g. copy to the node and run with KVM/libvirt). Boot the VM; it will have AlmaLinux 9, K3s (or Docker if you set the container_runtime role variable), SSH (use `admin` after disabling root login), chrony, and firewalld configured.
 
 5. **Optional:** If the build fails while waiting for SSH, the AlmaLinux 9 minimal ISO boot menu may differ; adjust `boot_command` in `almalinux-9.pkr.hcl` (see "Boot command tuning" in the image-builder README).
+
+### SBOM and compliance
+
+- **Packer build** produces a QCOW2 SBOM in SPDX format at `infra/image-builder/packer/artifacts/sbom-qcow2.json`. Optional container image SPDX files are written to `artifacts/` when `sbom_container_images` is set.
+- **CI** produces SPDX SBOMs for container images (e.g. `qminiwasm-backend`) and uploads them as workflow artifacts (`sbom-spdx`). Use these for compliance and attestation (e.g. Kyverno verifyImages).
+- **Optional:** NetOps (NetBox/Netdisco) and Keycloak provisioning (OpenTofu) are described in the optional step below.
 
 ---
 
@@ -57,7 +63,7 @@ On the node (or a dedicated host with Docker), run the Zero Trust security stack
    ```
    Save the printed Intermediate CA cert if you will enable mTLS for PostgreSQL (Step 3 optional).
 
-4. **Keycloak:** The `qminiwasm` realm is auto-imported from `keycloak-init/qminiwasm-realm.json`. Configure the Teleport OIDC client (redirect URIs, client secret) and user registration; see [containers/security-stack/keycloak-init/README.md](../containers/security-stack/keycloak-init/README.md). For developer login via Teleport (SSH/Kubernetes), use [scripts/teleport-login.ps1](../scripts/teleport-login.ps1) or [scripts/teleport-login.sh](../scripts/teleport-login.sh) after Teleport is deployed (see [wiki/Development](https://github.com/kennetholsenatm-gif/LLM_Pract/wiki/Development)).
+4. **Keycloak:** The `qminiwasm` realm is auto-imported from `keycloak-init/qminiwasm-realm.json`. Alternatively, use **OpenTofu** to manage the realm, groups, and test users: see [infra/opentofu/keycloak-provisioning/README.md](../infra/opentofu/keycloak-provisioning/README.md). Configure the Teleport OIDC client (redirect URIs, client secret) and user registration; see [containers/security-stack/keycloak-init/README.md](../containers/security-stack/keycloak-init/README.md). For developer login via Teleport (SSH/Kubernetes), use [scripts/teleport-login.ps1](../scripts/teleport-login.ps1) or [scripts/teleport-login.sh](../scripts/teleport-login.sh) after Teleport is deployed (see [wiki/Development](https://github.com/kennetholsenatm-gif/LLM_Pract/wiki/Development)).
 
 5. **Production:** Replace Vault dev mode with a proper seal (Transit, cloud KMS); do not use the dev root token in production.
 
@@ -110,6 +116,16 @@ Run the Q-Mini-WASM Web UI (FastAPI backend + React frontend). You can run it wi
    Override `image.repository` and `image.tag` as needed. If Kyverno requires a Trivy scan label, set `podAnnotations["trivy.scan/passed"]="true"` after CI passes.
 
 3. **Configure** the WUI for your environment (env vars, ingress, TLS) per the chart values.
+
+---
+
+## Optional: NetOps and identity (NetBox, Keycloak provisioning, VyOS)
+
+After the main steps, you can add network source-of-truth and SDN:
+
+1. **NetBox + Netdisco:** From `infra/netops/`, copy `.env.example` to `.env`, set secrets, and run `docker compose up -d`. NetBox (port 8000) provides IPAM and inventory; Netdisco (port 5000) provides discovery. Use [infra/image-builder/ansible/netbox_inventory.yml](../infra/image-builder/ansible/netbox_inventory.yml) with `NETBOX_URL` and `NETBOX_TOKEN` for Ansible dynamic inventory against a NetBox-managed fleet.
+2. **Keycloak provisioning (OpenTofu):** With Keycloak up (Step 2), run the OpenTofu module in `infra/opentofu/keycloak-provisioning/` to create or update the realm, groups (e.g. `admin-user`, `data-scientist`), and test users. See that module’s README for variables and conflict avoidance with JSON realm import.
+3. **VyOS / SDN:** Use [infra/netops/sdn/vyos-config.set](../infra/netops/sdn/vyos-config.set) as a reference (or apply it manually/automatically) for VXLAN and BGP EVPN. Connect OVS or AsterNOS on the host to the VyOS VXLAN overlay as described in [infra/netops/README.md](../infra/netops/README.md).
 
 ---
 
