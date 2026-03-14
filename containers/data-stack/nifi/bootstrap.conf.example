@@ -1,0 +1,11 @@
+# Example NiFi JVM bootstrap settings for vertical scaling.
+# The stack uses NIFI_JVM_HEAP_INIT and NIFI_JVM_HEAP_MAX in docker-compose (env) by default.
+# Mount this file (or merge these lines into your bootstrap.conf) if you run NiFi without compose.
+#
+# Heap (typical for 8–16GB host allocation for NiFi):
+# java.arg.2=-Xms4g
+# java.arg.3=-Xmx8g
+#
+# Optional: GC and metaspace
+# java.arg.4=-XX:+UseG1GC
+# java.arg.5=-XX:MaxMetaspaceSize=512m
