@@ -1,0 +1,13 @@
+# Optional: copy to terraform.tfvars to override. Do not commit terraform.tfvars (add to .gitignore).
+# When using `make -C infra/opentofu local-up`, this file is used by default so no copy is required.
+# Paths are relative to this file (environments/local) unless absolute.
+
+kube_config_path = "./kubeconfig"
+
+teleport_chart_version = "16.1.0"
+# Path to infra/teleport/teleport-values.yaml (from repo root: ../../../teleport/teleport-values.yaml)
+teleport_values_file   = "../../../teleport/teleport-values.yaml"
+
+enable_wui = false
+# When enable_wui = true, set path to charts/qminiwasm-wui (from repo root: ../../../../charts/qminiwasm-wui)
+# wui_chart_path = "../../../../charts/qminiwasm-wui"

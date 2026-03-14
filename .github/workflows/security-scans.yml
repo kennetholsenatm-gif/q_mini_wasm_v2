@@ -52,7 +52,7 @@ jobs:
       - name: Install OpenSCAP (scanner and utils)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenscap8 openscap-utils
+          sudo apt-get install -y openscap-common libopenscap25t64 openscap-utils
           oscap --version || true
 
       - name: Fetch SCAP content (ComplianceAsCode)

@@ -1,0 +1,3 @@
+# Packer output and large SBOM artifacts
+output-*/
+artifacts/*.json

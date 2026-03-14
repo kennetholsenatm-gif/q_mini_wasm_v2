@@ -1,0 +1,2 @@
+# For wazuh_alerts_mcp.py (MCP server). Install in edge LXC/container venv.
+mcp>=1.0.0

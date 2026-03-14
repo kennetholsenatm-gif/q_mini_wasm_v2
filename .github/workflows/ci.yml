@@ -164,3 +164,32 @@ jobs:
           name: trivy-image-sbom
           path: trivy-image-sbom.json
         continue-on-error: true
+
+  # SPDX SBOM for container images (compliance; Packer produces QCOW2 SBOM on build host)
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build backend image for SBOM
+        run: docker build -f wui/backend/Dockerfile -t qminiwasm-backend:${{ github.sha }} .
+      - name: Install syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      - name: Generate SPDX SBOM (syft)
+        run: syft qminiwasm-backend:${{ github.sha }} -o spdx-json=sbom-backend.spdx.json
+      - name: Generate SPDX SBOM (Trivy, optional)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/out" aquasec/trivy image --format spdx-json --output /out/sbom-backend-trivy.spdx.json qminiwasm-backend:${{ github.sha }} || true
+      - name: Upload SPDX SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: sbom-backend.spdx.json
+        continue-on-error: true
+      - name: Upload Trivy SPDX SBOM (if present)
+        uses: actions/upload-artifact@v4
+        if: hashFiles('sbom-backend-trivy.spdx.json') != ''
+        with:
+          name: sbom-spdx-trivy
+          path: sbom-backend-trivy.spdx.json
+        continue-on-error: true

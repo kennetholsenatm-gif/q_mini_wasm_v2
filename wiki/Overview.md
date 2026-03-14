@@ -2,27 +2,52 @@
 
 ## Introduction to Q-Mini-WASM
 
-Q-Mini-WASM is a cutting-edge quantum computing framework that combines the power of WebAssembly (WASM) with quantum machine learning capabilities. This project represents a significant advancement in quantum computing by providing a secure, scalable platform for quantum applications while adhering to modern DevSecOps principles.
+Q-Mini-WASM is a quantum computing framework that combines WebAssembly (WASM) with quantum machine learning capabilities. It provides a secure, scalable platform for quantum applications with mature DevSecOps, Zero Trust security, and event-driven data infrastructure suitable for tactical edge and air-gapped deployments.
 
-## Core Architecture
+## Platform Architecture (Current State)
+
+The repository is organized into four main pillars:
+
+### 1. Host Appliance (Packer + QEMU)
+- **Location:** `infra/image-builder/`
+- **Purpose:** Build a hardened AlmaLinux 9 QCOW2 golden image for tactical edge.
+- **Contents:** Packer HCL (QEMU builder), Kickstart (ks.cfg), and a provision script that installs K3s, applies STIG-like hardening (SSH, chrony, firewalld), and creates an `admin` user.
+- **Output:** `output-almalinux9/almalinux9-golden.qcow2`. Aligns with [DockerOS Platform Standard](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/docs/DockerOS-Platform-Standard.md) (AlmaLinux 9 as host OS).
+
+### 2. Data Stack (Event-Driven Architecture)
+- **Location:** `containers/data-stack/`
+- **Purpose:** Vertically scalable, air-gap-friendly data ingestion and storage.
+- **Components:** PostgreSQL (pgvector for LLM/quantum data), RabbitMQ (event broker), Apache NiFi (data flow engine). All use `deploy.resources` for vertical scaling on a single host.
+- **Flow:** WUI backend publishes events to RabbitMQ; NiFi consumes, transforms, and writes final state to PostgreSQL. Optional mTLS for Postgres via Vault-issued client certs (see `postgres-mtls.conf` and security-stack).
+
+### 3. Security Stack (Zero Trust / PQC-Ready)
+- **Location:** `containers/security-stack/`
+- **Purpose:** Passwordless human and machine identity; TLS 1.3 with post-quantum (ML-KEM) readiness.
+- **Components:** Keycloak (FIDO2/Passkeys, OIDC for Teleport), HashiCorp Vault (PKI secrets engine for short-lived mTLS certs), Envoy (reverse proxy with TLS 1.3 and PQC curve options). Dedicated PostgreSQL for Keycloak.
+- **Integration:** Teleport uses Keycloak as OIDC IdP; services request client certs from Vault for passwordless database access.
+
+### 4. Application (Core Engine + WUI)
+- **Location:** `qminiwasm/` (Python package), `wui/` (FastAPI backend + React frontend), `charts/qminiwasm-wui/` (Helm chart).
+- **Purpose:** Quantum circuit simulation, WASM execution, Intel Quantum/ARC integration, and the Web UI for configuration and control.
+- **Deployment:** Docker (e.g. `wui/backend/Dockerfile`) or Kubernetes via Helm; chart is STIG/Kyverno-aware (non-root, securityContext, optional Trivy scan annotation).
+
+Optional Kubernetes/OpenTofu: `infra/opentofu/` (Teleport, Kyverno, Falco), `infra/teleport/`, `infra/kyverno/`, `infra/falco/`. See the [Greenfield Deployment Guide](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/docs/Greenfield-Deployment.md) in the repository for full deployment order.
+
+## Core Application Architecture
 
 ### Quantum Computing Layer
-- **Qiskit Integration**: IBM's quantum computing framework for circuit creation and execution
-- **PennyLane Integration**: Cross-platform quantum machine learning library
-- **Quantum Circuit Simulation**: High-fidelity simulation of quantum circuits
-- **Hardware Abstraction**: Platform-independent quantum hardware interface
+- **PennyLane Integration**: Cross-platform quantum machine learning (primary).
+- **Intel Quantum**: Integration points for Intel Quantum SDK, IQS, and Tunnel Falls (see [Intel Quantum and ARC](Intel-Quantum-and-ARC)).
+- **Quantum Circuit Simulation**: High-fidelity simulation and hardware abstraction.
 
 ### WebAssembly Layer
-- **WASM Compilation**: High-performance compilation of quantum algorithms
-- **Execution Engine**: Optimized WASM runtime for quantum computations
-- **Memory Management**: Efficient memory allocation and garbage collection
-- **Parallel Execution**: Multi-threaded quantum circuit execution
+- **WASM Compilation and Execution**: High-performance WASM runtime (e.g. wasmtime, pywasm).
+- **Memory Management and Parallel Execution**: Optimized for quantum and classical workloads.
 
 ### Application Layer
-- **API Interface**: RESTful APIs for quantum service integration
-- **Data Pipeline**: Secure data processing and transformation
-- **Machine Learning**: Integration with ML frameworks for quantum-enhanced models
-- **Visualization**: Real-time quantum circuit visualization and monitoring
+- **API Interface**: FastAPI backend (REST) for the WUI and service integration.
+- **Data Pipeline**: Event-driven flow via RabbitMQ and NiFi; canonical state in PostgreSQL (pgvector for embeddings).
+- **Web UI**: React frontend for configuration, quantum backend selection, and monitoring.
 
 ## Technical Specifications
 
@@ -82,14 +107,113 @@ Q-Mini-WASM is a cutting-edge quantum computing framework that combines the powe
 ## Architecture Diagram
 
 ```mermaid
-graph TD
-    A[Client Applications] --> B[API Gateway]
-    B --> C[Quantum Circuit Manager]
-    C --> D[WebAssembly Engine]
-    D --> E[Quantum Hardware/Simulator]
-    F[Security Services] --> C
-    G[Monitoring Services] --> C
-    H[Data Services] --> C
+flowchart TB
+    subgraph clients [Clients]
+        User[Users]
+    end
+    subgraph security [Security Stack]
+        Keycloak[Keycloak]
+        Vault[Vault]
+        Envoy[Envoy]
+    end
+    subgraph app [Application]
+        WUI[WUI Backend]
+        Engine[Q-Mini-WASM Engine]
+    end
+    subgraph data [Data Stack]
+        RabbitMQ[RabbitMQ]
+        NiFi[NiFi]
+        PG[(PostgreSQL)]
+    end
+    subgraph host [Host]
+        Packer[AlmaLinux 9 Golden Image]
+    end
+    User --> Keycloak
+    Keycloak --> WUI
+    Envoy --> Keycloak
+    Envoy --> Vault
+    WUI --> RabbitMQ
+    RabbitMQ --> NiFi
+    NiFi --> PG
+    WUI --> Engine
+    Vault -->|mTLS certs| PG
+    Packer --> host
+```
+
+## Tactical Edge End-to-End Architecture
+
+The following diagram shows the full path from CI/NetOps provisioning through far-edge devices to the tactical edge node (SDN, security stack, data stack, and application stack), including WireGuard SASE and Solace Agent Mesh A2A communication.
+
+```mermaid
+flowchart TB
+    subgraph CI["Provisioning & NetOps (CI/CD Pipeline)"]
+        direction LR
+        Packer["Packer + Ansible\n(Builds QCOW2 Image & SBOM)"]
+        NetBox["NetBox + Netdisco\n(Network Source of Truth & IPAM)"]
+    end
+
+    subgraph FarEdge["Far Edge Device (IoT/Sensor/Drone)"]
+        direction TB
+        Incus["Incus Orchestrator (LXC)"]
+        subgraph LXC["LXC System Containers"]
+            direction LR
+            SASE["SASE Proxy\n(WireGuard + Envoy)"]
+            IDS["Security IDS\n(Wazuh Agent)"]
+            AIAgent["AI Agent Runtime\n(Solace Agent Mesh)"]
+        end
+        AIAgent -->|Local Tool Call| IDS
+        AIAgent -->|Filtered Local API| SASE
+    end
+
+    subgraph HostNode["Tactical Edge Node (Ruggedized Hardware)"]
+        direction TB
+        OS["AlmaLinux 9 Host OS\n(Hardened Golden Image)"]
+
+        subgraph SDN["SDN & Network Fabric"]
+            VyOS["VyOS Router\n(BGP EVPN / VXLAN)"]
+            OVS["AsterNOS / Open vSwitch\n(VXLAN VTEP)"]
+        end
+
+        subgraph Security["Security & Zero Trust Stack"]
+            Ingress["Envoy / NGINX Ingress\n(Post-Quantum TLS 1.3 ML-KEM)"]
+            Vault["HashiCorp Vault\n(PKI & Dynamic Secrets)"]
+            Keycloak["Keycloak IAM\n(FIDO2/Passkeys)"]
+            Teleport["Teleport\n(Cert-based Access Proxy)"]
+        end
+
+        subgraph DataStack["Event & Data Stack"]
+            Solace["Solace PubSub+\n(Event Broker & Agent Orchestrator)"]
+            NiFi["Apache NiFi\n(Data Routing & Flow)"]
+            DB[("PostgreSQL\n(pgvector)")]
+        end
+
+        subgraph AppStack["Core Application Stack"]
+            Backend["FastAPI WUI Backend\n(QminiWASM Engine)"]
+            Frontend["React Web UI"]
+        end
+
+        VyOS --- OVS
+        OVS --- Ingress
+
+        Ingress --> Frontend
+        Ingress --> Backend
+        Ingress --> Solace
+
+        Backend <-->|Publishes/Subscribes Events| Solace
+        NiFi <-->|Subscribes & Transforms| Solace
+        NiFi -->|Writes Final State (mTLS)| DB
+        Backend -->|Direct Query (mTLS)| DB
+
+        Teleport -.->|OIDC Trust| Keycloak
+        Backend -.->|Requests Short-Lived Cert| Vault
+        NiFi -.->|Requests Short-Lived Cert| Vault
+    end
+
+    Packer -.->|Deploys to| HostNode
+    NetBox -.->|Ansible Dynamic Inventory| VyOS
+
+    SASE <===>|Encrypted WireGuard SASE Tunnel| VyOS
+    AIAgent <.->|Async A2A Comm (Guaranteed Delivery)| Solace
 ```
 
 ## Development Philosophy
