@@ -53,6 +53,7 @@ kubectl get pods -A
 ```
 
 - Ingress: **http://localhost** (and **https://localhost** if TLS is configured).
+- **Teleport (local):** The local environment sets `teleport_wait_for_jobs = false` and a 15-minute timeout so `local-up` can complete even when the OIDC connector is not created yet. If Teleport pods are not ready, run `kubectl get pods -n teleport` and `kubectl logs -n teleport -l app.kubernetes.io/name=teleport` to debug; create the OIDC connector (e.g. via tctl or the Operator) and scale/restart as needed.
 - Teleport: configure Ingress or port-forward to the Teleport proxy service; use the URL from your Teleport values (e.g. `teleport.example.com` with a local hosts entry or ingress host).
 
 ## Optional: WUI

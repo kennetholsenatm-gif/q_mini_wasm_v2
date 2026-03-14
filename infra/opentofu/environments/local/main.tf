@@ -13,9 +13,12 @@ module "addons" {
 module "workloads" {
   source = "../../modules/workloads"
 
-  teleport_chart_version = var.teleport_chart_version
-  teleport_values_file  = var.teleport_values_file
-  enable_wui            = var.enable_wui
-  wui_chart_path        = var.wui_chart_path != "" ? var.wui_chart_path : abspath("${path.module}/../../../../charts/qminiwasm-wui")
-  wui_ingress_class     = var.ingress_class_name
+  teleport_chart_version  = var.teleport_chart_version
+  teleport_values_file    = var.teleport_values_file
+  teleport_timeout        = var.teleport_timeout
+  teleport_wait_for_jobs  = var.teleport_wait_for_jobs
+  teleport_wait           = var.teleport_wait
+  enable_wui              = var.enable_wui
+  wui_chart_path         = var.wui_chart_path != "" ? var.wui_chart_path : abspath("${path.module}/../../../../charts/qminiwasm-wui")
+  wui_ingress_class      = var.ingress_class_name
 }

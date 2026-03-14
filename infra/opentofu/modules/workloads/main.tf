@@ -9,8 +9,9 @@ resource "helm_release" "teleport" {
   create_namespace  = true
   version           = var.teleport_chart_version
   values            = [file(var.teleport_values_file)]
-  wait              = true
-  wait_for_jobs     = true
+  wait              = var.teleport_wait
+  wait_for_jobs     = var.teleport_wait_for_jobs
+  timeout           = var.teleport_timeout
 }
 
 resource "helm_release" "wui" {
