@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Deploy wiki
-        uses: spenserblack/actions-wiki@v1
+        uses: spenserblack/actions-wiki@v0.4.0-rc.1
         with:
           path: wiki
           token: ${{ secrets.WIKI_DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}

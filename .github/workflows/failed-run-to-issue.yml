@@ -8,7 +8,7 @@ env:
 
 on:
   workflow_run:
-    workflows: ["CI", "Security"]
+    workflows: ["CI", "Security", "codeql", "opentofu-infra", "security"]
     types: [completed]
     branches: [main, master]
 
@@ -36,22 +36,31 @@ jobs:
               `- **Event:** ${run.event}`,
               `- **Triggered by:** @${run.actor?.login || 'unknown'}`,
               '',
+              `**Failure Type:** ${run.name.includes('Security') ? 'Security' : run.name.includes('CI') ? 'CI' : 'Infrastructure'}`,
+              '',
               `View the [run logs](${run.html_url}) to fix the failure.`,
+              '',
+              '---',
+              '### Next Steps:',
+              '1. Review the workflow logs to identify the root cause',
+              '2. Check if this is a regression or a new issue',
+              '3. Update tests or configuration if needed',
+              '4. Re-run the workflow once the issue is resolved'
             ].join('\n');
             const { data: issue } = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Workflow failed: ${run.name} #${run.run_number}`,
+              title: `🚨 Workflow failed: ${run.name} #${run.run_number}`,
               body,
+              labels: ['bug', 'automated', 'needs-triage', 'workflow-failure']
             });
             core.setOutput('issue_node_id', issue.node_id);
             core.setOutput('issue_number', issue.number);
             core.setOutput('issue_url', issue.html_url);
-        continue-on-error: true
 
       - name: Get project ID
         id: project
-        if: secrets.ADD_TO_PROJECT_TOKEN != ''
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
@@ -66,11 +75,11 @@ jobs:
             const projectId = result?.user?.projectV2?.id;
             if (!projectId) throw new Error('Could not find project (check ADD_TO_PROJECT_TOKEN and project number)');
             core.setOutput('project_id', projectId);
-        continue-on-error: true
 
       - name: Add issue to project
         id: add_to_project
-        if: steps.create.outputs.issue_node_id != '' && secrets.ADD_TO_PROJECT_TOKEN != '' && steps.project.outputs.project_id != ''
+        if: steps.create.outputs.issue_node_id != '' && steps.project.outputs.project_id != ''
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
@@ -85,7 +94,52 @@ jobs:
               }
             `, { projectId, contentId });
             core.notice('Failed-run issue added to project #3');
-        continue-on-error: true
+
+      - name: Add issue to project column
+        if: steps.add_to_project.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
+          script: |
+            const result = await github.graphql(`
+              query {
+                user(login: "kennetholsenatm-gif") {
+                  projectV2(number: 3) {
+                    id
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            title
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `);
+            const project = result.user.projectV2;
+            const issueItem = project.items.nodes.find(item => 
+              item.content?.title === `🚨 Workflow failed: ${context.payload.workflow_run.name} #${context.payload.workflow_run.run_number}`
+            );
+            if (issueItem) {
+              await github.graphql(`
+                mutation($itemId: ID!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: "${project.id}",
+                    itemId: $itemId,
+                    fieldId: "3",
+                    value: "To Do"
+                  }) {
+                    projectV2Item {
+                      id
+                    }
+                  }
+                }
+              `, { itemId: issueItem.id });
+            }
 
       - name: Summary
         run: |
