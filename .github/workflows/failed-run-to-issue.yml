@@ -60,7 +60,7 @@ jobs:
 
       - name: Get project ID
         id: project
-        if: secrets.ADD_TO_PROJECT_TOKEN != ''
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
@@ -78,7 +78,8 @@ jobs:
 
       - name: Add issue to project
         id: add_to_project
-        if: steps.create.outputs.issue_node_id != '' && secrets.ADD_TO_PROJECT_TOKEN != '' && steps.project.outputs.project_id != ''
+        if: steps.create.outputs.issue_node_id != '' && steps.project.outputs.project_id != ''
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}

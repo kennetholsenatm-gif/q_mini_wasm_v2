@@ -64,8 +64,12 @@ async def get_quantum_config() -> QuantumConfigResponse:
     return QuantumConfigResponse(backend=backend, simulator_name=sim, credentials_configured=creds)
 
 
-# Allowlist of backend ids safe for use in filenames (no user-controlled path segment).
-_VALID_BACKEND_IDS = frozenset(b.id for b in QUANTUM_BACKENDS)
+# (backend_id, filename) — path uses only the literal filename, never user input.
+_BACKEND_ENV_FILES: tuple[tuple[str, str], ...] = (
+    ("ibm_quantum", "ibm_quantum.env"),
+    ("intel_qs", "intel_qs.env"),
+    ("penny_lane", "penny_lane.env"),
+)
 
 
 def _path_under_base(resolved_path: Path, resolved_base: Path) -> bool:
@@ -82,22 +86,22 @@ def _persist_credentials(backend: str, credentials: dict[str, str]) -> None:
     cred_dir = os.environ.get("WUI_CREDENTIALS_DIR")
     if not cred_dir or not credentials:
         return
-    # Use allowlist so path component is not user-controlled; reject otherwise.
-    if backend not in _VALID_BACKEND_IDS:
-        return
     base_dir = Path(cred_dir).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
-    # Filename from allowlisted backend only; then verify resolved path stays under base.
-    filepath = (base_dir / f"{backend}.env").resolve()
-    if not _path_under_base(filepath, base_dir):
+    for _bid, env_filename in _BACKEND_ENV_FILES:
+        if _bid != backend:
+            continue
+        filepath = (base_dir / env_filename).resolve()
+        if not _path_under_base(filepath, base_dir):
+            return
+        lines = [f"{k}={v}" for k, v in credentials.items() if v]
+        if lines:
+            filepath.write_text("\n".join(lines), encoding="utf-8")
+            try:
+                filepath.chmod(0o600)
+            except OSError:
+                pass
         return
-    lines = [f"{k}={v}" for k, v in credentials.items() if v]
-    if lines:
-        filepath.write_text("\n".join(lines), encoding="utf-8")
-        try:
-            filepath.chmod(0o600)
-        except OSError:
-            pass
 
 
 @router.put("/config", response_model=QuantumConfigResponse)
