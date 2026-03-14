@@ -142,7 +142,7 @@ jobs:
       - name: Build backend image for scan
         run: docker build -f wui/backend/Dockerfile -t qminiwasm-backend:${{ github.sha }} .
       - name: Run Trivy image scan (fail on CRITICAL/HIGH)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.35.0
         continue-on-error: true
         with:
           image-ref: "qminiwasm-backend:${{ github.sha }}"
