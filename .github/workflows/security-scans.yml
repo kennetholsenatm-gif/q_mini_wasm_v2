@@ -2,6 +2,9 @@
 # Runs pip install -e .[security], bandit, trivy, and run_openscap_scan.py; uploads OpenSCAP HTML report.
 name: Security Scans
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, master]
