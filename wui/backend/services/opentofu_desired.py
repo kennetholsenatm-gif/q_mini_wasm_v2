@@ -2,19 +2,13 @@
 
 import json
 import os
-import re
 import uuid
 from pathlib import Path
 from typing import Any
 
-
-def _safe_provider_id_for_filename(provider_id: str) -> str | None:
-    """Return a sanitized provider_id safe for use in filenames, or None if invalid."""
-    if not provider_id or not isinstance(provider_id, str):
-        return None
-    if re.fullmatch(r"[A-Za-z0-9_.-]+", provider_id.strip()):
-        return provider_id.strip()
-    return None
+# Allowlist of provider ids safe for filenames (no user-controlled path segment).
+# Must match deploy router TFVAR_PRESETS; add new providers here when adding presets.
+_ALLOWED_PROVIDER_IDS = frozenset({"lambda", "runpod", "ibm_cloud"})
 
 
 def _path_under_base(resolved_path: Path, resolved_base: Path) -> bool:
@@ -48,19 +42,21 @@ def write_desired_tfvars(
     Returns:
         (config_path_basename, full_path)
     """
-    safe_id = _safe_provider_id_for_filename(provider_id)
-    if safe_id is None:
-        raise ValueError("provider_id must be alphanumeric with only dots, underscores, or hyphens")
+    # Use allowlist so path component is not user-controlled.
+    pid = (provider_id or "").strip() if isinstance(provider_id, str) else ""
+    if pid not in _ALLOWED_PROVIDER_IDS:
+        raise ValueError(
+            "provider_id must be one of: " + ", ".join(sorted(_ALLOWED_PROVIDER_IDS))
+        )
     desired_dir = get_desired_dir().resolve()
     desired_dir.mkdir(parents=True, exist_ok=True)
     short_id = uuid.uuid4().hex[:8]
-    basename = f"{safe_id}-{short_id}.tfvars.json"
-    # Build path from resolved base + sanitized basename only; verify no escape.
+    basename = f"{pid}-{short_id}.tfvars.json"
     full_path = (desired_dir / basename).resolve()
     if not _path_under_base(full_path, desired_dir):
         raise ValueError("Invalid path")
     payload = {
-        "provider_id": safe_id,
+        "provider_id": pid,
         "instance_type": instance_type,
         "region": region,
         **(metadata or {}),

@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-import re
 
 from fastapi import APIRouter, HTTPException
 
@@ -65,12 +64,8 @@ async def get_quantum_config() -> QuantumConfigResponse:
     return QuantumConfigResponse(backend=backend, simulator_name=sim, credentials_configured=creds)
 
 
-def _safe_backend_id_for_filename(backend: str) -> str | None:
-    """Return a sanitized backend id safe for use in filenames, or None if invalid."""
-    # Allow only simple tokens to avoid path traversal or special characters in filenames.
-    if re.fullmatch(r"[A-Za-z0-9_-]+", backend):
-        return backend
-    return None
+# Allowlist of backend ids safe for use in filenames (no user-controlled path segment).
+_VALID_BACKEND_IDS = frozenset(b.id for b in QUANTUM_BACKENDS)
 
 
 def _path_under_base(resolved_path: Path, resolved_base: Path) -> bool:
@@ -87,13 +82,13 @@ def _persist_credentials(backend: str, credentials: dict[str, str]) -> None:
     cred_dir = os.environ.get("WUI_CREDENTIALS_DIR")
     if not cred_dir or not credentials:
         return
-    safe_backend = _safe_backend_id_for_filename(backend)
-    if safe_backend is None:
+    # Use allowlist so path component is not user-controlled; reject otherwise.
+    if backend not in _VALID_BACKEND_IDS:
         return
     base_dir = Path(cred_dir).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
-    # Build path from resolved base + sanitized name only; then verify no escape.
-    filepath = (base_dir / f"{safe_backend}.env").resolve()
+    # Filename from allowlisted backend only; then verify resolved path stays under base.
+    filepath = (base_dir / f"{backend}.env").resolve()
     if not _path_under_base(filepath, base_dir):
         return
     lines = [f"{k}={v}" for k, v in credentials.items() if v]
