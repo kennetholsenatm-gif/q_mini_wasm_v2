@@ -2,6 +2,9 @@
 # Version: 3 — jobs structured so required checks can pass (install/scan optional, reports always created)
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, master]
