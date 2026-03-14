@@ -24,7 +24,8 @@ kubectl delete pvc -n teleport teleport
 kubectl delete pod -n teleport -l app.kubernetes.io/name=teleport-auth
 # If the label doesn't match, delete the auth pod by name from get pods
 ```
-Then check again: `kubectl get pods -n teleport` (auth will get a new PVC and start clean).
+Then check again: `kubectl
+ get pods -n teleport` (auth will get a new PVC and start clean).
 
 **3. Confirm the release is using local values:** `helm get values teleport -n teleport` and check that `authentication.type` is `local` and `localAuth` is `true`. If not, re-apply with `teleport_values_file = "../../../teleport/teleport-values-local.yaml"` and run `tofu apply` (or `make -C infra/opentofu local-up`) from `environments/local`.
 

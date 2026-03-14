@@ -1,8 +1,7 @@
 # Kubernetes & Cloud Deployment (from white paper)
 kubernetes>=28.0.0
 docker>=5.0.0
-# docker-compose: use "pip install docker-compose" (v2.x) or the standalone CLI
-docker-compose>=2.20.0
+# Docker Compose V2: use the Docker CLI plugin (docker compose), not pip. Install via Docker Desktop or: https://docs.docker.com/compose/install/
 # OpenTofu (optional; may require separate binary)
 # opentofu: no canonical PyPI package; omit or install via system/conda
 
