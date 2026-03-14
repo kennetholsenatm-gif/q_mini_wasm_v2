@@ -30,5 +30,5 @@ grafana-api>=0.0.1
 # Cloud Resources
 requests>=2.31
 boto3>=1.28
-google-cloud>=1.35.0
+google-cloud>=0.34.0
 azure-core>=1.28
