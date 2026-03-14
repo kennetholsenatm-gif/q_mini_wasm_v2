@@ -188,6 +188,9 @@ Comprehensive test suite:
 3. Configure infrastructure
 4. Implement backup procedures
 
+### Platform standard (DockerOS)
+We standardize on **AlmaLinux 9** (and AlmaLinux 10 when available), **Foreman** (Satellite FOSS equivalent), and **Foreman Smart Proxy** (Capsule equivalent) for hosts running Docker/Kubernetes and for container base images. See [docs/DockerOS-Platform-Standard.md](docs/DockerOS-Platform-Standard.md).
+
 ## Security Documentation
 
 ### Security Policies
