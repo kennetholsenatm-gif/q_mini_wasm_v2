@@ -3,9 +3,9 @@
 | File | Use case |
 |------|----------|
 | **teleport-values.yaml** | Production / Zero Trust: OIDC + WebAuthn, no local auth. Create the OIDC connector (tctl or Operator) before or after install. |
-| **teleport-values-local.yaml** | Local/Kind: local auth so the auth service starts without an IdP. Use with `environments/local` (default in terraform.tfvars.example). Create users with `tctl users add`. |
+| **teleport-values-local.yaml** | Local/Kind: local auth so the auth service starts without an IdP. Use with `environments/local` (default in terraform.tfvars.example). Create users with `tctl users add`. **Requires Teleport chart 16.1.0** (17/18 reject password-only MFA). |
 
-For local dev, `make -C infra/opentofu local-up` uses `teleport-values-local.yaml` by default so Teleport comes up without configuring OIDC.
+For local dev, `make -C infra/opentofu local-up` uses `teleport-values-local.yaml` and chart version 16.1.0 by default. If you use Helm directly, run: `helm upgrade teleport teleport/teleport-cluster -n teleport -f infra/teleport/teleport-values-local.yaml --version 16.1.0`.
 
 ## Troubleshooting: auth CrashLoopBackOff
 
