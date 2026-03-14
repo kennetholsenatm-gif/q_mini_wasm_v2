@@ -64,6 +64,41 @@ safety check
 pwsh -File scripts/devsecops-workflow.ps1
 ```
 
+## Connecting to Docker and Kubernetes via Teleport
+
+When the project uses [Teleport](https://goteleport.com/) for Zero Trust access, development access to Kubernetes (and optionally Docker) is gated by Teleport. You use short-lived certificates instead of long-lived kubeconfig or SSH keys.
+
+### Prerequisites
+
+- **tsh** (Teleport client) installed. See [Teleport installation](https://goteleport.com/docs/installation/).
+- **TELEPORT_PROXY** set to your Teleport proxy address (e.g. `teleport.example.com`).
+- **TELEPORT_KUBE_CLUSTER** (optional) set to the Kubernetes cluster name configured in Teleport (e.g. `qminiwasm-dev`).
+
+### Steps
+
+1. Set environment variables (replace with your cluster values):
+
+   ```bash
+   export TELEPORT_PROXY=teleport.example.com
+   export TELEPORT_KUBE_CLUSTER=qminiwasm-dev
+   ```
+
+   On Windows (PowerShell):
+
+   ```powershell
+   $env:TELEPORT_PROXY = "teleport.example.com"
+   $env:TELEPORT_KUBE_CLUSTER = "qminiwasm-dev"
+   ```
+
+2. Run the login script. This performs `tsh login --auth=sso` (browser/WebAuthn) and updates your kubeconfig with short-lived certs:
+
+   - **Windows:** `pwsh -File scripts/teleport-login.ps1`
+   - **Linux/macOS:** `./scripts/teleport-login.sh`
+
+3. Use `kubectl` and (if configured) Docker as usual. Access is enforced by Teleport; certificates expire after the session TTL (e.g. 8 hours). Re-run the script when needed.
+
+For how this satisfies IA-2, AC-3, and AU-2/AU-3, see [SECURITY.md](../SECURITY.md#zero-trust-access-teleport).
+
 ## Code Quality Standards
 
 ### Python Code Standards

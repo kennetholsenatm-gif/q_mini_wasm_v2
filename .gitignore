@@ -51,12 +51,20 @@ htmlcov/
 .tox/
 .nox/
 
-# Docker (allow project Dockerfile at repo root for DevSecOps showcase)
+# Docker (allow multi-container Dockerfiles and root compose)
 .dockerignore
 Dockerfile*
 !/Dockerfile
+!wui/backend/Dockerfile
+!wui/frontend/Dockerfile
+!containers/Dockerfile.training
+!containers/Dockerfile.serving
+!containers/nginx/Dockerfile
+!containers/wui/Dockerfile
+!containers/wui/Dockerfile.almalinux
 docker-compose*.yml
 docker-compose*.yaml
+!docker-compose.yml
 
 # Logs
 logs/

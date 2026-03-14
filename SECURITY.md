@@ -66,6 +66,17 @@ Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability sc
 - **SC-13**: Cryptographic Protection - Encryption used for sensitive data
 - **SC-23**: Data Origin Authentication - Data origin verified through digital signatures
 
+### Zero Trust Access (Teleport)
+
+When Teleport is deployed (see [infra/teleport/](infra/teleport/) and [scripts/teleport-login.ps1](scripts/teleport-login.ps1)), access to development Kubernetes and Docker environments is gated by a Zero Trust boundary:
+
+- **Teleport Zero Trust boundary:** All access to development Kubernetes (and, if configured, Docker via Application Access) goes through Teleport. No long-lived SSH keys or static passwords are used; authentication is SSO (OIDC with GitHub, Okta, or Azure AD) plus WebAuthn only (hardware key or platform authenticator).
+- **IA-2 (Identification and Authentication):** Multi-factor authentication is enforced: first factor via the identity provider (SSO), second factor via WebAuthn (e.g., YubiKey, Touch ID, Windows Hello). Password-only and single-factor access are not permitted.
+- **AC-3 (Access Enforcement):** Teleport RBAC roles (`dev-read-only`, `dev-admin`) enforce least privilege; roles are mapped from IdP groups and restrict access to development namespaces. Users do not receive direct cluster credentials.
+- **AU-2 / AU-3 (Audit Events and Content):** Teleport emits login, session, and command execution events as structured audit data. These events can be forwarded to an ELK Stack or Splunk endpoint (configured via environment or secrets, not in the repository) for continuous monitoring and audit review (AU-2, AU-3).
+
+IdP configuration (OIDC client secret) and audit sink configuration (ELK/Splunk endpoint and credentials) are not stored in the repository and are supplied via secrets or environment at deployment time.
+
 ## Security Policies
 
 ### Code Security
