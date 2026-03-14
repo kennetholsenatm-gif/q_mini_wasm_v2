@@ -20,6 +20,7 @@ export function JobConfigSummary() {
       <ul className="job-config-list">
         <li>
           <strong>Hardware:</strong> {config.accelerator} (device {config.device_index})
+          {config.execution_mode && ` · ${config.execution_mode}`}
         </li>
         <li>
           <strong>Quantum backend:</strong> {config.quantum_backend}
@@ -28,8 +29,13 @@ export function JobConfigSummary() {
           <strong>Circuit:</strong> {config.num_qubits} qubits, {config.qaoa_layers} QAOA layers, {config.diff_method}
         </li>
         <li>
-          <strong>Training:</strong> {config.epochs} epochs, batch size {config.batch_size}
+          <strong>Training:</strong> {config.num_trainable_parameters ?? 1024} parameters, {config.epochs} epochs, batch size {config.batch_size}
         </li>
+        {config.transfer_config && (
+          <li>
+            <strong>Transfer:</strong> batch {config.transfer_config.transfer_batch_size}, {config.transfer_config.serialization_format}, poll {config.transfer_config.polling_interval_seconds}s
+          </li>
+        )}
       </ul>
     </section>
   );

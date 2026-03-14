@@ -148,7 +148,7 @@ graph TD
 
 ## Getting Started
 
-Ready to begin your quantum computing journey with Q-Mini-WASM? Follow our [Development Workflow](Development.md) guide to set up your development environment and start building quantum applications today.
+Ready to begin your quantum computing journey with Q-Mini-WASM? Follow our [Development Workflow](Development) guide to set up your development environment and start building quantum applications today.
 
 ---
 

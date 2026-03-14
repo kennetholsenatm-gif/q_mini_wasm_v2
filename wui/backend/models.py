@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field
 
 # ----- Hardware -----
 
+class ExecutionMode(str, Enum):
+    local = "local"
+    hpc = "hpc"
+
+
 class AcceleratorType(str, Enum):
     cuda = "cuda"
     xpu = "xpu"
@@ -17,15 +22,30 @@ class HardwareOption(BaseModel):
     name: str = Field(description="Human-readable name.")
 
 
+class HpcConnectionDetails(BaseModel):
+    endpoint_url: Optional[str] = Field(default=None, description="HPC cluster endpoint URL.")
+    auth_token: Optional[str] = Field(default=None, description="Authentication token; never logged.")
+    cluster_id: Optional[str] = Field(default=None, description="Cluster identifier.")
+    node_id: Optional[str] = Field(default=None, description="Node identifier.")
+
+
 class HardwareCurrent(BaseModel):
     accelerator: str = Field(description="Current accelerator: cuda, xpu, cpu.")
     device_index: int = Field(default=0, description="Device index.")
     device_name: str = Field(description="Human-readable device name.")
+    execution_mode: ExecutionMode = Field(default=ExecutionMode.hpc, description="Local or HPC execution.")
+    hpc_connection: Optional[HpcConnectionDetails] = Field(default=None, description="HPC connection details when mode is hpc.")
+    local_accelerator: Optional[AcceleratorType] = Field(default=None, description="Local accelerator when mode is local.")
+    simulated_quantum: bool = Field(default=False, description="Use simulated quantum when mode is local.")
 
 
 class HardwareCurrentUpdate(BaseModel):
     accelerator: AcceleratorType
     device_index: int = 0
+    execution_mode: Optional[ExecutionMode] = None
+    hpc_connection: Optional[HpcConnectionDetails] = None
+    local_accelerator: Optional[AcceleratorType] = None
+    simulated_quantum: Optional[bool] = None
 
 
 # ----- Quantum backend -----
@@ -43,11 +63,15 @@ class QuantumConfigResponse(BaseModel):
         default_factory=dict,
         description="Per-env-var flag that credential is set (no values returned).",
     )
+    endpoint_url: Optional[str] = Field(default=None, description="Optional endpoint URL for quantum provider.")
+    provider: Optional[str] = Field(default=None, description="Provider name: ibm, ionq, intel.")
 
 
 class QuantumConfigUpdate(BaseModel):
-    backend: str = Field(description="Backend id: ibm_quantum, intel_qs, penny_lane.")
+    backend: str = Field(description="Backend id: ibm_quantum, intel_qs, penny_lane, ionq.")
     credentials: Dict[str, str] = Field(default_factory=dict, description="API keys / tokens; never logged.")
+    endpoint_url: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class QuantumVerifyResponse(BaseModel):
@@ -103,17 +127,53 @@ class DeployTfvarsResponse(BaseModel):
     presets: List[TfvarPreset] = Field(default_factory=list, description="Preconfigured presets.")
 
 
+# ----- Training config -----
+
+class TrainingConfigResponse(BaseModel):
+    num_trainable_parameters: int = Field(ge=1, default=1024, description="Number of parameters to train.")
+    epochs: int = Field(ge=1, default=10, description="Training epochs.")
+    batch_size: int = Field(ge=1, default=32, description="Training batch size.")
+
+
+class TrainingConfigUpdate(BaseModel):
+    num_trainable_parameters: Optional[int] = Field(default=None, ge=1)
+    epochs: Optional[int] = Field(default=None, ge=1)
+    batch_size: Optional[int] = Field(default=None, ge=1)
+
+
+# ----- HPC-to-Quantum transfer -----
+
+class SerializationFormat(str, Enum):
+    json = "json"
+    msgpack = "msgpack"
+
+
+class TransferConfig(BaseModel):
+    transfer_batch_size: int = Field(ge=1, default=64, description="Batch size for HPC-to-QPU transfer.")
+    serialization_format: str = Field(default="json", description="json or msgpack.")
+    polling_interval_seconds: float = Field(ge=0.1, default=2.0, description="Polling interval in seconds.")
+
+
+class TransferConfigUpdate(BaseModel):
+    transfer_batch_size: Optional[int] = Field(default=None, ge=1)
+    serialization_format: Optional[str] = Field(default=None)
+    polling_interval_seconds: Optional[float] = Field(default=None, ge=0.1)
+
+
 # ----- Job config (aggregate for training job) -----
 
 class JobConfigResponse(BaseModel):
     accelerator: str = Field(description="Accelerator: cuda, xpu, cpu.")
     device_index: int = Field(default=0)
+    execution_mode: str = Field(default="hpc", description="local or hpc.")
     quantum_backend: str = Field(description="Quantum backend id.")
     num_qubits: int = Field(description="QAOA num_qubits.")
     qaoa_layers: int = Field(description="QAOA layers.")
     diff_method: str = Field(description="parameter-shift or finite-diff.")
+    num_trainable_parameters: int = Field(default=1024, description="Number of parameters to train.")
     epochs: int = Field(default=10, description="Training epochs.")
     batch_size: int = Field(default=32, description="Training batch size.")
+    transfer_config: Optional[TransferConfig] = Field(default=None, description="HPC-to-QPU data transfer config.")
 
 
 class TrainingEstimateResponse(BaseModel):

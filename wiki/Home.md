@@ -4,17 +4,17 @@ Welcome to the comprehensive wiki for the Q-Mini-WASM quantum computing framewor
 
 ## Quick Navigation
 
-- [Project Overview](Overview.md)
-- [Intel Quantum and Intel ARC (XPU)](Intel-Quantum-and-ARC.md)
-- [DevSecOps Implementation](DevSecOps.md)
-- [Security Features](Security.md)
-- [Development Workflow](Development.md)
-- [Testing and Quality Assurance](Testing.md)
-- [Performance and Monitoring](Performance.md)
-- [Documentation](Documentation.md)
-- [Community and Support](Community.md)
-- [Legal and Compliance](Compliance.md)
-- [Roadmap](Roadmap.md)
+- [Project Overview](Overview)
+- [Intel Quantum and Intel ARC (XPU)](Intel-Quantum-and-ARC)
+- [DevSecOps Implementation](DevSecOps)
+- [Security Features](Security)
+- [Development Workflow](Development)
+- [Testing and Quality Assurance](Testing)
+- [Performance and Monitoring](Performance)
+- [Documentation](Documentation)
+- [Community and Support](Community)
+- [Legal and Compliance](Compliance)
+- [Roadmap](Roadmap)
 
 ## About Q-Mini-WASM
 
@@ -30,15 +30,15 @@ Q-Mini-WASM is a quantum computing framework that combines WebAssembly (WASM) wi
 
 ## Getting Started
 
-New to Q-Mini-WASM? Start with our [Project Overview](Overview.md) to understand the architecture and capabilities, then follow our [Development Workflow](Development.md) guide to set up your development environment.
+New to Q-Mini-WASM? Start with our [Project Overview](Overview) to understand the architecture and capabilities, then follow our [Development Workflow](Development) guide to set up your development environment.
 
 ## Security First
 
-Security is at the core of Q-Mini-WASM. Our [Security Features](Security.md) documentation details our comprehensive security implementation, including automated scanning, compliance checks, and incident response procedures.
+Security is at the core of Q-Mini-WASM. Our [Security Features](Security) documentation details our comprehensive security implementation, including automated scanning, compliance checks, and incident response procedures.
 
 ## Community
 
-We welcome contributions! Check out our [Community and Support](Community.md) section for guidelines on how to get involved, report issues, and contribute to the project.
+We welcome contributions! Check out our [Community and Support](Community) section for guidelines on how to get involved, report issues, and contribute to the project.
 
 ---
 

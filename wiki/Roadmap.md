@@ -142,7 +142,7 @@ Q-Mini-WASM's roadmap outlines our strategic vision for the future development o
 
 ## Getting Involved
 
-Ready to help shape the future of quantum computing? Follow our [Development Workflow](Development.md) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
+Ready to help shape the future of quantum computing? Follow our [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
 
 ---
 

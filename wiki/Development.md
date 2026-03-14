@@ -228,7 +228,7 @@ pwsh -File scripts/devsecops-workflow.ps1
 
 ## Getting Started
 
-Ready to start developing with Q-Mini-WASM? Follow our [Development Workflow](Development.md) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
+Ready to start developing with Q-Mini-WASM? Follow our [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
 
 ---
 

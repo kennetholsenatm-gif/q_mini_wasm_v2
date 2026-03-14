@@ -10,18 +10,30 @@ from ..models import (
     QuantumConfigResponse,
     QuantumConfigUpdate,
     QuantumVerifyResponse,
+    TransferConfig,
+    TransferConfigUpdate,
 )
 
 # In-memory: current backend id (no raw credentials stored in memory for safety)
 _quantum_backend: str | None = None
 # Which credential keys have been set (no values stored)
 _credentials_configured: dict[str, bool] = {}
+_quantum_endpoint_url: str | None = None
+_quantum_provider: str | None = None
+
+# HPC-to-QPU transfer config
+_transfer_config: TransferConfig = TransferConfig()
 
 QUANTUM_BACKENDS = [
     QuantumBackendInfo(
         id="ibm_quantum",
         name="IBM Quantum",
         required_env_vars=["IBM_QUANTUM_API_KEY"],
+    ),
+    QuantumBackendInfo(
+        id="ionq",
+        name="IonQ",
+        required_env_vars=["IONQ_API_KEY"],
     ),
     QuantumBackendInfo(
         id="intel_qs",
@@ -61,12 +73,19 @@ async def get_quantum_config() -> QuantumConfigResponse:
     backend = _quantum_backend if _quantum_backend is not None else s.quantum_backend
     sim = "default.qubit" if backend == "penny_lane" else None
     creds = _get_credentials_configured(backend)
-    return QuantumConfigResponse(backend=backend, simulator_name=sim, credentials_configured=creds)
+    return QuantumConfigResponse(
+        backend=backend,
+        simulator_name=sim,
+        credentials_configured=creds,
+        endpoint_url=_quantum_endpoint_url,
+        provider=_quantum_provider,
+    )
 
 
 # (backend_id, filename) — path uses only the literal filename, never user input.
 _BACKEND_ENV_FILES: tuple[tuple[str, str], ...] = (
     ("ibm_quantum", "ibm_quantum.env"),
+    ("ionq", "ionq.env"),
     ("intel_qs", "intel_qs.env"),
     ("penny_lane", "penny_lane.env"),
 )
@@ -110,8 +129,12 @@ async def put_quantum_config(body: QuantumConfigUpdate) -> QuantumConfigResponse
     valid = {b.id for b in QUANTUM_BACKENDS}
     if body.backend not in valid:
         raise HTTPException(status_code=400, detail=f"Unknown backend: {body.backend}")
-    global _quantum_backend, _credentials_configured
+    global _quantum_backend, _credentials_configured, _quantum_endpoint_url, _quantum_provider
     _quantum_backend = body.backend
+    if body.endpoint_url is not None:
+        _quantum_endpoint_url = body.endpoint_url.strip() or None
+    if body.provider is not None:
+        _quantum_provider = body.provider.strip() or None
     for k, v in (body.credentials or {}).items():
         if v and isinstance(v, str) and v.strip():
             _credentials_configured[k] = True
@@ -120,6 +143,8 @@ async def put_quantum_config(body: QuantumConfigUpdate) -> QuantumConfigResponse
         backend=body.backend,
         simulator_name="default.qubit" if body.backend == "penny_lane" else None,
         credentials_configured=_get_credentials_configured(body.backend),
+        endpoint_url=_quantum_endpoint_url,
+        provider=_quantum_provider,
     )
 
 
@@ -147,4 +172,24 @@ async def post_quantum_verify() -> QuantumVerifyResponse:
         return QuantumVerifyResponse(ok=False, message="IBM Quantum verification not implemented")
     if backend == "intel_qs":
         return QuantumVerifyResponse(ok=False, message="Intel QS verification not implemented")
+    if backend == "ionq":
+        return QuantumVerifyResponse(ok=False, message="IonQ verification not implemented")
     return QuantumVerifyResponse(ok=False, message=f"Unknown backend: {backend}")
+
+
+@router.get("/transfer-config", response_model=TransferConfig)
+async def get_transfer_config() -> TransferConfig:
+    """Return HPC-to-QPU data transfer configuration."""
+    return _transfer_config
+
+
+@router.put("/transfer-config", response_model=TransferConfig)
+async def put_transfer_config(body: TransferConfigUpdate) -> TransferConfig:
+    """Update HPC-to-QPU transfer configuration."""
+    global _transfer_config
+    _transfer_config = TransferConfig(
+        transfer_batch_size=body.transfer_batch_size if body.transfer_batch_size is not None else _transfer_config.transfer_batch_size,
+        serialization_format=body.serialization_format if body.serialization_format is not None else _transfer_config.serialization_format,
+        polling_interval_seconds=body.polling_interval_seconds if body.polling_interval_seconds is not None else _transfer_config.polling_interval_seconds,
+    )
+    return _transfer_config
