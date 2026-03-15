@@ -23,6 +23,7 @@ def _path_under_base(resolved_path: Path, resolved_base: Path) -> bool:
 def get_desired_dir() -> Path:
     """Return the directory for desired tfvars (repo root relative)."""
     from ..config import get_settings
+
     s = get_settings()
     if s.opentofu_desired_dir:
         return Path(s.opentofu_desired_dir)
@@ -45,9 +46,7 @@ def write_desired_tfvars(
     # Use allowlist so path component is not user-controlled.
     pid = (provider_id or "").strip() if isinstance(provider_id, str) else ""
     if pid not in _ALLOWED_PROVIDER_IDS:
-        raise ValueError(
-            "provider_id must be one of: " + ", ".join(sorted(_ALLOWED_PROVIDER_IDS))
-        )
+        raise ValueError("provider_id must be one of: " + ", ".join(sorted(_ALLOWED_PROVIDER_IDS)))
     desired_dir = get_desired_dir().resolve()
     desired_dir.mkdir(parents=True, exist_ok=True)
     short_id = uuid.uuid4().hex[:8]
@@ -66,7 +65,10 @@ def write_desired_tfvars(
 
 
 def list_desired_tfvars() -> list[str]:
-    """List basenames of *.tfvars.json and *.tfvars in the desired dir. Empty if dir missing/unreadable."""
+    """List basenames of *.tfvars.json and *.tfvars in the desired dir.
+
+    Empty if dir missing/unreadable.
+    """
     desired_dir = get_desired_dir()
     if not desired_dir.exists() or not desired_dir.is_dir():
         return []

@@ -18,7 +18,8 @@ The implementation follows the white paper's specifications for:
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import List
+
 
 class SYCLHardware:
     """SYCLHardware: SYCL Hardware Mapping Stubs
@@ -65,7 +66,9 @@ class SYCLHardware:
         self.logger.info(f"Executing {kernel} on Vector Engine (XVE)")
         return data  # Return input data as placeholder
 
-    def execute_matrix_engine(self, matrix: List[List[float]], weights: List[List[float]]) -> List[List[float]]:
+    def execute_matrix_engine(
+        self, matrix: List[List[float]], weights: List[List[float]]
+    ) -> List[List[float]]:
         """Execute matrix operations on Matrix Engine (XMX).
 
         This method implements the Matrix Engine execution interface for MLP execution:
@@ -82,7 +85,7 @@ class SYCLHardware:
         """
         # Placeholder implementation - would execute on actual Matrix Engine
         self.logger.info("Executing matrix operations on Matrix Engine (XMX)")
-        return [[sum(a*b for a,b in zip(row, col)) for col in zip(*weights)] for row in matrix]
+        return [[sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix]
 
     def pack_ternary_weights(self, weights: List[int]) -> bytes:
         """Pack ternary weights using C for Metal (CM) strategy.
@@ -100,7 +103,7 @@ class SYCLHardware:
         """
         # Placeholder implementation - would pack ternary weights
         self.logger.info("Packing ternary weights using C for Metal strategy")
-        return b''  # Return empty bytes as placeholder
+        return b""  # Return empty bytes as placeholder
 
     def driver_memory_paging(self, memory: List[float], size: int) -> None:
         """Implement driver-level memory paging.

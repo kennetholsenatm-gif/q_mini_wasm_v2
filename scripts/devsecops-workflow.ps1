@@ -87,12 +87,18 @@ function Check-Dependencies {
         Log-Debug "Found Docker $DockerVersion"
     }
 
-    # Check Docker Compose
-    if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) {
-        $MissingDeps += "Docker Compose"
-    } else {
+    # Check Docker Compose (standalone binary or Docker Compose V2 plugin)
+    $script:DockerComposeCmd = $null
+    if (Get-Command docker-compose -ErrorAction SilentlyContinue) {
+        $script:DockerComposeCmd = "docker-compose"
         $ComposeVersion = docker-compose --version
         Log-Debug "Found Docker Compose $ComposeVersion"
+    } elseif (docker compose version 2>$null) {
+        $script:DockerComposeCmd = "docker compose"
+        Log-Debug "Found Docker Compose (plugin): $(docker compose version --short 2>$null)"
+    }
+    if (-not $script:DockerComposeCmd) {
+        $MissingDeps += "Docker Compose"
     }
 
     # Check OpenTofu
@@ -311,7 +317,16 @@ function Run-PostDeploymentTests {
 # Monitoring setup
 function Setup-Monitoring {
     Log-Info "Setting up monitoring..."
-    if (-not (docker-compose -f (Join-Path $ProjectRoot "monitoring/docker-compose.yml") up -d)) {
+    $composePath = Join-Path $ProjectRoot "monitoring/docker-compose.yml"
+    $composeResult = $false
+    if ($script:DockerComposeCmd -eq "docker compose") {
+        docker compose -f $composePath up -d
+        $composeResult = $LASTEXITCODE -eq 0
+    } else {
+        docker-compose -f $composePath up -d
+        $composeResult = $LASTEXITCODE -eq 0
+    }
+    if (-not $composeResult) {
         Log-Error "Failed to start monitoring stack"
         return 1
     }

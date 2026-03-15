@@ -2,7 +2,7 @@
 # Multi-stage: frontend build, then AlmaLinux 9 runtime with Python 3.11.
 # Build from repo root: docker build -f containers/wui/Dockerfile.almalinux -t qminiwasm-wui:0.1.0 .
 
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 WORKDIR /build
 COPY wui/frontend/package.json wui/frontend/package-lock.json* ./
 RUN npm ci 2>/dev/null || npm install

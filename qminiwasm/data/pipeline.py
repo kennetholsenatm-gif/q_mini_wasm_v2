@@ -11,9 +11,9 @@ The implementation follows the white paper's specifications for:
 - Continuous pre-training and CISPO integration
 """
 
-import wasmtime
 import logging
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List
+
 
 class DataPipeline:
     """DataPipeline: Synthetic Data Pipeline for Q-Mini-WASM Training

@@ -1,10 +1,12 @@
+from pathlib import Path
+
 from setuptools import setup, find_packages
 
 setup(
     name="llm-pract",
     version="0.1.0",
     description="Q-Mini-WASM: Quantum-Classical Hybrid AI Architecture",
-    long_description=open("README.md").read(),
+    long_description=(Path(__file__).parent / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="Q-Mini-WASM Team",
     author_email="team@q-mini-wasm.org",

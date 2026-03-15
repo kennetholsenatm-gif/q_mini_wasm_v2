@@ -7,8 +7,6 @@ and QAOA parameters. Uses the quantum backend registry for backend selection.
 
 from __future__ import annotations
 
-from typing import Any
-
 import torch
 import torch.nn as nn
 

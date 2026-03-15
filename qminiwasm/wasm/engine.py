@@ -1,19 +1,57 @@
 """WASM Execution Engine
 
-This module implements the WasmExecutor class (Pillar 5) which provides the WebAssembly interpreter
-for deterministic in-model execution. It uses the wasmtime Python library to execute WASM code and
-capture stack/memory deltas for training.
+This module implements the WasmExecutor class (Pillar 5) which provides the
+WebAssembly interpreter for deterministic in-model execution. It uses the wasmtime
+Python library to execute WASM code and capture stack/memory deltas for training.
 
-The implementation follows the mathematical formulations from the Q-Mini-WASM white paper, including:
+The implementation follows the mathematical formulations from the Q-Mini-WASM white
+paper, including:
 - Wasmtime instrumentation for linear memory introspection
 - Stack/memory delta capture for training
 - Epoch-based interruption for fine-grained control
 - Fault injection for robustness training
 """
 
-import wasmtime
+import json
 import logging
+import os
+import tempfile
+import time
 from typing import Dict, List, Tuple
+
+import wasmtime
+
+
+# #region agent log
+def _dbg(path: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    try:
+        d = dict(data)
+        run_id = d.pop("runId", "run")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "3fd919",
+                        "runId": run_id,
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": d,
+                        "timestamp": int(time.time() * 1000),
+                    },
+                    default=str,
+                )
+                + "\n"
+            )
+    except Exception:  # nosec B110 - debug logger must not break app
+        pass
+
+
+# #endregion
+
+# wasmtime Python bindings use WasmtimeError; older docs sometimes mention Error
+WasmtimeException = getattr(wasmtime, "WasmtimeError", getattr(wasmtime, "Error", Exception))
+
 
 class WasmExecutor:
     """WasmExecutor: WASM Execution Engine for Deterministic In-Model Execution
@@ -46,12 +84,26 @@ class WasmExecutor:
         Returns:
             Compiled wasmtime.Module
         """
+        engine = getattr(self.store, "engine", self.store)
         try:
-            module = wasmtime.Module.from_binary(self.store.engine, wasm_bytes)
+            from_binary = getattr(wasmtime.Module, "from_binary", None)
+            if from_binary is not None:
+                module = from_binary(engine, wasm_bytes)
+            else:
+                with tempfile.NamedTemporaryFile(suffix=".wasm", delete=False) as f:
+                    f.write(wasm_bytes)
+                    path = f.name
+                try:
+                    module = wasmtime.Module.from_file(engine, path)
+                finally:
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
             self.logger.info("WASM module compiled successfully")
             return module
-        except wasmtime.Error as e:
-            self.logger.error(f"Failed to compile WASM module: {e}")
+        except WasmtimeException as e:
+            self.logger.error("Failed to compile WASM module: %s", e)
             raise
 
     def execute(self, module: wasmtime.Module, func_name: str, args: List[int]) -> Tuple[int, Dict]:
@@ -68,29 +120,164 @@ class WasmExecutor:
             - Stack state
             - Execution trace
         """
+        _log = os.path.abspath(os.path.join(os.getcwd(), "debug-3fd919.log"))
         try:
-            # Create instance and get function
-            instance = wasmtime.Instance(module, [])
-            func = instance.get_func(func_name)
-
+            # #region agent log
+            _dbg(
+                _log,
+                "H3",
+                "engine.py:execute:pre_instance",
+                "Creating Instance",
+                {"func_name": func_name, "args": args, "has_store": hasattr(self, "store")},
+            )
+            # #endregion
+            instance = wasmtime.Instance(self.store, module, [])  # type: ignore[call-arg,arg-type]
+            # #region agent log
+            _dbg(
+                _log,
+                "H3",
+                "engine.py:execute:post_instance",
+                "Instance created",
+                {
+                    "instance_type": type(instance).__name__,
+                    "dir_instance": [x for x in dir(instance) if not x.startswith("_")][:20],
+                },
+            )
+            # #endregion
+            # Get exported function: wasmtime-py uses instance.exports(store)[name]; else get_func
+            func = None
+            try:
+                func = instance.get_func(func_name)  # type: ignore[attr-defined]
+                _dbg(
+                    _log,
+                    "H1",
+                    "engine.py:execute:get_func",
+                    "Got func via get_func",
+                    {"func_type": type(func).__name__},
+                )
+            except AttributeError:
+                _dbg(_log, "H1", "engine.py:execute:get_func_attr_err", "get_func missing", {})
+            if func is None:
+                exports_fn = getattr(instance, "exports", None)
+                if callable(exports_fn):
+                    try:
+                        exports = exports_fn(self.store)
+                        func = (
+                            exports.get(func_name)
+                            if hasattr(exports, "get")
+                            else exports[func_name]  # type: ignore[index]
+                        )
+                        _dbg(
+                            _log,
+                            "H1",
+                            "engine.py:execute:exports_ok",
+                            "Got func via exports(store)",
+                            {"func_type": type(func).__name__ if func else None},
+                        )
+                    except (KeyError, TypeError):
+                        pass
+            if func is None:
+                try:
+                    func = instance[func_name]  # type: ignore[index]
+                    _dbg(
+                        _log,
+                        "H1",
+                        "engine.py:execute:getitem_ok",
+                        "Got func via []",
+                        {"func_type": type(func).__name__},
+                    )
+                except (KeyError, TypeError):
+                    func = getattr(instance, "get", lambda n: None)(func_name)
             if func is None:
                 raise ValueError(f"Function {func_name} not found in WASM module")
 
-            # Execute function with arguments
-            result = func.call(args)
+            # Call: newer API uses func(store, *args), older uses func.call(args)
+            call = getattr(func, "call", None)
+            # #region agent log
+            _dbg(
+                _log,
+                "H2",
+                "engine.py:execute:pre_call",
+                "About to call",
+                {"has_call_attr": call is not None, "func_type": type(func).__name__},
+            )
+            # #endregion
+            if call is not None:
+                try:
+                    result = call(self.store, *args)
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:call_store_ok",
+                        "call(store,*args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
+                except TypeError:
+                    result = call(args)
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:call_args_ok",
+                        "call(args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
+            else:
+                try:
+                    result = func(self.store, *args)
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:func_store_ok",
+                        "func(store,*args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
+                except TypeError:
+                    result = func(*args)
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:func_args_ok",
+                        "func(*args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
+            # #region agent log
+            _dbg(
+                _log,
+                "H4",
+                "engine.py:execute:return",
+                "Returning result",
+                {
+                    "result": result,
+                    "result_type": type(result).__name__,
+                    "is_tuple": isinstance(result, tuple),
+                },
+            )
+            # #endregion
 
             # Capture execution state (simplified for now)
             execution_state = {
                 "memory": None,  # Would capture linear memory contents
-                "stack": None,   # Would capture stack state
-                "trace": None    # Would capture execution trace
+                "stack": None,  # Would capture stack state
+                "trace": None,  # Would capture execution trace
             }
 
             self.logger.info("WASM function executed successfully")
             return result, execution_state
 
-        except wasmtime.Error as e:
-            self.logger.error(f"WASM execution failed: {e}")
+        except WasmtimeException as e:
+            self.logger.error("WASM execution failed: %s", e)
+            raise
+        except Exception as e:
+            # #region agent log
+            _log = os.path.abspath(os.path.join(os.getcwd(), "debug-3fd919.log"))
+            _dbg(
+                _log,
+                "H5",
+                "engine.py:execute:exception",
+                "Exception in execute",
+                {"type": type(e).__name__, "message": str(e)},
+            )
+            # #endregion
             raise
 
     def capture_deltas(self, instance: wasmtime.Instance) -> Dict:
@@ -108,11 +295,7 @@ class WasmExecutor:
             Dictionary containing captured deltas
         """
         # Placeholder implementation - would use wasmtime API to introspect memory/stack
-        deltas = {
-            "memory_deltas": None,
-            "stack_deltas": None,
-            "execution_trace": None
-        }
+        deltas = {"memory_deltas": None, "stack_deltas": None, "execution_trace": None}
 
         self.logger.info("Captured execution deltas")
         return deltas

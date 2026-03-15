@@ -55,3 +55,9 @@ variable "wui_chart_path" {
   default     = ""
   description = "Path to qminiwasm-wui chart (required when enable_wui is true)"
 }
+
+variable "metallb_address_pool" {
+  type        = list(string)
+  default     = ["172.18.255.200-172.18.255.220"]
+  description = "MetalLB IP address pool for LoadBalancer services. Default fits Kind Docker network; for DHCP subnet use e.g. [\"192.168.1.200-192.168.1.220\"] and reserve that range in DHCP."
+}

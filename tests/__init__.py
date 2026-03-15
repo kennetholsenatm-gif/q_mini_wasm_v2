@@ -13,7 +13,8 @@ Key Components:
 """
 
 try:
-    from .test_qminiwasm import TestQMiniWASM
+    from .test_qminiwasm import TestQMiniWASM  # noqa: F401
+
     __all__ = ["TestQMiniWASM"]
 except ImportError:
     __all__ = []

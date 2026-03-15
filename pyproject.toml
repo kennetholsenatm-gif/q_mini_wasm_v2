@@ -9,7 +9,6 @@ include = ["qminiwasm*"]
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv", "build", "dist"]
 skips = ["B101"]  # assert_used allowed in test code
-tests = ["qminiwasm"]
 
 [tool.black]
 line-length = 100

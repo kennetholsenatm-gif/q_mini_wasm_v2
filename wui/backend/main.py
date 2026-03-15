@@ -27,7 +27,9 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="QMiniWASM WUI Backend",
         version="0.1.0",
-        description="Backend API for managing cloud/HPC/quantum providers and OpenTofu deployments.",
+        description=(
+            "Backend API for managing cloud/HPC/quantum providers and OpenTofu deployments."
+        ),
     )
 
     app.add_middleware(
@@ -58,10 +60,10 @@ def create_app() -> FastAPI:
     static_dir = os.environ.get("STATIC_DIR", "")
     if static_dir and os.path.isdir(static_dir):
         from fastapi.staticfiles import StaticFiles
+
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
     return app
 
 
 app = create_app()
-

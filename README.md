@@ -81,16 +81,21 @@ python -c "import qminiwasm; print(qminiwasm.__version__)"
 pwsh -File scripts/devsecops-workflow.ps1
 ```
 
+## Edge product focus
+
+A primary product of this platform is the **event-driven SASE edge**: ruggedized edge nodes running AI agents that connect over **DMVPN** to a central Solace event mesh, with guaranteed delivery and MCP tools (security, telemetry, NetOps, logs, infra). The host appliance, data stack (including Solace PubSub+ and Agent Mesh), security stack, and optional NetOps exist to deploy and operate that edge and the central orchestration it depends on.
+
 ## Platform Architecture
 
-The repository includes four main pillars:
+The repository includes four main pillars plus the edge product:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
 | **Host appliance** | [infra/image-builder/](infra/image-builder/) | Packer + QEMU: build hardened AlmaLinux 9 QCOW2 golden image with K3s and STIG-like hardening (tactical edge). |
-| **Data stack** | [containers/data-stack/](containers/data-stack/) | Event-driven pipeline: PostgreSQL (pgvector), RabbitMQ, Apache NiFi; vertically scalable, air-gap-friendly. |
+| **Data stack** | [containers/data-stack/](containers/data-stack/) | Event-driven pipeline: PostgreSQL (pgvector), RabbitMQ, Apache NiFi, Solace PubSub+ and Agent Mesh (broker for edge agents); vertically scalable, air-gap-friendly. |
 | **Security stack** | [containers/security-stack/](containers/security-stack/) | Zero Trust / PQC-ready: Keycloak (FIDO2/Passkeys), Vault (PKI/mTLS), Envoy (TLS 1.3 + ML-KEM). |
 | **Application** | [qminiwasm/](qminiwasm/), [wui/](wui/), [charts/](charts/) | Core engine, FastAPI/React WUI, Helm chart for Kubernetes. |
+| **Edge gateway** | [infra/edge-gateway/](infra/edge-gateway/) | Event-driven SASE edge: Solace Agent Mesh agents on LXCs, connect over DMVPN, MCP tools for Wazuh, Zabbix, Netdisco, Foreman, Graylog. |
 
 Optional Kubernetes/OpenTofu: [infra/opentofu/](infra/opentofu/) (Teleport, Kyverno, Falco), [infra/teleport/](infra/teleport/), [infra/kyverno/](infra/kyverno/), [infra/falco/](infra/falco/). See [docs/Greenfield-Deployment.md](docs/Greenfield-Deployment.md) for full deployment order.
 
@@ -105,6 +110,7 @@ LLM_Pract/
 │   ├── data-stack/      # PostgreSQL, RabbitMQ, NiFi (EDA)
 │   └── security-stack/  # Keycloak, Vault, Envoy (Zero Trust / PQC)
 ├── infra/               # Infrastructure as Code
+│   ├── edge-gateway/    # SASE edge agents (DMVPN + Solace Agent Mesh, MCP tools)
 │   ├── image-builder/   # Packer + QEMU (AlmaLinux 9 golden image)
 │   ├── opentofu/        # OpenTofu: Kubernetes, Teleport, Kyverno, Falco
 │   ├── teleport/        # Teleport Helm values and roles
@@ -168,10 +174,9 @@ OpenSCAP is integrated to audit **low-level hardware configuration** and **conta
 
 **Run the OpenSCAP scanner locally:**
 
-1. Install the scanner and content (Debian/Ubuntu):
-   ```bash
-   sudo apt-get install -y libopenscap8 openscap-utils
-   ```
+1. Install the scanner and content. This project is AlmaLinux/RHEL focused; use the appropriate commands for your OS:
+   - **AlmaLinux / RHEL / Rocky:** `sudo dnf install -y openscap openscap-utils`
+   - **Debian/Ubuntu:** `sudo apt-get install -y libopenscap8 openscap-utils`
    For SCAP Security Guide content, download a [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content) release and set `OSCAP_CONTENT_PATH` to the unpacked directory.
 
 2. Install the project with the security extra and run the script:
@@ -240,7 +245,7 @@ Comprehensive test suite:
 4. Implement backup procedures
 
 ### Platform standard (DockerOS)
-We standardize on **AlmaLinux 9** (and AlmaLinux 10 when available), **Foreman** (Satellite FOSS equivalent), and **Foreman Smart Proxy** (Capsule equivalent) for hosts running Docker/Kubernetes and for container base images. See [docs/DockerOS-Platform-Standard.md](docs/DockerOS-Platform-Standard.md).
+We standardize on **AlmaLinux 9** (and AlmaLinux 10 when available), **Foreman** (Satellite FOSS equivalent), and **Foreman Smart Proxy** (Capsule equivalent) for hosts running Docker/Kubernetes and for container base images. **CI is AlmaLinux/RHEL focused:** lint, tests, and SAST run inside AlmaLinux 9; container images are AlmaLinux-based. See [docs/DockerOS-Platform-Standard.md](docs/DockerOS-Platform-Standard.md).
 
 ## Security Documentation
 

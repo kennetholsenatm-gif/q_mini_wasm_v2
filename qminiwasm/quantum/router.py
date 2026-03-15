@@ -1,10 +1,12 @@
 """Quantum MoE Router Implementation
 
-This module implements the Quantum MoE Router (Pillar 1) which reformulates MoE routing as a discrete combinatorial
-optimization problem mapped to a quantum topology. It uses Parameterized Quantum Circuits (PQCs) and the Quantum
-Approximate Optimization Algorithm (QAOA) to solve the routing problem with perfect load balancing.
+This module implements the Quantum MoE Router (Pillar 1) which reformulates MoE routing
+as a discrete combinatorial optimization problem mapped to a quantum topology. It uses
+Parameterized Quantum Circuits (PQCs) and the Quantum Approximate Optimization
+Algorithm (QAOA) to solve the routing problem with perfect load balancing.
 
-The implementation is based on the mathematical formulations described in the Q-Mini-WASM white paper, including:
+The implementation is based on the mathematical formulations described in the Q-Mini-WASM
+white paper, including:
 - Quadratic Unconstrained Binary Optimization (QUBO) formulation
 - Ising Hamiltonian translation
 - Angle Embedding and Barren Plateau mitigation
@@ -14,7 +16,6 @@ The implementation is based on the mathematical formulations described in the Q-
 import torch
 import torch.nn as nn
 import pennylane as qml
-from pennylane import numpy as np
 
 # Constants based on white paper specifications
 NUM_QUBITS = 8
@@ -22,14 +23,16 @@ NUM_EXPERTS = 8
 QAOA_LAYERS = 3
 
 # Device for PennyLane quantum circuit
-dev = qml.device('default.qubit', wires=NUM_QUBITS)
+dev = qml.device("default.qubit", wires=NUM_QUBITS)
+
 
 def qaoa_layer(gamma, beta, compressed_affinities, penalty_factor):
     """Applies a single adiabatic block of the QAOA unitary evolution.
 
-    This function implements the Cost Hamiltonian (Ising Model H_C) and Mixer Hamiltonian (H_B)
-    for the QAOA algorithm. It applies local magnetic fields encoding classical semantic projections,
-    Ising interactions for capacity and top-k penalties, and Pauli-X rotations for quantum tunneling.
+    This function implements the Cost Hamiltonian (Ising Model H_C) and Mixer
+    Hamiltonian (H_B) for the QAOA algorithm. It applies local magnetic fields
+    encoding classical semantic projections, Ising interactions for capacity and
+    top-k penalties, and Pauli-X rotations for quantum tunneling.
 
     Args:
         gamma: QAOA gamma parameter for Cost Hamiltonian
@@ -51,7 +54,8 @@ def qaoa_layer(gamma, beta, compressed_affinities, penalty_factor):
     for i in range(NUM_QUBITS):
         qml.RX(beta, wires=i)
 
-@qml.qnode(dev, interface='torch', diff_method='parameter-shift')
+
+@qml.qnode(dev, interface="torch", diff_method="parameter-shift")
 def quantum_router_circuit(gammas, betas, compressed_affinities, layers=QAOA_LAYERS):
     """Constructs the QAOA PQC to evaluate mathematically optimal routing matrices.
 
@@ -84,6 +88,7 @@ def quantum_router_circuit(gammas, betas, compressed_affinities, layers=QAOA_LAY
 
     # Measurement: Extract expectation values of Pauli-Z (Spin states)
     return [qml.expval(qml.PauliZ(i)) for i in range(NUM_QUBITS)]
+
 
 class HybridQuantumMoE(nn.Module):
     """Hybrid Quantum-Classical MoE Router Implementation
@@ -135,20 +140,32 @@ class HybridQuantumMoE(nn.Module):
         # Use tanh activation to keep values in [-1, 1] range for quantum circuit
         compressed_state = torch.tanh(self.compressor(hidden_states)).squeeze()
 
-        # Phase 2: QPU Execution. QAOA circuit computes discrete combinatorial routing
-        q_routing_exp = quantum_router_circuit(self.gammas, self.betas, compressed_state)
+        # Phase 2: QPU Execution. QAOA circuit expects 1D (8,) affinities; run per batch item
+        if compressed_state.dim() == 1:
+            q_routing_exp = quantum_router_circuit(self.gammas, self.betas, compressed_state)
+            q_routing_probs = [(val + 1.0) / 2.0 for val in q_routing_exp]
+            routing_weights = torch.stack(q_routing_probs)
+        else:
+            batch_size = compressed_state.size(0)
+            routed = []
+            for b in range(batch_size):
+                exp = quantum_router_circuit(self.gammas, self.betas, compressed_state[b])
+                probs = [(val + 1.0) / 2.0 for val in exp]
+                routed.append(torch.stack(probs))
+            routing_weights = torch.stack(routed)
 
-        # Phase 3: Map Pauli-Z expectation values [-1, 1] to binary routing probabilities
-        # Convert from [-1, 1] to [0, 1] range
-        q_routing_probs = [(val + 1.0) / 2.0 for val in q_routing_exp]
-        routing_weights = torch.stack(q_routing_probs)
+        # Phase 3: routing_weights is (num_experts,) or (batch, num_experts)
 
         # Phase 4: Sparse Expert Execution
         # Initialize output tensor
         out = torch.zeros_like(hidden_states)
 
         # Apply routing weights to expert outputs
+        # routing_weights: (num_experts,) for single sample or (batch, num_experts) when batched
         for i, expert in enumerate(self.experts):
-            out += routing_weights[i] * expert(hidden_states)
+            if routing_weights.dim() == 1:
+                out += routing_weights[i] * expert(hidden_states)
+            else:
+                out += routing_weights[:, i].unsqueeze(1) * expert(hidden_states)
 
         return out

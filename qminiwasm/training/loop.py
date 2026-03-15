@@ -7,12 +7,11 @@ Uses DataPipeline and Wasmtime traces when available; STE is handled by TernaryW
 
 from __future__ import annotations
 
-import os
-from typing import Any
+from typing import Any, cast
 
 import torch
 
-from ..hardware.device import get_device
+from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
 from ..data.pipeline import DataPipeline
 
@@ -44,7 +43,10 @@ def run_training_loop(
     Returns:
         Dict with "epochs_run", "final_loss", "metrics" (placeholder).
     """
-    device = get_device(accelerator=accelerator, device_index=device_index)
+    device = get_device(
+        accelerator=cast(AcceleratorType | None, accelerator),
+        device_index=device_index,
+    )
 
     model = QMiniWASM(device=device)
     model.quantum_router.train()
@@ -57,9 +59,14 @@ def run_training_loop(
     )
 
     pipeline = DataPipeline()
-    processed_data = pipeline.generate_training_data(algorithms=["default"], num_samples=max(1, batch_size * 4))
+    processed_data = pipeline.generate_training_data(
+        algorithms=["default"], num_samples=max(1, batch_size * 4)
+    )
     if not processed_data:
-        processed_data = [{"hidden": torch.randn(4096), "target": torch.randn(4096)} for _ in range(batch_size * 2)]
+        processed_data = [
+            {"hidden": torch.randn(4096), "target": torch.randn(4096)}
+            for _ in range(batch_size * 2)
+        ]
 
     final_loss = 0.0
     for epoch in range(epochs):

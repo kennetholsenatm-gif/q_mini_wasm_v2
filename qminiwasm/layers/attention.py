@@ -79,27 +79,17 @@ class TropicalAttention(nn.Module):
 
         if d_value is None:
             if d_model % num_heads != 0:
-                raise ValueError(
-                    "d_model must be divisible by num_heads when d_value is None."
-                )
+                raise ValueError("d_model must be divisible by num_heads when d_value is None.")
             d_value = d_model // num_heads
         self.d_value = d_value
 
         # Linear projections into tropical attention space.
-        self.q_proj = nn.Linear(
-            d_model, num_heads * d_head, bias=bias, **factory_kwargs
-        )
-        self.k_proj = nn.Linear(
-            d_model, num_heads * d_head, bias=bias, **factory_kwargs
-        )
-        self.v_proj = nn.Linear(
-            d_model, num_heads * d_value, bias=bias, **factory_kwargs
-        )
+        self.q_proj = nn.Linear(d_model, num_heads * d_head, bias=bias, **factory_kwargs)
+        self.k_proj = nn.Linear(d_model, num_heads * d_head, bias=bias, **factory_kwargs)
+        self.v_proj = nn.Linear(d_model, num_heads * d_value, bias=bias, **factory_kwargs)
 
         # Output projection back to d_model.
-        self.out_proj = nn.Linear(
-            num_heads * d_value, d_model, bias=bias, **factory_kwargs
-        )
+        self.out_proj = nn.Linear(num_heads * d_value, d_model, bias=bias, **factory_kwargs)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Forward pass of TropicalAttention.
@@ -111,15 +101,12 @@ class TropicalAttention(nn.Module):
             Output tensor of shape (batch_size, seq_len, d_model).
         """
         if hidden_states.dim() != 3:
-            raise ValueError(
-                "hidden_states must be of shape (batch_size, seq_len, d_model)."
-            )
+            raise ValueError("hidden_states must be of shape (batch_size, seq_len, d_model).")
 
         batch_size, seq_len, d_model = hidden_states.shape
         if d_model != self.d_model:
             raise ValueError(
-                f"Expected hidden_states feature dimension {self.d_model}, "
-                f"but got {d_model}."
+                f"Expected hidden_states feature dimension {self.d_model}, " f"but got {d_model}."
             )
 
         if seq_len == 0:
@@ -276,4 +263,3 @@ class TropicalAttention(nn.Module):
                 best_pos = pos
 
         return hull[best_pos]
-

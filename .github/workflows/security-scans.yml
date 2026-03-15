@@ -27,22 +27,22 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install project and security extras
+      - name: Create venv and install project and security extras
         run: |
+          python -m venv .venv
+          . .venv/bin/activate
           python -m pip install --upgrade pip
-          pip install -r requirements/security.txt 2>/dev/null || pip install bandit pip-audit click loguru
+          pip install -r requirements/security.txt 2>/dev/null || pip install bandit pip-audit click loguru pypatch==1.0.2
           pip install -e . --no-deps 2>/dev/null || true
 
       - name: Run Bandit
-        run: bandit -r qminiwasm/ -f json -o bandit-report.json || true
-        continue-on-error: true
+        run: .venv/bin/bandit -r qminiwasm/ wui/backend/ -c pyproject.toml -f json -o bandit-report.json
 
       - name: Run pip-audit
-        run: pip-audit -r requirements.txt -f json -o pip-audit-report.json || true
-        continue-on-error: true
+        run: .venv/bin/pip-audit -r requirements.txt -f json -o pip-audit-report.json
 
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -66,7 +66,7 @@ jobs:
 
       - name: Run OpenSCAP scan
         run: |
-          python scripts/security/run_openscap_scan.py \
+          .venv/bin/python scripts/security/run_openscap_scan.py \
             --report-html openscap_report.html \
             --results-arf openscap_results.arf.xml \
             --no-fail-on-critical || true

@@ -1,2 +1,3 @@
-# For wazuh_alerts_mcp.py (MCP server). Install in edge LXC/container venv.
+# For MCP tools (wazuh_alerts_mcp, zabbix_metrics_mcp, netdisco_topology_mcp,
+# foreman_provisioning_mcp, graylog_query_mcp). Install in edge LXC/container venv.
 mcp>=1.0.0

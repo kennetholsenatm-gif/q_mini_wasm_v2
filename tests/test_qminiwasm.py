@@ -16,7 +16,11 @@ The tests follow the white paper's specifications and cover:
 import unittest
 import torch
 import logging
+
+import wasmtime
+
 from qminiwasm import QMiniWASM
+
 
 class TestQMiniWASM(unittest.TestCase):
     """Test cases for Q-Mini-WASM architecture."""
@@ -47,18 +51,21 @@ class TestQMiniWASM(unittest.TestCase):
         self.assertEqual(output.shape, (2, 4096))
 
     def test_execute_wasm(self):
-        """Test WASM execution."""
-        # Create simple WASM module (addition function)
-        wasm_code = bytes.fromhex(
-            "0061736d01000000"  # WASM magic number and version
-            "0a0601000001070160017e0041046d6f64756c6500010a"
-            "040601000000034000000b"
-        )
+        """Test WASM execution using wat2wasm so the binary is always valid."""
+        wat = """
+        (module
+          (func $add (param i32 i32) (result i32)
+            local.get 0
+            local.get 1
+            i32.add)
+          (export "add" (func $add)))
+        """
+        wasm_code = wasmtime.wat2wasm(wat)
 
-        # Test execution
         result, execution_state = self.model.execute_wasm(wasm_code, "add", [2, 3])
-
-        # Verify result (2 + 3 = 5)
+        # wasmtime may return a single value or a 1-tuple
+        if isinstance(result, tuple) and len(result) == 1:
+            result = result[0]
         self.assertEqual(result, 5)
 
     def test_ternary_quantization(self):
@@ -86,7 +93,9 @@ class TestQMiniWASM(unittest.TestCase):
     def test_train_evaluate(self):
         """Test model training and evaluation."""
         # Create test data
-        training_data = [{"input": torch.randn(4096), "target": torch.randn(4096)} for _ in range(10)]
+        training_data = [
+            {"input": torch.randn(4096), "target": torch.randn(4096)} for _ in range(10)
+        ]
         test_data = [{"input": torch.randn(4096), "target": torch.randn(4096)} for _ in range(5)]
 
         # Test training
@@ -104,5 +113,6 @@ class TestQMiniWASM(unittest.TestCase):
         with self.assertRaises(Exception):
             self.model.execute_wasm(invalid_wasm, "add", [2, 3])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

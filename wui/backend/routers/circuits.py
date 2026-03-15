@@ -30,6 +30,7 @@ async def get_circuit_presets() -> list[CircuitPreset]:
 async def get_circuit_current() -> CircuitCurrentResponse:
     """Return current circuit config."""
     from ..config import get_settings
+
     s = get_settings()
     if _circuit:
         return CircuitCurrentResponse(**_circuit)
@@ -45,7 +46,9 @@ async def put_circuit_current(body: CircuitCurrentUpdate) -> CircuitCurrentRespo
     """Set current circuit config. Used by ML engine when building quantum router."""
     global _circuit
     if body.diff_method not in ("parameter-shift", "finite-diff"):
-        raise HTTPException(status_code=400, detail="diff_method must be parameter-shift or finite-diff")
+        raise HTTPException(
+            status_code=400, detail="diff_method must be parameter-shift or finite-diff"
+        )
     _circuit = {
         "num_qubits": body.num_qubits,
         "qaoa_layers": body.qaoa_layers,

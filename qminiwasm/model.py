@@ -140,7 +140,7 @@ class QMiniWASM:
         """
         try:
             # Use data pipeline for training
-            processed_data = self.data_pipeline.generate_training_data(
+            self.data_pipeline.generate_training_data(
                 algorithms=["default"], num_samples=len(training_data)
             )
 
@@ -169,11 +169,7 @@ class QMiniWASM:
         try:
             # Evaluate model (placeholder implementation)
             self.logger.info("Evaluating QMiniWASM model")
-            return {
-                "accuracy": 0.0,
-                "loss": 0.0,
-                "metrics": {}
-            }
+            return {"accuracy": 0.0, "loss": 0.0, "metrics": {}}
 
         except Exception as e:
             self.logger.error(f"Evaluation failed: {e}")

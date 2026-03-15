@@ -29,3 +29,6 @@ Then check again: `kubectl
 
 **3. Confirm the release is using local values:** `helm get values teleport -n teleport` and check that `authentication.type` is `local` and `localAuth` is `true`. If not, re-apply with `teleport_values_file = "../../../teleport/teleport-values-local.yaml"` and run `tofu apply` (or `make -C infra/opentofu local-up`) from `environments/local`.
 
+## Local Kind: access via Teleport
+
+To access the Kind cluster through Teleport (port-forward proxy, then `tsh login` and `tsh kube login qminiwasm-local`), see the [Local Kind: access via Teleport](../opentofu/environments/local/README.md#local-kind-access-via-teleport) section in the local environment README. The Teleport proxy (or any LoadBalancer service) can be given an external IP from MetalLB's pool; see [MetalLB / LoadBalancer external IP](../opentofu/environments/local/README.md#metallb--loadbalancer-external-ip) in the local README.

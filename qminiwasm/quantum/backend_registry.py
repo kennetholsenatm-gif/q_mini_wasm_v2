@@ -21,14 +21,20 @@ class QuantumBackend(Protocol):
         gammas: torch.Tensor,
         betas: torch.Tensor,
     ) -> torch.Tensor:
-        """Run the QAOA circuit and return routing weights (e.g. Pauli-Z expectations mapped to [0,1])."""
+        """Run the QAOA circuit and return routing weights (e.g. Pauli-Z expectations
+        mapped to [0,1])."""
         ...
 
 
 class PennyLaneBackend:
     """PennyLane default.qubit backend; differentiable via parameter-shift."""
 
-    def __init__(self, num_qubits: int = 8, qaoa_layers: int = 3, diff_method: str = "parameter-shift"):
+    def __init__(
+        self,
+        num_qubits: int = 8,
+        qaoa_layers: int = 3,
+        diff_method: str = "parameter-shift",
+    ):
         self.num_qubits = num_qubits
         self.qaoa_layers = qaoa_layers
         self._diff_method = diff_method
@@ -38,6 +44,7 @@ class PennyLaneBackend:
         if self._qnode is not None:
             return self._qnode
         import pennylane as qml
+
         nq = self.num_qubits
         layers = self.qaoa_layers
         dev = qml.device("default.qubit", wires=nq)
@@ -85,7 +92,9 @@ class IBMQuantumBackend:
         gammas: torch.Tensor,
         betas: torch.Tensor,
     ) -> torch.Tensor:
-        raise NotImplementedError("IBM Quantum backend not implemented; use penny_lane for training.")
+        raise NotImplementedError(
+            "IBM Quantum backend not implemented; use penny_lane for training."
+        )
 
 
 class IntelQSBackend:
@@ -100,7 +109,7 @@ class IntelQSBackend:
         raise NotImplementedError("Intel QS backend not implemented; use penny_lane for training.")
 
 
-_BACKEND_FACTORIES = {
+_BACKEND_FACTORIES: dict[str, Callable[..., QuantumBackend]] = {
     "penny_lane": lambda **kw: PennyLaneBackend(**kw),
     "ibm_quantum": lambda **kw: IBMQuantumBackend(),
     "intel_qs": lambda **kw: IntelQSBackend(),
@@ -125,7 +134,9 @@ def get_backend(
         Backend instance with run_forward(...).
     """
     if backend_id not in _BACKEND_FACTORIES:
-        raise ValueError(f"Unknown quantum backend: {backend_id}. Choose from {list(_BACKEND_FACTORIES)}.")
+        raise ValueError(
+            f"Unknown quantum backend: {backend_id}. Choose from {list(_BACKEND_FACTORIES)}."
+        )
     return _BACKEND_FACTORIES[backend_id](
         num_qubits=num_qubits,
         qaoa_layers=qaoa_layers,

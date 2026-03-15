@@ -1,6 +1,6 @@
 # Local Kubernetes development environment (Kind + OpenTofu)
 
-Reproducible local cluster using **Kind** (Kubernetes IN Docker), with **OpenTofu** deploying NGINX Ingress and workloads (Teleport, optional WUI). The same addon and workload logic can be reused for production (EKS/AKS/GKE) by swapping the cluster source; see [../prod/README.md](../prod/README.md).
+Reproducible local cluster using **Kind** (Kubernetes IN Docker), with **OpenTofu** deploying NGINX Ingress, **MetalLB** (LoadBalancer external IPs), and workloads (Teleport, optional WUI). The same addon and workload logic can be reused for production (EKS/AKS/GKE) by swapping the cluster source; see [../prod/README.md](../prod/README.md).
 
 ## Dependencies
 
@@ -46,15 +46,49 @@ tofu apply
 
 If you do not create `terraform.tfvars`, use the example as the var file: `tofu apply -var-file=terraform.tfvars.example`.
 
-### 3. Verify
+### Verify
 
-```bash
-kubectl get pods -A
-```
+1. Export kubeconfig (from repo root):
+
+   ```bash
+   export KUBECONFIG="$(pwd)/infra/opentofu/environments/local/kubeconfig"
+   ```
+
+2. Check all pods and Teleport:
+
+   ```bash
+   kubectl get pods -A
+   kubectl get pods -n teleport
+   ```
+
+3. **If Teleport auth is not Running:** See [infra/teleport/README.md](../../teleport/README.md): delete the auth PVC, restart the auth pod, and confirm the release uses `teleport-values-local.yaml` and chart 16.1.0.
 
 - Ingress: **http://localhost** (and **https://localhost** if TLS is configured).
-- **Teleport (local):** The local environment sets `teleport_wait_for_jobs = false` and a 15-minute timeout so `local-up` can complete even when the OIDC connector is not created yet. If Teleport pods are not ready, run `kubectl get pods -n teleport` and `kubectl logs -n teleport -l app.kubernetes.io/name=teleport` to debug; create the OIDC connector (e.g. via tctl or the Operator) and scale/restart as needed.
-- Teleport: configure Ingress or port-forward to the Teleport proxy service; use the URL from your Teleport values (e.g. `teleport.example.com` with a local hosts entry or ingress host).
+- **Teleport (local):** The example tfvars set `teleport_wait = false` and `teleport_wait_for_jobs = false` so `local-up` completes without waiting on Teleport. If auth is CrashLooping, follow the troubleshooting in [infra/teleport/README.md](../../teleport/README.md).
+
+### Local Kind: access via Teleport
+
+For Zero Trust parity you can access the cluster through Teleport instead of direct kubeconfig:
+
+1. Port-forward the Teleport proxy (from a terminal with `KUBECONFIG` set):
+
+   ```bash
+   kubectl port-forward -n teleport svc/teleport 443:443
+   ```
+
+2. In another terminal, log in with a local user (create one first via `tctl users add` from inside the cluster, or use the auth pod):
+
+   ```bash
+   tsh login --proxy=localhost:443 --user=<local-user>
+   ```
+
+3. Attach to the Kubernetes cluster (name must match `kubeClusterName` in [teleport-values-local.yaml](../../teleport/teleport-values-local.yaml), e.g. `qminiwasm-local`):
+
+   ```bash
+   tsh kube login qminiwasm-local
+   ```
+
+   Then use `kubectl` as usual; access is gated by Teleport. For local dev, many users use direct `KUBECONFIG`; Teleport is optional.
 
 ## Optional: WUI
 
@@ -66,6 +100,18 @@ wui_chart_path = "../../../../charts/qminiwasm-wui"   # from repo root when runn
 ```
 
 Then `tofu apply`. The chart uses non-root security context and the nginx IngressClass.
+
+## MetalLB / LoadBalancer external IP
+
+**MetalLB** is installed so `LoadBalancer`-type services get an external IP (anycast-style single address per service via Layer 2).
+
+- **Default pool:** `172.18.255.200-172.18.255.220` (range in the Kind Docker network). LoadBalancer IPs work from the host and inside the cluster. If your Kind Docker network uses a different subnet, get it with:
+  ```bash
+  docker network inspect kind -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+  ```
+  then set `metallb_address_pool` in `terraform.tfvars` to a range inside that subnet (e.g. `["172.18.255.200-172.18.255.220"]`).
+
+- **DHCP-subnet pool:** To use a range in the same subnet as your host’s DHCP (e.g. `192.168.1.200-192.168.1.220`): set `metallb_address_pool = ["192.168.1.200-192.168.1.220"]` in `terraform.tfvars`, **reserve that range in your DHCP server** (exclude it or use static reservations) so no other device gets those IPs, and ensure the host can route that subnet to the cluster. Then `tofu apply`.
 
 ## Production: swapping the cluster
 

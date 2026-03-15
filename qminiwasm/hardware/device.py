@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Literal, Union
+from typing import Literal
 
 import torch
 
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _IPEX_AVAILABLE = False
 try:
     import intel_extension_for_pytorch  # noqa: F401
+
     _IPEX_AVAILABLE = True
 except ImportError:
     pass
@@ -54,7 +55,8 @@ def get_device(
     Args:
         accelerator: "cuda", "xpu", or "cpu". If None, use env / prefer_xpu.
         device_index: Device index for cuda or xpu (e.g. 0). Ignored on CPU.
-        prefer_xpu: Legacy: If True, use XPU; if False, prefer CPU (or CUDA if only that is set). If None, use env.
+        prefer_xpu: Legacy: If True, use XPU; if False, prefer CPU (or CUDA if only that
+            is set). If None, use env.
 
     Returns:
         torch.device: cuda:index, xpu:index, or cpu.

@@ -1,9 +1,10 @@
 """Q-Mini-WASM: Hybrid Quantum-Classical Mixture-of-Experts Architecture
 
-This package implements the Q-Mini-WASM architecture, a highly specialized 500-million parameter prototype
-that operates at the absolute frontier of quantum machine learning (QML), discrete computational geometry,
-and low-level hardware orchestration. It explicitly internalizes exact computational execution by compiling
-a WebAssembly (WASM) interpreter directly into specific latent weights of a Sparse Mixture-of-Experts (MoE) framework.
+This package implements the Q-Mini-WASM architecture, a highly specialized 500-million
+parameter prototype that operates at the absolute frontier of quantum machine learning (QML),
+discrete computational geometry, and low-level hardware orchestration. It explicitly
+internalizes exact computational execution by compiling a WebAssembly (WASM) interpreter
+directly into specific latent weights of a Sparse Mixture-of-Experts (MoE) framework.
 
 The architecture consists of five pillars:
 1. Quantum MoE Router - Reformulates MoE routing as a discrete combinatorial optimization problem

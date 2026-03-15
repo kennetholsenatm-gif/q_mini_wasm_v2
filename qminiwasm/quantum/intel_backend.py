@@ -22,8 +22,12 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 # Intel quantum research and SDK resources (from intel.com quantum-computing page)
-INTEL_QUANTUM_RESEARCH_URL = "https://www.intel.com/content/www/us/en/research/quantum-computing.html"
-INTEL_QUANTUM_SDK_OVERVIEW_URL = "https://www.intel.com/content/www/us/en/developer/tools/quantum-sdk/overview.html"
+INTEL_QUANTUM_RESEARCH_URL = (
+    "https://www.intel.com/content/www/us/en/research/quantum-computing.html"
+)
+INTEL_QUANTUM_SDK_OVERVIEW_URL = (
+    "https://www.intel.com/content/www/us/en/developer/tools/quantum-sdk/overview.html"
+)
 INTEL_QUANTUM_SDK_DOCS_URL = "https://intel.github.io/quantum-sdk-docs/"
 INTEL_QS_DOCS_URL = "https://intel-qs.readthedocs.io/"
 
@@ -39,11 +43,13 @@ def get_intel_quantum_info() -> Dict[str, Any]:
     # Optional: detect Intel Quantum SDK or intel-qs if installed
     try:
         import intel_quantum_sdk  # type: ignore  # noqa: F401
+
         backends.append("intel_quantum_sdk")
     except ImportError:
         pass
     try:
         import qs  # intel-qs Python bindings  # noqa: F401
+
         backends.append("intel_qs")
     except ImportError:
         pass
@@ -69,6 +75,7 @@ def get_intel_quantum_simulator_backend() -> Optional[Any]:
     """
     try:
         import qs  # intel-qs  # noqa: F401
+
         return qs
     except ImportError:
         return None
