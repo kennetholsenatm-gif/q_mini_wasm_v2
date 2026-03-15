@@ -117,7 +117,7 @@ class WasmExecutor:
             - Stack state
             - Execution trace
         """
-        _log = os.path.join(os.path.dirname(__file__), "..", "..", "debug-3fd919.log")
+        _log = os.path.abspath(os.path.join(os.getcwd(), "debug-3fd919.log"))
         try:
             # #region agent log
             _dbg(
@@ -138,23 +138,28 @@ class WasmExecutor:
                 {"instance_type": type(instance).__name__, "dir_instance": [x for x in dir(instance) if not x.startswith("_")][:20]},
             )
             # #endregion
-            # Get exported function (wasmtime: get_func removed in favor of exports)
+            # Get exported function: wasmtime-py uses instance.exports(store)[name]; older used get_func
+            func = None
             try:
                 func = instance.get_func(func_name)  # type: ignore[attr-defined]
-                _dbg(_log, "H1", "engine.py:execute:get_func", "Got func via get_func", {"func_type": type(func).__name__, "func_name": func_name})
-            except AttributeError as e:
-                # #region agent log
-                _dbg(_log, "H1", "engine.py:execute:get_func_attr_err", "get_func missing", {"error": str(e)})
-                # #endregion
+                _dbg(_log, "H1", "engine.py:execute:get_func", "Got func via get_func", {"func_type": type(func).__name__})
+            except AttributeError:
+                _dbg(_log, "H1", "engine.py:execute:get_func_attr_err", "get_func missing", {})
+            if func is None:
+                exports_fn = getattr(instance, "exports", None)
+                if callable(exports_fn):
+                    try:
+                        exports = exports_fn(self.store)
+                        func = exports.get(func_name) if hasattr(exports, "get") else exports[func_name]  # type: ignore[index]
+                        _dbg(_log, "H1", "engine.py:execute:exports_ok", "Got func via exports(store)", {"func_type": type(func).__name__ if func else None})
+                    except (KeyError, TypeError):
+                        pass
+            if func is None:
                 try:
                     func = instance[func_name]  # type: ignore[index]
                     _dbg(_log, "H1", "engine.py:execute:getitem_ok", "Got func via []", {"func_type": type(func).__name__})
-                except (KeyError, TypeError) as e2:
-                    # #region agent log
-                    _dbg(_log, "H1", "engine.py:execute:getitem_err", "[] failed", {"error": str(e2)})
-                    # #endregion
+                except (KeyError, TypeError):
                     func = getattr(instance, "get", lambda n: None)(func_name)
-                    _dbg(_log, "H1", "engine.py:execute:get_fallback", "Used get()", {"func_is_none": func is None})
             if func is None:
                 raise ValueError(f"Function {func_name} not found in WASM module")
 
@@ -202,7 +207,7 @@ class WasmExecutor:
             raise
         except Exception as e:
             # #region agent log
-            _log = os.path.join(os.path.dirname(__file__), "..", "..", "debug-3fd919.log")
+            _log = os.path.abspath(os.path.join(os.getcwd(), "debug-3fd919.log"))
             _dbg(_log, "H5", "engine.py:execute:exception", "Exception in execute", {"type": type(e).__name__, "message": str(e)})
             # #endregion
             raise
