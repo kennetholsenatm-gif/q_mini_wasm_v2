@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from ..config import HierarchicalConfig
 

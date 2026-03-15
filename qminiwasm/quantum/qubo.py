@@ -9,7 +9,7 @@ with binary x_{t,e} in {0,1}. Mapping to Ising: x_i = (1 - s_i) / 2, s_i in {-1,
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Tuple
 
 import torch
 
