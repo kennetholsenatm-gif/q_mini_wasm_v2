@@ -91,15 +91,30 @@ class WasmExecutor:
             - Execution trace
         """
         try:
-            # Create instance and get function (wasmtime API varies by version)
             instance = wasmtime.Instance(self.store, module, [])  # type: ignore[call-arg,arg-type]
-            func = instance.get_func(func_name)  # type: ignore[attr-defined]
-
+            # Get exported function (wasmtime: get_func removed in favor of exports)
+            try:
+                func = instance.get_func(func_name)  # type: ignore[attr-defined]
+            except AttributeError:
+                try:
+                    func = instance[func_name]  # type: ignore[index]
+                except (KeyError, TypeError):
+                    func = getattr(instance, "get", lambda n: None)(func_name)
             if func is None:
                 raise ValueError(f"Function {func_name} not found in WASM module")
 
-            # Execute function with arguments
-            result = func.call(args)
+            # Call: newer API uses func(store, *args), older uses func.call(args)
+            call = getattr(func, "call", None)
+            if call is not None:
+                try:
+                    result = call(self.store, *args)
+                except TypeError:
+                    result = call(args)
+            else:
+                try:
+                    result = func(self.store, *args)
+                except TypeError:
+                    result = func(*args)
 
             # Capture execution state (simplified for now)
             execution_state = {
