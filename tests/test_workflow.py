@@ -1,5 +1,6 @@
 """Test the complete DevSecOps workflow script (PowerShell)."""
 
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -82,8 +83,6 @@ def test_script_documentation():
 
 
 def test_script_help_runs():
-    import shutil
-
     pwsh = shutil.which("pwsh") or shutil.which("powershell")
     if not pwsh:
         pytest.skip("pwsh/powershell not found")
@@ -101,10 +100,13 @@ def test_complete_workflow_run():
     """Run the full workflow (slow; use -m integration to run)."""
     if not SCRIPT_PATH.exists():
         pytest.skip("Workflow script not found")
+    pwsh = shutil.which("pwsh") or shutil.which("powershell")
+    if not pwsh:
+        pytest.skip("pwsh/powershell not found")
     start = time.time()
     try:
         result = subprocess.run(
-            ["pwsh", "-NoProfile", "-File", str(SCRIPT_PATH)],
+            [pwsh, "-NoProfile", "-File", str(SCRIPT_PATH)],
             capture_output=True,
             text=True,
             timeout=600,

@@ -153,7 +153,11 @@ class HybridQuantumMoE(nn.Module):
         out = torch.zeros_like(hidden_states)
 
         # Apply routing weights to expert outputs
+        # routing_weights: (num_experts,) for single sample or (batch, num_experts) when batched
         for i, expert in enumerate(self.experts):
-            out += routing_weights[i] * expert(hidden_states)
+            if routing_weights.dim() == 1:
+                out += routing_weights[i] * expert(hidden_states)
+            else:
+                out += routing_weights[:, i].unsqueeze(1) * expert(hidden_states)
 
         return out

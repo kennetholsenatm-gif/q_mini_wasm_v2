@@ -16,6 +16,9 @@ import wasmtime
 import logging
 from typing import Dict, List, Tuple
 
+# wasmtime Python bindings use WasmtimeError; older docs sometimes mention Error
+WasmtimeException = getattr(wasmtime, "WasmtimeError", getattr(wasmtime, "Error", Exception))
+
 
 class WasmExecutor:
     """WasmExecutor: WASM Execution Engine for Deterministic In-Model Execution
@@ -54,8 +57,8 @@ class WasmExecutor:
             )
             self.logger.info("WASM module compiled successfully")
             return module
-        except wasmtime.Error as e:  # type: ignore[attr-defined]
-            self.logger.error(f"Failed to compile WASM module: {e}")
+        except WasmtimeException as e:
+            self.logger.error("Failed to compile WASM module: %s", e)
             raise
 
     def execute(self, module: wasmtime.Module, func_name: str, args: List[int]) -> Tuple[int, Dict]:
@@ -93,8 +96,8 @@ class WasmExecutor:
             self.logger.info("WASM function executed successfully")
             return result, execution_state
 
-        except wasmtime.Error as e:  # type: ignore[attr-defined]
-            self.logger.error(f"WASM execution failed: {e}")
+        except WasmtimeException as e:
+            self.logger.error("WASM execution failed: %s", e)
             raise
 
     def capture_deltas(self, instance: wasmtime.Instance) -> Dict:
