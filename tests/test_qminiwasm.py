@@ -16,6 +16,9 @@ The tests follow the white paper's specifications and cover:
 import unittest
 import torch
 import logging
+
+import wasmtime
+
 from qminiwasm import QMiniWASM
 
 
@@ -48,17 +51,21 @@ class TestQMiniWASM(unittest.TestCase):
         self.assertEqual(output.shape, (2, 4096))
 
     def test_execute_wasm(self):
-        """Test WASM execution."""
-        # Valid minimal WASM: add(i32, i32) -> i32; section sizes must match payloads
-        wasm_code = bytes.fromhex(
-            "0061736d01000000"  # magic & version
-            "01070160027f7f017f"  # type section len 7: (i32,i32)->i32
-            "02020100"  # function section: func 0 -> type 0
-            "070901036164640000"  # export section len 9: "add" -> func 0
-            "0a08010600200020016a0b"  # code section len 8: body len 6, i32.add
-        )
+        """Test WASM execution using wat2wasm so the binary is always valid."""
+        wat = """
+        (module
+          (func $add (param i32 i32) (result i32)
+            local.get 0
+            local.get 1
+            i32.add)
+          (export "add" (func $add)))
+        """
+        wasm_code = wasmtime.wat2wasm(wat)
 
         result, execution_state = self.model.execute_wasm(wasm_code, "add", [2, 3])
+        # wasmtime may return a single value or a 1-tuple
+        if isinstance(result, tuple) and len(result) == 1:
+            result = result[0]
         self.assertEqual(result, 5)
 
     def test_ternary_quantization(self):
