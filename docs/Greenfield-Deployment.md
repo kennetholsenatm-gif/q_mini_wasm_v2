@@ -1,6 +1,6 @@
 # Greenfield Deployment Guide
 
-Step-by-step, zero-to-hero guide for deploying Q-Mini-WASM on a **completely clean, air-gapped ruggedized node**. Assumes no pre-existing containers, databases, or identity providers. Follow the steps in order; each step assumes the previous one is complete.
+Step-by-step, zero-to-hero guide for deploying Q-Mini-WASM on a **completely clean, air-gapped ruggedized node**. Assumes no pre-existing containers, databases, or identity providers. Follow the steps in order; each step assumes the previous one is complete. The result is a node (and optional central stacks) capable of running the **event-driven SASE edge product**—edge agents connecting over **DMVPN** to the central Solace mesh—with the host, security, data, and application stacks in place to support it.
 
 ---
 

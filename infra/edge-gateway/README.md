@@ -1,6 +1,6 @@
 # Edge Gateway: Event-Driven AI with Solace Agent Mesh
 
-This directory configures **edge LXC (or host) nodes** to participate in the central event-driven AI mesh using **Solace Agent Mesh**. The architecture abandons synchronous REST APIs for AI workflows in favor of **asynchronous, Agent-to-Agent (A2A)** communication over the Solace event backbone, with **guaranteed delivery** so tasks survive temporary SASE/WireGuard tunnel drops.
+This directory defines the **edge product**: edge LXC (or host) nodes that participate in the central event-driven AI mesh over **DMVPN** using **Solace Agent Mesh**. The edge agent mesh and its MCP tools are a primary product; the central data stack and security stack exist to run the broker and services that edge agents depend on. The architecture abandons synchronous REST APIs for AI workflows in favor of **asynchronous, Agent-to-Agent (A2A)** communication over the Solace event backbone, with **guaranteed delivery** so tasks survive temporary SASE/DMVPN tunnel drops.
 
 ## Event-Driven AI Paradigm
 
@@ -15,8 +15,8 @@ This directory configures **edge LXC (or host) nodes** to participate in the cen
 
 1. **Central (data stack):** The QminiWASM engine or a gateway publishes a **task request** (e.g. “analyze security logs at edge site X”) to a Solace topic/queue on the central PubSub+ broker.
 2. **Orchestrator:** The Solace Agent Mesh **Orchestrator** (running in the central data stack) subscribes to task requests, consults **Agent Cards** (capabilities advertised by each agent), and **routes** the task to the appropriate edge agent (e.g. “Edge Security Log Analyzer” at the LXC with Wazuh).
-3. **Edge agent:** The **edge sensor agent** runs in the LXC (or container), connects to the **central broker over the WireGuard VPN** (using the VPN IP as `SOLACE_BROKER_URL`). It **self-registers** its Agent Card (skills: “Edge Security Log Analyzer”, “Local Telemetry Summarizer”). When a task is routed to it, it runs its **tools** (e.g. MCP server that reads Wazuh alerts from the neighboring `security-ids` LXC) and sends the result back over the mesh.
-4. **Guaranteed delivery:** If the SASE/WireGuard tunnel drops, the broker **retains** the task message. When the edge reconnects, the agent consumes the message and processes it. No manual retry or lost requests.
+3. **Edge agent:** The **edge sensor agent** runs in the LXC (or container), connects to the **central broker over the DMVPN tunnel** (using the tunnel IP as `SOLACE_BROKER_URL`). It **self-registers** its Agent Card (skills: “Edge Security Log Analyzer”, “Local Telemetry Summarizer”). When a task is routed to it, it runs its **tools** (e.g. MCP server that reads Wazuh alerts from the neighboring `security-ids` LXC) and sends the result back over the mesh.
+4. **Guaranteed delivery:** If the SASE/DMVPN tunnel drops, the broker **retains** the task message. When the edge reconnects, the agent consumes the message and processes it. No manual retry or lost requests.
 
 All **Solace broker credentials** (`SOLACE_BROKER_URL`, `SOLACE_BROKER_USERNAME`, `SOLACE_BROKER_PASSWORD`, `SOLACE_BROKER_VPN`) and optional **Wazuh/LLM** secrets must be supplied via **environment variables**. In production, source these from **HashiCorp Vault** (e.g. inject at container start or via Ansible/Vault integration); no hardcoded credentials in this repo.
 
@@ -26,7 +26,7 @@ All **Solace broker credentials** (`SOLACE_BROKER_URL`, `SOLACE_BROKER_USERNAME`
 |------|--------|
 | [ansible/site.yml](ansible/site.yml) | Playbook for edge hosts; applies `ai-agent-runtime` role (Agent Mesh CLI + config). |
 | [ansible/roles/ai-agent-runtime/](ansible/roles/ai-agent-runtime/) | Installs Solace Agent Mesh CLI (pip/venv), deploys `agent-mesh/` YAML. |
-| [agent-mesh/edge-sensor-agent.yaml](agent-mesh/edge-sensor-agent.yaml) | Edge agent definition: broker (WireGuard VPN URL), **Agent Card** (skills), **Tool** (MCP for Wazuh). |
+| [agent-mesh/edge-sensor-agent.yaml](agent-mesh/edge-sensor-agent.yaml) | Edge agent definition: broker (DMVPN URL), **Agent Card** (skills), **Tool** (MCP for Wazuh). |
 | [agent-mesh/tools/wazuh_alerts_mcp.py](agent-mesh/tools/wazuh_alerts_mcp.py) | MCP server that reads Wazuh alerts from the neighboring `security-ids` LXC/container. |
 | [agent-mesh/shared_config_edge.yaml](agent-mesh/shared_config_edge.yaml) | Optional shared anchors for broker/model/services when running the edge agent standalone. |
 
@@ -37,7 +37,7 @@ The **central** Solace PubSub+ broker and Solace Agent Mesh (Orchestrator + Gate
 - **solace-pubsub:** Event broker (SMF 55555, WebSocket 8008). Credentials via `SOLACE_ADMIN_PASSWORD` (and Vault when integrated).
 - **solace-agent-mesh:** Orchestrator + Gateway; connects to `solace-pubsub` using `SOLACE_BROKER_URL`, `SOLACE_BROKER_PASSWORD`, etc. Exposes the web UI and routes tasks to edge agents by Agent Card.
 
-Edge agents **do not** run in the data stack; they run on edge LXCs and connect to the **same** broker (over VPN) so the orchestrator and edge agents share one event mesh.
+Edge agents **do not** run in the data stack; they run on edge LXCs and connect to the **same** broker over DMVPN so the orchestrator and edge agents share one event mesh.
 
 ## Edge LXC setup
 
@@ -67,7 +67,7 @@ Edge agents **do not** run in the data stack; they run on edge LXCs and connect 
    sam run configs/agents/edge-sensor-agent.yaml
    ```
 
-The agent connects to the central broker (over WireGuard/VPN), publishes its **Agent Card** (Edge Security Log Analyzer, Local Telemetry Summarizer), and listens for tasks. The **Wazuh MCP tool** is invoked when the orchestrator sends a task that requires reading alerts from the neighboring `security-ids` LXC.
+The agent connects to the central broker over DMVPN, publishes its **Agent Card** (Edge Security Log Analyzer, Local Telemetry Summarizer), and listens for tasks. The **Wazuh MCP tool** is invoked when the orchestrator sends a task that requires reading alerts from the neighboring `security-ids` LXC.
 
 ## Vault integration
 

@@ -86,7 +86,7 @@ All services use an internal bridge network (`data-stack-internal`); only the po
 The stack includes **Solace PubSub+** (`solace-pubsub`) and **Solace Agent Mesh** (`solace-agent-mesh`) **alongside** RabbitMQ and NiFi:
 
 - **solace-pubsub:** Event broker (SMF 55555, WebSocket 8008, SEMP 8080). Used by Agent Mesh and optional event-driven clients. Set `SOLACE_ADMIN_PASSWORD` in `.env` (or inject from Vault).
-- **solace-agent-mesh:** Orchestrator + Gateway for event-driven, Agent-to-Agent (A2A) AI workflows. Connects to `solace-pubsub` via `SOLACE_BROKER_URL`, `SOLACE_BROKER_PASSWORD`, etc. Web UI on port 8000. Edge agents (see [infra/edge-gateway/](../../infra/edge-gateway/)) connect to the same broker over VPN and self-register via Agent Cards for task routing.
+- **solace-agent-mesh:** Orchestrator + Gateway for event-driven, Agent-to-Agent (A2A) AI workflows. Connects to `solace-pubsub` via `SOLACE_BROKER_URL`, `SOLACE_BROKER_PASSWORD`, etc. Web UI on port 8000. The data stack hosts the event broker that the SASE edge product depends on. Edge agents (see [infra/edge-gateway/](../../infra/edge-gateway/)) connect to the same broker over DMVPN and self-register via Agent Cards for task routing.
 
 Credentials must be set via environment (e.g. `.env` or Vault); see `.env.example` for variable names.
 

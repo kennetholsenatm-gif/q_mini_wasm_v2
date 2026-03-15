@@ -4,9 +4,13 @@
 
 Q-Mini-WASM is a quantum computing framework that combines WebAssembly (WASM) with quantum machine learning capabilities. It provides a secure, scalable platform for quantum applications with mature DevSecOps, Zero Trust security, and event-driven data infrastructure suitable for tactical edge and air-gapped deployments.
 
+## Product focus: event-driven SASE edge
+
+A primary product of this platform is the **tactical edge**: autonomous edge agents that connect over **DMVPN** to the central Solace mesh, use MCP tools for security, telemetry, NetOps, logs, and infrastructure lifecycle, and rely on guaranteed delivery when the tunnel is flaky. The four pillars (host, data, security, application) and optional NetOps exist to build, run, and operate that edge and its central broker/orchestrator.
+
 ## Platform Architecture (Current State)
 
-The repository is organized into four main pillars:
+The pillars below support the edge product described above. The repository is organized into four main pillars:
 
 ### 1. Host Appliance (Packer + QEMU)
 - **Location:** `infra/image-builder/`
@@ -142,7 +146,7 @@ flowchart TB
 
 ## Tactical Edge End-to-End Architecture
 
-The following diagram shows the full path from CI/NetOps provisioning through far-edge devices to the tactical edge node (SDN, security stack, data stack, and application stack), including WireGuard SASE and Solace Agent Mesh A2A communication.
+The following diagram shows the full path from CI/NetOps provisioning through far-edge devices to the tactical edge node (SDN, security stack, data stack, and application stack), including DMVPN SASE and Solace Agent Mesh A2A communication.
 
 ```mermaid
 flowchart TB
@@ -157,7 +161,7 @@ flowchart TB
         Incus["Incus Orchestrator (LXC)"]
         subgraph LXC["LXC System Containers"]
             direction LR
-            SASE["SASE Proxy\n(WireGuard + Envoy)"]
+            SASE["SASE Proxy\n(DMVPN + Envoy)"]
             IDS["Security IDS\n(Wazuh Agent)"]
             AIAgent["AI Agent Runtime\n(Solace Agent Mesh)"]
         end
@@ -212,7 +216,7 @@ flowchart TB
     Packer -.->|Deploys to| HostNode
     NetBox -.->|Ansible Dynamic Inventory| VyOS
 
-    SASE <===>|Encrypted WireGuard SASE Tunnel| VyOS
+    SASE <===>|Encrypted DMVPN SASE Tunnel| VyOS
     AIAgent <.->|Async A2A Comm (Guaranteed Delivery)| Solace
 ```
 
