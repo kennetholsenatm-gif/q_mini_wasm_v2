@@ -38,7 +38,9 @@ class WasmEngine:
                 self._test_wasm_compilation()
                 self.logger.info("WASM engine initialized with actual compilation")
             except Exception as e:
-                self.logger.warning("WASM compilation not available: %s. Using mock implementation.", str(e))
+                self.logger.warning(
+                    "WASM compilation not available: %s. Using mock implementation.", str(e)
+                )
                 self.use_mock = True
 
     def _test_wasm_compilation(self):
@@ -81,12 +83,14 @@ class WasmEngine:
                 wasm_file = os.path.join(tmpdir, "output.wasm")
                 compile_cmd = [
                     "clang",
-                    "-target", "wasm32",
+                    "-target",
+                    "wasm32",
                     "-nostdlib",
                     "-Wl,--no-entry",
                     "-Wl,--export-all",
-                    "-o", wasm_file,
-                    c_file_path
+                    "-o",
+                    wasm_file,
+                    c_file_path,
                 ]
 
                 result = subprocess.run(compile_cmd, capture_output=True, text=True)
@@ -107,13 +111,17 @@ class WasmEngine:
                     return None
 
         except FileNotFoundError:
-            self.logger.error("clang compiler not found. Please install clang for WASM compilation.")
+            self.logger.error(
+                "clang compiler not found. Please install clang for WASM compilation."
+            )
             return None
         except Exception as e:
             self.logger.error("WASM compilation error: %s", str(e))
             return None
 
-    def execute_wasm(self, module: Optional[wasmtime.Module], func_name: str, args: List[int]) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    def execute_wasm(
+        self, module: Optional[wasmtime.Module], func_name: str, args: List[int]
+    ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """Execute WASM function and capture state
 
         Args:
@@ -146,7 +154,9 @@ class WasmEngine:
             self.logger.error("WASM execution error: %s", str(e))
             return 0, None, None
 
-    def _execute_mock(self, func_name: str, args: List[int]) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    def _execute_mock(
+        self, func_name: str, args: List[int]
+    ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """Mock WASM execution for testing/development
 
         Args:
@@ -277,5 +287,5 @@ MESH_ALGORITHMS = {
     uint32_t consensus_vote(uint32_t current, uint32_t vote) {
         return (current + vote) / 2;
     }
-    """
+    """,
 }

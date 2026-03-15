@@ -198,7 +198,12 @@ class TropicalAttention(nn.Module):
             k_full = torch.cat([d_k, k], dim=2)
             v_full = torch.cat([d_v, v], dim=2)
             q_full = torch.cat(
-                [torch.zeros(batch_size, self.num_heads, delta_len, 2, device=q.device, dtype=q.dtype), q],
+                [
+                    torch.zeros(
+                        batch_size, self.num_heads, delta_len, 2, device=q.device, dtype=q.dtype
+                    ),
+                    q,
+                ],
                 dim=2,
             )
         else:
@@ -208,7 +213,9 @@ class TropicalAttention(nn.Module):
             q_full = q
 
         # Output buffer: (B, H, T, d_value) — only over original seq_len for output.
-        out = torch.empty(batch_size, self.num_heads, seq_len, self.d_value, device=v.device, dtype=v.dtype)
+        out = torch.empty(
+            batch_size, self.num_heads, seq_len, self.d_value, device=v.device, dtype=v.dtype
+        )
 
         # For each batch and head, maintain a streaming upper hull of Key indices.
         for b in range(batch_size):

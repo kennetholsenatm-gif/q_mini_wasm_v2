@@ -40,7 +40,9 @@ class HierarchicalConfig:
             T_conf=float(t) if t else 0.85,
             delta_format_version=int(os.environ.get("DELTA_FORMAT_VERSION", "1") or "1") or 1,
             top_k_experts=int(x) if (x := os.environ.get("TOP_K_EXPERTS", "")).isdigit() else None,
-            expert_capacity=int(x) if (x := os.environ.get("EXPERT_CAPACITY", "")).isdigit() else None,
+            expert_capacity=(
+                int(x) if (x := os.environ.get("EXPERT_CAPACITY", "")).isdigit() else None
+            ),
         )
 
 

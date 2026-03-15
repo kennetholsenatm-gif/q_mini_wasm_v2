@@ -135,7 +135,9 @@ class QMiniWASM:
             state = {"execution_state": execution_state, "result": result, "loop_idx": loop_idx}
             return result, state
 
-        certainty_fn = compute_certainty if compute_certainty is not None else default_certainty_heuristic
+        certainty_fn = (
+            compute_certainty if compute_certainty is not None else default_certainty_heuristic
+        )
         result, outcome, num_loops, last_state = run_edge_cognitive_loop(
             execute_one_block, certainty_fn, cfg
         )

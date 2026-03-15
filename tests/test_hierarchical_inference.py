@@ -117,7 +117,9 @@ class TestHierarchicalFlow(unittest.TestCase):
         payload = {"linear_memory": b"\x01\x02\x03\x04\x05\x06\x07\x08"}
         deltas = inter.accept(payload)
         self.assertGreater(len(deltas), 0)
-        self.assertTrue(all(isinstance(p[0], int) and isinstance(p[1], (bytes, type(None))) for p in deltas))
+        self.assertTrue(
+            all(isinstance(p[0], int) and isinstance(p[1], (bytes, type(None))) for p in deltas)
+        )
 
     def test_data_pipeline_load_wasm_traces(self):
         """Data pipeline load_wasm_traces returns list of trace dicts."""
@@ -139,12 +141,14 @@ class TestRunHierarchical(unittest.TestCase):
             from qminiwasm import QMiniWASM
         except ImportError:
             self.skipTest("wasmtime not installed")
-        wat = "(module (func $add (param i32 i32) (result i32) local.get 0 local.get 1 i32.add) (export \"add\" (func $add)))"
+        wat = '(module (func $add (param i32 i32) (result i32) local.get 0 local.get 1 i32.add) (export "add" (func $add)))'
         wasm_code = wasmtime.wat2wasm(wat)
         model = QMiniWASM()
         cfg = HierarchicalConfig(N_max_loops=2, T_conf=0.99)
         result, outcome, num_loops, last_state = model.run_hierarchical(
-            wasm_code, "add", [2, 3],
+            wasm_code,
+            "add",
+            [2, 3],
             continuation_hidden_states=torch.zeros(1, 4096),
             config=cfg,
         )

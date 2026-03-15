@@ -26,6 +26,7 @@ BytesLike = Union[bytes, bytearray, memoryview]
 @dataclass
 class delta_payload_struct:
     """Delta payload with metadata for attestation and streaming."""
+
     format_version: int
     length: int
     checksum: str
@@ -49,7 +50,9 @@ class HullKVCache:
         state_key = tuple(hidden_state.tolist())
         return self.cache.get(state_key, None)
 
-    def generate_corrective_tokens(self, corrupted_state: torch.Tensor, valid_state: torch.Tensor) -> torch.Tensor:
+    def generate_corrective_tokens(
+        self, corrupted_state: torch.Tensor, valid_state: torch.Tensor
+    ) -> torch.Tensor:
         """Generate corrective tokens to transform corrupted state to valid state"""
         # Calculate the difference between corrupted and valid states
         difference = valid_state - corrupted_state
@@ -124,7 +127,9 @@ class DataPipeline:
                 # Fallback to mock execution if compilation fails
                 for _ in range(num_samples):
                     inputs = [random.randint(0, 1000), random.randint(0, 1000)]
-                    output, hidden_state, target_state = self.wasm_engine._execute_mock(algo_name, inputs)
+                    output, hidden_state, target_state = self.wasm_engine._execute_mock(
+                        algo_name, inputs
+                    )
                     self.hullkv_cache.store_valid_state(hidden_state, target_state)
                     sample = {
                         "algorithm": algo_name,
@@ -134,8 +139,8 @@ class DataPipeline:
                         "target": target_state,
                         "execution_state": {
                             "instruction_pointer": 0,
-                            "memory_size": hidden_state.numel()
-                        }
+                            "memory_size": hidden_state.numel(),
+                        },
                     }
                     training_data.append(sample)
                 continue
@@ -152,7 +157,9 @@ class DataPipeline:
 
                     if hidden_state is None or target_state is None:
                         # Fallback to mock execution if WASM execution fails
-                        output, hidden_state, target_state = self.wasm_engine._execute_mock(algo_name, inputs)
+                        output, hidden_state, target_state = self.wasm_engine._execute_mock(
+                            algo_name, inputs
+                        )
 
                     # Store valid state transition in HullKVCache
                     self.hullkv_cache.store_valid_state(hidden_state, target_state)
@@ -166,8 +173,8 @@ class DataPipeline:
                         "target": target_state,
                         "execution_state": {
                             "instruction_pointer": 0,
-                            "memory_size": hidden_state.numel()
-                        }
+                            "memory_size": hidden_state.numel(),
+                        },
                     }
                     training_data.append(sample)
 
@@ -199,7 +206,7 @@ class DataPipeline:
         fault_probabilities = {
             "bit_flip": 0.1,  # 10% chance of bit flip
             "stack_drop": 0.05,  # 5% chance of stack drop
-            "oob_pointer": 0.02  # 2% chance of out-of-bounds pointer
+            "oob_pointer": 0.02,  # 2% chance of out-of-bounds pointer
         }
 
         for sample in training_data:
@@ -209,21 +216,31 @@ class DataPipeline:
             for fault_type in fault_types:
                 if fault_type == "bit_flip" and random.random() < fault_probabilities["bit_flip"]:
                     # Flip random bits in the hidden state tensor
-                    bit_flip_mask = torch.bernoulli(torch.full_like(corrupted_sample["hidden"], 0.01))
+                    bit_flip_mask = torch.bernoulli(
+                        torch.full_like(corrupted_sample["hidden"], 0.01)
+                    )
                     corrupted_sample["hidden"] = corrupted_sample["hidden"] ^ bit_flip_mask
                     corrupted_sample["faults"] = corrupted_sample.get("faults", []) + ["bit_flip"]
 
-                elif fault_type == "stack_drop" and random.random() < fault_probabilities["stack_drop"]:
+                elif (
+                    fault_type == "stack_drop"
+                    and random.random() < fault_probabilities["stack_drop"]
+                ):
                     # Drop random elements from the hidden state
                     drop_mask = torch.bernoulli(torch.full_like(corrupted_sample["hidden"], 0.2))
                     corrupted_sample["hidden"] = corrupted_sample["hidden"] * (1 - drop_mask)
                     corrupted_sample["faults"] = corrupted_sample.get("faults", []) + ["stack_drop"]
 
-                elif fault_type == "oob_pointer" and random.random() < fault_probabilities["oob_pointer"]:
+                elif (
+                    fault_type == "oob_pointer"
+                    and random.random() < fault_probabilities["oob_pointer"]
+                ):
                     # Create out-of-bounds pointer effect by adding large values
                     oob_mask = torch.bernoulli(torch.full_like(corrupted_sample["hidden"], 0.1))
                     corrupted_sample["hidden"] = corrupted_sample["hidden"] + oob_mask * 1000
-                    corrupted_sample["faults"] = corrupted_sample.get("faults", []) + ["oob_pointer"]
+                    corrupted_sample["faults"] = corrupted_sample.get("faults", []) + [
+                        "oob_pointer"
+                    ]
 
             corrupted_data.append(corrupted_sample)
 
@@ -262,24 +279,28 @@ class DataPipeline:
                         )
                         # Apply correction
                         recovered_sample["hidden"] = sample["hidden"] + corrective_tokens
-                        recovered_sample["recovery"] = recovered_sample.get("recovery", []) + ["bit_flip_recovered"]
+                        recovered_sample["recovery"] = recovered_sample.get("recovery", []) + [
+                            "bit_flip_recovered"
+                        ]
 
                 # Try to recover from stack drop
                 if "stack_drop" in sample["faults"]:
                     # Fill dropped elements with mean value
                     mean_value = torch.mean(sample["hidden"])
                     recovered_sample["hidden"] = torch.where(
-                        sample["hidden"] == 0,
-                        mean_value,
-                        sample["hidden"]
+                        sample["hidden"] == 0, mean_value, sample["hidden"]
                     )
-                    recovered_sample["recovery"] = recovered_sample.get("recovery", []) + ["stack_recovered"]
+                    recovered_sample["recovery"] = recovered_sample.get("recovery", []) + [
+                        "stack_recovered"
+                    ]
 
                 # Try to recover from out-of-bounds pointer
                 if "oob_pointer" in sample["faults"]:
                     # Clamp out-of-bounds values to valid range
                     recovered_sample["hidden"] = torch.clamp(sample["hidden"], -1000, 1000)
-                    recovered_sample["recovery"] = recovered_sample.get("recovery", []) + ["oob_pointer_recovered"]
+                    recovered_sample["recovery"] = recovered_sample.get("recovery", []) + [
+                        "oob_pointer_recovered"
+                    ]
 
             recovered_data.append(recovered_sample)
 
@@ -291,12 +312,16 @@ class DataPipeline:
         for _ in range(num_traces):
             # Generate synthetic trace with realistic values
             mem = torch.randint(0, 256, (64,), dtype=torch.uint8).numpy().tobytes()
-            traces.append({
-                "linear_memory": mem,
-                "stack_snapshot": [random.randint(0, 100) for _ in range(3)],
-                "instruction_pointer": random.randint(0, 100),
-                "algorithm": random.choice(["hash", "encrypt", "network", "routing", "consensus"])
-            })
+            traces.append(
+                {
+                    "linear_memory": mem,
+                    "stack_snapshot": [random.randint(0, 100) for _ in range(3)],
+                    "instruction_pointer": random.randint(0, 100),
+                    "algorithm": random.choice(
+                        ["hash", "encrypt", "network", "routing", "consensus"]
+                    ),
+                }
+            )
         self.logger.info("Loaded %d WASM traces", len(traces))
         return traces
 
