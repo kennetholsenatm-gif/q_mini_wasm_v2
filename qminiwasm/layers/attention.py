@@ -92,9 +92,7 @@ class TropicalAttention(nn.Module):
         self.out_proj = nn.Linear(num_heads * d_value, d_model, bias=bias, **factory_kwargs)
 
         # Optional: (addr, value) deltas ingested from Tier 2 state migration (HullKV).
-        self.register_buffer(
-            "_delta_k", torch.zeros(0, num_heads, 2, device=device, dtype=dtype)
-        )
+        self.register_buffer("_delta_k", torch.zeros(0, num_heads, 2, device=device, dtype=dtype))
         self.register_buffer(
             "_delta_v", torch.zeros(0, num_heads, d_value, device=device, dtype=dtype)
         )
