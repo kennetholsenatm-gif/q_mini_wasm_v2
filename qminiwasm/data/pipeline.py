@@ -53,8 +53,35 @@ class DataPipeline:
             List of training data samples
         """
         # Placeholder implementation - would generate training data
-        self.logger.info(f"Generating training data for {len(algorithms)} algorithms")
+        self.logger.info("Generating training data for %d algorithms", len(algorithms))
         return []  # Return empty list as placeholder
+
+    def load_wasm_traces(
+        self,
+        num_traces: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Load or generate WASM execution traces for Tier 2 ingestion and training.
+
+        Each trace is a dict with linear_memory (bytes or None), stack_snapshot (list or None),
+        and optional execution_state for testing delta compression and HullKV ingestion.
+
+        Args:
+            num_traces: Number of traces to return.
+
+        Returns:
+            List of trace dicts (linear_memory, stack_snapshot, etc.).
+        """
+        traces: List[Dict[str, Any]] = []
+        for _ in range(num_traces):
+            # Synthetic trace: small linear memory blob and placeholder stack
+            mem = bytes([i % 256 for i in range(64)])
+            traces.append({
+                "linear_memory": mem,
+                "stack_snapshot": [0, 1, 2],
+                "instruction_pointer": 0,
+            })
+        self.logger.info("Loaded %d WASM traces", len(traces))
+        return traces
 
     def inject_faults(self, training_data: List[Dict], fault_types: List[str]) -> List[Dict]:
         """Inject faults into training data for robustness.

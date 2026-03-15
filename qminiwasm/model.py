@@ -14,12 +14,18 @@ AI training uses Intel ARC (XPU) when available; CUDA is not used.
 """
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 
 import torch
 
+from .config import DEFAULT_HIERARCHICAL_CONFIG, HierarchicalConfig
+from .inference.edge import EdgeOutcome, default_certainty_heuristic, run_edge_cognitive_loop
+from .inference.escalation import prepare_escalation_payload
 from .quantum.router import HybridQuantumMoE
+from .quantum.interconnect import StateMigrationInterconnect
 from .layers.ternary import TernaryWASMExpert
+from .layers.attention import TropicalAttention
 from .wasm.engine import WasmExecutor
 from .hardware.sycl_stubs import SYCLHardware
 from .hardware.device import get_device
@@ -58,6 +64,8 @@ class QMiniWASM:
         self.wasm_executor = WasmExecutor()
         self.sycl_hardware = SYCLHardware()
         self.data_pipeline = DataPipeline()
+        self.state_migration = StateMigrationInterconnect()
+        self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
         self.logger.info("QMiniWASM model initialized on %s", self.device)
 
     def execute_wasm(self, wasm_code: bytes, func_name: str, args: List[int]) -> Tuple[int, Dict]:
@@ -94,6 +102,112 @@ class QMiniWASM:
         except Exception as e:
             self.logger.error(f"WASM execution failed: {e}")
             raise
+
+    def run_edge_inference(
+        self,
+        wasm_code: bytes,
+        func_name: str,
+        args: List[int],
+        compute_certainty: Optional[Any] = None,
+        config: Optional[HierarchicalConfig] = None,
+    ) -> Tuple[Any, EdgeOutcome, int, Dict]:
+        """Run Tier 1 edge cognitive loop: local WASM + N-loop halting + escalation.
+
+        Runs up to N_max_loops execution blocks; after each block computes a
+        certainty scalar and stops when certainty > T_conf (RESOLVED_LOCAL) or
+        when N loops are done (ESCALATE_TO_CLOUD).
+
+        Args:
+            wasm_code: WASM bytecode.
+            func_name: Function to execute each block.
+            args: Arguments for the function.
+            compute_certainty: Callable(state_dict) -> float in [0,1]. Default heuristic.
+            config: Hierarchical config; uses DEFAULT_HIERARCHICAL_CONFIG if None.
+
+        Returns:
+            (result, outcome, num_loops, last_state).
+        """
+        module = self.wasm_executor.compile_wasm(wasm_code)
+        cfg = config or DEFAULT_HIERARCHICAL_CONFIG
+
+        def execute_one_block(loop_idx: int) -> Tuple[Any, Dict]:
+            result, execution_state = self.wasm_executor.execute(module, func_name, args)
+            state = {"execution_state": execution_state, "result": result, "loop_idx": loop_idx}
+            return result, state
+
+        certainty_fn = compute_certainty if compute_certainty is not None else default_certainty_heuristic
+        result, outcome, num_loops, last_state = run_edge_cognitive_loop(
+            execute_one_block, certainty_fn, cfg
+        )
+        if outcome == EdgeOutcome.ESCALATE_TO_CLOUD:
+            last_state["escalation_payload"] = prepare_escalation_payload(last_state, cfg)
+        return result, outcome, num_loops, last_state
+
+    def run_hierarchical(
+        self,
+        wasm_code: bytes,
+        func_name: str,
+        args: List[int],
+        continuation_hidden_states: Optional[torch.Tensor] = None,
+        compute_certainty: Optional[Any] = None,
+        config: Optional[HierarchicalConfig] = None,
+    ) -> Tuple[Any, EdgeOutcome, int, Dict]:
+        """Single entry point for hierarchical inference: Tier 1 -> Tier 2 -> Tier 3.
+
+        (1) Runs Tier 1 edge cognitive loop (local WASM + N-loop + certainty).
+        (2) If ESCALATE_TO_CLOUD, builds escalation payload and runs Tier 2 state
+            migration (ingest deltas into HullKVCache) then Tier 3 (hybrid inference).
+        (3) Returns (result, outcome, num_loops, state); state includes
+            escalation_payload when outcome is ESCALATE_TO_CLOUD.
+
+        Args:
+            wasm_code: WASM bytecode for edge execution.
+            func_name: Function name to execute each block.
+            args: Arguments for the function.
+            continuation_hidden_states: For cloud path after escalation; if None,
+                a zero tensor (1, d_model) is used.
+            compute_certainty: Optional certainty callable; default heuristic otherwise.
+            config: Optional hierarchical config.
+
+        Returns:
+            (result, outcome, num_loops, last_state).
+        """
+        result, outcome, num_loops, last_state = self.run_edge_inference(
+            wasm_code, func_name, args, compute_certainty=compute_certainty, config=config
+        )
+        if outcome == EdgeOutcome.ESCALATE_TO_CLOUD:
+            payload = last_state.get("escalation_payload")
+            if payload is not None and continuation_hidden_states is not None:
+                self.inference_from_escalation(payload, continuation_hidden_states)
+            elif payload is not None:
+                dev = self.device
+                dummy = torch.zeros(1, 4096, device=dev, dtype=torch.float32)
+                self.inference_from_escalation(payload, dummy)
+        return result, outcome, num_loops, last_state
+
+    def inference_from_escalation(
+        self,
+        payload: Dict[str, Any],
+        continuation_hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        """Re-hydrate from Tier 2 escalation payload and resume at step N+1 (cloud).
+
+        Ingests delta payload into HullKVCache (TropicalAttention), then runs
+        hybrid inference on continuation_hidden_states so the cloud path is
+        exercised with the migrated state in context.
+
+        Args:
+            payload: From prepare_escalation_payload or last_state['escalation_payload'].
+            continuation_hidden_states: Hidden states for the continuation step
+                (batch_size, d_model).
+
+        Returns:
+            Output tensor from hybrid inference (batch_size, d_model).
+        """
+        deltas = self.state_migration.accept(payload)
+        if deltas and hasattr(self, "tropical_attention") and self.tropical_attention is not None:
+            self.tropical_attention.ingest_deltas(deltas, device=self.device)
+        return self.hybrid_inference(continuation_hidden_states)
 
     def hybrid_inference(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Perform quantum-classical hybrid inference.
