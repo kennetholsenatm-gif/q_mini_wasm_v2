@@ -55,6 +55,9 @@ class TropicalAttention(nn.Module):
         dtype: Optional torch.dtype for parameter initialization.
     """
 
+    _delta_k: torch.Tensor
+    _delta_v: torch.Tensor
+
     def __init__(
         self,
         d_model: int,
