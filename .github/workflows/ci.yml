@@ -28,26 +28,24 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v6
-        continue-on-error: true
 
       - name: CI version (confirm this is v3, AlmaLinux-focused)
         run: echo "CI workflow v3 | AlmaLinux-focused | sha=${{ github.sha }} | ref=${{ github.ref }}"
-        continue-on-error: true
 
       - name: Lint and test in AlmaLinux 9
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace -e PIP_NO_CACHE_DIR=1 \
             almalinux:9.7-20260129 bash -c '
+            set -e
             dnf install -y python3.11 python3.11-pip 2>/dev/null || true
             python3.11 -m pip install --upgrade pip
             python3.11 -m pip install black flake8 mypy pytest pytest-cov pypatch==1.0.2
             python3.11 -m pip install -r requirements/ci.txt 2>/dev/null || python3.11 -m pip install -r requirements.txt 2>/dev/null || true
-            python3.11 -m black --check qminiwasm/ tests/ 2>/dev/null || true
-            python3.11 -m flake8 qminiwasm/ tests/ --max-line-length=100 --extend-ignore=E203,W503 2>/dev/null || true
-            python3.11 -m mypy qminiwasm/ --ignore-missing-imports 2>/dev/null || true
-            python3.11 -m pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term 2>/dev/null || true
-          '
-        continue-on-error: true
+            python3.11 -m black --check qminiwasm/ tests/ wui/backend/
+            python3.11 -m flake8 qminiwasm/ tests/ wui/backend/ --max-line-length=100 --extend-ignore=E203,W503
+            python3.11 -m mypy qminiwasm/ --ignore-missing-imports
+            python3.11 -m pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term
+            '
 
       - name: Ensure coverage.xml exists
         run: echo '<coverage></coverage>' > "$GITHUB_WORKSPACE/coverage.xml"
@@ -67,23 +65,21 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v6
-        continue-on-error: true
 
       - name: CI version (confirm this is v3, AlmaLinux-focused)
         run: echo "CI workflow v3 | AlmaLinux-focused | sha=${{ github.sha }} | ref=${{ github.ref }}"
-        continue-on-error: true
 
       - name: Bandit and pip-audit in AlmaLinux 9
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace -e PIP_NO_CACHE_DIR=1 \
             almalinux:9.7-20260129 bash -c '
+            set -e
             dnf install -y python3.11 python3.11-pip 2>/dev/null || true
             python3.11 -m pip install --upgrade pip
             python3.11 -m pip install bandit pip-audit pypatch==1.0.2
-            bandit -r qminiwasm/ -f json -o bandit-report.json 2>/dev/null || true
-            pip-audit -r requirements.txt -f json -o pip-audit-report.json 2>/dev/null || true
-          '
-        continue-on-error: true
+            bandit -r qminiwasm/ wui/backend/ -c pyproject.toml -f json -o bandit-report.json
+            pip-audit -r requirements.txt -f json -o pip-audit-report.json
+            '
 
       - name: Ensure report files exist
         run: |
@@ -114,8 +110,7 @@ jobs:
       - name: Build backend image for scan
         run: docker build -f wui/backend/Dockerfile -t qminiwasm-backend:${{ github.sha }} .
       - name: Run Trivy image scan (fail on CRITICAL/HIGH)
-        uses: aquasecurity/trivy-action@0.28.0
-        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: "qminiwasm-backend:${{ github.sha }}"
           format: "sarif"

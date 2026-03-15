@@ -34,15 +34,13 @@ jobs:
           pip install -e . --no-deps 2>/dev/null || true
 
       - name: Run Bandit
-        run: bandit -r qminiwasm/ -f json -o bandit-report.json || true
-        continue-on-error: true
+        run: bandit -r qminiwasm/ wui/backend/ -c pyproject.toml -f json -o bandit-report.json
 
       - name: Run pip-audit
-        run: pip-audit -r requirements.txt -f json -o pip-audit-report.json || true
-        continue-on-error: true
+        run: pip-audit -r requirements.txt -f json -o pip-audit-report.json
 
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: "fs"
           scan-ref: "."

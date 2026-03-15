@@ -17,10 +17,10 @@ Implementation artifacts in this repository:
 
 | Control / Practice | Implementation |
 |-------------------|----------------|
-| **CI/CD and gates** | [.github/workflows/ci.yml](.github/workflows/ci.yml) – lint, tests, Bandit, pip-audit; branch protection should require CI to pass (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
+| **CI/CD and gates** | [.github/workflows/ci.yml](.github/workflows/ci.yml) – lint, tests, Bandit, pip-audit; **lint-and-test** and **security** jobs are required to pass (critical steps do not use continue-on-error), so merges are blocked on failures; branch protection should require CI to pass (see [CONTRIBUTING.md](CONTRIBUTING.md)). |
 | **Scheduled security scans** | [.github/workflows/security.yml](.github/workflows/security.yml) – weekly and on release: pip-audit, Gitleaks (secrets), Trivy filesystem; SBOM (CycloneDX) artifact. |
 | **Shift-left (pre-commit)** | [.pre-commit-config.yaml](.pre-commit-config.yaml) – Black, Flake8, MyPy, Bandit, detect-secrets. |
-| **SAST / code scanning** | [pyproject.toml](pyproject.toml) `[tool.bandit]`; [.semgrep.yml](.semgrep.yml); CI runs Bandit on `qminiwasm/`, optional Semgrep. |
+| **SAST / code scanning** | [pyproject.toml](pyproject.toml) `[tool.bandit]`; [.semgrep.yml](.semgrep.yml); CI runs Bandit on `qminiwasm/` and `wui/backend/`, optional Semgrep. |
 | **Dependency scanning** | CI and security workflow run `pip-audit`; [.github/dependabot.yml](.github/dependabot.yml) for dependency and GitHub Actions updates. |
 | **Secret detection** | Pre-commit: detect-secrets (baseline [.secrets.baseline](.secrets.baseline)); CI/security: Gitleaks. |
 | **Local DevSecOps workflow** | [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) – full local workflow (tests, Bandit, Safety, Semgrep, STIG checks, reports). |
