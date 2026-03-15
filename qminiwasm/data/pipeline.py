@@ -323,7 +323,7 @@ def compress_deltas(
     """Compute binary diff of current linear memory vs baseline (loop 0)."""
     cur = _to_bytes(current_memory)
     base = _to_bytes(baseline_memory)
-    deltas: List[Tuple[int, Optional[bytes])] = []
+    deltas: List[Tuple[int, Optional[bytes]]] = []
 
     if cur is None and base is None:
         pass
