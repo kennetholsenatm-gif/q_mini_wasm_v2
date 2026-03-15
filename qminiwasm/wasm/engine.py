@@ -12,9 +12,12 @@ paper, including:
 - Fault injection for robustness training
 """
 
-import wasmtime
 import logging
+import os
+import tempfile
 from typing import Dict, List, Tuple
+
+import wasmtime
 
 # wasmtime Python bindings use WasmtimeError; older docs sometimes mention Error
 WasmtimeException = getattr(wasmtime, "WasmtimeError", getattr(wasmtime, "Error", Exception))
@@ -51,10 +54,22 @@ class WasmExecutor:
         Returns:
             Compiled wasmtime.Module
         """
+        engine = getattr(self.store, "engine", self.store)
         try:
-            module = wasmtime.Module.from_binary(  # type: ignore[attr-defined]
-                self.store.engine, wasm_bytes
-            )
+            from_binary = getattr(wasmtime.Module, "from_binary", None)
+            if from_binary is not None:
+                module = from_binary(engine, wasm_bytes)
+            else:
+                with tempfile.NamedTemporaryFile(suffix=".wasm", delete=False) as f:
+                    f.write(wasm_bytes)
+                    path = f.name
+                try:
+                    module = wasmtime.Module.from_file(engine, path)
+                finally:
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
             self.logger.info("WASM module compiled successfully")
             return module
         except WasmtimeException as e:

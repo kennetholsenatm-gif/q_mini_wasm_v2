@@ -140,13 +140,25 @@ class HybridQuantumMoE(nn.Module):
         # Use tanh activation to keep values in [-1, 1] range for quantum circuit
         compressed_state = torch.tanh(self.compressor(hidden_states)).squeeze()
 
-        # Phase 2: QPU Execution. QAOA circuit computes discrete combinatorial routing
-        q_routing_exp = quantum_router_circuit(self.gammas, self.betas, compressed_state)
+        # Phase 2: QPU Execution. QAOA circuit expects 1D (8,) affinities; run per batch item
+        if compressed_state.dim() == 1:
+            q_routing_exp = quantum_router_circuit(
+                self.gammas, self.betas, compressed_state
+            )
+            q_routing_probs = [(val + 1.0) / 2.0 for val in q_routing_exp]
+            routing_weights = torch.stack(q_routing_probs)
+        else:
+            batch_size = compressed_state.size(0)
+            routed = []
+            for b in range(batch_size):
+                exp = quantum_router_circuit(
+                    self.gammas, self.betas, compressed_state[b]
+                )
+                probs = [(val + 1.0) / 2.0 for val in exp]
+                routed.append(torch.stack(probs))
+            routing_weights = torch.stack(routed)
 
-        # Phase 3: Map Pauli-Z expectation values [-1, 1] to binary routing probabilities
-        # Convert from [-1, 1] to [0, 1] range
-        q_routing_probs = [(val + 1.0) / 2.0 for val in q_routing_exp]
-        routing_weights = torch.stack(q_routing_probs)
+        # Phase 3: routing_weights is (num_experts,) or (batch, num_experts)
 
         # Phase 4: Sparse Expert Execution
         # Initialize output tensor
