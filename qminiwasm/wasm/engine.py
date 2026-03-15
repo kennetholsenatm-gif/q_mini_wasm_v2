@@ -191,11 +191,12 @@ class WasmEngine:
         store = self._compiled_store
         try:
             instance = wasmtime.Instance(store, module, [])
-            func = instance.exports(store)[func_name]
-            # wasmtime-py: call with (store, *args)
-            result = func(store, *args)
+            func = instance.exports(store)[func_name]  # type: ignore[index]
+            # wasmtime-py: call with (store, *args); export is a Func at runtime
+            result = func(store, *args)  # type: ignore[operator]
             # Unwrap single-value tuple if needed (wasmtime can return (value,))
-            output = result[0] if isinstance(result, tuple) and len(result) == 1 else result
+            raw = result[0] if isinstance(result, tuple) and len(result) == 1 else result
+            output: int = int(raw) if raw is not None else 0
             hidden_state = torch.tensor([args[0], output, len(args)], dtype=torch.float32)
             target_state = torch.tensor([args[0], output + 1, len(args) + 1], dtype=torch.float32)
 
