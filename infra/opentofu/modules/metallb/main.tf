@@ -1,6 +1,12 @@
 # MetalLB: LoadBalancer provider for Kind/bare metal. Assigns external IPs from address_pool via Layer 2.
 # Helm installs MetalLB; IPAddressPool and L2Advertisement are CRs (create after Helm so CRDs exist).
 # Namespace is created with pod-security labels so MetalLB speaker (privileged for ARP) is allowed.
+#
+# First-time apply: the provider validates kubernetes_manifest against the cluster at plan time, so the
+# MetalLB CRDs must already exist. If you see "no matches for kind IPAddressPool in group metallb.io",
+# from infra/opentofu/environments/local (with vars set, e.g. terraform.tfvars) run:
+#   tofu apply -target=module.metallb.kubernetes_namespace.metallb -target=module.metallb.helm_release.metallb
+#   tofu apply
 
 resource "kubernetes_namespace" "metallb" {
   metadata {
