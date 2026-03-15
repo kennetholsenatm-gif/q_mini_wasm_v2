@@ -49,9 +49,9 @@ class WasmExecutor:
             Compiled wasmtime.Module
         """
         try:
-            module = wasmtime.Module.from_binary(
+            module = wasmtime.Module.from_binary(  # type: ignore[attr-defined]
                 self.store.engine, wasm_bytes
-            )  # type: ignore[attr-defined]
+            )
             self.logger.info("WASM module compiled successfully")
             return module
         except wasmtime.Error as e:  # type: ignore[attr-defined]
