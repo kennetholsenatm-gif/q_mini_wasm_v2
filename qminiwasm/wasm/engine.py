@@ -1,7 +1,7 @@
 """WASM Engine for Q-Mini-WASM
 
-This module provides the core WASM compilation and execution engine for the Q-Mini-WASM architecture.
-It handles:
+This module provides the core WASM compilation and execution engine for the
+Q-Mini-WASM architecture. It handles:
 - C source compilation to WASM modules
 - WASM module instantiation and execution
 - Stack and memory state capture
@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import os
 import wasmtime
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Optional, Tuple
 import torch
 
 logger = logging.getLogger(__name__)

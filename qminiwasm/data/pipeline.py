@@ -100,7 +100,7 @@ class DataPipeline:
             num_samples: Number of samples to generate
 
         Returns:
-            List of training data samples with {"hidden": torch.Tensor, "target": torch.Tensor} structure
+            List of training data samples with "hidden" and "target" torch.Tensor keys.
         """
         self.logger.info("Generating training data for %d algorithms", len(algorithms))
         training_data = []

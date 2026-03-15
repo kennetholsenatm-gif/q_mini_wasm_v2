@@ -141,7 +141,11 @@ class TestRunHierarchical(unittest.TestCase):
             from qminiwasm import QMiniWASM
         except ImportError:
             self.skipTest("wasmtime not installed")
-        wat = '(module (func $add (param i32 i32) (result i32) local.get 0 local.get 1 i32.add) (export "add" (func $add)))'
+        wat = (
+            "(module (func $add (param i32 i32) (result i32) "
+            "local.get 0 local.get 1 i32.add) "
+            "(export \"add\" (func $add)))"
+        )
         wasm_code = wasmtime.wat2wasm(wat)
         model = QMiniWASM()
         cfg = HierarchicalConfig(N_max_loops=2, T_conf=0.99)
