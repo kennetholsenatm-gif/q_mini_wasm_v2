@@ -31,6 +31,9 @@ class WasmEngine:
         self.use_mock = use_mock
         self.logger = logging.getLogger(__name__)
         self._module_cache: Dict[str, Optional[Any]] = {}
+        # Keep store for last compile_wasm so Instance can use same engine (no cross-Engine)
+        self._compiled_store: Optional[Any] = None
+        self._compiled_module: Optional[Any] = None
 
         if not use_mock:
             try:
@@ -119,6 +122,54 @@ class WasmEngine:
             self.logger.error("WASM compilation error: %s", str(e))
             return None
 
+    def compile_wasm(self, wasm_code: bytes) -> Optional[Any]:
+        """Load WASM binary into a Module (model/execute_wasm interface).
+
+        Stores the Store used so execute_wasm can instantiate with the same
+        engine (wasmtime does not support cross-Engine instantiation).
+
+        Args:
+            wasm_code: WASM binary bytes (e.g. from wasmtime.wat2wasm).
+
+        Returns:
+            wasmtime.Module or None if use_mock or load fails.
+        """
+        if self.use_mock:
+            return None
+        try:
+            store = wasmtime.Store()
+            module = wasmtime.Module(store.engine, wasm_code)  # type: ignore[attr-defined]
+            self._compiled_store = store
+            self._compiled_module = module
+            return module
+        except Exception as e:
+            self.logger.error("Failed to load WASM module: %s", str(e))
+            return None
+
+    def execute(
+        self,
+        module: Optional[Any],
+        func_name: str,
+        args: List[int],
+    ) -> Tuple[Any, Dict[str, Any]]:
+        """Execute WASM function and return (result, execution_state) for model interface.
+
+        Args:
+            module: Module from compile_wasm (or None for mock).
+            func_name: Export name of the function.
+            args: Integer arguments.
+
+        Returns:
+            (result, execution_state) with execution_state containing
+            hidden_state and target_state.
+        """
+        output, hidden_state, target_state = self.execute_wasm(module, func_name, args)
+        execution_state: Dict[str, Any] = {
+            "hidden_state": hidden_state,
+            "target_state": target_state,
+        }
+        return output, execution_state
+
     def execute_wasm(
         self, module: Optional[wasmtime.Module], func_name: str, args: List[int]
     ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor]]:
@@ -134,17 +185,17 @@ class WasmEngine:
         """
         if self.use_mock or module is None:
             return self._execute_mock(func_name, args)
-
+        if self._compiled_store is None or self._compiled_module is not module:
+            self.logger.error("Module was not compiled by this engine; use compile_wasm first.")
+            return 0, None, None
+        store = self._compiled_store
         try:
-            store = wasmtime.Store()
             instance = wasmtime.Instance(store, module, [])
-            func = instance.get_export(func_name).func()  # type: ignore[attr-defined]
-
-            # Execute the function
-            result = func(*args)
-
-            # Capture stack and memory states (simulated)
-            output = result
+            func = instance.exports(store)[func_name]
+            # wasmtime-py: call with (store, *args)
+            result = func(store, *args)
+            # Unwrap single-value tuple if needed (wasmtime can return (value,))
+            output = result[0] if isinstance(result, tuple) and len(result) == 1 else result
             hidden_state = torch.tensor([args[0], output, len(args)], dtype=torch.float32)
             target_state = torch.tensor([args[0], output + 1, len(args) + 1], dtype=torch.float32)
 
