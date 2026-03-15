@@ -49,13 +49,13 @@ class TestQMiniWASM(unittest.TestCase):
 
     def test_execute_wasm(self):
         """Test WASM execution."""
-        # Valid minimal WASM: add(i32, i32) -> i32 (type, function, export, code)
+        # Valid minimal WASM: add(i32, i32) -> i32; section sizes must match payloads
         wasm_code = bytes.fromhex(
             "0061736d01000000"  # magic & version
-            "01090160027f7f017f"  # type: (i32,i32)->i32
-            "02020100"  # func 0 -> type 0
-            "070a01036164640000"  # export "add" -> func 0
-            "0a0b010700200020016a0b"  # code: local.get 0, local.get 1, i32.add
+            "01070160027f7f017f"  # type section len 7: (i32,i32)->i32
+            "02020100"  # function section: func 0 -> type 0
+            "070901036164640000"  # export section len 9: "add" -> func 0
+            "0a08010600200020016a0b"  # code section len 8: body len 6, i32.add
         )
 
         result, execution_state = self.model.execute_wasm(wasm_code, "add", [2, 3])
