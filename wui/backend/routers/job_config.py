@@ -25,7 +25,9 @@ async def get_job_config() -> JobConfigResponse:
     execution_mode = hw.get("execution_mode", "hpc")
     if hasattr(execution_mode, "value"):
         execution_mode = execution_mode.value
-    quantum_backend = q_router._quantum_backend if q_router._quantum_backend is not None else s.quantum_backend
+    quantum_backend = (
+        q_router._quantum_backend if q_router._quantum_backend is not None else s.quantum_backend
+    )
     circ = circ_router._circuit
     if circ:
         num_qubits = circ["num_qubits"]

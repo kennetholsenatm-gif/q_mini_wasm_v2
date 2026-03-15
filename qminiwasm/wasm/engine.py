@@ -15,6 +15,7 @@ import wasmtime
 import logging
 from typing import Dict, List, Tuple
 
+
 class WasmExecutor:
     """WasmExecutor: WASM Execution Engine for Deterministic In-Model Execution
 
@@ -82,8 +83,8 @@ class WasmExecutor:
             # Capture execution state (simplified for now)
             execution_state = {
                 "memory": None,  # Would capture linear memory contents
-                "stack": None,   # Would capture stack state
-                "trace": None    # Would capture execution trace
+                "stack": None,  # Would capture stack state
+                "trace": None,  # Would capture execution trace
             }
 
             self.logger.info("WASM function executed successfully")
@@ -108,11 +109,7 @@ class WasmExecutor:
             Dictionary containing captured deltas
         """
         # Placeholder implementation - would use wasmtime API to introspect memory/stack
-        deltas = {
-            "memory_deltas": None,
-            "stack_deltas": None,
-            "execution_trace": None
-        }
+        deltas = {"memory_deltas": None, "stack_deltas": None, "execution_trace": None}
 
         self.logger.info("Captured execution deltas")
         return deltas

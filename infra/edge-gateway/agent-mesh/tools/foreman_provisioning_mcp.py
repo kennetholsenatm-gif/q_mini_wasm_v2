@@ -37,6 +37,8 @@ def _foreman_headers() -> dict | str:
 def _foreman_request(method: str, path: str, body: dict | None = None, params: dict | None = None) -> str:
     """Send request to Foreman API. Returns JSON string or error message."""
     base_url = os.environ.get("FOREMAN_API_URL", "https://foreman.example.com").rstrip("/")
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return "Error: FOREMAN_API_URL must use http:// or https://."
     headers = _foreman_headers()
     if isinstance(headers, str):
         return headers
@@ -47,7 +49,7 @@ def _foreman_request(method: str, path: str, body: dict | None = None, params: d
         import urllib.request
         data = json.dumps(body).encode() if body else None
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:  # nosec B310
             out = r.read().decode()
             return json.dumps(json.loads(out), indent=2) if out else "{}"
     except Exception as e:

@@ -1,6 +1,6 @@
 # WUI Frontend (Vite/React). Build from repo root: docker build -f wui/frontend/Dockerfile .
 # Stage 1: build
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY wui/frontend/package.json wui/frontend/package-lock.json* ./
 RUN npm ci 2>/dev/null || npm install

@@ -1,4 +1,5 @@
 """Test the DevSecOps workflow (PowerShell script)."""
+
 import subprocess
 import pytest
 from pathlib import Path
@@ -62,12 +63,16 @@ def test_script_logging():
 def test_script_error_handling():
     content = SCRIPT_PATH.read_text()
     assert "exit 1" in content, "Script should handle errors properly"
-    assert "Administrator" in content or "admin" in content.lower(), "Script should check for admin run"
+    assert (
+        "Administrator" in content or "admin" in content.lower()
+    ), "Script should check for admin run"
 
 
 def test_script_main_function():
     content = SCRIPT_PATH.read_text()
-    assert "function Main" in content or "function Main " in content, "Script should have main function"
+    assert (
+        "function Main" in content or "function Main " in content
+    ), "Script should have main function"
     assert "Run-CompleteWorkflow" in content, "Script should call workflow"
 
 
@@ -126,6 +131,7 @@ def test_script_header_comment():
 def test_script_help_option():
     """Script should support --help (skipped if pwsh not available)."""
     import shutil
+
     pwsh = shutil.which("pwsh") or shutil.which("powershell")
     if not pwsh:
         pytest.skip("pwsh/powershell not found")

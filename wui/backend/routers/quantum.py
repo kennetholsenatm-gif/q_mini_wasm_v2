@@ -69,6 +69,7 @@ def _get_credentials_configured(backend: str) -> dict[str, bool]:
 async def get_quantum_config() -> QuantumConfigResponse:
     """Return current backend id and non-secret config. No API keys."""
     from ..config import get_settings
+
     s = get_settings()
     backend = _quantum_backend if _quantum_backend is not None else s.quantum_backend
     sim = "default.qubit" if backend == "penny_lane" else None
@@ -153,11 +154,13 @@ async def post_quantum_verify() -> QuantumVerifyResponse:
     """Test connection to the selected backend (e.g. PennyLane device creation)."""
     backend = _quantum_backend
     from ..config import get_settings
+
     if backend is None:
         backend = get_settings().quantum_backend
     if backend == "penny_lane":
         try:
             import pennylane as qml  # type: ignore
+
             dev = qml.device("default.qubit", wires=2)
             assert dev is not None
             return QuantumVerifyResponse(ok=True, message="PennyLane default.qubit OK")
@@ -188,8 +191,20 @@ async def put_transfer_config(body: TransferConfigUpdate) -> TransferConfig:
     """Update HPC-to-QPU transfer configuration."""
     global _transfer_config
     _transfer_config = TransferConfig(
-        transfer_batch_size=body.transfer_batch_size if body.transfer_batch_size is not None else _transfer_config.transfer_batch_size,
-        serialization_format=body.serialization_format if body.serialization_format is not None else _transfer_config.serialization_format,
-        polling_interval_seconds=body.polling_interval_seconds if body.polling_interval_seconds is not None else _transfer_config.polling_interval_seconds,
+        transfer_batch_size=(
+            body.transfer_batch_size
+            if body.transfer_batch_size is not None
+            else _transfer_config.transfer_batch_size
+        ),
+        serialization_format=(
+            body.serialization_format
+            if body.serialization_format is not None
+            else _transfer_config.serialization_format
+        ),
+        polling_interval_seconds=(
+            body.polling_interval_seconds
+            if body.polling_interval_seconds is not None
+            else _transfer_config.polling_interval_seconds
+        ),
     )
     return _transfer_config

@@ -1,4 +1,5 @@
 """Test the complete DevSecOps workflow script (PowerShell)."""
+
 import subprocess
 import time
 from pathlib import Path
@@ -82,6 +83,7 @@ def test_script_documentation():
 
 def test_script_help_runs():
     import shutil
+
     pwsh = shutil.which("pwsh") or shutil.which("powershell")
     if not pwsh:
         pytest.skip("pwsh/powershell not found")

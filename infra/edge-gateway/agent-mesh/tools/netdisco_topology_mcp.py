@@ -23,6 +23,8 @@ except ImportError:
 def _netdisco_auth() -> tuple[str, dict] | str:
     """Return (base_url, headers) or error string. Uses NETDISCO_API_KEY or login with user/password."""
     api_url = os.environ.get("NETDISCO_API_URL", "http://localhost:5000").rstrip("/")
+    if not (api_url.startswith("http://") or api_url.startswith("https://")):
+        return "Error: NETDISCO_API_URL must use http:// or https://."
     key = os.environ.get("NETDISCO_API_KEY")
     if key:
         return (api_url, {"Accept": "application/json", "Authorization": key})
@@ -39,7 +41,7 @@ def _netdisco_auth() -> tuple[str, dict] | str:
             method="POST",
         )
         req.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310
             data = json.loads(r.read().decode())
         token = data.get("api_key")
         if not token:
@@ -61,7 +63,7 @@ def _netdisco_get(path: str, params: dict | None = None) -> str:
     try:
         import urllib.request
         req = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:  # nosec B310
             return json.dumps(json.loads(r.read().decode()), indent=2)
     except Exception as e:
         return f"Error querying Netdisco API: {e}"

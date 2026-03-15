@@ -18,6 +18,7 @@ import torch
 import logging
 from qminiwasm import QMiniWASM
 
+
 class TestQMiniWASM(unittest.TestCase):
     """Test cases for Q-Mini-WASM architecture."""
 
@@ -86,7 +87,9 @@ class TestQMiniWASM(unittest.TestCase):
     def test_train_evaluate(self):
         """Test model training and evaluation."""
         # Create test data
-        training_data = [{"input": torch.randn(4096), "target": torch.randn(4096)} for _ in range(10)]
+        training_data = [
+            {"input": torch.randn(4096), "target": torch.randn(4096)} for _ in range(10)
+        ]
         test_data = [{"input": torch.randn(4096), "target": torch.randn(4096)} for _ in range(5)]
 
         # Test training
@@ -104,5 +107,6 @@ class TestQMiniWASM(unittest.TestCase):
         with self.assertRaises(Exception):
             self.model.execute_wasm(invalid_wasm, "add", [2, 3])
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

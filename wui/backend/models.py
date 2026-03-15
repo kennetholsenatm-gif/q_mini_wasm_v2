@@ -3,8 +3,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ----- Hardware -----
+
 
 class ExecutionMode(str, Enum):
     local = "local"
@@ -24,7 +24,9 @@ class HardwareOption(BaseModel):
 
 class HpcConnectionDetails(BaseModel):
     endpoint_url: Optional[str] = Field(default=None, description="HPC cluster endpoint URL.")
-    auth_token: Optional[str] = Field(default=None, description="Authentication token; never logged.")
+    auth_token: Optional[str] = Field(
+        default=None, description="Authentication token; never logged."
+    )
     cluster_id: Optional[str] = Field(default=None, description="Cluster identifier.")
     node_id: Optional[str] = Field(default=None, description="Node identifier.")
 
@@ -33,10 +35,18 @@ class HardwareCurrent(BaseModel):
     accelerator: str = Field(description="Current accelerator: cuda, xpu, cpu.")
     device_index: int = Field(default=0, description="Device index.")
     device_name: str = Field(description="Human-readable device name.")
-    execution_mode: ExecutionMode = Field(default=ExecutionMode.hpc, description="Local or HPC execution.")
-    hpc_connection: Optional[HpcConnectionDetails] = Field(default=None, description="HPC connection details when mode is hpc.")
-    local_accelerator: Optional[AcceleratorType] = Field(default=None, description="Local accelerator when mode is local.")
-    simulated_quantum: bool = Field(default=False, description="Use simulated quantum when mode is local.")
+    execution_mode: ExecutionMode = Field(
+        default=ExecutionMode.hpc, description="Local or HPC execution."
+    )
+    hpc_connection: Optional[HpcConnectionDetails] = Field(
+        default=None, description="HPC connection details when mode is hpc."
+    )
+    local_accelerator: Optional[AcceleratorType] = Field(
+        default=None, description="Local accelerator when mode is local."
+    )
+    simulated_quantum: bool = Field(
+        default=False, description="Use simulated quantum when mode is local."
+    )
 
 
 class HardwareCurrentUpdate(BaseModel):
@@ -50,10 +60,13 @@ class HardwareCurrentUpdate(BaseModel):
 
 # ----- Quantum backend -----
 
+
 class QuantumBackendInfo(BaseModel):
     id: str = Field(description="Backend id.")
     name: str = Field(description="Human-readable name.")
-    required_env_vars: List[str] = Field(default_factory=list, description="Env var names for credentials (no values).")
+    required_env_vars: List[str] = Field(
+        default_factory=list, description="Env var names for credentials (no values)."
+    )
 
 
 class QuantumConfigResponse(BaseModel):
@@ -63,13 +76,17 @@ class QuantumConfigResponse(BaseModel):
         default_factory=dict,
         description="Per-env-var flag that credential is set (no values returned).",
     )
-    endpoint_url: Optional[str] = Field(default=None, description="Optional endpoint URL for quantum provider.")
+    endpoint_url: Optional[str] = Field(
+        default=None, description="Optional endpoint URL for quantum provider."
+    )
     provider: Optional[str] = Field(default=None, description="Provider name: ibm, ionq, intel.")
 
 
 class QuantumConfigUpdate(BaseModel):
     backend: str = Field(description="Backend id: ibm_quantum, intel_qs, penny_lane, ionq.")
-    credentials: Dict[str, str] = Field(default_factory=dict, description="API keys / tokens; never logged.")
+    credentials: Dict[str, str] = Field(
+        default_factory=dict, description="API keys / tokens; never logged."
+    )
     endpoint_url: Optional[str] = None
     provider: Optional[str] = None
 
@@ -80,6 +97,7 @@ class QuantumVerifyResponse(BaseModel):
 
 
 # ----- Circuits (PQC) -----
+
 
 class CircuitPreset(BaseModel):
     num_qubits: int
@@ -96,10 +114,13 @@ class CircuitCurrentResponse(BaseModel):
 class CircuitCurrentUpdate(BaseModel):
     num_qubits: int = Field(ge=1, le=32, description="Number of qubits.")
     qaoa_layers: int = Field(ge=1, le=20, description="QAOA layers.")
-    diff_method: str = Field(default="parameter-shift", description="parameter-shift or finite-diff.")
+    diff_method: str = Field(
+        default="parameter-shift", description="parameter-shift or finite-diff."
+    )
 
 
 # ----- Deployment (OpenTofu) -----
+
 
 class DeployDesiredRequest(BaseModel):
     provider_id: str = Field(description="Provider identifier (e.g. lambda, runpod).")
@@ -129,8 +150,11 @@ class DeployTfvarsResponse(BaseModel):
 
 # ----- Training config -----
 
+
 class TrainingConfigResponse(BaseModel):
-    num_trainable_parameters: int = Field(ge=1, default=1024, description="Number of parameters to train.")
+    num_trainable_parameters: int = Field(
+        ge=1, default=1024, description="Number of parameters to train."
+    )
     epochs: int = Field(ge=1, default=10, description="Training epochs.")
     batch_size: int = Field(ge=1, default=32, description="Training batch size.")
 
@@ -143,15 +167,20 @@ class TrainingConfigUpdate(BaseModel):
 
 # ----- HPC-to-Quantum transfer -----
 
+
 class SerializationFormat(str, Enum):
     json = "json"
     msgpack = "msgpack"
 
 
 class TransferConfig(BaseModel):
-    transfer_batch_size: int = Field(ge=1, default=64, description="Batch size for HPC-to-QPU transfer.")
+    transfer_batch_size: int = Field(
+        ge=1, default=64, description="Batch size for HPC-to-QPU transfer."
+    )
     serialization_format: str = Field(default="json", description="json or msgpack.")
-    polling_interval_seconds: float = Field(ge=0.1, default=2.0, description="Polling interval in seconds.")
+    polling_interval_seconds: float = Field(
+        ge=0.1, default=2.0, description="Polling interval in seconds."
+    )
 
 
 class TransferConfigUpdate(BaseModel):
@@ -162,6 +191,7 @@ class TransferConfigUpdate(BaseModel):
 
 # ----- Job config (aggregate for training job) -----
 
+
 class JobConfigResponse(BaseModel):
     accelerator: str = Field(description="Accelerator: cuda, xpu, cpu.")
     device_index: int = Field(default=0)
@@ -170,18 +200,25 @@ class JobConfigResponse(BaseModel):
     num_qubits: int = Field(description="QAOA num_qubits.")
     qaoa_layers: int = Field(description="QAOA layers.")
     diff_method: str = Field(description="parameter-shift or finite-diff.")
-    num_trainable_parameters: int = Field(default=1024, description="Number of parameters to train.")
+    num_trainable_parameters: int = Field(
+        default=1024, description="Number of parameters to train."
+    )
     epochs: int = Field(default=10, description="Training epochs.")
     batch_size: int = Field(default=32, description="Training batch size.")
-    transfer_config: Optional[TransferConfig] = Field(default=None, description="HPC-to-QPU data transfer config.")
+    transfer_config: Optional[TransferConfig] = Field(
+        default=None, description="HPC-to-QPU data transfer config."
+    )
 
 
 class TrainingEstimateResponse(BaseModel):
     estimated_seconds: float = Field(description="Estimated training duration in seconds.")
-    message: Optional[str] = Field(default=None, description="Human-readable estimate (e.g. ~5 min).")
+    message: Optional[str] = Field(
+        default=None, description="Human-readable estimate (e.g. ~5 min)."
+    )
 
 
 # ----- Providers (existing) -----
+
 
 class ProviderType(str, Enum):
     lambda_cloud = "lambda"
@@ -257,4 +294,3 @@ class ProviderResponse(BaseModel):
     region: Optional[str]
     metadata: Dict[str, Any]
     # Do not expose actual secrets or Vault paths by default.
-

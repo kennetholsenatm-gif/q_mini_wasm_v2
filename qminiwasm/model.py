@@ -169,11 +169,7 @@ class QMiniWASM:
         try:
             # Evaluate model (placeholder implementation)
             self.logger.info("Evaluating QMiniWASM model")
-            return {
-                "accuracy": 0.0,
-                "loss": 0.0,
-                "metrics": {}
-            }
+            return {"accuracy": 0.0, "loss": 0.0, "metrics": {}}
 
         except Exception as e:
             self.logger.error(f"Evaluation failed: {e}")

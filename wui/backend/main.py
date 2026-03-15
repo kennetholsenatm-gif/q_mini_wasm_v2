@@ -58,10 +58,10 @@ def create_app() -> FastAPI:
     static_dir = os.environ.get("STATIC_DIR", "")
     if static_dir and os.path.isdir(static_dir):
         from fastapi.staticfiles import StaticFiles
+
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
     return app
 
 
 app = create_app()
-

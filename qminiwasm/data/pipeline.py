@@ -15,6 +15,7 @@ import wasmtime
 import logging
 from typing import Dict, List, Tuple
 
+
 class DataPipeline:
     """DataPipeline: Synthetic Data Pipeline for Q-Mini-WASM Training
 

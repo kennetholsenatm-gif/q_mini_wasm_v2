@@ -54,6 +54,7 @@ async def get_hardware_options() -> list[HardwareOption]:
 async def get_hardware_current() -> HardwareCurrent:
     """Return current device selection (from stored config or env defaults)."""
     from ..config import get_settings
+
     s = get_settings()
     mode = _current.get("execution_mode", ExecutionMode.hpc.value)
     if isinstance(mode, ExecutionMode):
@@ -62,7 +63,11 @@ async def get_hardware_current() -> HardwareCurrent:
     acc = _current.get("accelerator")
     local_acc_raw = _current.get("local_accelerator")
     if mode_enum == ExecutionMode.local and local_acc_raw is not None:
-        acc = local_acc_raw.value if isinstance(local_acc_raw, AcceleratorType) else str(local_acc_raw)
+        acc = (
+            local_acc_raw.value
+            if isinstance(local_acc_raw, AcceleratorType)
+            else str(local_acc_raw)
+        )
     if acc is None:
         if s.prefer_cuda:
             acc = "cuda"
@@ -74,7 +79,11 @@ async def get_hardware_current() -> HardwareCurrent:
     hpc = _hpc_connection_safe(_current.get("hpc_connection"))
     local_acc = None
     if local_acc_raw is not None:
-        local_acc = local_acc_raw if isinstance(local_acc_raw, AcceleratorType) else AcceleratorType(str(local_acc_raw))
+        local_acc = (
+            local_acc_raw
+            if isinstance(local_acc_raw, AcceleratorType)
+            else AcceleratorType(str(local_acc_raw))
+        )
     simulated_quantum = _current.get("simulated_quantum", False)
     return HardwareCurrent(
         accelerator=acc,

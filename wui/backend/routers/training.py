@@ -33,7 +33,11 @@ async def put_training_config(body: TrainingConfigUpdate) -> TrainingConfigRespo
     """Update training config."""
     global _training_config
     _training_config = TrainingConfigResponse(
-        num_trainable_parameters=body.num_trainable_parameters if body.num_trainable_parameters is not None else _training_config.num_trainable_parameters,
+        num_trainable_parameters=(
+            body.num_trainable_parameters
+            if body.num_trainable_parameters is not None
+            else _training_config.num_trainable_parameters
+        ),
         epochs=body.epochs if body.epochs is not None else _training_config.epochs,
         batch_size=body.batch_size if body.batch_size is not None else _training_config.batch_size,
     )
@@ -61,7 +65,9 @@ async def get_training_estimate(
 
     if accelerator is None:
         hw = hw_router._current
-        accelerator = hw.get("accelerator") or ("xpu" if s.prefer_xpu else ("cuda" if s.prefer_cuda else "cpu"))
+        accelerator = hw.get("accelerator") or (
+            "xpu" if s.prefer_xpu else ("cuda" if s.prefer_cuda else "cpu")
+        )
     if quantum_backend is None:
         quantum_backend = q_router._quantum_backend or s.quantum_backend
     if num_qubits is None or qaoa_layers is None:
@@ -103,6 +109,8 @@ async def get_training_estimate(
     param_factor = 1.0 + 0.0001 * min(num_trainable_parameters, 100_000)
     param_factor = min(param_factor, 10.0)
 
-    estimated_seconds = steps * base_sec_per_step * acc_factor * backend_factor * circuit_factor * param_factor
+    estimated_seconds = (
+        steps * base_sec_per_step * acc_factor * backend_factor * circuit_factor * param_factor
+    )
     message = _format_duration(estimated_seconds)
     return TrainingEstimateResponse(estimated_seconds=estimated_seconds, message=message)

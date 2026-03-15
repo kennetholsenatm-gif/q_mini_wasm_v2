@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _IPEX_AVAILABLE = False
 try:
     import intel_extension_for_pytorch  # noqa: F401
+
     _IPEX_AVAILABLE = True
 except ImportError:
     pass

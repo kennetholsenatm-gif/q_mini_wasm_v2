@@ -22,7 +22,8 @@ NUM_EXPERTS = 8
 QAOA_LAYERS = 3
 
 # Device for PennyLane quantum circuit
-dev = qml.device('default.qubit', wires=NUM_QUBITS)
+dev = qml.device("default.qubit", wires=NUM_QUBITS)
+
 
 def qaoa_layer(gamma, beta, compressed_affinities, penalty_factor):
     """Applies a single adiabatic block of the QAOA unitary evolution.
@@ -51,7 +52,8 @@ def qaoa_layer(gamma, beta, compressed_affinities, penalty_factor):
     for i in range(NUM_QUBITS):
         qml.RX(beta, wires=i)
 
-@qml.qnode(dev, interface='torch', diff_method='parameter-shift')
+
+@qml.qnode(dev, interface="torch", diff_method="parameter-shift")
 def quantum_router_circuit(gammas, betas, compressed_affinities, layers=QAOA_LAYERS):
     """Constructs the QAOA PQC to evaluate mathematically optimal routing matrices.
 
@@ -84,6 +86,7 @@ def quantum_router_circuit(gammas, betas, compressed_affinities, layers=QAOA_LAY
 
     # Measurement: Extract expectation values of Pauli-Z (Spin states)
     return [qml.expval(qml.PauliZ(i)) for i in range(NUM_QUBITS)]
+
 
 class HybridQuantumMoE(nn.Module):
     """Hybrid Quantum-Classical MoE Router Implementation
