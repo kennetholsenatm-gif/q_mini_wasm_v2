@@ -26,7 +26,7 @@ from .quantum.router import HybridQuantumMoE
 from .quantum.interconnect import StateMigrationInterconnect
 from .layers.ternary import TernaryWASMExpert
 from .layers.attention import TropicalAttention
-from .wasm.engine import WasmExecutor
+from .wasm.engine import WasmEngine as WasmExecutor
 from .hardware.sycl_stubs import SYCLHardware
 from .hardware.device import get_device
 from .data.pipeline import DataPipeline

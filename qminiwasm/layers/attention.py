@@ -92,8 +92,12 @@ class TropicalAttention(nn.Module):
         self.out_proj = nn.Linear(num_heads * d_value, d_model, bias=bias, **factory_kwargs)
 
         # Optional: (addr, value) deltas ingested from Tier 2 state migration (HullKV).
-        self.register_buffer("_delta_k", torch.zeros(0, num_heads, 2, **factory_kwargs))
-        self.register_buffer("_delta_v", torch.zeros(0, num_heads, d_value, **factory_kwargs))
+        self.register_buffer(
+            "_delta_k", torch.zeros(0, num_heads, 2, device=device, dtype=dtype)
+        )
+        self.register_buffer(
+            "_delta_v", torch.zeros(0, num_heads, d_value, device=device, dtype=dtype)
+        )
 
     def ingest_deltas(
         self,
@@ -175,13 +179,16 @@ class TropicalAttention(nn.Module):
 
         # Optional prefix from ingested (addr, value) deltas (Tier 2 state migration).
         delta_len = self._delta_k.size(0)
+        d_k: Optional[torch.Tensor]
+        d_v: Optional[torch.Tensor]
         if delta_len > 0:
             # Prepend delta keys/values as prefix to the sequence for hull.
             # Keys: (D, H, 2) -> (B, H, D, 2); Values: (D, H, d_value) -> (B, H, D, d_value)
             d_k = self._delta_k.unsqueeze(0).expand(batch_size, -1, -1, -1)
             d_v = self._delta_v.unsqueeze(0).expand(batch_size, -1, -1, -1)
         else:
-            d_k = d_v = None
+            d_k = None
+            d_v = None
 
         # Project to Queries, Keys, Values.
         q = self.q_proj(hidden_states)  # (B, T, H * 2)

@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import os
 import wasmtime
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class WasmEngine:
         """
         self.use_mock = use_mock
         self.logger = logging.getLogger(__name__)
-        self._module_cache = {}
+        self._module_cache: Dict[str, Optional[Any]] = {}
 
         if not use_mock:
             try:
@@ -104,7 +104,7 @@ class WasmEngine:
                     with open(wasm_file, "rb") as f:
                         wasm_bytes = f.read()
                     store = wasmtime.Store()
-                    module = wasmtime.Module.from_binary(store.engine, wasm_bytes)
+                    module = wasmtime.Module(store.engine, wasm_bytes)  # type: ignore[attr-defined]
                     return module
                 except Exception as e:
                     self.logger.error("Failed to load WASM module: %s", str(e))
@@ -138,7 +138,7 @@ class WasmEngine:
         try:
             store = wasmtime.Store()
             instance = wasmtime.Instance(store, module, [])
-            func = instance.get_export(func_name).func()
+            func = instance.get_export(func_name).func()  # type: ignore[attr-defined]
 
             # Execute the function
             result = func(*args)
@@ -212,7 +212,7 @@ class WasmCompiler:
         """
         self.engine = engine
         self.logger = logging.getLogger(__name__)
-        self._source_cache = {}
+        self._source_cache: Dict[str, str] = {}
 
     def compile_algorithm(self, algorithm_name: str, c_code: str) -> Optional[wasmtime.Module]:
         """Compile algorithm C code to WASM module
