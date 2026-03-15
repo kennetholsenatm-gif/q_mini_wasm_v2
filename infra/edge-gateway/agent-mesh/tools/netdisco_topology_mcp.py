@@ -25,12 +25,16 @@ def _netdisco_auth() -> tuple[str, dict] | str:
     api_url = os.environ.get("NETDISCO_API_URL", "http://localhost:5000").rstrip("/")
     if not (api_url.startswith("http://") or api_url.startswith("https://")):
         return "Error: NETDISCO_API_URL must use http:// or https://."
-    key = os.environ.get("NETDISCO_API_KEY")
-    if key:
-        return (api_url, {"Accept": "application/json", "Authorization": key})
+    if os.environ.get("NETDISCO_API_KEY"):
+        return (
+            api_url,
+            {
+                "Accept": "application/json",
+                "Authorization": os.environ.get("NETDISCO_API_KEY", ""),
+            },
+        )
     user = os.environ.get("NETDISCO_USER", "")
-    password = os.environ.get("NETDISCO_PASSWORD", "")
-    if not user or not password:
+    if not user or not os.environ.get("NETDISCO_PASSWORD"):
         return "Error: Set NETDISCO_API_KEY or (NETDISCO_USER and NETDISCO_PASSWORD)."
     try:
         import urllib.request
@@ -40,13 +44,21 @@ def _netdisco_auth() -> tuple[str, dict] | str:
             headers={"Accept": "application/json"},
             method="POST",
         )
-        req.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
+        req.add_header(
+            "Authorization",
+            "Basic "
+            + base64.b64encode(
+                f"{user}:{os.environ.get('NETDISCO_PASSWORD', '')}".encode()
+            ).decode(),
+        )
         with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310
             data = json.loads(r.read().decode())
-        token = data.get("api_key")
-        if not token:
+        if not data.get("api_key"):
             return "Error: Netdisco login did not return api_key."
-        return (api_url, {"Accept": "application/json", "Authorization": token})
+        return (
+            api_url,
+            {"Accept": "application/json", "Authorization": data.get("api_key", "")},
+        )
     except Exception as e:
         return f"Error logging in to Netdisco: {e}"
 
@@ -146,5 +158,5 @@ if HAS_MCP:
         asyncio.run(main())
 else:
     if __name__ == "__main__":
-        print(get_netdisco_report(), file=sys.stderr)
+        print("MCP not available. Install mcp to run as stdio server.", file=sys.stderr)
         sys.exit(0)

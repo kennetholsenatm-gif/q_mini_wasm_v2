@@ -23,14 +23,18 @@ except ImportError:
 
 def _foreman_headers() -> dict | str:
     """Return auth headers for Foreman API or error string."""
-    token = os.environ.get("FOREMAN_API_TOKEN")
-    if token:
-        return {"Content-Type": "application/json", "Accept": "application/json", "Authorization": f"Bearer {token}"}
+    if os.environ.get("FOREMAN_API_TOKEN"):
+        return {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": "Bearer " + (os.environ.get("FOREMAN_API_TOKEN") or ""),
+        }
     user = os.environ.get("FOREMAN_USER", "")
-    password = os.environ.get("FOREMAN_PASSWORD", "")
-    if not user or not password:
+    if not user or not os.environ.get("FOREMAN_PASSWORD"):
         return "Error: Set FOREMAN_API_TOKEN or (FOREMAN_USER and FOREMAN_PASSWORD)."
-    creds = base64.b64encode(f"{user}:{password}".encode()).decode()
+    creds = base64.b64encode(
+        f"{user}:{os.environ.get('FOREMAN_PASSWORD', '')}".encode()
+    ).decode()
     return {"Content-Type": "application/json", "Accept": "application/json", "Authorization": f"Basic {creds}"}
 
 
@@ -195,5 +199,5 @@ if HAS_MCP:
         asyncio.run(main())
 else:
     if __name__ == "__main__":
-        print(foreman_list_hosts(), file=sys.stderr)
+        print("MCP not available. Install mcp to run as stdio server.", file=sys.stderr)
         sys.exit(0)
