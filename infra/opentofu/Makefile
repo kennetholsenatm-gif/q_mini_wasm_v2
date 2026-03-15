@@ -9,7 +9,7 @@ TFVARS        := $(if $(wildcard $(LOCAL_ENV)/terraform.tfvars),$(LOCAL_ENV)/ter
 TFVARS_FILE   := $(if $(wildcard $(LOCAL_ENV)/terraform.tfvars),terraform.tfvars,terraform.tfvars.example)
 KUBECONFIG_ABS := $(abspath $(LOCAL_ENV)/kubeconfig)
 
-.PHONY: local-up local-down local-plan local-cluster-ensure local-cluster-delete local-check-deps
+.PHONY: local-up local-down local-plan local-verify local-cluster-ensure local-cluster-delete local-check-deps
 
 # One command: ensure cluster, then tofu init + apply (no tfvars copy needed by default)
 local-up: local-check-deps local-cluster-ensure
@@ -26,6 +26,11 @@ local-plan: local-check-deps local-cluster-ensure
 local-down:
 	cd $(LOCAL_ENV) && KUBECONFIG="$(KUBECONFIG_ABS)" tofu destroy -var-file="$(TFVARS_FILE)" -auto-approve 2>/dev/null || true
 	$(MAKE) -C $(KIND_DIR) kind-delete KIND_CLUSTER_NAME="$(KIND_CLUSTER_NAME)"
+
+# Verify cluster and Teleport pods (run after local-up)
+local-verify:
+	@KUBECONFIG="$(KUBECONFIG_ABS)" kubectl get pods -n teleport 2>/dev/null || (echo "Run 'make -C infra/opentofu local-up' first and set KUBECONFIG." && exit 1)
+	@KUBECONFIG="$(KUBECONFIG_ABS)" kubectl get pods -n teleport --no-headers 2>/dev/null | awk '{print $$3}' | grep -qv Running && echo "If teleport-auth is not Running, see infra/teleport/README.md" || true
 
 # Create Kind cluster if missing; always refresh kubeconfig (uses bash script for Windows/Git Bash compatibility)
 local-cluster-ensure:
