@@ -21,7 +21,8 @@ class QuantumBackend(Protocol):
         gammas: torch.Tensor,
         betas: torch.Tensor,
     ) -> torch.Tensor:
-        """Run the QAOA circuit and return routing weights (e.g. Pauli-Z expectations mapped to [0,1])."""
+        """Run the QAOA circuit and return routing weights (e.g. Pauli-Z expectations
+        mapped to [0,1])."""
         ...
 
 
