@@ -38,13 +38,15 @@ jobs:
             almalinux:9.7-20260129 bash -c '
             set -e
             dnf install -y python3.11 python3.11-pip 2>/dev/null || true
-            python3.11 -m pip install --upgrade pip
-            python3.11 -m pip install black flake8 mypy pytest pytest-cov pypatch==1.0.2
-            python3.11 -m pip install -r requirements/ci.txt 2>/dev/null || python3.11 -m pip install -r requirements.txt 2>/dev/null || true
-            python3.11 -m black --check qminiwasm/ tests/ wui/backend/
-            python3.11 -m flake8 qminiwasm/ tests/ wui/backend/ --max-line-length=100 --extend-ignore=E203,W503
-            python3.11 -m mypy qminiwasm/ --ignore-missing-imports
-            python3.11 -m pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term
+            python3.11 -m venv /workspace/.venv
+            . /workspace/.venv/bin/activate
+            pip install --upgrade pip
+            pip install black flake8 mypy pytest pytest-cov pypatch==1.0.2
+            pip install -r requirements/ci.txt 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true
+            black --check qminiwasm/ tests/ wui/backend/
+            flake8 qminiwasm/ tests/ wui/backend/ --max-line-length=100 --extend-ignore=E203,W503
+            mypy qminiwasm/ --ignore-missing-imports
+            pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term
             '
 
       - name: Ensure coverage.xml exists
@@ -75,8 +77,10 @@ jobs:
             almalinux:9.7-20260129 bash -c '
             set -e
             dnf install -y python3.11 python3.11-pip 2>/dev/null || true
-            python3.11 -m pip install --upgrade pip
-            python3.11 -m pip install bandit pip-audit pypatch==1.0.2
+            python3.11 -m venv /workspace/.venv
+            . /workspace/.venv/bin/activate
+            pip install --upgrade pip
+            pip install bandit pip-audit pypatch==1.0.2
             bandit -r qminiwasm/ wui/backend/ -c pyproject.toml -f json -o bandit-report.json
             pip-audit -r requirements.txt -f json -o pip-audit-report.json
             '

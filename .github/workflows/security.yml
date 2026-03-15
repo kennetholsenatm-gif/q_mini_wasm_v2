@@ -25,19 +25,21 @@ jobs:
           cache: "pip"
         continue-on-error: true
 
-      - name: Install dependencies and pip-audit
+      - name: Create venv and install dependencies and pip-audit
         run: |
+          python -m venv .venv
+          . .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r requirements.txt pip-audit pypatch==1.0.2 || pip install pip-audit pypatch==1.0.2 || true
         continue-on-error: true
 
       - name: Run pip-audit (audit only)
-        run: pip-audit || true
+        run: .venv/bin/pip-audit || true
         continue-on-error: true
 
       - name: Generate SBOM (CycloneDX)
         run: |
-          pip-audit -f cyclonedx-json -o sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components":[]}' > sbom.json
+          .venv/bin/pip-audit -f cyclonedx-json -o sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components":[]}' > sbom.json
         continue-on-error: true
 
       - name: Ensure sbom.json exists

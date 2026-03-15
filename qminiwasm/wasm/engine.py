@@ -21,6 +21,7 @@ from typing import Dict, List, Tuple
 
 import wasmtime
 
+
 # #region agent log
 def _dbg(path: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
     try:
@@ -42,8 +43,10 @@ def _dbg(path: str, hypothesis_id: str, location: str, message: str, data: dict)
                 )
                 + "\n"
             )
-    except Exception:  # noqa: S110
+    except Exception:  # nosec B110 - debug logger must not break app
         pass
+
+
 # #endregion
 
 # wasmtime Python bindings use WasmtimeError; older docs sometimes mention Error
@@ -135,14 +138,23 @@ class WasmExecutor:
                 "H3",
                 "engine.py:execute:post_instance",
                 "Instance created",
-                {"instance_type": type(instance).__name__, "dir_instance": [x for x in dir(instance) if not x.startswith("_")][:20]},
+                {
+                    "instance_type": type(instance).__name__,
+                    "dir_instance": [x for x in dir(instance) if not x.startswith("_")][:20],
+                },
             )
             # #endregion
             # Get exported function: wasmtime-py uses instance.exports(store)[name]; older used get_func
             func = None
             try:
                 func = instance.get_func(func_name)  # type: ignore[attr-defined]
-                _dbg(_log, "H1", "engine.py:execute:get_func", "Got func via get_func", {"func_type": type(func).__name__})
+                _dbg(
+                    _log,
+                    "H1",
+                    "engine.py:execute:get_func",
+                    "Got func via get_func",
+                    {"func_type": type(func).__name__},
+                )
             except AttributeError:
                 _dbg(_log, "H1", "engine.py:execute:get_func_attr_err", "get_func missing", {})
             if func is None:
@@ -151,13 +163,25 @@ class WasmExecutor:
                     try:
                         exports = exports_fn(self.store)
                         func = exports.get(func_name) if hasattr(exports, "get") else exports[func_name]  # type: ignore[index]
-                        _dbg(_log, "H1", "engine.py:execute:exports_ok", "Got func via exports(store)", {"func_type": type(func).__name__ if func else None})
+                        _dbg(
+                            _log,
+                            "H1",
+                            "engine.py:execute:exports_ok",
+                            "Got func via exports(store)",
+                            {"func_type": type(func).__name__ if func else None},
+                        )
                     except (KeyError, TypeError):
                         pass
             if func is None:
                 try:
                     func = instance[func_name]  # type: ignore[index]
-                    _dbg(_log, "H1", "engine.py:execute:getitem_ok", "Got func via []", {"func_type": type(func).__name__})
+                    _dbg(
+                        _log,
+                        "H1",
+                        "engine.py:execute:getitem_ok",
+                        "Got func via []",
+                        {"func_type": type(func).__name__},
+                    )
                 except (KeyError, TypeError):
                     func = getattr(instance, "get", lambda n: None)(func_name)
             if func is None:
@@ -177,19 +201,53 @@ class WasmExecutor:
             if call is not None:
                 try:
                     result = call(self.store, *args)
-                    _dbg(_log, "H2", "engine.py:execute:call_store_ok", "call(store,*args) ok", {"result": result, "result_type": type(result).__name__})
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:call_store_ok",
+                        "call(store,*args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
                 except TypeError as te:
                     result = call(args)
-                    _dbg(_log, "H2", "engine.py:execute:call_args_ok", "call(args) ok", {"result": result, "result_type": type(result).__name__})
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:call_args_ok",
+                        "call(args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
             else:
                 try:
                     result = func(self.store, *args)
-                    _dbg(_log, "H2", "engine.py:execute:func_store_ok", "func(store,*args) ok", {"result": result, "result_type": type(result).__name__})
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:func_store_ok",
+                        "func(store,*args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
                 except TypeError:
                     result = func(*args)
-                    _dbg(_log, "H2", "engine.py:execute:func_args_ok", "func(*args) ok", {"result": result, "result_type": type(result).__name__})
+                    _dbg(
+                        _log,
+                        "H2",
+                        "engine.py:execute:func_args_ok",
+                        "func(*args) ok",
+                        {"result": result, "result_type": type(result).__name__},
+                    )
             # #region agent log
-            _dbg(_log, "H4", "engine.py:execute:return", "Returning result", {"result": result, "result_type": type(result).__name__, "is_tuple": isinstance(result, tuple)})
+            _dbg(
+                _log,
+                "H4",
+                "engine.py:execute:return",
+                "Returning result",
+                {
+                    "result": result,
+                    "result_type": type(result).__name__,
+                    "is_tuple": isinstance(result, tuple),
+                },
+            )
             # #endregion
 
             # Capture execution state (simplified for now)
@@ -208,7 +266,13 @@ class WasmExecutor:
         except Exception as e:
             # #region agent log
             _log = os.path.abspath(os.path.join(os.getcwd(), "debug-3fd919.log"))
-            _dbg(_log, "H5", "engine.py:execute:exception", "Exception in execute", {"type": type(e).__name__, "message": str(e)})
+            _dbg(
+                _log,
+                "H5",
+                "engine.py:execute:exception",
+                "Exception in execute",
+                {"type": type(e).__name__, "message": str(e)},
+            )
             # #endregion
             raise
 
