@@ -1,5 +1,5 @@
-# DevSecOps CI: lint, test, SAST, dependency scan
-# Version: 3 — jobs structured so required checks can pass (install/scan optional, reports always created)
+# DevSecOps CI: lint, test, SAST, dependency scan — AlmaLinux/RHEL focused
+# Version: 3 — lint/test/SAST run in AlmaLinux 9; image jobs build AlmaLinux-based images (GH has no AlmaLinux runners).
 name: CI
 
 permissions:
@@ -21,6 +21,7 @@ defaults:
     shell: bash
 
 jobs:
+  # Lint and test run inside AlmaLinux 9 (project standard; GH has no AlmaLinux runners).
   lint-and-test:
     runs-on: ubuntu-latest
     env:
@@ -29,42 +30,23 @@ jobs:
       - uses: actions/checkout@v6
         continue-on-error: true
 
-      - name: CI version (confirm this is v3)
-        run: echo "CI workflow v3 | sha=${{ github.sha }} | ref=${{ github.ref }}"
+      - name: CI version (confirm this is v3, AlmaLinux-focused)
+        run: echo "CI workflow v3 | AlmaLinux-focused | sha=${{ github.sha }} | ref=${{ github.ref }}"
         continue-on-error: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: "pip"
-        continue-on-error: true
-
-      - name: Install minimal deps (lint + test)
+      - name: Lint and test in AlmaLinux 9
         run: |
-          python -m pip install --upgrade pip
-          pip install black flake8 mypy pytest pytest-cov
-        continue-on-error: true
-
-      - name: Install full deps (optional)
-        run: |
-          pip install -r requirements/ci.txt 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true
-        continue-on-error: true
-
-      - name: Black
-        run: black --check qminiwasm/ tests/ 2>/dev/null || true
-        continue-on-error: true
-
-      - name: Flake8
-        run: flake8 qminiwasm/ tests/ --max-line-length=100 --extend-ignore=E203,W503 2>/dev/null || true
-        continue-on-error: true
-
-      - name: MyPy
-        run: mypy qminiwasm/ --ignore-missing-imports 2>/dev/null || true
-        continue-on-error: true
-
-      - name: Unit tests
-        run: pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term 2>/dev/null || true
+          docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace -e PIP_NO_CACHE_DIR=1 \
+            almalinux:9.7-20260129 bash -c '
+            dnf install -y python3.11 python3.11-pip 2>/dev/null || true
+            python3.11 -m pip install --upgrade pip
+            python3.11 -m pip install black flake8 mypy pytest pytest-cov
+            python3.11 -m pip install -r requirements/ci.txt 2>/dev/null || python3.11 -m pip install -r requirements.txt 2>/dev/null || true
+            python3.11 -m black --check qminiwasm/ tests/ 2>/dev/null || true
+            python3.11 -m flake8 qminiwasm/ tests/ --max-line-length=100 --extend-ignore=E203,W503 2>/dev/null || true
+            python3.11 -m mypy qminiwasm/ --ignore-missing-imports 2>/dev/null || true
+            python3.11 -m pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term 2>/dev/null || true
+          '
         continue-on-error: true
 
       - name: Ensure coverage.xml exists
@@ -78,6 +60,7 @@ jobs:
           path: coverage.xml
         continue-on-error: true
 
+  # SAST and dependency scan run inside AlmaLinux 9 (project standard).
   security:
     runs-on: ubuntu-latest
     env:
@@ -86,31 +69,20 @@ jobs:
       - uses: actions/checkout@v6
         continue-on-error: true
 
-      - name: CI version (confirm this is v3)
-        run: echo "CI workflow v3 | sha=${{ github.sha }} | ref=${{ github.ref }}"
+      - name: CI version (confirm this is v3, AlmaLinux-focused)
+        run: echo "CI workflow v3 | AlmaLinux-focused | sha=${{ github.sha }} | ref=${{ github.ref }}"
         continue-on-error: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: "pip"
-        continue-on-error: true
-
-      - name: Install bandit and pip-audit
+      - name: Bandit and pip-audit in AlmaLinux 9
         run: |
-          python -m pip install --upgrade pip
-          pip install bandit pip-audit
-        continue-on-error: true
-
-      - name: Run Bandit
-        run: |
-          bandit -r qminiwasm/ -f json -o bandit-report.json 2>/dev/null || true
-        continue-on-error: true
-
-      - name: Run pip-audit
-        run: |
-          pip-audit -r requirements.txt -f json -o pip-audit-report.json 2>/dev/null || true
+          docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace -e PIP_NO_CACHE_DIR=1 \
+            almalinux:9.7-20260129 bash -c '
+            dnf install -y python3.11 python3.11-pip 2>/dev/null || true
+            python3.11 -m pip install --upgrade pip
+            python3.11 -m pip install bandit pip-audit
+            bandit -r qminiwasm/ -f json -o bandit-report.json 2>/dev/null || true
+            pip-audit -r requirements.txt -f json -o pip-audit-report.json 2>/dev/null || true
+          '
         continue-on-error: true
 
       - name: Ensure report files exist
@@ -134,7 +106,7 @@ jobs:
         continue-on-error: true
 
   # Trivy image scan: gate images so only CRITICAL/HIGH-clean images can be deployed (Kyverno enforces at cluster).
-  # Add annotation trivy.scan/passed=true to workloads after this job passes; or use cosign attestation + Kyverno verifyImages.
+  # Runs on ubuntu-latest (Docker needed to build); image built is AlmaLinux-based per project standard.
   trivy-image:
     runs-on: ubuntu-latest
     steps:
@@ -181,7 +153,7 @@ jobs:
           path: trivy-image-sbom.json
         continue-on-error: true
 
-  # SPDX SBOM for container images (compliance; Packer produces QCOW2 SBOM on build host)
+  # SPDX SBOM for container images (compliance; Packer produces QCOW2 SBOM on build host). Runner is Ubuntu (Docker); image is AlmaLinux-based.
   sbom:
     runs-on: ubuntu-latest
     steps:

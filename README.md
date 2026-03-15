@@ -168,10 +168,9 @@ OpenSCAP is integrated to audit **low-level hardware configuration** and **conta
 
 **Run the OpenSCAP scanner locally:**
 
-1. Install the scanner and content (Debian/Ubuntu):
-   ```bash
-   sudo apt-get install -y libopenscap8 openscap-utils
-   ```
+1. Install the scanner and content. This project is AlmaLinux/RHEL focused; use the appropriate commands for your OS:
+   - **AlmaLinux / RHEL / Rocky:** `sudo dnf install -y openscap openscap-utils`
+   - **Debian/Ubuntu:** `sudo apt-get install -y libopenscap8 openscap-utils`
    For SCAP Security Guide content, download a [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content) release and set `OSCAP_CONTENT_PATH` to the unpacked directory.
 
 2. Install the project with the security extra and run the script:
@@ -240,7 +239,7 @@ Comprehensive test suite:
 4. Implement backup procedures
 
 ### Platform standard (DockerOS)
-We standardize on **AlmaLinux 9** (and AlmaLinux 10 when available), **Foreman** (Satellite FOSS equivalent), and **Foreman Smart Proxy** (Capsule equivalent) for hosts running Docker/Kubernetes and for container base images. See [docs/DockerOS-Platform-Standard.md](docs/DockerOS-Platform-Standard.md).
+We standardize on **AlmaLinux 9** (and AlmaLinux 10 when available), **Foreman** (Satellite FOSS equivalent), and **Foreman Smart Proxy** (Capsule equivalent) for hosts running Docker/Kubernetes and for container base images. **CI is AlmaLinux/RHEL focused:** lint, tests, and SAST run inside AlmaLinux 9; container images are AlmaLinux-based. See [docs/DockerOS-Platform-Standard.md](docs/DockerOS-Platform-Standard.md).
 
 ## Security Documentation
 
