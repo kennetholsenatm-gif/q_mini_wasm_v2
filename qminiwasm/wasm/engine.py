@@ -49,10 +49,10 @@ class WasmExecutor:
             Compiled wasmtime.Module
         """
         try:
-            module = wasmtime.Module.from_binary(self.store.engine, wasm_bytes)
+            module = wasmtime.Module.from_binary(self.store.engine, wasm_bytes)  # type: ignore[attr-defined]
             self.logger.info("WASM module compiled successfully")
             return module
-        except wasmtime.Error as e:
+        except wasmtime.Error as e:  # type: ignore[attr-defined]
             self.logger.error(f"Failed to compile WASM module: {e}")
             raise
 
@@ -71,9 +71,9 @@ class WasmExecutor:
             - Execution trace
         """
         try:
-            # Create instance and get function
-            instance = wasmtime.Instance(module, [])
-            func = instance.get_func(func_name)
+            # Create instance and get function (wasmtime API varies by version)
+            instance = wasmtime.Instance(self.store, module, [])  # type: ignore[call-arg,arg-type]
+            func = instance.get_func(func_name)  # type: ignore[attr-defined]
 
             if func is None:
                 raise ValueError(f"Function {func_name} not found in WASM module")
@@ -91,7 +91,7 @@ class WasmExecutor:
             self.logger.info("WASM function executed successfully")
             return result, execution_state
 
-        except wasmtime.Error as e:
+        except wasmtime.Error as e:  # type: ignore[attr-defined]
             self.logger.error(f"WASM execution failed: {e}")
             raise
 

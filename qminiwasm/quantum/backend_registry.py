@@ -109,7 +109,7 @@ class IntelQSBackend:
         raise NotImplementedError("Intel QS backend not implemented; use penny_lane for training.")
 
 
-_BACKEND_FACTORIES = {
+_BACKEND_FACTORIES: dict[str, Callable[..., QuantumBackend]] = {
     "penny_lane": lambda **kw: PennyLaneBackend(**kw),
     "ibm_quantum": lambda **kw: IBMQuantumBackend(),
     "intel_qs": lambda **kw: IntelQSBackend(),

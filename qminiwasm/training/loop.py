@@ -7,11 +7,11 @@ Uses DataPipeline and Wasmtime traces when available; STE is handled by TernaryW
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 
-from ..hardware.device import get_device
+from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
 from ..data.pipeline import DataPipeline
 
@@ -43,7 +43,10 @@ def run_training_loop(
     Returns:
         Dict with "epochs_run", "final_loss", "metrics" (placeholder).
     """
-    device = get_device(accelerator=accelerator, device_index=device_index)
+    device = get_device(
+        accelerator=cast(AcceleratorType | None, accelerator),
+        device_index=device_index,
+    )
 
     model = QMiniWASM(device=device)
     model.quantum_router.train()
