@@ -126,11 +126,11 @@ def _persist_credentials(backend: str, credentials: dict[str, str]) -> None:
 
 @router.put("/config", response_model=QuantumConfigResponse)
 async def put_quantum_config(body: QuantumConfigUpdate) -> QuantumConfigResponse:
-    """Set quantum backend and persist credentials (e.g. to env or Vault). Do not log credentials."""
+    """Set quantum backend and persist credentials (e.g. to env or Vault). Do not log."""
     valid = {b.id for b in QUANTUM_BACKENDS}
     if body.backend not in valid:
         raise HTTPException(status_code=400, detail=f"Unknown backend: {body.backend}")
-    global _quantum_backend, _credentials_configured, _quantum_endpoint_url, _quantum_provider
+    global _quantum_backend, _quantum_endpoint_url, _quantum_provider
     _quantum_backend = body.backend
     if body.endpoint_url is not None:
         _quantum_endpoint_url = body.endpoint_url.strip() or None
@@ -167,7 +167,10 @@ async def post_quantum_verify() -> QuantumVerifyResponse:
         except ImportError:
             return QuantumVerifyResponse(
                 ok=False,
-                message="PennyLane not installed in this environment. Configure PennyLane for the training job; the engine will use it at runtime.",
+                message=(
+                    "PennyLane not installed. Configure PennyLane for the training job; "
+                    "the engine will use it at runtime."
+                ),
             )
         except Exception as e:
             return QuantumVerifyResponse(ok=False, message=str(e))

@@ -18,7 +18,7 @@ The implementation follows the white paper's specifications for:
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import List
 
 
 class SYCLHardware:

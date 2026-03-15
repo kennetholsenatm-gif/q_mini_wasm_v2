@@ -1,10 +1,12 @@
 """Quantum MoE Router Implementation
 
-This module implements the Quantum MoE Router (Pillar 1) which reformulates MoE routing as a discrete combinatorial
-optimization problem mapped to a quantum topology. It uses Parameterized Quantum Circuits (PQCs) and the Quantum
-Approximate Optimization Algorithm (QAOA) to solve the routing problem with perfect load balancing.
+This module implements the Quantum MoE Router (Pillar 1) which reformulates MoE routing
+as a discrete combinatorial optimization problem mapped to a quantum topology. It uses
+Parameterized Quantum Circuits (PQCs) and the Quantum Approximate Optimization
+Algorithm (QAOA) to solve the routing problem with perfect load balancing.
 
-The implementation is based on the mathematical formulations described in the Q-Mini-WASM white paper, including:
+The implementation is based on the mathematical formulations described in the Q-Mini-WASM
+white paper, including:
 - Quadratic Unconstrained Binary Optimization (QUBO) formulation
 - Ising Hamiltonian translation
 - Angle Embedding and Barren Plateau mitigation
@@ -14,7 +16,6 @@ The implementation is based on the mathematical formulations described in the Q-
 import torch
 import torch.nn as nn
 import pennylane as qml
-from pennylane import numpy as np
 
 # Constants based on white paper specifications
 NUM_QUBITS = 8
@@ -28,9 +29,10 @@ dev = qml.device("default.qubit", wires=NUM_QUBITS)
 def qaoa_layer(gamma, beta, compressed_affinities, penalty_factor):
     """Applies a single adiabatic block of the QAOA unitary evolution.
 
-    This function implements the Cost Hamiltonian (Ising Model H_C) and Mixer Hamiltonian (H_B)
-    for the QAOA algorithm. It applies local magnetic fields encoding classical semantic projections,
-    Ising interactions for capacity and top-k penalties, and Pauli-X rotations for quantum tunneling.
+    This function implements the Cost Hamiltonian (Ising Model H_C) and Mixer
+    Hamiltonian (H_B) for the QAOA algorithm. It applies local magnetic fields
+    encoding classical semantic projections, Ising interactions for capacity and
+    top-k penalties, and Pauli-X rotations for quantum tunneling.
 
     Args:
         gamma: QAOA gamma parameter for Cost Hamiltonian

@@ -140,7 +140,7 @@ class QMiniWASM:
         """
         try:
             # Use data pipeline for training
-            processed_data = self.data_pipeline.generate_training_data(
+            self.data_pipeline.generate_training_data(
                 algorithms=["default"], num_samples=len(training_data)
             )
 

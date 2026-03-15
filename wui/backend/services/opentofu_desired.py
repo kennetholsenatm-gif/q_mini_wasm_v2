@@ -65,7 +65,10 @@ def write_desired_tfvars(
 
 
 def list_desired_tfvars() -> list[str]:
-    """List basenames of *.tfvars.json and *.tfvars in the desired dir. Empty if dir missing/unreadable."""
+    """List basenames of *.tfvars.json and *.tfvars in the desired dir.
+
+    Empty if dir missing/unreadable.
+    """
     desired_dir = get_desired_dir()
     if not desired_dir.exists() or not desired_dir.is_dir():
         return []

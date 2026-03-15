@@ -1,8 +1,8 @@
 """Ternary Quantization Layer
 
-This module implements the TernaryWASMExpert class (Pillar 2) which forces WASM execution expert weights
-into an unstructured ternary state: W ∈ {-1, 0, 1}. This ensures deterministic execution and perfectly
-simulates exact processor stack mechanics over million-step traces.
+This module implements the TernaryWASMExpert class (Pillar 2) which forces WASM execution
+expert weights into an unstructured ternary state: W ∈ {-1, 0, 1}. This ensures deterministic
+execution and perfectly simulates exact processor stack mechanics over million-step traces.
 
 The implementation includes:
 - Straight-Through Estimator (STE) for classical training
@@ -10,7 +10,8 @@ The implementation includes:
 - Variance initialization for ternary parameters
 - Forward pass with STE graph manipulation
 
-The implementation follows the mathematical formulations from the Q-Mini-WASM white paper, including:
+The implementation follows the mathematical formulations from the Q-Mini-WASM white
+paper, including:
 - Floating-point drift mitigation
 - STE graph manipulation using detach()
 - Variance initialization for ternary parameters

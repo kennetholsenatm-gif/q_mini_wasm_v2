@@ -279,7 +279,9 @@ class ProviderCreateRequest(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     secrets: Dict[str, str] = Field(
         default_factory=dict,
-        description="Raw secret values (API keys, tokens). Must be written to Vault and never logged.",
+        description=(
+            "Raw secret values (API keys, tokens). Must be written to Vault and never logged."
+        ),
     )
 
 

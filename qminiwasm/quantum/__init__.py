@@ -1,8 +1,9 @@
 """Quantum MoE Router Module
 
-This module implements the Quantum MoE Router (Pillar 1) which reformulates MoE routing as a discrete combinatorial
-optimization problem mapped to a quantum topology. It uses Parameterized Quantum Circuits (PQCs) and the Quantum
-Approximate Optimization Algorithm (QAOA) to solve the routing problem with perfect load balancing.
+This module implements the Quantum MoE Router (Pillar 1) which reformulates MoE routing
+as a discrete combinatorial optimization problem mapped to a quantum topology. It uses
+Parameterized Quantum Circuits (PQCs) and the Quantum Approximate Optimization
+Algorithm (QAOA) to solve the routing problem with perfect load balancing.
 
 Key Components:
 - HybridQuantumMoE: Main quantum MoE router class

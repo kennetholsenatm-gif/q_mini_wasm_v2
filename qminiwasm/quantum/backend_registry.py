@@ -29,7 +29,10 @@ class PennyLaneBackend:
     """PennyLane default.qubit backend; differentiable via parameter-shift."""
 
     def __init__(
-        self, num_qubits: int = 8, qaoa_layers: int = 3, diff_method: str = "parameter-shift"
+        self,
+        num_qubits: int = 8,
+        qaoa_layers: int = 3,
+        diff_method: str = "parameter-shift",
     ):
         self.num_qubits = num_qubits
         self.qaoa_layers = qaoa_layers

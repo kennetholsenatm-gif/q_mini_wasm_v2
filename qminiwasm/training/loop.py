@@ -7,7 +7,6 @@ Uses DataPipeline and Wasmtime traces when available; STE is handled by TernaryW
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import torch

@@ -1,4 +1,4 @@
-"""Aggregate job config (hardware + quantum + circuit + training + transfer) for the training job."""
+"""Aggregate job config (hardware + quantum + circuit + training + transfer) for the job."""
 
 from fastapi import APIRouter
 

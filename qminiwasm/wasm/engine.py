@@ -1,8 +1,8 @@
 """WASM Execution Engine
 
-This module implements the WasmExecutor class (Pillar 5) which provides the WebAssembly interpreter
-for deterministic in-model execution. It uses the wasmtime Python library to execute WASM code and
-capture stack/memory deltas for training.
+This module implements the WasmExecutor class (Pillar 5) which provides the
+WebAssembly interpreter for deterministic in-model execution. It uses the wasmtime
+Python library to execute WASM code and capture stack/memory deltas for training.
 
 The implementation follows the mathematical formulations from the Q-Mini-WASM white paper, including:
 - Wasmtime instrumentation for linear memory introspection
