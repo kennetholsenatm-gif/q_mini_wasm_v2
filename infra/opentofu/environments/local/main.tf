@@ -1,4 +1,4 @@
-# Local environment: addons (NGINX Ingress) + workloads (Teleport, optional WUI).
+# Local environment: addons (NGINX Ingress) + MetalLB + workloads (Teleport, optional WUI).
 # Cluster is created separately via modules/cluster/kind (Makefile or create-cluster.sh).
 
 module "addons" {
@@ -8,6 +8,13 @@ module "addons" {
   ingress_nginx_chart_version = var.ingress_nginx_chart_version
   ingress_class_name       = var.ingress_class_name
   host_port_enabled        = true
+}
+
+module "metallb" {
+  source = "../../modules/metallb"
+  depends_on = [module.addons]
+
+  address_pool = var.metallb_address_pool
 }
 
 module "workloads" {

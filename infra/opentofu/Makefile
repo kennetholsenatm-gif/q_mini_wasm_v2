@@ -33,8 +33,9 @@ local-verify:
 	@KUBECONFIG="$(KUBECONFIG_ABS)" kubectl get pods -n teleport --no-headers 2>/dev/null | awk '{print $$3}' | grep -qv Running && echo "If teleport-auth is not Running, see infra/teleport/README.md" || true
 
 # Create Kind cluster if missing; always refresh kubeconfig (uses bash script for Windows/Git Bash compatibility)
+# Use relative path so bash gets scripts/ensure-kind-cluster.sh (avoids Windows CURDIR backslashes breaking the path)
 local-cluster-ensure:
-	@bash "$(CURDIR)/scripts/ensure-kind-cluster.sh" "$(KIND_CLUSTER_NAME)" "$(KUBECONFIG_ABS)" "$(KIND_DIR)"
+	@bash scripts/ensure-kind-cluster.sh "$(KIND_CLUSTER_NAME)" "$(KUBECONFIG_ABS)" "$(KIND_DIR)"
 
 local-cluster-delete:
 	$(MAKE) -C $(KIND_DIR) kind-delete KIND_CLUSTER_NAME="$(KIND_CLUSTER_NAME)"

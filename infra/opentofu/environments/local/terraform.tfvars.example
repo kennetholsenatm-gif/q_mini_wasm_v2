@@ -14,3 +14,7 @@ teleport_wait_for_jobs = false   # false for local when OIDC connector not creat
 enable_wui = false
 # When enable_wui = true, set path to charts/qminiwasm-wui (from repo root: ../../../../charts/qminiwasm-wui)
 # wui_chart_path = "../../../../charts/qminiwasm-wui"
+
+# MetalLB: IP pool for LoadBalancer services (anycast-style single IP per service). Default fits Kind Docker network.
+# For DHCP subnet: use e.g. ["192.168.1.200-192.168.1.220"] and reserve that range in your DHCP server.
+# metallb_address_pool = ["172.18.255.200-172.18.255.220"]

@@ -1,6 +1,6 @@
 # Local Kubernetes development environment (Kind + OpenTofu)
 
-Reproducible local cluster using **Kind** (Kubernetes IN Docker), with **OpenTofu** deploying NGINX Ingress and workloads (Teleport, optional WUI). The same addon and workload logic can be reused for production (EKS/AKS/GKE) by swapping the cluster source; see [../prod/README.md](../prod/README.md).
+Reproducible local cluster using **Kind** (Kubernetes IN Docker), with **OpenTofu** deploying NGINX Ingress, **MetalLB** (LoadBalancer external IPs), and workloads (Teleport, optional WUI). The same addon and workload logic can be reused for production (EKS/AKS/GKE) by swapping the cluster source; see [../prod/README.md](../prod/README.md).
 
 ## Dependencies
 
@@ -100,6 +100,18 @@ wui_chart_path = "../../../../charts/qminiwasm-wui"   # from repo root when runn
 ```
 
 Then `tofu apply`. The chart uses non-root security context and the nginx IngressClass.
+
+## MetalLB / LoadBalancer external IP
+
+**MetalLB** is installed so `LoadBalancer`-type services get an external IP (anycast-style single address per service via Layer 2).
+
+- **Default pool:** `172.18.255.200-172.18.255.220` (range in the Kind Docker network). LoadBalancer IPs work from the host and inside the cluster. If your Kind Docker network uses a different subnet, get it with:
+  ```bash
+  docker network inspect kind -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+  ```
+  then set `metallb_address_pool` in `terraform.tfvars` to a range inside that subnet (e.g. `["172.18.255.200-172.18.255.220"]`).
+
+- **DHCP-subnet pool:** To use a range in the same subnet as your host’s DHCP (e.g. `192.168.1.200-192.168.1.220`): set `metallb_address_pool = ["192.168.1.200-192.168.1.220"]` in `terraform.tfvars`, **reserve that range in your DHCP server** (exclude it or use static reservations) so no other device gets those IPs, and ensure the host can route that subnet to the cluster. Then `tofu apply`.
 
 ## Production: swapping the cluster
 

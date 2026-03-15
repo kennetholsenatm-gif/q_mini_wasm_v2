@@ -31,4 +31,4 @@ Then check again: `kubectl
 
 ## Local Kind: access via Teleport
 
-To access the Kind cluster through Teleport (port-forward proxy, then `tsh login` and `tsh kube login qminiwasm-local`), see the [Local Kind: access via Teleport](../opentofu/environments/local/README.md#local-kind-access-via-teleport) section in the local environment README.
+To access the Kind cluster through Teleport (port-forward proxy, then `tsh login` and `tsh kube login qminiwasm-local`), see the [Local Kind: access via Teleport](../opentofu/environments/local/README.md#local-kind-access-via-teleport) section in the local environment README. The Teleport proxy (or any LoadBalancer service) can be given an external IP from MetalLB's pool; see [MetalLB / LoadBalancer external IP](../opentofu/environments/local/README.md#metallb--loadbalancer-external-ip) in the local README.
