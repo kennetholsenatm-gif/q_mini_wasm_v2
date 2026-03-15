@@ -144,7 +144,7 @@ class WasmExecutor:
                 },
             )
             # #endregion
-            # Get exported function: wasmtime-py uses instance.exports(store)[name]; older used get_func
+            # Get exported function: wasmtime-py uses instance.exports(store)[name]; else get_func
             func = None
             try:
                 func = instance.get_func(func_name)  # type: ignore[attr-defined]
@@ -162,7 +162,11 @@ class WasmExecutor:
                 if callable(exports_fn):
                     try:
                         exports = exports_fn(self.store)
-                        func = exports.get(func_name) if hasattr(exports, "get") else exports[func_name]  # type: ignore[index]
+                        func = (
+                            exports.get(func_name)
+                            if hasattr(exports, "get")
+                            else exports[func_name]  # type: ignore[index]
+                        )
                         _dbg(
                             _log,
                             "H1",
@@ -208,7 +212,7 @@ class WasmExecutor:
                         "call(store,*args) ok",
                         {"result": result, "result_type": type(result).__name__},
                     )
-                except TypeError as te:
+                except TypeError:
                     result = call(args)
                     _dbg(
                         _log,
