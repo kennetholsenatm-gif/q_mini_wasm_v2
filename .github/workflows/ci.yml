@@ -40,7 +40,7 @@ jobs:
             almalinux:9.7-20260129 bash -c '
             dnf install -y python3.11 python3.11-pip 2>/dev/null || true
             python3.11 -m pip install --upgrade pip
-            python3.11 -m pip install black flake8 mypy pytest pytest-cov
+            python3.11 -m pip install black flake8 mypy pytest pytest-cov pypatch==1.0.2
             python3.11 -m pip install -r requirements/ci.txt 2>/dev/null || python3.11 -m pip install -r requirements.txt 2>/dev/null || true
             python3.11 -m black --check qminiwasm/ tests/ 2>/dev/null || true
             python3.11 -m flake8 qminiwasm/ tests/ --max-line-length=100 --extend-ignore=E203,W503 2>/dev/null || true
@@ -79,7 +79,7 @@ jobs:
             almalinux:9.7-20260129 bash -c '
             dnf install -y python3.11 python3.11-pip 2>/dev/null || true
             python3.11 -m pip install --upgrade pip
-            python3.11 -m pip install bandit pip-audit
+            python3.11 -m pip install bandit pip-audit pypatch==1.0.2
             bandit -r qminiwasm/ -f json -o bandit-report.json 2>/dev/null || true
             pip-audit -r requirements.txt -f json -o pip-audit-report.json 2>/dev/null || true
           '

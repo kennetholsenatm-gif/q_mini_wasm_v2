@@ -30,7 +30,7 @@ jobs:
       - name: Install project and security extras
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements/security.txt 2>/dev/null || pip install bandit pip-audit click loguru
+          pip install -r requirements/security.txt 2>/dev/null || pip install bandit pip-audit click loguru pypatch==1.0.2
           pip install -e . --no-deps 2>/dev/null || true
 
       - name: Run Bandit

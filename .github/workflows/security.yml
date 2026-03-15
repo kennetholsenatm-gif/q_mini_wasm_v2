@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies and pip-audit
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pip-audit || pip install pip-audit || true
+          pip install -r requirements.txt pip-audit pypatch==1.0.2 || pip install pip-audit pypatch==1.0.2 || true
         continue-on-error: true
 
       - name: Run pip-audit (audit only)
