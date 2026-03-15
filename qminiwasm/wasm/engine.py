@@ -196,7 +196,7 @@ class WasmEngine:
             result = func(store, *args)  # type: ignore[operator]
             # Unwrap single-value tuple if needed (wasmtime can return (value,))
             raw = result[0] if isinstance(result, tuple) and len(result) == 1 else result
-            output: int = int(raw) if raw is not None else 0
+            output = int(raw) if raw is not None else 0  # type: ignore[arg-type]
             hidden_state = torch.tensor([args[0], output, len(args)], dtype=torch.float32)
             target_state = torch.tensor([args[0], output + 1, len(args) + 1], dtype=torch.float32)
 
