@@ -49,17 +49,16 @@ class TestQMiniWASM(unittest.TestCase):
 
     def test_execute_wasm(self):
         """Test WASM execution."""
-        # Create simple WASM module (addition function)
+        # Valid minimal WASM: add(i32, i32) -> i32 (type, function, export, code)
         wasm_code = bytes.fromhex(
-            "0061736d01000000"  # WASM magic number and version
-            "0a0601000001070160017e0041046d6f64756c6500010a"
-            "040601000000034000000b"
+            "0061736d01000000"  # magic & version
+            "01090160027f7f017f"  # type: (i32,i32)->i32
+            "02020100"  # func 0 -> type 0
+            "070a01036164640000"  # export "add" -> func 0
+            "0a0b010700200020016a0b"  # code: local.get 0, local.get 1, i32.add
         )
 
-        # Test execution
         result, execution_state = self.model.execute_wasm(wasm_code, "add", [2, 3])
-
-        # Verify result (2 + 3 = 5)
         self.assertEqual(result, 5)
 
     def test_ternary_quantization(self):
