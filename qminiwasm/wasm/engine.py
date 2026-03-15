@@ -144,7 +144,7 @@ class WasmEngine:
             return module
         except Exception as e:
             self.logger.error("Failed to load WASM module: %s", str(e))
-            return None
+            raise
 
     def execute(
         self,
