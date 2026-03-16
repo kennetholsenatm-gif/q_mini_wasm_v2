@@ -54,6 +54,7 @@ The architecture has been successfully implemented and validated through:
 - [Executive Summary](Executive-Summary.md) - High-level overview of the architecture
 - [Project Goals](Project-Goals.md) - Detailed technical objectives and success metrics
 - [White Paper](white_paper.tex) - Comprehensive mathematical and technical specification
+- [UX/UI Design and Style Guide](UX-UI-Design-Style-Guide.md) - WUI design system, accessibility (WCAG 2.2), and component guidelines for Q-Mini-WASM
 
 ## Contributing
 
