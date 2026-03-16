@@ -10,3 +10,9 @@ export type { CardProps, CardHeaderProps, CardContentProps, CardFooterProps } fr
 
 export { Modal } from './Modal';
 export type { ModalProps } from './Modal';
+
+export { ToastProvider, useToast } from './Toast';
+export type { Toast } from './Toast';
+
+export { ErrorBoundary, withErrorBoundary, useErrorHandler } from './ErrorBoundary';
+export type { ErrorBoundaryProps, ErrorBoundaryState } from './ErrorBoundary';
