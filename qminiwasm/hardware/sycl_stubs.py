@@ -11,8 +11,9 @@ import os
 # Try to import the real SYCL implementation
 try:
     from qminiwasm.hardware.sycl import SYCLHardware as RealSYCLHardware
-    SYCL_BACKEND = os.getenv('SYCL_BACKEND', 'sycl').lower()
-    if SYCL_BACKEND == 'sycl':
+
+    SYCL_BACKEND = os.getenv("SYCL_BACKEND", "sycl").lower()
+    if SYCL_BACKEND == "sycl":
         SYCL_AVAILABLE = True
         logger = logging.getLogger(__name__)
         logger.info("Using real SYCL backend")
@@ -24,6 +25,7 @@ except ImportError:
     SYCL_AVAILABLE = False
     logger = logging.getLogger(__name__)
     logger.info("SYCL backend not available, using stubs")
+
 
 class SYCLHardware:
     """SYCLHardware: unified interface for SYCL hardware operations.

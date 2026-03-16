@@ -11,6 +11,7 @@ import dpctl
 import dpctl.tensor as dpt
 import dpctl.tensor.numpy_usm_shared as usm_np
 
+
 class SYCLHardware:
     """SYCLHardware: hardware mapping implementation using Intel oneAPI SYCL.
 
@@ -79,7 +80,9 @@ class SYCLHardware:
         """
         if self.device is None:
             self.logger.warning("No SYCL device available, falling back to stub behavior")
-            return [[sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix]
+            return [
+                [sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix
+            ]
 
         self.logger.info("Executing matrix operations on Matrix Engine (XMX) using SYCL")
 
@@ -154,47 +157,3 @@ class SYCLHardware:
             self.logger.debug("Created USM allocation for memory paging")
         except Exception as e:
             self.logger.warning(f"Failed to create USM allocation: {e}")
-
-# task_progress RECOMMENDED
-
-When starting a new task, it is recommended to include a todo list using the task_progress parameter.
-
-
-1. Include a todo list using the task_progress parameter in your next tool call
-2. Create a comprehensive checklist of all steps needed
-3. Use markdown format: - [ ] for incomplete, - [x] for complete
-
-**Benefits of creating a todo/task_progress list now:**
-	- Clear roadmap for implementation
-	- Progress tracking throughout the task
-	- Nothing gets forgotten or missed
-	- Users can see, monitor, and edit the plan
-
-**Example structure:**```
-- [ ] Analyze requirements
-- [ ] Set up necessary files
-- [ ] Implement main functionality
-- [ ] Handle edge cases
-- [ ] Test the implementation
-- [ ] Verify results```
-
-Keeping the task_progress list updated helps track progress and ensures nothing is missed.
-
-<environment_details>
-# Visual Studio Code Visible Files
-qminiwasm/hardware/sycl_stubs.py
-
-# Visual Studio Code Open Tabs
-ARCHITECTURAL_ANALYSIS_REPORT.md
-../../Users/kenne/.cursor/plugins/cache/cursor-public/superpowers/a0b9ecce2b25aa7d703138f17650540c2e8b2cde/hooks/session-start.sh
-qminiwasm/hardware/sycl_stubs.py
-
-# Current Time
-3/15/2026, 11:17:55 PM (America/Los_Angeles, UTC-7:00)
-
-# Context Window Usage
-17,503 / 131K tokens used (13%)
-
-# Current Mode
-ACT MODE
-</environment_details>

@@ -6,4 +6,4 @@ It uses Intel oneAPI SYCL to provide native hardware acceleration for vector and
 
 from .sycl_hardware import SYCLHardware
 
-__all__ = ['SYCLHardware']
+__all__ = ["SYCLHardware"]
