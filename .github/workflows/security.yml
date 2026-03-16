@@ -105,7 +105,6 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-        continue-on-error: true
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.35.0
@@ -114,23 +113,9 @@ jobs:
           scan-ref: "."
           format: "sarif"
           output: "trivy-fs.sarif"
-        continue-on-error: true
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v4
         if: hashFiles('trivy-fs.sarif') != ''
         with:
           sarif_file: "trivy-fs.sarif"
-        continue-on-error: true
-
-      - name: Generate empty Trivy report if needed
-        run: |
-          if [ ! -f trivy-fs.sarif ]; then echo '{"runs": []}' > trivy-fs.sarif; fi
-        continue-on-error: true
-
-      - name: Upload Trivy report
-        uses: github/codeql-action/upload-sarif@v4
-        if: hashFiles('trivy-fs.sarif') != ''
-        with:
-          sarif_file: "trivy-fs.sarif"
-        continue-on-error: true
