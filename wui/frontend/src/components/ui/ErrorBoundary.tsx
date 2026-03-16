@@ -1,6 +1,16 @@
 import React, { Component, ReactNode, ErrorInfo } from 'react';
 import './ErrorBoundary.css';
 
+/** Generate a cryptographically secure random suffix (e.g. for error/user IDs). */
+function secureRandomSuffix(length: number = 9): string {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(36)).join('').slice(0, length);
+  }
+  return Math.random().toString(36).slice(2, 2 + length);
+}
+
 interface ErrorBoundaryState {
   hasError: boolean;
   error?: Error;
@@ -25,7 +35,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return {
       hasError: true,
       error,
-      errorId: `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      errorId: `error-${Date.now()}-${secureRandomSuffix(9)}`
     };
   }
 
@@ -78,10 +88,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   getUserId = (): string => {
-    // Get user ID from localStorage or generate anonymous ID
+    // Get user ID from localStorage or generate anonymous ID (crypto-safe)
     let userId = localStorage.getItem('user_id');
     if (!userId) {
-      userId = `anonymous-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      userId = `anonymous-${Date.now()}-${secureRandomSuffix(9)}`;
       localStorage.setItem('user_id', userId);
     }
     return userId;

@@ -78,9 +78,9 @@ export class SecurityUtils {
     if (typeof input !== 'string') return '';
     
     return input
-      .replace(/</g, '<')
-      .replace(/>/g, '>')
-      .replace(/"/g, '"')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
       .replace(/'/g, '&#x27;')
       .replace(/\//g, '&#x2F;');
   }
@@ -123,11 +123,11 @@ export class SecurityUtils {
    */
   static isXssAttempt(input: string): boolean {
     const xssPatterns = [
-      /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+      /<script\b[^<]*(?:(?!<\/script\s*>)<[^<]*)*<\/script\s*>/gi,
       /javascript:/gi,
       /on\w+\s*=/gi,
-      /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
-      /<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi,
+      /<iframe\b[^<]*(?:(?!<\/iframe\s*>)<[^<]*)*<\/iframe\s*>/gi,
+      /<object\b[^<]*(?:(?!<\/object\s*>)<[^<]*)*<\/object\s*>/gi,
     ];
 
     return xssPatterns.some(pattern => pattern.test(input));
