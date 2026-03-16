@@ -37,6 +37,93 @@ class CryptoConfig:
     wasm_enclave_enabled: bool = True
 
 
+class ApproximateDCPE:
+    """Base Approximate Distance-Comparison-Preserving Encryption (DCPE)."""
+
+    def __init__(self, config: Optional[CryptoConfig] = None):
+        self.config = config or CryptoConfig()
+        self.quantum_backend = None
+        self.current_key = hashlib.sha256(secrets.token_bytes(32)).hexdigest()
+        self.key_counter = 0
+        self._initialize_quantum_backend()
+
+    def _initialize_quantum_backend(self):
+        """Initialize quantum backend for cryptographic operations"""
+        if self.config.quantum_enabled:
+            try:
+                self.quantum_backend = ctypes.CDLL("libquantum_crypto.so")
+                logging.getLogger(__name__).info("Initialized quantum cryptographic backend")
+            except Exception as e:
+                logging.getLogger(__name__).warning(
+                    "Quantum cryptographic backend initialization failed: %s", e
+                )
+                self.quantum_backend = None
+
+    def _generate_key(self) -> str:
+        """Generate a new cryptographic key"""
+        if self.quantum_backend:
+            try:
+                key_ptr = self.quantum_backend.generate_quantum_key()
+                return ctypes.string_at(key_ptr).decode("utf-8")
+            except Exception as e:
+                logging.getLogger(__name__).warning("Quantum key generation failed: %s", e)
+        return hashlib.sha256(secrets.token_bytes(32)).hexdigest()
+
+    def _rotate_key(self):
+        """Rotate the cryptographic key"""
+        self.key_counter += 1
+        if self.key_counter % self.config.key_rotation_interval == 0:
+            self.current_key = self._generate_key()
+            logging.getLogger(__name__).info(
+                "Rotated cryptographic key (counter=%d)", self.key_counter
+            )
+            if self.quantum_backend:
+                try:
+                    self.quantum_backend.rotate_quantum_keys()
+                    logging.getLogger(__name__).info("Rotated quantum cryptographic keys")
+                except Exception as e:
+                    logging.getLogger(__name__).warning(
+                        "Quantum key rotation failed: %s", e
+                    )
+
+    def encrypt(self, vector: torch.Tensor) -> torch.Tensor:
+        """Encrypt a vector using Approximate DCPE with quantum enhancement"""
+        self._rotate_key()
+        scaled = vector * self.config.scale_factor
+        noise = torch.randn_like(scaled) * self.config.perturbation_factor
+        if self.config.noise_injection_rate > 0:
+            mask = torch.bernoulli(torch.full_like(noise, self.config.noise_injection_rate))
+            noise = noise * mask
+        key_hash = int(self.current_key[:8], 16)
+        key_noise = torch.randn_like(scaled) * (key_hash % 100) / 100.0
+        if self.quantum_backend:
+            try:
+                vector_array = (c_float * len(vector))(*vector.numpy())
+                encrypted_ptr = self.quantum_backend.quantum_encrypt(
+                    vector_array, len(vector), self.current_key.encode("utf-8")
+                )
+                return torch.tensor([encrypted_ptr[i] for i in range(len(vector))])
+            except Exception as e:
+                logging.getLogger(__name__).warning("Quantum encryption failed: %s", e)
+        return scaled + noise + key_noise
+
+    def decrypt(self, encrypted: torch.Tensor) -> torch.Tensor:
+        """Decrypt a vector (approximate due to perturbation)."""
+        if self.quantum_backend:
+            try:
+                encrypted_array = (c_float * len(encrypted))(*encrypted.numpy())
+                decrypted_ptr = self.quantum_backend.quantum_decrypt(
+                    encrypted_array, len(encrypted), self.current_key.encode("utf-8")
+                )
+                decrypted = torch.tensor(
+                    [decrypted_ptr[i] for i in range(len(encrypted))]
+                )
+                return decrypted / self.config.scale_factor
+            except Exception as e:
+                logging.getLogger(__name__).warning("Quantum decryption failed: %s", e)
+        return encrypted / self.config.scale_factor
+
+
 class EnhancedApproximateDCPE(ApproximateDCPE):
     """Enhanced Approximate Distance-Comparison-Preserving Encryption (DCPE)
 
@@ -189,108 +276,6 @@ class EnhancedApproximateDCPE(ApproximateDCPE):
 
         return encrypted / self.config.scale_factor
 
-    def _initialize_quantum_backend(self):
-        """Initialize quantum backend for cryptographic operations"""
-        if self.config.quantum_enabled:
-            try:
-                # Load quantum cryptographic library
-                self.quantum_backend = ctypes.CDLL("libquantum_crypto.so")
-                self.logger.info("Initialized quantum cryptographic backend")
-            except Exception as e:
-                self.logger.warning("Quantum cryptographic backend initialization failed: %s", e)
-                self.quantum_backend = None
-
-    def _generate_key(self) -> str:
-        """Generate a new cryptographic key"""
-        if self.quantum_backend:
-            try:
-                # Use quantum-enhanced key generation
-                key_ptr = self.quantum_backend.generate_quantum_key()
-                key = ctypes.string_at(key_ptr).decode("utf-8")
-                return key
-            except Exception as e:
-                self.logger.warning("Quantum key generation failed: %s", e)
-        return hashlib.sha256(secrets.token_bytes(32)).hexdigest()
-
-    def _rotate_key(self):
-        """Rotate the cryptographic key"""
-        self.key_counter += 1
-        if self.key_counter % self.config.key_rotation_interval == 0:
-            self.current_key = self._generate_key()
-            self.logger.info("Rotated cryptographic key (counter=%d)", self.key_counter)
-            # Trigger quantum key rotation if enabled
-            if self.quantum_backend:
-                try:
-                    self.quantum_backend.rotate_quantum_keys()
-                    self.logger.info("Rotated quantum cryptographic keys")
-                except Exception as e:
-                    self.logger.warning("Quantum key rotation failed: %s", e)
-
-    def encrypt(self, vector: torch.Tensor) -> torch.Tensor:
-        """Encrypt a vector using Approximate DCPE with quantum enhancement
-
-        Args:
-            vector: Input vector to encrypt
-
-        Returns:
-            Encrypted vector preserving distance comparisons
-        """
-        self._rotate_key()
-
-        # Scale the vector
-        scaled = vector * self.config.scale_factor
-
-        # Add perturbation noise (SPARSE noise injection)
-        noise = torch.randn_like(scaled) * self.config.perturbation_factor
-        if self.config.noise_injection_rate > 0:
-            mask = torch.bernoulli(torch.full_like(noise, self.config.noise_injection_rate))
-            noise = noise * mask
-
-        # Add cryptographic key-derived noise
-        key_hash = int(self.current_key[:8], 16)
-        key_noise = torch.randn_like(scaled) * (key_hash % 100) / 100.0
-
-        # Quantum-enhanced encryption if backend available
-        if self.quantum_backend:
-            try:
-                # Convert vector to C array
-                vector_array = (c_float * len(vector))(*vector.numpy())
-                encrypted_ptr = self.quantum_backend.quantum_encrypt(
-                    vector_array, len(vector), self.current_key.encode("utf-8")
-                )
-                encrypted = torch.tensor([encrypted_ptr[i] for i in range(len(vector))])
-                return encrypted
-            except Exception as e:
-                self.logger.warning("Quantum encryption failed: %s", e)
-
-        encrypted = scaled + noise + key_noise
-        return encrypted
-
-    def decrypt(self, encrypted: torch.Tensor) -> torch.Tensor:
-        """Decrypt a vector (for internal use only)
-
-        Args:
-            encrypted: Encrypted vector
-
-        Returns:
-            Decrypted vector (approximate due to perturbation)
-        """
-        # Note: Perfect decryption is not possible due to perturbation
-        # This is for internal consistency checks only
-        if self.quantum_backend:
-            try:
-                # Convert encrypted to C array
-                encrypted_array = (c_float * len(encrypted))(*encrypted.numpy())
-                decrypted_ptr = self.quantum_backend.quantum_decrypt(
-                    encrypted_array, len(encrypted), self.current_key.encode("utf-8")
-                )
-                decrypted = torch.tensor([decrypted_ptr[i] for i in range(len(encrypted))])
-                return decrypted / self.config.scale_factor
-            except Exception as e:
-                self.logger.warning("Quantum decryption failed: %s", e)
-
-        return encrypted / self.config.scale_factor
-
 
 class WebAssemblyEnclave:
     """WebAssembly Enclave for Cryptographic Isolation
@@ -307,8 +292,10 @@ class WebAssemblyEnclave:
         """
         self.wasm_engine = wasm_engine
         self.logger = logging.getLogger(__name__)
-        self.isolation_context = self._create_isolation_context()
+        self.config = CryptoConfig()
+        self.quantum_enclave = None
         self._initialize_quantum_enclave()
+        self.isolation_context = self._create_isolation_context()
 
     def _initialize_quantum_enclave(self):
         """Initialize quantum-enhanced enclave capabilities"""

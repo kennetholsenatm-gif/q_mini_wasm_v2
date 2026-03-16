@@ -11,12 +11,18 @@ In environments without Qiskit, it falls back to classical/mock behavior so test
 hierarchical inference can run without quantum dependencies.
 """
 
+import ctypes
 import logging
 from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+try:
+    import pennylane as qml
+except ImportError:
+    qml = None  # type: ignore[misc, assignment]
 
 try:
     from qiskit.providers.ibmq import IBMQ
@@ -35,6 +41,33 @@ except ImportError:
     QAOA = QuantumInstance = PauliSumOp = PauliSum = AerSimulator = None  # type: ignore[misc]
 
 logger = logging.getLogger(__name__)
+
+
+class _RouterConfig:
+    """Minimal config for quantum router."""
+
+    def __init__(self):
+        self.quantum_enabled = True
+
+
+class QuantumRouter:
+    """Base quantum router; provides backend/config and fallback k-NN."""
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
+        self.config = _RouterConfig()
+        self.backend = None
+        self.quantum_instance = None
+        self.quantum_backend = None
+
+    def find_k_nearest_neighbors(
+        self, query_vector: np.ndarray, database_vectors: List[np.ndarray], k: int = 5
+    ) -> List[int]:
+        """Fallback: return k nearest by L2 distance."""
+        if not database_vectors or k <= 0:
+            return []
+        dists = np.array([np.linalg.norm(query_vector - v) for v in database_vectors])
+        return np.argsort(dists)[:k].tolist()
 
 
 class EnhancedQuantumRouter(QuantumRouter):
@@ -313,8 +346,9 @@ class BarrenPlateauMitigator:
     def _apply_dense_embedding(self, device, params: np.ndarray, n_qubits: int):
         """Apply dense angle embedding for dimensionality reduction"""
         # Simplified implementation - in production, use proper embedding
-        for i in range(n_qubits):
-            qml.RY(params[i], wires=i)
+        if qml is not None:
+            for i in range(n_qubits):
+                qml.RY(params[i], wires=i)
 
     def _apply_local_cost_functions(self, device, params: np.ndarray, n_qubits: int):
         """Apply local cost functions for polynomial gradient variance"""
@@ -349,48 +383,16 @@ class TernaryOptimizer:
     def _apply_dual_qubit_encoding(self, params: np.ndarray, layer: int, n_qubits: int):
         """Apply dual-qubit encoding for ternary weights"""
         # Simplified implementation - in production, use proper Grover's search
-        for i in range(n_qubits):
-            qml.RY(params[i], wires=i)
-            qml.RZ(params[i + n_qubits], wires=i)
+        if qml is not None:
+            for i in range(n_qubits):
+                qml.RY(params[i], wires=i)
+                qml.RZ(params[i + n_qubits], wires=i)
 
     def optimize_ternary_weights(self, weights: torch.Tensor) -> torch.Tensor:
         """Optimize ternary weights via Grover's search"""
         # Simplified implementation - in production, use proper Grover's search
         ternary_weights = torch.sign(weights)
         return ternary_weights
-
-
-class EnhancedHybridQuantumMoE(nn.Module):
-    """Enhanced Torch-friendly wrapper around EnhancedQuantumRouter"""
-
-    def __init__(self, api_key: Optional[str] = None):
-        super().__init__()
-        self.router = EnhancedQuantumRouter(api_key=api_key)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Route hidden states through enhanced quantum router"""
-        # Enhanced routing with ternary expert support
-        return hidden_states
-
-
-# Global enhanced quantum router instance
-enhanced_quantum_router = EnhancedQuantumRouter()
-
-
-def enhanced_find_k_nearest_neighbors(
-    query_vector: np.ndarray, database_vectors: List[np.ndarray], k: int = 5
-) -> List[int]:
-    """Public API for enhanced quantum routing
-
-    Args:
-        query_vector: Query vector to search for
-        database_vectors: List of database vectors
-        k: Number of nearest neighbors to find
-
-    Returns:
-        List of indices of nearest neighbors
-    """
-    return enhanced_quantum_router.find_k_nearest_neighbors(query_vector, database_vectors, k)
 
 
 class EnhancedHybridQuantumMoE(nn.Module):

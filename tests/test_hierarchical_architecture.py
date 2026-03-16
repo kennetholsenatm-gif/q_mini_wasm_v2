@@ -8,7 +8,6 @@ Tests the complete implementation of:
 
 import unittest
 import torch
-import numpy as np
 from qminiwasm.security.crypto import (
     encrypt_vector,
     decrypt_vector,
@@ -109,7 +108,10 @@ class TestVec2TextRAG(unittest.TestCase):
 
     def test_syntax_validation(self):
         """Test syntax validation for reconstructed text"""
-        valid_text = '{"state_id": "test", "timestamp": "2026-01-01T00:00:00Z", "execution_state": {"memory": {}, "stack": []}}'
+        valid_text = (
+            '{"state_id": "test", "timestamp": "2026-01-01T00:00:00Z", '
+            '"execution_state": {"memory": {}, "stack": []}}'
+        )
         is_valid, error = validate_reconstructed_text(valid_text)
         self.assertTrue(is_valid, f"Valid JSON should pass syntax validation: {error}")
 
@@ -140,7 +142,10 @@ class TestVec2TextRAG(unittest.TestCase):
     def _simulate_diffusion(self, vector: torch.Tensor) -> str:
         """Simulate diffusion model output"""
         # Simplified simulation - in production, use actual model
-        return '{"state_id": "test", "timestamp": "2026-01-01T00:00:00Z", "execution_state": {"memory": {}, "stack": []}}'
+        return (
+            '{"state_id": "test", "timestamp": "2026-01-01T00:00:00Z", '
+            '"execution_state": {"memory": {}, "stack": []}}'
+        )
 
 
 class TestEnhancedQuantumRouter(unittest.TestCase):

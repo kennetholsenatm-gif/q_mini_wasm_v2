@@ -15,7 +15,6 @@ import torch
 import torch.nn as nn
 from typing import List, Optional, Tuple
 import json
-import re
 
 logger = logging.getLogger(__name__)
 
