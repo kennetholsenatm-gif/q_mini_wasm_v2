@@ -1,75 +1,124 @@
-# Q-Mini-WASM: Secure SASE AI Agent Mesh for Tactical Edge Deployments
+# Hierarchical Edge-Quantum AI Architecture: Vec2Text-RAG with Approximate DCPE
 
 ## Tagline
-Ruggedized AI agents that deploy anywhere, connect securely, and execute complex ML models at the edge - built for defense, deployable on GCC High.
+Zero-degradation autonomous agents with quantum-accelerated privacy-preserving memory persistence
 
 ## Executive Summary
-Q-Mini-WASM is a Secure Access Service Edge (SASE) platform that deploys autonomous AI agents to austere, disconnected, or air-gapped environments. These agents connect over DMVPN to a central event mesh (e.g., Solace), enabling real-time data processing and decision-making at the tactical edge. Built from the ground up with military-grade DevSecOps, the platform features STIG-compliant AlmaLinux appliances, CMMC 2.0 adherence, and a Zero Trust security stack (Vault, Keycloak, mTLS, Envoy). The architecture is designed for full deployment on GCC High while remaining flexible for commercial or hybrid environments.
+The Hierarchical Edge-Quantum AI Architecture is a revolutionary framework that integrates Vec2Text-RAG and Approximate DCPE for continuous-looping autonomous agents. This architecture addresses the critical challenges of cognitive degradation and data privacy by treating continuous dense vectors as the sole representation of episodic cognitive states. Edge gateways utilizing WebAssembly runtimes encrypt these episodic vectors using Approximate Distance-Comparison-Preserving Encryption prior to transmission. Centralized routing and approximate k-Nearest Neighbor searches are executed over this encrypted manifold via a Quantum Approximate Optimization Algorithm operating on a software-defined quantum router. Finally, exact memory reconstruction is securely handled back at the edge using a Conditional Masked Diffusion Vec2Text inversion module.
 
 ## Core Technology
-At its foundation, Q-Mini-WASM leverages WebAssembly (WASM) for secure, sandboxed execution of AI/ML models in resource-constrained environments. The platform's hybrid quantum-classical ML pipeline, accelerated by Intel XPU/ARC hardware, enables complex models to run efficiently in low SWaP (Size, Weight, and Power) environments. This technology stack powers the AI agents that form the tactical edge mesh.
+The architecture leverages a hierarchical topology where highly constrained edge devices handle all cryptographic operations and memory reconstruction locally, while a centralized, quantum-accelerated cloud infrastructure manages the computational burden of routing and similarity search over a mathematically obfuscated latent space. Key technologies include:
+- **Vec2Text-RAG Paradigm**: Inverting the embedding process using Conditional Masked Diffusion for exact text reconstruction
+- **Approximate DCPE**: Scale-and-Perturb encryption preserving distance comparisons for similarity search
+- **Quantum Routing**: QAOA-based routing over encrypted vectors using holographic metasurface
+- **WebAssembly Enclaves**: Zero-trust boundary enforcement using WasmEdge or QMiniWasm runtimes
 
 ## Project Goals
 
-- **Tactical Edge SASE Mesh**: Deploy autonomous AI agents to austere environments with DMVPN connectivity to central event mesh
-- **IT/OT Infrastructure Support**: Provide secure AI processing for both IT and OT systems in disconnected or air-gapped environments
-- **Advanced ML Pipeline**: Enable complex ML models to run efficiently in low SWaP environments using WASM + quantum-classical ML + Intel hardware acceleration
-- **GCC High Compliance**: Built from the ground up with military-grade DevSecOps, STIG-compliant AlmaLinux, CMMC 2.0 adherence, and Zero Trust security stack
-- **Zero Trust Security**: Implement comprehensive security with Vault for secrets management, Keycloak for identity, mTLS for communication, and Envoy for service mesh
-- **Event-Driven Architecture**: Connect edge agents to central event mesh (e.g., Solace) for real-time data processing and decision-making
-- **Ruggedized Deployment**: Support for austere, low-bandwidth, disconnected, or completely air-gapped environments
-- **Flexible Deployment**: Architecture designed for GCC High while remaining deployable in commercial or hybrid environments
+### 1. Zero-Degradation Memory Persistence
+- Deploy autonomous agents with exact syntactic reconstruction of historical states
+- Eliminate context rot and memory degradation in continuous-looping systems
+- Achieve zero-degradation state persistence over extended temporal horizons
+- Enable perfect recall of exact numerical parameters and rigid logic rules
+
+### 2. Privacy-Preserving Architecture
+- Treat continuous dense vectors as sole representation of episodic cognitive states
+- Intentionally discard plaintext payload prior to database storage
+- Implement property-preserving encryption for secure similarity search
+- Ensure no plaintext exposure in centralized systems
+
+### 3. Quantum-Accelerated Performance
+- Leverage Quantum Approximate Optimization Algorithm for routing problems
+- Achieve orders-of-magnitude speedup for similarity search operations
+- Enable microsecond-level response times for continuous-looping agents
+- Handle exponential growth of episodic states efficiently
+
+### 4. Military-Grade Security
+- Implement zero-trust architecture with strict edge-cloud boundary
+- Deploy WebAssembly enclaves for cryptographic isolation
+- Apply Approximate Distance-Comparison-Preserving Encryption (DCPE)
+- Enforce dynamic key rotation and SPARSE noise injection
+- Achieve STIG compliance and CMMC 2.0 adherence
+
+### 5. Resource-Constrained Deployment
+- Enable deployment on edge devices with limited computational resources
+- Maintain sub-100MB memory footprint for edge components
+- Optimize for WebAssembly runtime constraints
+- Support resource-constrained environments with lightweight runtimes
+
+### 6. Mathematical Rigor
+- Provide exhaustive cryptographic threat modeling and mitigation
+- Formulate complete mathematical models for all components
+- Implement rigorous algorithmic compensation for encryption approximation errors
+- Conduct physical resource allocation analysis
+
+### 7. Physical Optimization
+- Optimize quantum hardware for 10-millikelvin thermodynamic limits
+- Implement thermodynamic bottleneck prevention
+- Design specialized Cryo-CMOS controllers for quantum hardware
+- Ensure physical constraints are respected in quantum operations
+
+### 8. Cognitive Preservation
+- Eliminate compounding hallucinations in standard models
+- Enable exact reconstruction of procedural states
+- Support structured JSON object memory representation
+- Maintain syntactic and logical structure of original states
 
 ## Key Features
 
-- **Secure SASE Platform**: Event-driven SASE edge platform with DMVPN connectivity
-- **AI Agent Mesh**: Deployable autonomous agents for tactical edge operations
-- **Advanced ML Engine**: WASM-based execution of complex ML models in resource-constrained environments
-- **Hardware Acceleration**: Intel XPU/ARC acceleration for quantum-classical ML pipelines
-- **Military-Grade Security**: STIG-compliant AlmaLinux, CMMC 2.0, Zero Trust architecture
-- **Event Mesh Integration**: Connect to central event mesh (e.g., Solace) for real-time processing
-- **Rugged Deployment**: Support for austere, disconnected, and air-gapped environments
-- **GCC High Ready**: Built for government cloud deployment with commercial flexibility
+- **Zero-Degradation Memory**: Exact syntactic reconstruction of historical states using Vec2Text-RAG
+- **Privacy Preservation**: No plaintext storage in centralized databases
+- **Quantum Acceleration**: Extreme computational parallelism for similarity search
+- **Resource Efficiency**: Sub-100MB memory footprint for edge components
+- **Security Isolation**: Absolute cryptographic isolation between edge and cloud
+- **Scalability**: Handles exponential growth of episodic states
+- **Low Latency**: Microsecond-level response times for continuous-looping agents
+- **Mathematical Rigor**: Exhaustive cryptographic threat modeling and mitigation
+- **Physical Optimization**: Thermodynamic optimization for quantum hardware
 
 ## Architecture Overview
 
-The platform consists of three main components:
+The architecture consists of three main components:
 
-1. **Edge Agents**: Ruggedized AI agents deployed to tactical edge environments
-2. **Central Event Mesh**: Secure connectivity to central event processing (e.g., Solace)
-3. **ML Pipeline**: Hybrid quantum-classical ML accelerated by Intel hardware
+1. **Edge Environment**: WebAssembly enclaves handling agent reasoning, JSON formatting, vector embedding, cryptographic operations, and memory reconstruction
+2. **Network Transit**: TLS fabric transmitting only encrypted vectors between edge and cloud
+3. **Cloud Infrastructure**: Vector database for chronological storage and quantum cluster for routing optimization
 
-Each edge agent runs in a secure WASM sandbox, enabling safe execution of complex ML models while maintaining isolation and security. The agents connect over DMVPN to the central event mesh, enabling real-time data processing and decision-making even in disconnected environments.
+Each edge agent runs in a secure WebAssembly sandbox, enabling safe execution of cryptographic operations while maintaining isolation and security. The agents connect to the centralized quantum infrastructure for routing and similarity search, enabling real-time data processing and decision-making even in disconnected environments.
 
-## Deployment Scenarios
+## Implementation Status
 
-- **Military Operations**: Deploy to austere environments for real-time intelligence processing
-- **Government IT/OT**: Secure AI processing for government infrastructure in disconnected environments
-- **Enterprise Edge**: Deploy AI agents to remote sites with limited connectivity
-- **Critical Infrastructure**: Secure processing for power grids, water systems, and other critical infrastructure
-- **Disaster Response**: Deploy to disaster areas for real-time situational awareness
+The architecture has been successfully implemented and validated through:
+- Complete mathematical formulation of all components
+- Exhaustive cryptographic threat modeling and mitigation
+- Physical resource allocation analysis
+- Quantum hardware optimization studies
+- WebAssembly runtime performance validation
+- End-to-end prototype demonstrating zero-degradation memory persistence
 
 ## Security & Compliance
 
-- **STIG-Compliant AlmaLinux**: Host appliances built to STIG standards
-- **CMMC 2.0 Adherence**: Compliance with Cybersecurity Maturity Model Certification
-- **Zero Trust Architecture**: Comprehensive security stack with Vault, Keycloak, mTLS, and Envoy
-- **GCC High Ready**: Designed for government cloud deployment
-- **DMVPN Security**: Secure connectivity over DMVPN for edge agents
-- **WASM Sandboxing**: Secure execution environment for ML models
+Built from the ground up with military-grade security features:
+- **Zero-Trust Architecture**: Strict boundary between edge and cloud components
+- **Cryptographic Isolation**: All plaintext operations occur within WebAssembly enclaves
+- **Approximate DCPE**: Property-preserving encryption enabling secure similarity search
+- **Dynamic Key Rotation**: Aggressive key rotation to prevent chosen-plaintext attacks
+- **SPARSE Noise Injection**: Dimension-selective noise injection defending against manifold alignment attacks
+- **STIG-Compliant Infrastructure**: Military-grade host appliances
+- **CMMC 2.0 Adherence**: Compliance with cybersecurity maturity standards
 
 ## Getting Started
 
-The platform is designed for deployment in austere environments. For development and testing, you can set up a local environment with the following components:
+The platform is designed for deployment in resource-constrained environments. For development and testing, you can set up a local environment with the following components:
 
-- **Edge Agent**: WASM-based AI agent for tactical edge processing
-- **Event Mesh**: Central event processing (e.g., Solace)
-- **Security Stack**: Vault, Keycloak, mTLS, and Envoy for secure operations
-- **Hardware Acceleration**: Intel XPU/ARC for ML model acceleration
+- **Edge Agent**: WebAssembly-based agent for cryptographic operations and memory reconstruction
+- **Quantum Router**: QAOA-based routing for similarity search over encrypted vectors
+- **Security Stack**: Zero-trust architecture with WebAssembly enclaves
+- **Hardware Acceleration**: Quantum hardware optimization for routing operations
 
 ## Contributing
 
-We welcome contributions from defense contractors, government IT/OT administrators, and enterprise edge architects. Please review our contributing guidelines and security policies before submitting changes.
+We welcome contributions from autonomous systems researchers, security architects, and quantum computing engineers. Please review our contributing guidelines and security policies before submitting changes.
 
 ## License
 
@@ -77,4 +126,4 @@ This project is licensed under the Apache 2.0 License - see the LICENSE file for
 
 ## Support
 
-For support and questions, please contact our team through the project's issue tracker or email support@qminiwasm.com.
+For support and questions, please contact our team through the project's issue tracker or email support@edgequantum.ai.
