@@ -15,15 +15,10 @@ from qminiwasm.security.crypto import (
     generate_symmetric_key,
     rotate_symmetric_key,
     validate_security_context,
-    log_security_operation
+    log_security_operation,
 )
-from qminiwasm.inference.vec2text import (
-    reconstruct_memory,
-    validate_reconstructed_text
-)
-from qminiwasm.quantum.router import (
-    enhanced_find_k_nearest_neighbors
-)
+from qminiwasm.inference.vec2text import reconstruct_memory, validate_reconstructed_text
+from qminiwasm.quantum.router import enhanced_find_k_nearest_neighbors
 
 
 class TestEnhancedApproximateDCPE(unittest.TestCase):
@@ -44,8 +39,10 @@ class TestEnhancedApproximateDCPE(unittest.TestCase):
         original_distance = torch.norm(self.test_vector)
         decrypted_distance = torch.norm(decrypted)
         self.assertAlmostEqual(
-            original_distance, decrypted_distance, delta=0.1 * original_distance,
-            msg="Decrypted distance should preserve original within β=0.1"
+            original_distance,
+            decrypted_distance,
+            delta=0.1 * original_distance,
+            msg="Decrypted distance should preserve original within β=0.1",
         )
 
     def test_manifold_alignment_protection(self):
@@ -60,8 +57,10 @@ class TestEnhancedApproximateDCPE(unittest.TestCase):
                 original_dist = torch.norm(vectors[i] - vectors[j])
                 encrypted_dist = torch.norm(encrypted_vectors[i] - encrypted_vectors[j])
                 self.assertAlmostEqual(
-                    original_dist, encrypted_dist, delta=0.1 * original_dist,
-                    msg="Encrypted distances should preserve original within β=0.1"
+                    original_dist,
+                    encrypted_dist,
+                    delta=0.1 * original_dist,
+                    msg="Encrypted distances should preserve original within β=0.1",
                 )
 
     def test_key_rotation(self):
@@ -77,11 +76,11 @@ class TestEnhancedApproximateDCPE(unittest.TestCase):
         context = {
             "memory_usage": 50 * 1024 * 1024,
             "cpu_time": 500,
-            "allowed_operations": ["encrypt", "decrypt"]
+            "allowed_operations": ["encrypt", "decrypt"],
         }
         self.assertTrue(
             validate_security_context("encrypt", context),
-            "Valid security context should allow encryption"
+            "Valid security context should allow encryption",
         )
 
     def test_security_logging(self):
@@ -114,7 +113,7 @@ class TestVec2TextRAG(unittest.TestCase):
         is_valid, error = validate_reconstructed_text(valid_text)
         self.assertTrue(is_valid, f"Valid JSON should pass syntax validation: {error}")
 
-        invalid_text = 'invalid json'
+        invalid_text = "invalid json"
         is_valid, error = validate_reconstructed_text(invalid_text)
         self.assertFalse(is_valid, "Invalid JSON should fail validation")
 
@@ -123,8 +122,7 @@ class TestVec2TextRAG(unittest.TestCase):
         # Test that oversampling generates multiple hypotheses
         hypotheses = self._generate_hypotheses(self.candidate_vectors)
         self.assertGreaterEqual(
-            len(hypotheses), 5,
-            "Oversampling should generate multiple hypotheses"
+            len(hypotheses), 5, "Oversampling should generate multiple hypotheses"
         )
 
     def _generate_hypotheses(self, vectors: list) -> list:
@@ -168,10 +166,8 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
     def _enhanced_qubo_formulation(self, affinity: torch.Tensor, K: int, C: int):
         """Test enhanced QUBO formulation"""
         try:
-            from qminiwasm.quantum.qubo import (
-                enhanced_qubo_hamiltonian,
-                enhanced_qubo_to_ising
-            )
+            from qminiwasm.quantum.qubo import enhanced_qubo_hamiltonian, enhanced_qubo_to_ising
+
             q_linear, q_quad = enhanced_qubo_hamiltonian(affinity, K, C)
             h, J = enhanced_qubo_to_ising(q_linear, q_quad)
             return q_linear, q_quad
@@ -181,18 +177,16 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
     def test_quantum_routing(self):
         """Test enhanced quantum routing with barren plateau mitigation"""
         # Test k-NN routing
-        neighbors = enhanced_find_k_nearest_neighbors(
-            self.query_vector, self.database_vectors, k=5
-        )
+        neighbors = enhanced_find_k_nearest_neighbors(self.query_vector, self.database_vectors, k=5)
         self.assertEqual(
-            len(neighbors), 5,
-            "Quantum routing should find exactly k nearest neighbors"
+            len(neighbors), 5, "Quantum routing should find exactly k nearest neighbors"
         )
 
     def test_barren_plateau_mitigation(self):
         """Test barren plateau mitigation strategies"""
         # Test that mitigation strategies are applied
         from qminiwasm.quantum.router import BarrenPlateauMitigator
+
         mitigator = BarrenPlateauMitigator()
         initial_params = mitigator.generate_initial_params(100)
         self.assertIsNotNone(initial_params, "Initial parameters should be generated")
@@ -201,6 +195,7 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
         """Test ternary expert support via Grover's search"""
         # Test ternary weight optimization
         from qminiwasm.quantum.router import TernaryOptimizer
+
         optimizer = TernaryOptimizer()
         test_weights = torch.randn(100)
         ternary_weights = optimizer.optimize_ternary_weights(test_weights)
@@ -210,6 +205,7 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
         """Test quantum-aware optimizations"""
         # Test quantum-aware affinity calculation
         from qminiwasm.quantum.qubo import quantum_aware_affinity
+
         compressed_states = torch.randn(10, 5, 1024)
         expert_signatures = torch.randn(20, 1024)
         affinity = quantum_aware_affinity(compressed_states, expert_signatures)
@@ -234,9 +230,7 @@ class TestIntegration(unittest.TestCase):
 
         # Test quantum routing
         database_vectors = [torch.randn(1024) for _ in range(100)]
-        neighbors = enhanced_find_k_nearest_neighbors(
-            query_vector, database_vectors, k=5
-        )
+        neighbors = enhanced_find_k_nearest_neighbors(query_vector, database_vectors, k=5)
         self.assertEqual(len(neighbors), 5, "Quantum routing should find k neighbors")
 
     def test_security_compliance(self):
@@ -254,11 +248,9 @@ class TestIntegration(unittest.TestCase):
 
         # Test that quantum routing uses enhanced QUBO
         database_vectors = [torch.randn(1024) for _ in range(100)]
-        neighbors = enhanced_find_k_nearest_neighbors(
-            query_vector, database_vectors, k=5
-        )
+        neighbors = enhanced_find_k_nearest_neighbors(query_vector, database_vectors, k=5)
         self.assertEqual(len(neighbors), 5, "Enhanced QUBO should be used")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

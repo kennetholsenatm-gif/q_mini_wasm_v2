@@ -44,14 +44,17 @@ class ConditionalMaskedDiffusion(nn.Module):
         self.ffn_dim = 2048
 
         # Transformer layers
-        self.layers = nn.ModuleList([
-            nn.TransformerEncoderLayer(
-                d_model=self.embedding_dim,
-                nhead=self.num_heads,
-                dim_feedforward=self.ffn_dim,
-                batch_first=True
-            ) for _ in range(self.num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.TransformerEncoderLayer(
+                    d_model=self.embedding_dim,
+                    nhead=self.num_heads,
+                    dim_feedforward=self.ffn_dim,
+                    batch_first=True,
+                )
+                for _ in range(self.num_layers)
+            ]
+        )
 
         # Adaptive layer normalization
         self.layer_norm = nn.LayerNorm(self.embedding_dim)
@@ -152,21 +155,18 @@ class SyntaxValidator:
             "properties": {
                 "state_id": {"type": "string"},
                 "timestamp": {"type": "string", "format": "date-time"},
-                "sub_goals": {
-                    "type": "array",
-                    "items": {"type": "object"}
-                },
+                "sub_goals": {"type": "array", "items": {"type": "object"}},
                 "execution_state": {
                     "type": "object",
                     "properties": {
                         "memory": {"type": "object"},
                         "stack": {"type": "array"},
-                        "return_value": {"type": "string"}
+                        "return_value": {"type": "string"},
                     },
-                    "required": ["memory", "stack"]
-                }
+                    "required": ["memory", "stack"],
+                },
             },
-            "required": ["state_id", "timestamp", "execution_state"]
+            "required": ["state_id", "timestamp", "execution_state"],
         }
 
     def validate(self, text: str) -> Tuple[bool, Optional[str]]:
@@ -246,9 +246,13 @@ class Vec2TextRAG:
         # Configure oversampling parameters
         self.oversample_factor = 10
         self.latent_threshold = 0.1
-        self.logger.info("Configured network-level oversampling with factor %d", self.oversample_factor)
+        self.logger.info(
+            "Configured network-level oversampling with factor %d", self.oversample_factor
+        )
 
-    def reconstruct_memory(self, query_vector: torch.Tensor, candidate_vectors: List[torch.Tensor]) -> Optional[str]:
+    def reconstruct_memory(
+        self, query_vector: torch.Tensor, candidate_vectors: List[torch.Tensor]
+    ) -> Optional[str]:
         """Reconstruct exact memory using syntax-forced latent compensation
 
         Args:
@@ -281,7 +285,7 @@ class Vec2TextRAG:
         """Generate oversampled candidate set for syntax-forced compensation"""
         # Create expanded candidate set
         expanded = candidate_vectors * self.oversample_factor
-        return expanded[:self.oversample_factor * len(candidate_vectors)]
+        return expanded[: self.oversample_factor * len(candidate_vectors)]
 
     def _generate_hypotheses(self, vectors: List[torch.Tensor]) -> List[str]:
         """Generate text hypotheses from candidate vectors"""
@@ -303,13 +307,15 @@ class Vec2TextRAG:
                 valid.append(text)
         return valid
 
-    def _verify_latent_space(self, query_vector: torch.Tensor, valid_hypotheses: List[str]) -> Optional[str]:
+    def _verify_latent_space(
+        self, query_vector: torch.Tensor, valid_hypotheses: List[str]
+    ) -> Optional[str]:
         """Verify hypotheses in latent space and select best match"""
         if not valid_hypotheses:
             return None
 
         # Re-embed valid hypotheses
-        best_distance = float('inf')
+        best_distance = float("inf")
         best_text = None
 
         for text in valid_hypotheses:
@@ -343,7 +349,9 @@ class Vec2TextRAG:
 vec2text_rag = Vec2TextRAG()
 
 
-def reconstruct_memory(query_vector: torch.Tensor, candidate_vectors: List[torch.Tensor]) -> Optional[str]:
+def reconstruct_memory(
+    query_vector: torch.Tensor, candidate_vectors: List[torch.Tensor]
+) -> Optional[str]:
     """Public API for memory reconstruction
 
     Args:

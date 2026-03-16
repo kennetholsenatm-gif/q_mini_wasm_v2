@@ -89,7 +89,8 @@ class EnhancedApproximateDCPE(ApproximateDCPE):
             self.current_key = self._generate_key()
             self.logger.info(
                 "Rotated cryptographic key (counter=%d, epoch=%d)",
-                self.key_counter, self.key_rotation_epoch
+                self.key_counter,
+                self.key_rotation_epoch,
             )
             # Trigger quantum key rotation if enabled
             if self.quantum_backend:
@@ -143,7 +144,7 @@ class EnhancedApproximateDCPE(ApproximateDCPE):
         noise = torch.randn_like(vector) * self.config.perturbation_factor
 
         # Apply dimension-selective noise injection
-        mask = self.sparsity_mask[:len(vector)]
+        mask = self.sparsity_mask[: len(vector)]
         elliptical_noise = noise * mask * sensitivity
         return elliptical_noise
 
@@ -187,6 +188,7 @@ class EnhancedApproximateDCPE(ApproximateDCPE):
                 self.logger.warning("Quantum decryption failed: %s", e)
 
         return encrypted / self.config.scale_factor
+
     def _initialize_quantum_backend(self):
         """Initialize quantum backend for cryptographic operations"""
         if self.config.quantum_enabled:

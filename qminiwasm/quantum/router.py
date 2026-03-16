@@ -60,7 +60,9 @@ class EnhancedQuantumRouter(QuantumRouter):
                 self.quantum_backend = ctypes.CDLL("libquantum_crypto.so")
                 self.logger.info("Initialized enhanced quantum cryptographic backend")
             except Exception as e:
-                self.logger.warning("Enhanced quantum cryptographic backend initialization failed: %s", e)
+                self.logger.warning(
+                    "Enhanced quantum cryptographic backend initialization failed: %s", e
+                )
                 self.quantum_backend = None
 
     def formulate_qubo(
@@ -96,9 +98,7 @@ class EnhancedQuantumRouter(QuantumRouter):
             for i in range(n):
                 for j in range(n):
                     if q_quad[i, j] != 0:
-                        pauli_terms.append(
-                            (q_quad[i, j], self._create_pauli_string(i, j, n))
-                        )
+                        pauli_terms.append((q_quad[i, j], self._create_pauli_string(i, j, n)))
             qubo_op = PauliSumOp(PauliSum(pauli_terms))
         except ImportError:
             # Fallback to PennyLane formulation
@@ -119,7 +119,9 @@ class EnhancedQuantumRouter(QuantumRouter):
                 affinity[t, e] = 1.0 / (1.0 + distance_matrix[t, e])
         return affinity
 
-    def _build_complete_qubo(self, affinity: torch.Tensor, T: int, E: int, C: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _build_complete_qubo(
+        self, affinity: torch.Tensor, T: int, E: int, C: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Build complete QUBO formulation with exact white paper specifications"""
         n = T * E
         q_linear = torch.zeros(n, dtype=affinity.dtype, device=affinity.device)
@@ -155,8 +157,8 @@ class EnhancedQuantumRouter(QuantumRouter):
         """Create Pauli string for QUBO terms"""
         # Create simplified Pauli string representation
         pauli_str = "I" * n
-        pauli_str = pauli_str[:i] + "Z" + pauli_str[i+1:]
-        pauli_str = pauli_str[:j] + "Z" + pauli_str[j+1:]
+        pauli_str = pauli_str[:i] + "Z" + pauli_str[i + 1 :]
+        pauli_str = pauli_str[:j] + "Z" + pauli_str[j + 1 :]
         return pauli_str
 
     def execute_qaoa(
