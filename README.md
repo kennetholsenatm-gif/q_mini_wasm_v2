@@ -38,7 +38,7 @@ The architecture leverages a hierarchical topology where highly constrained edge
 - Deploy WebAssembly enclaves for cryptographic isolation
 - Apply Approximate Distance-Comparison-Preserving Encryption (DCPE)
 - Enforce dynamic key rotation and SPARSE noise injection
-- Achieve STIG compliance and CMMC 2.0 adherence
+- Potentially Achieve STIG compliance and CMMC 2.0 adherence for AI
 
 ### 5. Resource-Constrained Deployment
 - Enable deployment on edge devices with limited computational resources
