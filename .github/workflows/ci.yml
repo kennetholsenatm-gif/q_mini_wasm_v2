@@ -53,6 +53,9 @@ jobs:
         run: echo '<coverage></coverage>' > "$GITHUB_WORKSPACE/coverage.xml"
         continue-on-error: true
 
+      - name: Generate environment variables documentation
+        run: python scripts/generate_env_docs.py
+
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         with:

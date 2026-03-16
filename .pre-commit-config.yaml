@@ -72,3 +72,12 @@ repos:
         args:
           - --pattern=^(master|develop|feature/.*|bugfix/.*|release/.*|security/.*|dev/.*)$
           - --message="Branch name must follow GitFlow conventions: master, develop, feature/, bugfix/, release/, security/, or dev/"
+
+  - repo: local
+    hooks:
+      - id: generate-env-docs
+        name: Generate environment variables documentation
+        entry: python scripts/generate_env_docs.py
+        language: system
+        files: \.env\.schema$
+        pass_filenames: false
