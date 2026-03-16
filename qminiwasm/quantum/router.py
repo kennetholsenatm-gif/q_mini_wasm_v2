@@ -10,18 +10,12 @@ It handles:
 
 import logging
 import numpy as np
-import torch
-from typing import List, Tuple, Optional, Dict, Any
-from qiskit import transpile, assemble
+from typing import List, Tuple, Optional, Dict
 from qiskit.providers.ibmq import IBMQ
 from qiskit.algorithms import QAOA
-from qiskit.algorithms.optimizers import COBYLA
-from qiskit.circuit import QuantumCircuit
 from qiskit.utils import QuantumInstance
 from qiskit.opflow import PauliSumOp, PauliSum
 from qiskit.aer import AerSimulator
-import pennylane as qml
-from pennylane import numpy as pnp
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +104,7 @@ class QuantumRouter:
                 for j in range(n):
                     if qubo[i, j] != 0:
                         pauli_terms.append(
-                            (qubo[i, j], f"II...IZ...ZI")
+                            (qubo[i, j], "II...IZ...ZI")
                         )  # Simplified representation
             qubo_op = PauliSumOp(PauliSum(pauli_terms))
         except ImportError:

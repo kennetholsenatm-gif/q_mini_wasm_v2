@@ -8,9 +8,8 @@ It handles:
 """
 
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional, Any
 from qiskit import IBMQ
-from qiskit.providers.ibmq import IBMQProvider
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +68,7 @@ class QuantumBackendRegistry:
 
             elif backend_type == "pennylane":
                 try:
-                    import pennylane as qml
+                    import pennylane  # noqa: F401
 
                     backend_info["initialized"] = True
                     self.logger.info("Initialized PennyLane backend: %s", name)
