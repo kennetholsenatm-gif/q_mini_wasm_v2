@@ -119,15 +119,16 @@ export class SecurityUtils {
   }
 
   /**
-   * Check for XSS patterns
+   * Check for XSS patterns.
+   * Script/iframe/object end tags use [ \t\n\r\f]* before '>' to match variants like </script >.
    */
   static isXssAttempt(input: string): boolean {
     const xssPatterns = [
-      /<script\b[^<]*(?:(?!<\/script\s*>)<[^<]*)*<\/script\s*>/gi,
+      /<script\b[^<]*(?:(?!<\/script[ \t\n\r\f]*>)<[^<]*)*<\/script[ \t\n\r\f]*>/gi,
       /javascript:/gi,
       /on\w+\s*=/gi,
-      /<iframe\b[^<]*(?:(?!<\/iframe\s*>)<[^<]*)*<\/iframe\s*>/gi,
-      /<object\b[^<]*(?:(?!<\/object\s*>)<[^<]*)*<\/object\s*>/gi,
+      /<iframe\b[^<]*(?:(?!<\/iframe[ \t\n\r\f]*>)<[^<]*)*<\/iframe[ \t\n\r\f]*>/gi,
+      /<object\b[^<]*(?:(?!<\/object[ \t\n\r\f]*>)<[^<]*)*<\/object[ \t\n\r\f]*>/gi,
     ];
 
     return xssPatterns.some(pattern => pattern.test(input));
