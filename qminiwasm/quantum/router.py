@@ -10,7 +10,7 @@ It handles:
 
 import logging
 import numpy as np
-from typing import List, Tuple, Optional, Dict
+from typing import List, Optional, Tuple
 from qiskit.providers.ibmq import IBMQ
 from qiskit.algorithms import QAOA
 from qiskit.utils import QuantumInstance
