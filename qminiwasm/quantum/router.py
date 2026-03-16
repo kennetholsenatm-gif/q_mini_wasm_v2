@@ -233,3 +233,6 @@ class QuantumRouter:
             return indices.tolist()
         # Fallback: return first k indices by query distance
         return np.argsort(query_distances)[:k].tolist()
+
+
+HybridQuantumMoE = QuantumRouter
