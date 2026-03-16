@@ -7,6 +7,7 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def main():
     """Generate comprehensive dataset for mesh network edge nodes"""
     logger.info("Starting dataset generation for hierarchical-inference-architecture")
@@ -20,23 +21,18 @@ def main():
     # Generate normal training data
     logger.info("Generating normal training data...")
     normal_data = pipeline.generate_training_data(
-        algorithms=mesh_algorithms,
-        num_samples=10000  # 10K samples per algorithm
+        algorithms=mesh_algorithms, num_samples=10000  # 10K samples per algorithm
     )
 
     # Inject faults for robustness training
     logger.info("Injecting faults for robustness training...")
     fault_types = ["bit_flip", "stack_drop", "out_of_bounds", "network_corruption"]
-    fault_injected_data = pipeline.inject_faults(
-        normal_data,
-        fault_types=fault_types
-    )
+    fault_injected_data = pipeline.inject_faults(normal_data, fault_types=fault_types)
 
     # Generate corrupted data for state recovery training
     logger.info("Generating corrupted data for state recovery...")
     corrupted_data = pipeline.inject_faults(
-        normal_data,
-        fault_types=["bit_flip", "stack_drop", "out_of_bounds"]
+        normal_data, fault_types=["bit_flip", "stack_drop", "out_of_bounds"]
     )
 
     # Apply state recovery
@@ -74,26 +70,31 @@ def main():
     logger.info("Dataset generation completed successfully!")
     logger.info(f"Total dataset size: {get_dataset_size(dataset_dir)}")
 
+
 def save_data(path: Path, data: list):
     """Save data to JSON file with compression"""
     import json
     import gzip
-    with gzip.open(path, 'wt', encoding='utf-8') as f:
+
+    with gzip.open(path, "wt", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
 
 def get_dataset_size(directory: Path) -> str:
     """Get human-readable size of dataset directory"""
     import os
+
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(directory):
         for f in filenames:
             fp = os.path.join(dirpath, f)
             total_size += os.path.getsize(fp)
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if total_size < 1024:
             return f"{total_size:.1f} {unit}"
         total_size /= 1024
     return f"{total_size:.1f} TB"
+
 
 if __name__ == "__main__":
     main()

@@ -4,6 +4,7 @@ MCP server that queries the local Zabbix proxy REST API for hardware/network met
 Credentials from env: ZABBIX_API_URL, ZABBIX_API_TOKEN (or ZABBIX_USER, ZABBIX_PASSWORD).
 Run as stdio MCP server: python zabbix_metrics_mcp.py
 """
+
 from __future__ import annotations
 
 import json
@@ -14,6 +15,7 @@ try:
     from mcp.server.stdio import stdio_server
     from mcp.server import Server
     from mcp.types import Tool, TextContent
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
@@ -21,12 +23,15 @@ except ImportError:
 
 def _zabbix_request(method: str, params: dict) -> str:
     """Send JSON-RPC request to Zabbix API. Returns JSON string or error message."""
-    api_url = os.environ.get("ZABBIX_API_URL", "http://localhost/zabbix/api_jsonrpc.php").rstrip("/")
+    api_url = os.environ.get("ZABBIX_API_URL", "http://localhost/zabbix/api_jsonrpc.php").rstrip(
+        "/"
+    )
     token = os.environ.get("ZABBIX_API_TOKEN")
     if not token:
         return "Error: ZABBIX_API_TOKEN not set. Obtain a token from Zabbix (API tokens or user.login)."
     try:
         import urllib.request
+
         body = {"jsonrpc": "2.0", "method": method, "params": params, "auth": token, "id": 1}
         data = json.dumps(body).encode()
         req = urllib.request.Request(
@@ -46,10 +51,14 @@ def _zabbix_request(method: str, params: dict) -> str:
 
 def get_zabbix_hosts() -> str:
     """Return list of hosts from Zabbix (for context)."""
-    return _zabbix_request("host.get", {"output": ["hostid", "host", "name"], "selectGroups": ["name"]})
+    return _zabbix_request(
+        "host.get", {"output": ["hostid", "host", "name"], "selectGroups": ["name"]}
+    )
 
 
-def get_zabbix_items(host_ids: list[str] | None = None, key_pattern: str | None = None, limit: int = 100) -> str:
+def get_zabbix_items(
+    host_ids: list[str] | None = None, key_pattern: str | None = None, limit: int = 100
+) -> str:
     """Return items (metrics) from Zabbix. Optionally filter by host IDs or key pattern."""
     params = {"output": ["itemid", "name", "key_", "hostid", "lastvalue", "units"], "limit": limit}
     if host_ids:
@@ -84,8 +93,15 @@ if HAS_MCP:
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "host_ids": {"type": "array", "items": {"type": "string"}, "description": "Filter by host IDs"},
-                        "key_pattern": {"type": "string", "description": "Filter items by key pattern (e.g. net.if)"},
+                        "host_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Filter by host IDs",
+                        },
+                        "key_pattern": {
+                            "type": "string",
+                            "description": "Filter items by key pattern (e.g. net.if)",
+                        },
                         "limit": {"type": "integer", "default": 100},
                     },
                 },
@@ -128,6 +144,7 @@ if HAS_MCP:
 
     if __name__ == "__main__":
         import asyncio
+
         asyncio.run(main())
 else:
     if __name__ == "__main__":

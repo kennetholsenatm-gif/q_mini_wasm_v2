@@ -4,6 +4,7 @@ MCP server that queries the local Netdisco instance for LLDP/CDP topology and MA
 Credentials from env: NETDISCO_API_URL, NETDISCO_USER, NETDISCO_PASSWORD (or NETDISCO_API_KEY).
 Run as stdio MCP server: python netdisco_topology_mcp.py
 """
+
 from __future__ import annotations
 
 import base64
@@ -15,6 +16,7 @@ try:
     from mcp.server.stdio import stdio_server
     from mcp.server import Server
     from mcp.types import Tool, TextContent
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
@@ -38,6 +40,7 @@ def _netdisco_auth() -> tuple[str, dict] | str:
         return "Error: Set NETDISCO_API_KEY or (NETDISCO_USER and NETDISCO_PASSWORD)."
     try:
         import urllib.request
+
         req = urllib.request.Request(
             f"{api_url}/login",
             data=b"",
@@ -74,6 +77,7 @@ def _netdisco_get(path: str, params: dict | None = None) -> str:
         url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
     try:
         import urllib.request
+
         req = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=15) as r:  # nosec B310
             return json.dumps(json.loads(r.read().decode()), indent=2)
@@ -116,22 +120,39 @@ if HAS_MCP:
             Tool(
                 name="get_netdisco_node_search",
                 description="Search Netdisco by IP or MAC to get MAC-to-port mappings (which switch/port the node is on).",
-                inputSchema={"type": "object", "properties": {"query": {"type": "string", "description": "IP or MAC address"}}, "required": ["query"]},
+                inputSchema={
+                    "type": "object",
+                    "properties": {"query": {"type": "string", "description": "IP or MAC address"}},
+                    "required": ["query"],
+                },
             ),
             Tool(
                 name="get_netdisco_device_nodes",
                 description="Get all nodes (MAC addresses on ports) for a device (switch) by its IP.",
-                inputSchema={"type": "object", "properties": {"device_ip": {"type": "string"}}, "required": ["device_ip"]},
+                inputSchema={
+                    "type": "object",
+                    "properties": {"device_ip": {"type": "string"}},
+                    "required": ["device_ip"],
+                },
             ),
             Tool(
                 name="get_netdisco_device",
                 description="Get device details from Netdisco by device IP.",
-                inputSchema={"type": "object", "properties": {"device_ip": {"type": "string"}}, "required": ["device_ip"]},
+                inputSchema={
+                    "type": "object",
+                    "properties": {"device_ip": {"type": "string"}},
+                    "required": ["device_ip"],
+                },
             ),
             Tool(
                 name="get_netdisco_report",
                 description="Run a Netdisco report (e.g. device_portutilization, device_neighbors).",
-                inputSchema={"type": "object", "properties": {"report_name": {"type": "string", "default": "device_portutilization"}}},
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "report_name": {"type": "string", "default": "device_portutilization"}
+                    },
+                },
             ),
         ]
 
@@ -155,6 +176,7 @@ if HAS_MCP:
 
     if __name__ == "__main__":
         import asyncio
+
         asyncio.run(main())
 else:
     if __name__ == "__main__":

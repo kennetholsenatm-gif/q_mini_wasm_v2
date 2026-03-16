@@ -87,15 +87,17 @@ class MockEdgeEncryption:
         hash_value = hash(secret_key) % 1000 / 100.0
         return 1.0 + (hash_value / 10.0)
 
-    def _generate_perturbation(self, vector: np.ndarray, secret_key: str, 
-                             approximation_factor: float) -> np.ndarray:
+    def _generate_perturbation(
+        self, vector: np.ndarray, secret_key: str, approximation_factor: float
+    ) -> np.ndarray:
         """Generate pseudorandom perturbation vector"""
         np.random.seed(hash(secret_key))
         perturbation = np.random.normal(0, approximation_factor, size=vector.shape)
         return perturbation
 
-    def _deterministic_shuffle(self, vector: np.ndarray, secret_key: str, 
-                             reverse: bool = False) -> np.ndarray:
+    def _deterministic_shuffle(
+        self, vector: np.ndarray, secret_key: str, reverse: bool = False
+    ) -> np.ndarray:
         """Deterministic shuffling of vector elements"""
         np.random.seed(hash(secret_key))
         indices = np.arange(len(vector))
@@ -120,7 +122,7 @@ class MockVec2Text:
             "answer": "The capital of France is Paris.",
             "context": "France is a country in Europe known for its culture and history.",
             "greeting": "Hello, how can I help you today?",
-            "farewell": "Goodbye! Have a great day."
+            "farewell": "Goodbye! Have a great day.",
         }
 
     def reconstruct_text(self, vector: np.ndarray) -> str:
@@ -161,11 +163,11 @@ class QuantumRAGPoC:
 
         # Initialize backend registry
         if api_key:
-            backend_registry.register_backend('ibmq_qasm_simulator', 'ibmq', api_key)
-            backend_registry.initialize_backend('ibmq_qasm_simulator')
+            backend_registry.register_backend("ibmq_qasm_simulator", "ibmq", api_key)
+            backend_registry.initialize_backend("ibmq_qasm_simulator")
         else:
-            backend_registry.register_backend('local_simulator', 'local')
-            backend_registry.initialize_backend('local_simulator')
+            backend_registry.register_backend("local_simulator", "local")
+            backend_registry.initialize_backend("local_simulator")
 
     def run_poc(self, query: str, database: List[str]) -> Tuple[str, List[str]]:
         """Run the complete Quantum RAG PoC
@@ -204,16 +206,15 @@ class QuantumRAGPoC:
 
         # Step C: Retrieve top-k results
         logger.info("Step C: Retrieving top-k results")
-        encrypted_results = [self.edge_encryption.scale_and_perturb(v, secret_key) 
-                           for v in retrieved_vectors]
+        encrypted_results = [
+            self.edge_encryption.scale_and_perturb(v, secret_key) for v in retrieved_vectors
+        ]
 
         # Step D: Decrypt and reconstruct memory (Simulated Edge)
         logger.info("Step D: Decrypting results and reconstructing memory")
-        decrypted_results = [self.edge_encryption.decrypt(v, secret_key) 
-                           for v in encrypted_results]
+        decrypted_results = [self.edge_encryption.decrypt(v, secret_key) for v in encrypted_results]
 
-        reconstructed_texts = [self.vec2text.reconstruct_text(v) 
-                              for v in decrypted_results]
+        reconstructed_texts = [self.vec2text.reconstruct_text(v) for v in decrypted_results]
 
         # Select best reconstruction
         best_reconstruction = self._select_best_reconstruction(reconstructed_texts, query_vector)
@@ -239,8 +240,9 @@ class QuantumRAGPoC:
         vector /= np.linalg.norm(vector)  # Normalize
         return vector
 
-    def _select_best_reconstruction(self, reconstructions: List[str], 
-                                  query_vector: np.ndarray) -> str:
+    def _select_best_reconstruction(
+        self, reconstructions: List[str], query_vector: np.ndarray
+    ) -> str:
         """Select the best reconstruction from multiple candidates
 
         Args:
@@ -259,7 +261,7 @@ class QuantumRAGPoC:
 def main():
     """Main execution function"""
     # Get API key from environment
-    api_key = os.getenv('QUANTUM_API_KEY')
+    api_key = os.getenv("QUANTUM_API_KEY")
     if api_key:
         logger.info("Using IBM Quantum API key from environment")
     else:
@@ -275,7 +277,7 @@ def main():
         "France is a country in Europe.",
         "Paris is known for the Eiffel Tower.",
         "France has a population of about 67 million.",
-        "The French Revolution began in 1789."
+        "The French Revolution began in 1789.",
     ]
 
     # Run PoC
@@ -292,7 +294,9 @@ def main():
     for backend in backends:
         backend_info = backend_registry.get_backend(backend)
         if backend_info:
-            print(f"- {backend}: {backend_info['type']} (initialized: {backend_info['initialized']})")
+            print(
+                f"- {backend}: {backend_info['type']} (initialized: {backend_info['initialized']})"
+            )
 
 
 if __name__ == "__main__":

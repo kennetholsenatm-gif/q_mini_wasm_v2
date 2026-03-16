@@ -33,11 +33,7 @@ class QuantumBackendRegistry:
             backend_type: Type of backend (e.g., 'ibmq', 'local', 'pennylane')
             api_key: API key for external providers
         """
-        self.backends[name] = {
-            'type': backend_type,
-            'api_key': api_key,
-            'initialized': False
-        }
+        self.backends[name] = {"type": backend_type, "api_key": api_key, "initialized": False}
         self.api_keys[name] = api_key
         self.logger.info("Registered backend: %s (%s)", name, backend_type)
 
@@ -52,29 +48,30 @@ class QuantumBackendRegistry:
             return False
 
         backend_info = self.backends[name]
-        backend_type = backend_info['type']
-        api_key = backend_info['api_key']
+        backend_type = backend_info["type"]
+        api_key = backend_info["api_key"]
 
         try:
-            if backend_type == 'ibmq':
+            if backend_type == "ibmq":
                 if api_key:
                     IBMQ.save_account(api_key, overwrite=True)
                     provider = IBMQ.load_account()
-                    backend_info['provider'] = provider
-                    backend_info['initialized'] = True
+                    backend_info["provider"] = provider
+                    backend_info["initialized"] = True
                     self.logger.info("Initialized IBM Quantum backend: %s", name)
                 else:
                     self.logger.warning("No API key provided for IBM Quantum backend")
 
-            elif backend_type == 'local':
+            elif backend_type == "local":
                 # Local simulator - no initialization needed
-                backend_info['initialized'] = True
+                backend_info["initialized"] = True
                 self.logger.info("Initialized local backend: %s", name)
 
-            elif backend_type == 'pennylane':
+            elif backend_type == "pennylane":
                 try:
                     import pennylane as qml
-                    backend_info['initialized'] = True
+
+                    backend_info["initialized"] = True
                     self.logger.info("Initialized PennyLane backend: %s", name)
                 except ImportError:
                     self.logger.warning("PennyLane not available for backend: %s", name)
@@ -102,7 +99,7 @@ class QuantumBackendRegistry:
             return None
 
         backend_info = self.backends[name]
-        if not backend_info['initialized']:
+        if not backend_info["initialized"]:
             self.logger.warning("Backend %s not initialized", name)
             return None
 
@@ -132,7 +129,7 @@ class QuantumBackendRegistry:
             api_key: New API key
         """
         if name in self.backends:
-            self.backends[name]['api_key'] = api_key
+            self.backends[name]["api_key"] = api_key
             self.api_keys[name] = api_key
             self.logger.info("Updated API key for backend: %s", name)
             # Re-initialize backend with new key
@@ -145,6 +142,6 @@ class QuantumBackendRegistry:
 backend_registry = QuantumBackendRegistry()
 
 # Predefined backends
-backend_registry.register_backend('ibmq_qasm_simulator', 'ibmq')
-backend_registry.register_backend('local_simulator', 'local')
-backend_registry.register_backend('pennylane', 'pennylane')
+backend_registry.register_backend("ibmq_qasm_simulator", "ibmq")
+backend_registry.register_backend("local_simulator", "local")
+backend_registry.register_backend("pennylane", "pennylane")

@@ -4,6 +4,7 @@ MCP server that exposes Wazuh alerts from the neighboring security-ids LXC/conta
 Reads from Wazuh API (WAZUH_API_URL, WAZUH_USER, WAZUH_PASSWORD from env).
 Run as stdio MCP server: python wazuh_alerts_mcp.py
 """
+
 from __future__ import annotations
 
 import os
@@ -14,6 +15,7 @@ try:
     from mcp.server.stdio import stdio_server
     from mcp.server import Server
     from mcp.types import Tool, TextContent
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
@@ -30,9 +32,12 @@ def get_wazuh_alerts(limit: int = 50) -> str:
         import urllib.request
         import base64
         import json
+
         req = urllib.request.Request(
             f"{api_url.rstrip('/')}/alerts?limit={limit}",
-            headers={"Authorization": "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()},
+            headers={
+                "Authorization": "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
+            },
         )
         with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode())
@@ -50,7 +55,10 @@ if HAS_MCP:
             Tool(
                 name="read_wazuh_alerts",
                 description="Read recent Wazuh security alerts from the neighboring security-ids container. Returns alert list as JSON.",
-                inputSchema={"type": "object", "properties": {"limit": {"type": "integer", "default": 50}}},
+                inputSchema={
+                    "type": "object",
+                    "properties": {"limit": {"type": "integer", "default": 50}},
+                },
             )
         ]
 
@@ -68,6 +76,7 @@ if HAS_MCP:
 
     if __name__ == "__main__":
         import asyncio
+
         asyncio.run(main())
 else:
     # Fallback: print alerts to stdout for testing without MCP package

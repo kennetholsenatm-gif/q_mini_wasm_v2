@@ -29,6 +29,7 @@ try:
     from loguru import logger
 except ImportError:
     import logging
+
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ KERNEL_MEMORY_KEYWORDS = re.compile(
 def find_oscap() -> str | None:
     """Return path to oscap binary or None if not found."""
     import shutil
+
     return shutil.which("oscap")
 
 
@@ -86,10 +88,15 @@ def run_oscap(
 ) -> int:
     """Run oscap xccdf eval. Returns oscap exit code (0 = pass)."""
     cmd = [
-        "oscap", "xccdf", "eval",
-        "--profile", profile,
-        "--results", str(results_arf),
-        "--report", str(report_html),
+        "oscap",
+        "xccdf",
+        "eval",
+        "--profile",
+        profile,
+        "--results",
+        str(results_arf),
+        "--report",
+        str(report_html),
         str(datastream),
     ]
     logger.info("Running: {}", " ".join(cmd))
@@ -106,7 +113,9 @@ def run_oscap(
             logger.warning("oscap stderr: {}", result.stderr[:500])
         return result.returncode
     except FileNotFoundError:
-        logger.error("oscap binary not found. Install OpenSCAP (e.g. libopenscap8, openscap-utils) and SCAP content.")
+        logger.error(
+            "oscap binary not found. Install OpenSCAP (e.g. libopenscap8, openscap-utils) and SCAP content."
+        )
         return 2
     except subprocess.TimeoutExpired:
         logger.error("oscap scan timed out (600s)")
@@ -127,12 +136,21 @@ def parse_arf_for_critical_failures(arf_path: Path) -> list[dict]:
     for elem in root.iter():
         if elem.tag.endswith("rule-result") or "rule-result" in elem.tag:
             result_attr = elem.get("result")
-            if result_attr and result_attr.lower() not in ("pass", "notselected", "notapplicable", "informational"):
+            if result_attr and result_attr.lower() not in (
+                "pass",
+                "notselected",
+                "notapplicable",
+                "informational",
+            ):
                 rule_id = elem.get("id", "")
                 severity = ""
                 title = ""
                 for child in elem:
-                    if child.tag.endswith("result") and child.text and child.text.strip().lower() == "fail":
+                    if (
+                        child.tag.endswith("result")
+                        and child.text
+                        and child.text.strip().lower() == "fail"
+                    ):
                         pass
                     if child.tag.endswith("severity"):
                         severity = (child.text or "").strip().lower()
@@ -144,13 +162,15 @@ def parse_arf_for_critical_failures(arf_path: Path) -> list[dict]:
                         or bool(KERNEL_MEMORY_KEYWORDS.search(rule_id))
                         or bool(KERNEL_MEMORY_KEYWORDS.search(title))
                     )
-                    failures.append({
-                        "id": rule_id,
-                        "result": result_attr,
-                        "severity": severity,
-                        "title": title[:200] if title else "",
-                        "critical": is_critical,
-                    })
+                    failures.append(
+                        {
+                            "id": rule_id,
+                            "result": result_attr,
+                            "severity": severity,
+                            "title": title[:200] if title else "",
+                            "critical": is_critical,
+                        }
+                    )
     return failures
 
 
@@ -179,7 +199,9 @@ def main_cli(
 
     critical_failures = []
     if results_arf_path.exists():
-        critical_failures = [f for f in parse_arf_for_critical_failures(results_arf_path) if f.get("critical")]
+        critical_failures = [
+            f for f in parse_arf_for_critical_failures(results_arf_path) if f.get("critical")
+        ]
         if critical_failures:
             logger.error("Critical or kernel/memory-related failures ({}):", len(critical_failures))
             for f in critical_failures[:10]:
@@ -211,7 +233,11 @@ if click is not None:
     )
     @click.option("--results-arf", default="openscap_results.arf.xml", help="Output ARF XML path.")
     @click.option("--report-html", default="openscap_report.html", help="Output HTML report path.")
-    @click.option("--fail-on-critical/--no-fail-on-critical", default=True, help="Exit non-zero on critical/kernel failures.")
+    @click.option(
+        "--fail-on-critical/--no-fail-on-critical",
+        default=True,
+        help="Exit non-zero on critical/kernel failures.",
+    )
     def cli(content_path, profile, results_arf, report_html, fail_on_critical):
         """Run OpenSCAP XCCDF evaluation and optionally fail on critical violations."""
         sys.exit(main_cli(content_path, profile, results_arf, report_html, fail_on_critical))
@@ -220,17 +246,33 @@ else:
 
     def cli():
         import argparse
+
         p = argparse.ArgumentParser(description="Run OpenSCAP XCCDF evaluation.")
-        p.add_argument("--content-path", default=os.environ.get("OSCAP_CONTENT_PATH"), help="SCAP content directory")
-        p.add_argument("--profile", default="xccdf_org.ssgproject.content_profile_cis", help="XCCDF profile")
+        p.add_argument(
+            "--content-path",
+            default=os.environ.get("OSCAP_CONTENT_PATH"),
+            help="SCAP content directory",
+        )
+        p.add_argument(
+            "--profile", default="xccdf_org.ssgproject.content_profile_cis", help="XCCDF profile"
+        )
         p.add_argument("--results-arf", default="openscap_results.arf.xml", help="ARF output path")
         p.add_argument("--report-html", default="openscap_report.html", help="HTML report path")
-        p.add_argument("--no-fail-on-critical", action="store_true", help="Do not exit non-zero on critical failures")
+        p.add_argument(
+            "--no-fail-on-critical",
+            action="store_true",
+            help="Do not exit non-zero on critical failures",
+        )
         args = p.parse_args()
-        sys.exit(main_cli(
-            args.content_path, args.profile, args.results_arf, args.report_html,
-            fail_on_critical=not args.no_fail_on_critical,
-        ))
+        sys.exit(
+            main_cli(
+                args.content_path,
+                args.profile,
+                args.results_arf,
+                args.report_html,
+                fail_on_critical=not args.no_fail_on_critical,
+            )
+        )
 
 
 if __name__ == "__main__":

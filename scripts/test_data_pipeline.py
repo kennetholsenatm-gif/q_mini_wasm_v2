@@ -7,6 +7,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class TestDataPipeline(unittest.TestCase):
     """Test cases for DataPipeline components"""
 
@@ -19,8 +20,7 @@ class TestDataPipeline(unittest.TestCase):
         """Test training data generation"""
         logger.info("Testing generate_training_data...")
         data = self.pipeline.generate_training_data(
-            algorithms=self.mesh_algorithms,
-            num_samples=100
+            algorithms=self.mesh_algorithms, num_samples=100
         )
         self.assertIsNotNone(data)
         self.assertGreater(len(data), 0)
@@ -40,10 +40,7 @@ class TestDataPipeline(unittest.TestCase):
     def test_inject_faults(self):
         """Test fault injection"""
         logger.info("Testing inject_faults...")
-        normal_data = self.pipeline.generate_training_data(
-            algorithms=["hash"],
-            num_samples=50
-        )
+        normal_data = self.pipeline.generate_training_data(algorithms=["hash"], num_samples=50)
 
         fault_types = ["bit_flip", "stack_drop", "out_of_bounds"]
         corrupted_data = self.pipeline.inject_faults(normal_data, fault_types)
@@ -65,15 +62,11 @@ class TestDataPipeline(unittest.TestCase):
     def test_state_recovery(self):
         """Test state recovery"""
         logger.info("Testing state_recovery...")
-        corrupted_data = self.pipeline.generate_training_data(
-            algorithms=["hash"],
-            num_samples=50
-        )
+        corrupted_data = self.pipeline.generate_training_data(algorithms=["hash"], num_samples=50)
 
         # Inject recoverable faults
         corrupted_data = self.pipeline.inject_faults(
-            corrupted_data,
-            fault_types=["bit_flip", "stack_drop"]
+            corrupted_data, fault_types=["bit_flip", "stack_drop"]
         )
 
         recovered_data = self.pipeline.state_recovery(corrupted_data)
@@ -114,6 +107,7 @@ class TestDataPipeline(unittest.TestCase):
         baseline = bytes([0] * 64)
 
         from qminiwasm.data.pipeline import compress_deltas
+
         payload = compress_deltas(current, baseline)
 
         self.assertIsNotNone(payload)
@@ -124,6 +118,7 @@ class TestDataPipeline(unittest.TestCase):
         self.assertIn("deltas", payload)
 
         logger.info("compress_deltas test passed!")
+
 
 if __name__ == "__main__":
     unittest.main()

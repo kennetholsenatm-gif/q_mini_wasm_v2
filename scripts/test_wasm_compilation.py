@@ -42,7 +42,9 @@ class TestWasmCompilation(unittest.TestCase):
                 # Test execution with sample inputs
                 for _ in range(3):
                     inputs = [random.randint(0, 1000), random.randint(0, 1000)]
-                    output, hidden, target = self.wasm_engine.execute_wasm(module, algo_name, inputs)
+                    output, hidden, target = self.wasm_engine.execute_wasm(
+                        module, algo_name, inputs
+                    )
 
                     self.assertIsNotNone(output, f"Execution failed for {algo_name}")
                     self.assertIsNotNone(hidden, f"Execution failed for {algo_name}")
@@ -72,7 +74,9 @@ class TestWasmCompilation(unittest.TestCase):
                     self.assertIsNotNone(hidden, f"Mock execution failed for {algo_name}")
                     self.assertIsNotNone(target, f"Mock execution failed for {algo_name}")
 
-                    logger.info("Mock executed %s with inputs %s: output=%s", algo_name, inputs, output)
+                    logger.info(
+                        "Mock executed %s with inputs %s: output=%s", algo_name, inputs, output
+                    )
 
             except Exception as e:
                 self.fail(f"Mock execution failed for {algo_name}: {str(e)}")

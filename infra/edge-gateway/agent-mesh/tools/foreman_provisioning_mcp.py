@@ -5,6 +5,7 @@ lifecycle: list/read/update hosts, quarantine, or create hosts (e.g. LXC).
 Credentials from env: FOREMAN_API_URL, FOREMAN_USER, FOREMAN_PASSWORD (or FOREMAN_API_TOKEN).
 Run as stdio MCP server: python foreman_provisioning_mcp.py
 """
+
 from __future__ import annotations
 
 import base64
@@ -16,6 +17,7 @@ try:
     from mcp.server.stdio import stdio_server
     from mcp.server import Server
     from mcp.types import Tool, TextContent
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
@@ -32,13 +34,17 @@ def _foreman_headers() -> dict | str:
     user = os.environ.get("FOREMAN_USER", "")
     if not user or not os.environ.get("FOREMAN_PASSWORD"):
         return "Error: Set FOREMAN_API_TOKEN or (FOREMAN_USER and FOREMAN_PASSWORD)."
-    creds = base64.b64encode(
-        f"{user}:{os.environ.get('FOREMAN_PASSWORD', '')}".encode()
-    ).decode()
-    return {"Content-Type": "application/json", "Accept": "application/json", "Authorization": f"Basic {creds}"}
+    creds = base64.b64encode(f"{user}:{os.environ.get('FOREMAN_PASSWORD', '')}".encode()).decode()
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Basic {creds}",
+    }
 
 
-def _foreman_request(method: str, path: str, body: dict | None = None, params: dict | None = None) -> str:
+def _foreman_request(
+    method: str, path: str, body: dict | None = None, params: dict | None = None
+) -> str:
     """Send request to Foreman API. Returns JSON string or error message."""
     base_url = os.environ.get("FOREMAN_API_URL", "https://foreman.example.com").rstrip("/")
     if not (base_url.startswith("http://") or base_url.startswith("https://")):
@@ -51,6 +57,7 @@ def _foreman_request(method: str, path: str, body: dict | None = None, params: d
         url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
     try:
         import urllib.request
+
         data = json.dumps(body).encode() if body else None
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         with urllib.request.urlopen(req, timeout=30) as r:  # nosec B310
@@ -86,12 +93,22 @@ def foreman_set_host_parameter(host_id_or_name: str, name: str, value: str) -> s
     """Set a host parameter (e.g. quarantine=true) via host update. Some Foreman versions require full host_parameters_attributes; if so, use foreman_update_host."""
     if not host_id_or_name or not name:
         return "Error: host_id_or_name and name are required."
-    return _foreman_request("PUT", f"/api/v2/hosts/{host_id_or_name.strip()}", body={
-        "host_parameters_attributes": [{"name": name.strip(), "value": value}],
-    })
+    return _foreman_request(
+        "PUT",
+        f"/api/v2/hosts/{host_id_or_name.strip()}",
+        body={
+            "host_parameters_attributes": [{"name": name.strip(), "value": value}],
+        },
+    )
 
 
-def foreman_create_host(name: str, organization_id: int | None = None, location_id: int | None = None, hostgroup_id: int | None = None, **kwargs: object) -> str:
+def foreman_create_host(
+    name: str,
+    organization_id: int | None = None,
+    location_id: int | None = None,
+    hostgroup_id: int | None = None,
+    **kwargs: object,
+) -> str:
     """Create a host (e.g. new LXC). Minimal: name; optional organization_id, location_id, hostgroup_id, and other host attributes."""
     body = {"name": name.strip(), **kwargs}
     if organization_id is not None:
@@ -114,13 +131,20 @@ if HAS_MCP:
                 description="List Foreman hosts with optional search filter.",
                 inputSchema={
                     "type": "object",
-                    "properties": {"search": {"type": "string"}, "per_page": {"type": "integer", "default": 20}},
+                    "properties": {
+                        "search": {"type": "string"},
+                        "per_page": {"type": "integer", "default": 20},
+                    },
                 },
             ),
             Tool(
                 name="foreman_get_host",
                 description="Get a single host by ID or name.",
-                inputSchema={"type": "object", "properties": {"host_id_or_name": {"type": "string"}}, "required": ["host_id_or_name"]},
+                inputSchema={
+                    "type": "object",
+                    "properties": {"host_id_or_name": {"type": "string"}},
+                    "required": ["host_id_or_name"],
+                },
             ),
             Tool(
                 name="foreman_update_host",
@@ -129,7 +153,10 @@ if HAS_MCP:
                     "type": "object",
                     "properties": {
                         "host_id_or_name": {"type": "string"},
-                        "host_params": {"type": "object", "description": "Host attributes to update"},
+                        "host_params": {
+                            "type": "object",
+                            "description": "Host attributes to update",
+                        },
                     },
                     "required": ["host_id_or_name", "host_params"],
                 },
@@ -139,7 +166,11 @@ if HAS_MCP:
                 description="Set a host parameter (e.g. quarantine=true).",
                 inputSchema={
                     "type": "object",
-                    "properties": {"host_id_or_name": {"type": "string"}, "name": {"type": "string"}, "value": {"type": "string"}},
+                    "properties": {
+                        "host_id_or_name": {"type": "string"},
+                        "name": {"type": "string"},
+                        "value": {"type": "string"},
+                    },
                     "required": ["host_id_or_name", "name", "value"],
                 },
             ),
@@ -196,6 +227,7 @@ if HAS_MCP:
 
     if __name__ == "__main__":
         import asyncio
+
         asyncio.run(main())
 else:
     if __name__ == "__main__":

@@ -44,10 +44,12 @@ class QuantumRouter:
             try:
                 IBMQ.save_account(api_key, overwrite=True)
                 provider = IBMQ.load_account()
-                self.backend = provider.get_backend('ibmq_qasm_simulator')
+                self.backend = provider.get_backend("ibmq_qasm_simulator")
                 self.logger.info("Initialized with IBM Quantum backend")
             except Exception as e:
-                self.logger.warning("Failed to initialize IBM Quantum: %s. Using local simulator.", str(e))
+                self.logger.warning(
+                    "Failed to initialize IBM Quantum: %s. Using local simulator.", str(e)
+                )
                 self._setup_local_simulator()
         else:
             self.logger.info("No API key provided. Using local simulator.")
@@ -60,13 +62,16 @@ class QuantumRouter:
             self.quantum_instance = QuantumInstance(simulator, shots=1024)
             self.logger.info("Initialized with local Aer simulator")
         except Exception as e:
-            self.logger.warning("Failed to initialize local simulator: %s. Using PennyLane mock.", str(e))
+            self.logger.warning(
+                "Failed to initialize local simulator: %s. Using PennyLane mock.", str(e)
+            )
             self._setup_penny_lane_mock()
 
     def _setup_penny_lane_mock(self):
         """Setup PennyLane mock for development"""
         try:
             import pennylane as qml
+
             self.backend = qml
             self.logger.info("Initialized with PennyLane mock backend")
         except ImportError:
@@ -99,11 +104,14 @@ class QuantumRouter:
         # Convert to PauliSumOp
         try:
             from qiskit.opflow import PauliSumOp, PauliSum
+
             pauli_terms = []
             for i in range(n):
                 for j in range(n):
                     if qubo[i, j] != 0:
-                        pauli_terms.append((qubo[i, j], f"II...IZ...ZI"))  # Simplified representation
+                        pauli_terms.append(
+                            (qubo[i, j], f"II...IZ...ZI")
+                        )  # Simplified representation
             qubo_op = PauliSumOp(PauliSum(pauli_terms))
         except ImportError:
             # Fallback to PennyLane formulation
@@ -114,8 +122,9 @@ class QuantumRouter:
 
         return qubo_op, initial_params
 
-    def execute_qaoa(self, qubo_op: Optional[PauliSumOp], initial_params: np.ndarray, 
-                    num_layers: int = 1) -> np.ndarray:
+    def execute_qaoa(
+        self, qubo_op: Optional[PauliSumOp], initial_params: np.ndarray, num_layers: int = 1
+    ) -> np.ndarray:
         """Execute QAOA algorithm
 
         Args:
@@ -137,9 +146,10 @@ class QuantumRouter:
                 result = qaoa.run(qubo_op, initial_point=initial_params)
                 return result.x
 
-            elif hasattr(self.backend, 'numpy'):
+            elif hasattr(self.backend, "numpy"):
                 # PennyLane implementation
                 import pennylane as qml
+
                 n_qubits = len(initial_params)
 
                 # Define device
@@ -190,9 +200,9 @@ class QuantumRouter:
             self.logger.error("QAOA execution failed: %s", str(e))
             return np.random.choice([0, 1], size=len(initial_params))
 
-    def find_k_nearest_neighbors(self, query_vector: np.ndarray, 
-                                database_vectors: List[np.ndarray], 
-                                k: int = 5) -> List[int]:
+    def find_k_nearest_neighbors(
+        self, query_vector: np.ndarray, database_vectors: List[np.ndarray], k: int = 5
+    ) -> List[int]:
         """Find k nearest neighbors using quantum routing
 
         Args:

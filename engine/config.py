@@ -24,10 +24,16 @@ class EngineConfig:
     ):
         self.accelerator = accelerator or os.environ.get("ACCELERATOR", "").strip() or None
         _idx = os.environ.get("DEVICE_INDEX", "")
-        self.device_index = int(_idx) if _idx.isdigit() else (device_index if device_index is not None else 0)
+        self.device_index = (
+            int(_idx) if _idx.isdigit() else (device_index if device_index is not None else 0)
+        )
         self.quantum_backend = quantum_backend or os.environ.get("QUANTUM_BACKEND", "penny_lane")
-        self.num_qubits = num_qubits if num_qubits is not None else int(os.environ.get("NUM_QUBITS", "8"))
-        self.qaoa_layers = qaoa_layers if qaoa_layers is not None else int(os.environ.get("QAOA_LAYERS", "3"))
+        self.num_qubits = (
+            num_qubits if num_qubits is not None else int(os.environ.get("NUM_QUBITS", "8"))
+        )
+        self.qaoa_layers = (
+            qaoa_layers if qaoa_layers is not None else int(os.environ.get("QAOA_LAYERS", "3"))
+        )
         self.diff_method = diff_method or os.environ.get("DIFF_METHOD", "parameter-shift")
         self.epochs = int(os.environ.get("EPOCHS", str(epochs)))
         self.batch_size = int(os.environ.get("BATCH_SIZE", str(batch_size)))
