@@ -1,94 +1,53 @@
-# Q-Mini-WASM Web Interface (WUI)
+# Q-Mini-WASM Frontend
 
-The Q-Mini-WASM Web Interface is a modern, accessible, and responsive frontend built with React and TypeScript. It implements a comprehensive design system following WCAG 2.2 accessibility standards and modern UI/UX principles.
+A modern, accessible, and performant React frontend for the Q-Mini-WASM project, built with TypeScript, Vite, and a comprehensive design system.
 
-## 🎨 Design System
+## 🚀 Features
 
-Our design system is built on the following principles:
+### 🎨 Design System
+- **Comprehensive Design Tokens**: CSS-in-JS variables for colors, spacing, typography, and shadows
+- **Accessible Components**: WCAG 2.2 compliant Button, Input, Card, Modal, Toast, and Error Boundary components
+- **Responsive Design**: Mobile-first approach with breakpoints for all screen sizes
+- **Dark Mode Support**: Automatic theme switching with CSS-in-JS variables
+- **High Contrast Mode**: Enhanced accessibility for users with visual impairments
 
-### 🎯 Core Principles
+### 🔒 Security & Performance
+- **Content Security Policy**: Comprehensive CSP headers to prevent XSS attacks
+- **Input Validation & Sanitization**: Built-in protection against SQL injection and XSS
+- **Secure Storage**: Encrypted localStorage with Web Crypto API
+- **Performance Monitoring**: Built-in performance tracking and optimization utilities
+- **Lazy Loading**: Image and component lazy loading with Intersection Observer
+- **Virtualization**: Long list virtualization for optimal rendering performance
 
-- **Accessibility First**: WCAG 2.2 AA compliance across all components
-- **Responsive Design**: Optimized for desktop, tablet, and mobile devices
-- **Consistent Branding**: Cohesive visual language with primary and secondary brand colors
-- **Performance**: Optimized for fast loading and smooth interactions
-- **Dark Mode Support**: Automatic theme switching with carefully crafted palettes
+### 🛠 Development Experience
+- **TypeScript**: Full type safety with comprehensive type definitions
+- **Jest & React Testing Library**: Comprehensive test suite with accessibility testing
+- **ESLint & Prettier**: Code quality and formatting standards
+- **Hot Module Replacement**: Fast development with Vite
+- **Path Aliases**: Clean import paths with `@/` prefix
 
-### 🎨 Color System
+### 📱 User Experience
+- **Toast Notifications**: Non-intrusive user feedback system
+- **Error Boundaries**: Graceful error handling with user-friendly messages
+- **Loading States**: Comprehensive loading indicators and skeleton screens
+- **Keyboard Navigation**: Full keyboard accessibility support
+- **Screen Reader Support**: ARIA labels and semantic HTML
 
-Our color system is based on semantic color naming with automatic dark mode support:
-
-- **Primary Colors**: Blue theme (`#0ea5e9`) for main brand elements
-- **Secondary Colors**: Orange theme (`#f59e0b`) for accent elements  
-- **Neutral Colors**: 10-step grayscale for text and backgrounds
-- **Semantic Colors**: Success, warning, and error states with proper contrast
-
-### 📐 Typography
-
-- **Base Font**: System font stack for optimal readability
-- **Font Sizes**: Rem-based scaling from 12px to 48px
-- **Line Heights**: Optimized for readability (1.25 to 1.625)
-- **Font Weights**: 300 to 700 for proper hierarchy
-
-### 📏 Spacing System
-
-- **Base Unit**: 4px grid system
-- **Scale**: xs (4px) to 8xl (128px)
-- **Consistent Padding/Margin**: Predictable spacing across components
-
-## 🧩 Component Library
-
-### Core Components
-
-#### Button
-- **Variants**: primary, secondary, success, warning, error, ghost, outline
-- **Sizes**: sm (32px), md (40px), lg (48px)
-- **Features**: Loading states, icons, full-width option
-- **Accessibility**: Focus management, ARIA labels, keyboard navigation
-
-#### Input
-- **Types**: text, email, password, number, search
-- **Sizes**: sm, md, lg with consistent heights
-- **Features**: Labels, helper text, error states, icons
-- **Accessibility**: Proper labeling, focus states, validation feedback
-
-#### Card
-- **Variants**: default, elevated, outlined
-- **Sizes**: Configurable padding (sm, md, lg, none)
-- **Features**: Header, content, footer sections
-- **Accessibility**: Semantic structure, focus management
-
-#### Modal
-- **Sizes**: sm, md, lg, xl, full
-- **Features**: Focus trapping, keyboard navigation, overlay click handling
-- **Accessibility**: ARIA roles, focus management, screen reader support
-
-### Component Features
-
-- **TypeScript Support**: Full type safety with comprehensive interfaces
-- **Accessibility**: WCAG 2.2 AA compliance with proper ARIA attributes
-- **Responsive**: Mobile-first design with breakpoint-based adjustments
-- **Theming**: Automatic dark mode support with high contrast options
-- **Performance**: Optimized rendering with minimal re-renders
-
-## 🚀 Getting Started
+## 📦 Installation
 
 ### Prerequisites
-
 - Node.js 18+ 
-- npm or yarn
-- Modern browser with ES6+ support
+- npm 8+ or yarn 1.22+
 
-### Installation
-
+### Setup
 ```bash
-cd wui/frontend
+# Clone the repository
+git clone <repository-url>
+cd LLM_Pract/wui/frontend
+
+# Install dependencies
 npm install
-```
 
-### Development
-
-```bash
 # Start development server
 npm run dev
 
@@ -96,212 +55,320 @@ npm run dev
 npm run build
 
 # Run tests
-npm run test
+npm test
+
+# Run accessibility tests
+npm run test:accessibility
 
 # Lint code
 npm run lint
+
+# Format code
+npm run format
 ```
 
-### Project Structure
+## 🏗️ Project Structure
 
 ```
 src/
-├── components/
-│   ├── ui/           # Design system components
-│   │   ├── Button/   # Button component
-│   │   ├── Input/    # Input component
-│   │   ├── Card/     # Card component
-│   │   ├── Modal/    # Modal component
-│   │   └── index.ts  # Component exports
-│   └── App.tsx       # Main application component
-├── styles/
-│   ├── design-tokens.css  # CSS custom properties
-│   ├── base.css           # Base styles and utilities
-│   └── App.css            # Application styles
-├── App.tsx           # Main application
-└── main.tsx          # Application entry point
+├── components/           # React components
+│   ├── ui/              # Design system components
+│   │   ├── Button/      # Accessible button component
+│   │   ├── Input/       # Form input with validation
+│   │   ├── Card/        # Content container component
+│   │   ├── Modal/       # Accessible modal dialog
+│   │   ├── Toast/       # Notification system
+│   │   ├── ErrorBoundary/ # Error handling component
+│   │   └── index.ts     # Component exports
+│   └── layout/          # Layout components
+│       ├── Header/      # Application header
+│       ├── Sidebar/     # Navigation sidebar
+│       └── Layout/      # Main layout wrapper
+├── pages/               # Page components
+│   ├── Dashboard/       # Main dashboard
+│   ├── Circuits/        # Circuit management
+│   ├── Hardware/        # Hardware configuration
+│   ├── Quantum/         # Quantum backend management
+│   ├── Deployment/      # Deployment configuration
+│   └── Training/        # Training job management
+├── hooks/               # Custom React hooks
+│   ├── useAuth/         # Authentication hook
+│   ├── useApi/          # API interaction hook
+│   ├── useToast/        # Toast notification hook
+│   └── performance.ts   # Performance optimization hooks
+├── services/            # API services
+│   ├── api.ts           # Main API client
+│   └── auth.ts          # Authentication service
+├── utils/               # Utility functions
+│   ├── formatters.ts    # Data formatting utilities
+│   ├── validators.ts    # Input validation utilities
+│   ├── performance.ts   # Performance optimization utilities
+│   └── accessibility.ts # Accessibility utilities
+├── security/            # Security utilities
+│   ├── security-headers.ts # CSP and security headers
+│   └── csrf.ts          # CSRF protection
+├── styles/              # Global styles
+│   ├── globals.css      # Global CSS-in-JS variables
+│   ├── reset.css        # CSS reset
+│   └── theme.css        # Theme-specific styles
+├── __tests__/           # Test files
+│   ├── accessibility.test.tsx # Accessibility tests
+│   └── components/      # Component tests
+├── App.tsx              # Main application component
+├── main.tsx             # Application entry point
+└── vite-env.d.ts        # Vite type definitions
 ```
 
-## 🎨 Customization
+## 🎨 Design System
 
-### Design Tokens
+### Color Palette
+The design system uses a comprehensive color palette with semantic naming:
 
-All design tokens are defined in `src/styles/design-tokens.css`:
+- **Primary Colors**: `--color-primary-*` (brand colors)
+- **Neutral Colors**: `--color-neutral-*` (grays and text)
+- **Success Colors**: `--color-success-*` (positive feedback)
+- **Error Colors**: `--color-error-*` (errors and warnings)
+- **Warning Colors**: `--color-warning-*` (caution messages)
 
-```css
-:root {
-  /* Colors */
-  --color-primary-500: #0ea5e9;
-  --color-secondary-500: #f59e0b;
-  
-  /* Typography */
-  --font-size-base: 1rem;
-  --line-height-normal: 1.5;
-  
-  /* Spacing */
-  --spacing-md: 1rem;
-  
-  /* Shadows */
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-```
+### Typography
+- **Font Family**: System font stack with fallbacks
+- **Font Sizes**: 12px to 48px with consistent scaling
+- **Line Heights**: 1.2 to 1.8 for optimal readability
+- **Font Weights**: 300 to 700 for hierarchy
 
-### Component Theming
+### Spacing
+- **Base Unit**: 4px grid system
+- **Spacing Scale**: xs (4px) to xxxl (48px)
+- **Consistent Padding/Margin**: Using CSS-in-JS variables
 
-Components automatically adapt to:
+### Shadows
+- **Subtle**: For depth without distraction
+- **Medium**: For important elements
+- **Large**: For modal overlays and focus states
 
-- **Color Scheme**: Light/dark mode via `prefers-color-scheme`
-- **Contrast**: High contrast mode via `prefers-contrast`
-- **Motion**: Reduced motion via `prefers-reduced-motion`
-- **Breakpoints**: Responsive design via media queries
+## 🔧 Configuration
 
-### Creating New Components
-
-1. **Follow the pattern**: Create `.tsx` and `.css` files
-2. **Use design tokens**: Reference CSS custom properties
-3. **Add TypeScript**: Define proper interfaces
-4. **Ensure accessibility**: Add ARIA attributes and keyboard support
-5. **Test responsiveness**: Verify mobile and desktop layouts
-
-## 🔧 API Integration
-
-The frontend is designed to work with the Q-Mini-WASM backend API:
-
-### Environment Configuration
+### Environment Variables
+Create a `.env` file in the frontend directory:
 
 ```env
 VITE_API_BASE_URL=http://localhost:8080
 VITE_WS_URL=ws://localhost:8080/ws
-VITE_THEME=auto
+VITE_APP_NAME=Q-Mini-WASM
+VITE_APP_VERSION=1.0.0
+VITE_ENABLE_DEBUG=true
 ```
 
-### API Client
+### Vite Configuration
+The `vite.config.ts` file includes:
+- TypeScript support
+- CSS-in-JS variables
+- Path aliases (`@/` prefix)
+- Development server configuration
+- Build optimization settings
 
-```typescript
-import { apiClient } from './services/api';
-
-// Example usage
-const response = await apiClient.get('/api/status');
-```
-
-### Error Handling
-
-- **Global error boundary** for component errors
-- **Toast notifications** for user feedback
-- **Loading states** for async operations
-- **Retry mechanisms** for failed requests
-
-## ♿ Accessibility
-
-### WCAG 2.2 Compliance
-
-- **Keyboard Navigation**: All interactive elements are keyboard accessible
-- **Screen Reader Support**: Proper ARIA labels and roles
-- **Focus Management**: Clear focus indicators and focus trapping
-- **Color Contrast**: Minimum 4.5:1 contrast ratio for text
-- **Semantic HTML**: Proper use of semantic elements
-
-### Testing Tools
-
-- **axe-core**: Automated accessibility testing
-- **Lighthouse**: Performance and accessibility audits
-- **Manual Testing**: Screen reader and keyboard testing
-
-## 📱 Responsive Design
-
-### Breakpoints
-
-- **Mobile**: `< 640px`
-- **Tablet**: `640px - 1024px`
-- **Desktop**: `> 1024px`
-
-### Mobile Optimizations
-
-- **Touch Targets**: Minimum 44px touch targets
-- **Gesture Support**: Swipe and pinch gestures where appropriate
-- **Performance**: Optimized for mobile networks and devices
-
-## 🎨 Styling Approach
-
-### CSS-in-JS Alternative
-
-We use **CSS Modules** and **CSS Custom Properties** for styling:
-
-- **Design Tokens**: Centralized CSS custom properties
-- **Component Styles**: Scoped CSS files per component
-- **Utility Classes**: Reusable utility classes in base.css
-- **Responsive**: Mobile-first media queries
-
-### CSS Architecture
-
-1. **Design Tokens**: Global CSS custom properties
-2. **Base Styles**: Reset, typography, utilities
-3. **Component Styles**: Scoped component styles
-4. **Application Styles**: Layout and page-specific styles
+### ESLint & Prettier
+- **ESLint**: TypeScript and React rules
+- **Prettier**: Consistent code formatting
+- **Husky**: Pre-commit hooks for code quality
 
 ## 🧪 Testing
 
-### Unit Testing
-
+### Running Tests
 ```bash
-npm run test
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run accessibility tests
+npm run test:accessibility
+
+# Generate coverage report
+npm run test:coverage
 ```
 
-- **Jest**: Test framework
-- **React Testing Library**: Component testing utilities
-- **Accessibility Testing**: axe-core integration
+### Test Structure
+- **Unit Tests**: Component functionality
+- **Integration Tests**: API interactions
+- **Accessibility Tests**: WCAG 2.2 compliance
+- **Performance Tests**: Load time and rendering tests
 
-### Visual Testing
+### Test Utilities
+- **React Testing Library**: Component testing
+- **Jest**: Test framework with accessibility matchers
+- **MSW**: Mock Service Worker for API mocking
 
-- **Storybook**: Component documentation and testing
-- **Visual Regression**: Automated screenshot testing
+## 🔒 Security
+
+### Content Security Policy
+The application implements a strict CSP:
+- **Script Sources**: Self-hosted only
+- **Style Sources**: Self and Google Fonts
+- **Connect Sources**: API endpoints only
+- **Image Sources**: Self, data URIs, and HTTPS
+
+### Input Validation
+- **XSS Protection**: HTML entity encoding
+- **SQL Injection**: Pattern detection and prevention
+- **CSRF Protection**: Token-based protection
+- **Rate Limiting**: Built-in rate limiting utilities
+
+### Secure Storage
+- **Encrypted localStorage**: Web Crypto API encryption
+- **Fallback Support**: Graceful degradation for older browsers
+- **Automatic Cleanup**: Memory management utilities
+
+## 📈 Performance
+
+### Optimization Features
+- **Code Splitting**: Route-based chunking
+- **Lazy Loading**: Component and image lazy loading
+- **Virtualization**: Long list optimization
+- **Caching**: Intelligent caching strategies
+- **Bundle Analysis**: Build size optimization
+
+### Performance Monitoring
+- **Execution Time**: Function performance tracking
+- **Memory Usage**: Memory leak detection
+- **Render Performance**: Component render optimization
+- **Network Performance**: API call optimization
+
+### Bundle Size
+- **Tree Shaking**: Unused code elimination
+- **Compression**: Gzip and Brotli compression
+- **Asset Optimization**: Image and font optimization
+
+## 🎯 Accessibility
+
+### WCAG 2.2 Compliance
+- **Keyboard Navigation**: Full keyboard support
+- **Screen Reader Support**: ARIA labels and semantic HTML
+- **Color Contrast**: High contrast mode support
+- **Focus Management**: Logical tab order and focus indicators
+- **Error Handling**: Accessible error messages
+
+### Testing
+- **Automated Testing**: Jest-axe integration
+- **Manual Testing**: Screen reader testing
+- **Keyboard Testing**: Tab navigation testing
+- **Contrast Testing**: Color contrast validation
 
 ## 🚀 Deployment
 
 ### Build Process
-
 ```bash
+# Build for production
 npm run build
+
+# Preview build
+npm run preview
+
+# Analyze bundle
+npm run analyze
 ```
 
-- **Vite**: Fast build tool with HMR
-- **Tree Shaking**: Automatic dead code elimination
-- **Minification**: CSS and JavaScript optimization
-- **Source Maps**: Production debugging support
-
 ### Production Considerations
-
+- **Environment Variables**: Secure handling in production
+- **CSP Headers**: Server-side CSP implementation
+- **HTTPS**: Required for security features
 - **Caching**: Proper cache headers for static assets
-- **Compression**: Gzip/Brotli compression enabled
-- **Security**: CSP headers and security best practices
-- **Performance**: Image optimization and lazy loading
 
-## 📚 Documentation
-
-- **Component API**: TypeScript interfaces and props
-- **Usage Examples**: Code examples in component files
-- **Accessibility Guidelines**: ARIA patterns and keyboard support
-- **Design Tokens**: Complete token reference
+### CI/CD Integration
+The frontend includes configuration for:
+- **GitHub Actions**: Automated testing and deployment
+- **Docker**: Containerized deployment
+- **Netlify/Vercel**: Static site deployment
 
 ## 🤝 Contributing
 
-1. **Fork the repository**
-2. **Create a feature branch**
-3. **Follow the design system patterns**
-4. **Add tests for new components**
-5. **Update documentation**
-6. **Submit a pull request**
+### Development Workflow
+1. **Fork** the repository
+2. **Clone** your fork
+3. **Create** a feature branch
+4. **Make** your changes
+5. **Test** your changes
+6. **Commit** with descriptive messages
+7. **Push** to your fork
+8. **Create** a pull request
+
+### Code Standards
+- **TypeScript**: All code must be typed
+- **Accessibility**: All components must be accessible
+- **Performance**: Optimize for performance
+- **Security**: Follow security best practices
+- **Testing**: Write tests for new features
+
+### Component Guidelines
+- **Props Interface**: Define TypeScript interfaces
+- **Accessibility**: Include ARIA attributes
+- **Error Handling**: Handle errors gracefully
+- **Loading States**: Include loading indicators
+- **Documentation**: Document component usage
+
+## 📚 Documentation
+
+### Component Documentation
+Each component includes:
+- **Props Interface**: TypeScript type definitions
+- **Usage Examples**: Code examples
+- **Accessibility Notes**: ARIA and keyboard support
+- **Performance Notes**: Optimization considerations
+
+### API Documentation
+- **Type Definitions**: Complete TypeScript interfaces
+- **Error Handling**: Error response types
+- **Authentication**: Auth flow documentation
+- **Rate Limiting**: API usage limits
+
+## 🔗 Integration
+
+### Backend API
+The frontend integrates with the Q-Mini-WASM backend API:
+- **RESTful Endpoints**: Standard HTTP methods
+- **WebSocket Support**: Real-time updates
+- **Authentication**: JWT-based auth
+- **Error Handling**: Consistent error responses
+
+### External Services
+- **Quantum Backends**: Integration with quantum computing services
+- **Hardware Monitoring**: Real-time hardware status
+- **Deployment Targets**: Multiple deployment platforms
+
+## 🐛 Troubleshooting
+
+### Common Issues
+- **CSP Errors**: Check Content Security Policy headers
+- **CORS Errors**: Verify API endpoint configuration
+- **Performance Issues**: Use performance monitoring tools
+- **Accessibility Issues**: Run accessibility tests
+
+### Debug Tools
+- **Browser DevTools**: Network and performance tabs
+- **React DevTools**: Component inspection
+- **Accessibility Tools**: Screen reader testing
+- **Performance Tools**: Lighthouse and WebPageTest
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details.
 
-## 🔗 Related Projects
+## 🙏 Acknowledgments
 
-- **Backend API**: [engine/](../engine/) - FastAPI backend
-- **Documentation**: [wiki/](../../wiki/) - Project documentation
-- **Infrastructure**: [infra/](../../infra/) - Deployment and infrastructure
+- **React Ecosystem**: For the excellent component model
+- **TypeScript**: For type safety and developer experience
+- **Vite**: For fast development and build times
+- **Accessibility Community**: For WCAG guidelines and best practices
+- **Security Community**: For security best practices and tools
+
+## 📞 Support
+
+For support and questions:
+- **GitHub Issues**: Bug reports and feature requests
+- **Documentation**: Comprehensive guides and examples
+- **Community**: Join our discussions and contribute
 
 ---
 
-**Built with ❤️ using React, TypeScript, and modern web standards**
+**Built with ❤️ for the quantum computing community**
