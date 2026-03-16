@@ -81,3 +81,7 @@ This technology represents a fundamental breakthrough in AI memory systems. It e
 
 **Last Updated:** 2026-03-16
 **Version:** 2.0
+
+## Related Resources
+
+- **NotebookLM Documentation:** [Hierarchical Edge-Quantum AI Architecture Notebook](https://notebooklm.google.com/notebook/62d6c7ee-8f93-4c5f-ac67-19b1a8956219)
