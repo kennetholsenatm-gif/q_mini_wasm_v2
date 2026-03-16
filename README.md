@@ -38,7 +38,7 @@ This architecture relies on a strict zero-trust boundary between resource-constr
 
 **Security & Compliance Posture:**
 * **Zero-Trust Boundary:** Absolute cryptographic isolation between edge and cloud. 
-* **Military-Grade Encryption:** Uses Approximate Distance-Comparison-Preserving Encryption (DCPE) and dynamic key rotation to defend against chosen-plaintext attacks.
+* **Encryption:** Uses Approximate Distance-Comparison-Preserving Encryption (DCPE) and dynamic key rotation to defend against chosen-plaintext attacks.
 * **SPARSE Noise Injection:** Defends against manifold alignment attacks through dimension-selective noise.
 * **Compliance Ready:** Designed specifically to map to **STIG** compliance and **CMMC 2.0** adherence for AI systems handling Controlled Unclassified Information (CUI).
 
