@@ -38,6 +38,14 @@ def prepare_escalation_payload(
     else:
         linear_memory = stack_snapshot = instruction_pointer = None
 
+    # Fallback: allow top-level keys when execution_state does not carry them
+    if linear_memory is None:
+        linear_memory = captured_deltas.get("linear_memory")
+    if stack_snapshot is None:
+        stack_snapshot = captured_deltas.get("stack_snapshot")
+    if instruction_pointer is None:
+        instruction_pointer = captured_deltas.get("instruction_pointer")
+
     payload = {
         "format_version": cfg.delta_format_version,
         "loop_index": captured_deltas.get("loop_idx", -1),
