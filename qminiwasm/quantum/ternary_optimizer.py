@@ -77,66 +77,14 @@ def grover_ternary_optimizer(
     num_iterations: int = 1,
     backend: str = "aer_simulator",
 ) -> torch.Tensor:
-    """Quantum ternary weight optimization using Grover's algorithm.
+    """Ternary weight optimization (classical path; quantum path reserved for future use).
 
-    Implements a modified Grover's search with Register Counting (RC) Oracle
-    to find globally optimal ternary weights.
-
-    Args:
-        weight: Continuous latent weights (any shape)
-        target_loss_fn: Loss function to minimize (optional)
-        num_iterations: Number of Grover iterations
-        backend: Quantum backend to use ("aer_simulator", "qasm_simulator", etc.)
+    Uses classical combinatorial search. backend is accepted for API compatibility only.
 
     Returns:
         torch.Tensor: Optimized ternary weights in {-1, 0, 1}
     """
-    if target_loss_fn is None:
-        # Fallback to classical optimization if no loss function provided
-        return ternary_optimizer_classical(weight, num_iterations, target_loss_fn=None)
-
-    try:
-        # Perform quantum optimization
-        optimal_weights = _quantum_ternary_optimization(weight, target_loss_fn, num_iterations)
-        return optimal_weights
-    except Exception as e:
-        # Fallback to classical optimization if quantum fails
-        print(f"Quantum optimization failed: {e}. Falling back to classical.")
-        return ternary_optimizer_classical(weight, num_iterations, target_loss_fn)
-
-
-def grover_ternary_optimizer(
-    weight: torch.Tensor,
-    target_loss_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-    num_iterations: int = 1,
-    backend: str = "aer_simulator",
-) -> torch.Tensor:
-    """Quantum ternary weight optimization using Grover's algorithm.
-
-    Implements a modified Grover's search with Register Counting (RC) Oracle
-    to find globally optimal ternary weights.
-
-    Args:
-        weight: Continuous latent weights (any shape)
-        target_loss_fn: Loss function to minimize (optional)
-        num_iterations: Number of Grover iterations
-        backend: Quantum backend to use ("aer_simulator", "qasm_simulator", etc.)
-
-    Returns:
-        torch.Tensor: Optimized ternary weights in {-1, 0, 1}
-    """
-    if target_loss_fn is None:
-        # Fallback to classical optimization if no loss function provided
-        return ternary_optimizer_classical(weight, num_iterations, target_loss_fn=None)
-
-    try:
-        # Perform quantum optimization
-        optimal_weights = _quantum_ternary_optimization(weight, target_loss_fn, num_iterations)
-        return optimal_weights
-    except Exception as e:
-        # Fallback to classical optimization if quantum fails
-        print(f"Quantum optimization failed: {e}. Falling back to classical.")
-        return ternary_optimizer_classical(weight, num_iterations, target_loss_fn)
+    return ternary_optimizer_classical(weight, num_iterations, target_loss_fn=target_loss_fn)
 
 
 def grover_ternary_optimizer_stub(
@@ -164,13 +112,9 @@ def grover_ternary_optimizer_stub(
 class GroverTernaryOptimizer(nn.Module):
     """Optional wrapper to run Grover-style ternary optimization in training.
 
-    When used with a target_loss_fn, runs quantum optimization using Grover's
-    algorithm to find globally optimal ternary weights. When target_loss_fn is
-    omitted or quantum fails, falls back to STE-style binarization.
-
-    Args:
-        num_iterations: Number of Grover iterations (default: 1)
-        backend: Quantum backend to use ("aer_simulator", "qasm_simulator", etc.)
+    When used with a target_loss_fn, runs classical combinatorial search to
+    minimize the loss over ternary configs. When target_loss_fn is omitted,
+    returns STE-style ternary.
     """
 
     def __init__(self, num_iterations: int = 1, backend: str = "aer_simulator"):
@@ -183,31 +127,14 @@ class GroverTernaryOptimizer(nn.Module):
         weight: torch.Tensor,
         target_loss_fn: Optional[Union[Callable[[torch.Tensor], torch.Tensor], nn.Module]] = None,
     ) -> torch.Tensor:
-        """Return ternary weight configuration using quantum optimization.
-
-        If target_loss_fn is provided, runs quantum optimization using Grover's
-        algorithm to minimize target_loss_fn(ternary_weight). Otherwise returns
-        STE-style ternary (no quantum backend required).
-
-        Args:
-            weight: Continuous latent weights (any shape)
-            target_loss_fn: Loss function to minimize (optional)
-
-        Returns:
-            torch.Tensor: Optimized ternary weights in {-1, 0, 1}
-        """
+        """Return ternary weight configuration (classical path)."""
         if target_loss_fn is None:
-            return _ste_ternary(weight)
+            fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None
+        elif isinstance(target_loss_fn, nn.Module):
 
-        try:
-            # Use quantum optimization
-            return grover_ternary_optimizer(
-                weight,
-                target_loss_fn=target_loss_fn,
-                num_iterations=self.num_iterations,
-                backend=self.backend,
-            )
-        except Exception as e:
-            # Fallback to classical optimization if quantum fails
-            print(f"Quantum optimization failed: {e}. Falling back to classical.")
-            return ternary_optimizer_classical(weight, self.num_iterations, target_loss_fn)
+            def fn(t: torch.Tensor) -> torch.Tensor:
+                return target_loss_fn(t)
+
+        else:
+            fn = target_loss_fn
+        return ternary_optimizer_classical(weight, self.num_iterations, target_loss_fn=fn)
