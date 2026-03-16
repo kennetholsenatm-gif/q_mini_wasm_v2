@@ -75,7 +75,9 @@ class QuantumBackendRegistry:
                     backend_info["initialized"] = True
                     self.logger.info("Initialized IBM Quantum backend: %s", name)
                 elif api_key:
-                    self.logger.warning("IBMQ not available; install qiskit-ibmq-provider for IBM Quantum backend")
+                    self.logger.warning(
+                        "IBMQ not available; install qiskit-ibmq-provider for IBM Quantum backend"
+                    )
                 else:
                     self.logger.warning("No API key provided for IBM Quantum backend")
 
@@ -189,9 +191,7 @@ class _DefaultQuantumBackend:
             # numpy or other: return slice
             return compressed_state[:, : self.num_qubits]
         except Exception as e:
-            logger.warning(
-                "run_forward fallback (compressed_state slice): %s", e, exc_info=False
-            )
+            logger.warning("run_forward fallback (compressed_state slice): %s", e, exc_info=False)
             return compressed_state[:, : self.num_qubits]
 
 

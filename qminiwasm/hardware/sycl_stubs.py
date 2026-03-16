@@ -72,12 +72,18 @@ class SYCLHardware:
             sycl_lib = ctypes.CDLL("libsycl.so")
 
             # Define function prototypes
-            sycl_lib.execute_vector_engine.argtypes = [ctypes.c_char_p, POINTER(c_float), ctypes.c_size_t]
+            sycl_lib.execute_vector_engine.argtypes = [
+                ctypes.c_char_p,
+                POINTER(c_float),
+                ctypes.c_size_t,
+            ]
             sycl_lib.execute_vector_engine.restype = POINTER(c_float)
 
             # Convert data to C array
             data_array = (c_float * len(data))(*data)
-            result_ptr = sycl_lib.execute_vector_engine(kernel.encode('utf-8'), data_array, len(data))
+            result_ptr = sycl_lib.execute_vector_engine(
+                kernel.encode("utf-8"), data_array, len(data)
+            )
 
             # Convert result back to Python list
             result = [result_ptr[i] for i in range(len(data))]
@@ -111,8 +117,11 @@ class SYCLHardware:
 
             # Define function prototypes
             sycl_lib.execute_matrix_engine.argtypes = [
-                POINTER(POINTER(c_float)), POINTER(POINTER(c_float)),
-                ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t
+                POINTER(POINTER(c_float)),
+                POINTER(POINTER(c_float)),
+                ctypes.c_size_t,
+                ctypes.c_size_t,
+                ctypes.c_size_t,
             ]
             sycl_lib.execute_matrix_engine.restype = POINTER(POINTER(c_float))
 
@@ -142,7 +151,9 @@ class SYCLHardware:
         except Exception as e:
             self.logger.error(f"SYCL Matrix Engine execution failed: {e}")
             # Fallback to Python implementation
-            return [[sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix]
+            return [
+                [sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix
+            ]
 
     def pack_ternary_weights(self, weights: List[int]) -> bytes:
         """Pack ternary weights: 5 trits per byte (3^5 = 243 states) using SYCL.
@@ -170,7 +181,7 @@ class SYCLHardware:
             result_ptr = sycl_lib.pack_ternary_weights(weights_array, len(weights))
 
             # Convert result back to Python bytes
-            result = bytes(result_ptr[:len(weights) // 5 + (1 if len(weights) % 5 != 0 else 0)])
+            result = bytes(result_ptr[: len(weights) // 5 + (1 if len(weights) % 5 != 0 else 0)])
             return result
         except Exception as e:
             self.logger.error(f"SYCL ternary weight packing failed: {e}")

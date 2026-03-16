@@ -53,7 +53,7 @@ def _create_ternary_oracle(num_qubits: int, target_state: List[int]) -> QuantumC
         if bit == 1:
             oracle.x(i)
     oracle.h(range(num_qubits))
-    oracle.mct(list(range(num_qubits-1)), num_qubits-1, None, mode='noancilla')
+    oracle.mct(list(range(num_qubits - 1)), num_qubits - 1, None, mode="noancilla")
     oracle.h(range(num_qubits))
     for i, bit in enumerate(target_state):
         if bit == 1:
@@ -61,8 +61,9 @@ def _create_ternary_oracle(num_qubits: int, target_state: List[int]) -> QuantumC
     return oracle
 
 
-def _quantum_amplitude_estimation(oracle: QuantumCircuit, num_qubits: int, 
-                                   num_iterations: int) -> List[int]:
+def _quantum_amplitude_estimation(
+    oracle: QuantumCircuit, num_qubits: int, num_iterations: int
+) -> List[int]:
     """Perform quantum amplitude estimation to find optimal ternary weights.
 
     Args:
@@ -91,9 +92,11 @@ def _quantum_amplitude_estimation(oracle: QuantumCircuit, num_qubits: int,
     return [int(bit) for bit in most_likely_state]
 
 
-def _quantum_ternary_optimization(weight: torch.Tensor, 
-                                   target_loss_fn: Callable[[torch.Tensor], torch.Tensor],
-                                   num_iterations: int = 1) -> torch.Tensor:
+def _quantum_ternary_optimization(
+    weight: torch.Tensor,
+    target_loss_fn: Callable[[torch.Tensor], torch.Tensor],
+    num_iterations: int = 1,
+) -> torch.Tensor:
     """Perform quantum optimization for ternary weights using Grover's algorithm.
 
     Args:
@@ -309,7 +312,7 @@ class GroverTernaryOptimizer(nn.Module):
                 weight,
                 target_loss_fn=target_loss_fn,
                 num_iterations=self.num_iterations,
-                backend=self.backend
+                backend=self.backend,
             )
         except Exception as e:
             # Fallback to classical optimization if quantum fails

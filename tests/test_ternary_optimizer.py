@@ -11,6 +11,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 _ternary_path = os.path.join(_REPO_ROOT, "qminiwasm", "quantum", "ternary_optimizer.py")
 import importlib.util
+
 _spec = importlib.util.spec_from_file_location("ternary_optimizer", _ternary_path)
 _ternary_mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_ternary_mod)
@@ -52,8 +53,10 @@ class TestTernaryOptimizer(unittest.TestCase):
         weight = torch.randn(2, 4)
         # Loss = L2 distance to target config; target favors zeros
         target = torch.zeros_like(weight)
+
         def loss_fn(w):
             return (w - target).pow(2).sum()
+
         ste_out = ternary_optimizer_classical(weight, 0, None)
         opt_out = ternary_optimizer_classical(weight, 20, target_loss_fn=loss_fn)
         ste_loss = loss_fn(ste_out).item()

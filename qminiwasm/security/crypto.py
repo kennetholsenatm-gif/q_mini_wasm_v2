@@ -23,13 +23,13 @@ import ctypes
 from ctypes import c_float, c_int, POINTER, Structure, pointer
 from typing import List, Tuple, Optional
 
-
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class CryptoConfig:
     """Configuration for cryptographic operations"""
+
     scale_factor: float = 1000.0
     perturbation_factor: float = 0.1
     key_rotation_interval: int = 1000
@@ -76,7 +76,7 @@ class ApproximateDCPE:
             try:
                 # Use quantum-enhanced key generation
                 key_ptr = self.quantum_backend.generate_quantum_key()
-                key = ctypes.string_at(key_ptr).decode('utf-8')
+                key = ctypes.string_at(key_ptr).decode("utf-8")
                 return key
             except Exception as e:
                 self.logger.warning("Quantum key generation failed: %s", e)
@@ -113,9 +113,7 @@ class ApproximateDCPE:
         # Add perturbation noise (SPARSE noise injection)
         noise = torch.randn_like(scaled) * self.config.perturbation_factor
         if self.config.noise_injection_rate > 0:
-            mask = torch.bernoulli(
-                torch.full_like(noise, self.config.noise_injection_rate)
-            )
+            mask = torch.bernoulli(torch.full_like(noise, self.config.noise_injection_rate))
             noise = noise * mask
 
         # Add cryptographic key-derived noise
@@ -128,7 +126,7 @@ class ApproximateDCPE:
                 # Convert vector to C array
                 vector_array = (c_float * len(vector))(*vector.numpy())
                 encrypted_ptr = self.quantum_backend.quantum_encrypt(
-                    vector_array, len(vector), self.current_key.encode('utf-8')
+                    vector_array, len(vector), self.current_key.encode("utf-8")
                 )
                 encrypted = torch.tensor([encrypted_ptr[i] for i in range(len(vector))])
                 return encrypted
@@ -154,7 +152,7 @@ class ApproximateDCPE:
                 # Convert encrypted to C array
                 encrypted_array = (c_float * len(encrypted))(*encrypted.numpy())
                 decrypted_ptr = self.quantum_backend.quantum_decrypt(
-                    encrypted_array, len(encrypted), self.current_key.encode('utf-8')
+                    encrypted_array, len(encrypted), self.current_key.encode("utf-8")
                 )
                 decrypted = torch.tensor([decrypted_ptr[i] for i in range(len(encrypted))])
                 return decrypted / self.config.scale_factor
@@ -203,7 +201,7 @@ class WebAssemblyEnclave:
                 "no_network_access": True,
                 "no_file_system_access": True,
                 "no_inter_process_communication": True,
-            }
+            },
         }
         if self.quantum_enclave:
             context["quantum_enabled"] = True
@@ -247,7 +245,7 @@ class WebAssemblyEnclave:
             if self.quantum_enclave:
                 try:
                     quantum_result = self.quantum_enclave.execute_quantum_operation(
-                        operation.encode('utf-8'), args
+                        operation.encode("utf-8"), args
                     )
                     execution_state["quantum_result"] = quantum_result
                     self.logger.info("Executed quantum-enhanced operation: %s", operation)
@@ -300,7 +298,7 @@ class KeyManager:
             try:
                 # Use quantum-enhanced key generation
                 key_ptr = self.quantum_backend.generate_quantum_key()
-                key = ctypes.string_at(key_ptr).decode('utf-8')
+                key = ctypes.string_at(key_ptr).decode("utf-8")
                 self.keys[key_id] = key
                 self.rotation_schedule[key_id] = 0
                 self.logger.info("Generated quantum %s key: %s", key_type, key_id)
@@ -326,8 +324,8 @@ class KeyManager:
         if self.quantum_backend:
             try:
                 # Use quantum-enhanced key rotation
-                key_ptr = self.quantum_backend.rotate_quantum_key(key_id.encode('utf-8'))
-                new_key = ctypes.string_at(key_ptr).decode('utf-8')
+                key_ptr = self.quantum_backend.rotate_quantum_key(key_id.encode("utf-8"))
+                new_key = ctypes.string_at(key_ptr).decode("utf-8")
                 self.keys[key_id] = new_key
                 self.rotation_schedule[key_id] = 0
                 self.logger.info("Rotated quantum key: %s", key_id)
@@ -407,10 +405,12 @@ class SecurityContext:
         if self.quantum_enforcer and self.policies["quantum_enabled"]:
             try:
                 result = self.quantum_enforcer.validate_quantum_security(
-                    operation.encode('utf-8'), context
+                    operation.encode("utf-8"), context
                 )
                 if not result:
-                    self.logger.warning("Quantum security validation failed for operation: %s", operation)
+                    self.logger.warning(
+                        "Quantum security validation failed for operation: %s", operation
+                    )
                     return False
             except Exception as e:
                 self.logger.warning("Quantum security validation failed: %s", e)
@@ -446,6 +446,7 @@ class SecurityContext:
     def _current_timestamp(self) -> str:
         """Get current timestamp for logging"""
         from datetime import datetime
+
         return datetime.now().isoformat()
 
 
@@ -460,6 +461,7 @@ dcpe_encryptor._initialize_quantum_backend()
 key_manager._initialize_quantum_backend()
 security_context._initialize_quantum_enforcer()
 
+
 def encrypt_vector(vector: torch.Tensor) -> torch.Tensor:
     """Encrypt a vector using Approximate DCPE with quantum enhancement
 
@@ -470,6 +472,7 @@ def encrypt_vector(vector: torch.Tensor) -> torch.Tensor:
         Encrypted vector preserving distance comparisons
     """
     return dcpe_encryptor.encrypt(vector)
+
 
 def decrypt_vector(encrypted: torch.Tensor) -> torch.Tensor:
     """Decrypt a vector (for internal use only)
@@ -482,6 +485,7 @@ def decrypt_vector(encrypted: torch.Tensor) -> torch.Tensor:
     """
     return dcpe_encryptor.decrypt(encrypted)
 
+
 def generate_symmetric_key(key_id: str) -> str:
     """Generate a symmetric cryptographic key
 
@@ -492,6 +496,7 @@ def generate_symmetric_key(key_id: str) -> str:
         Generated key as hex string
     """
     return key_manager.generate_key(key_id, key_type="symmetric")
+
 
 def rotate_symmetric_key(key_id: str) -> str:
     """Rotate a symmetric cryptographic key
@@ -504,6 +509,7 @@ def rotate_symmetric_key(key_id: str) -> str:
     """
     return key_manager.rotate_key(key_id)
 
+
 def validate_security_context(operation: str, context: Dict) -> bool:
     """Validate security context for an operation
 
@@ -515,6 +521,7 @@ def validate_security_context(operation: str, context: Dict) -> bool:
         True if operation is allowed, False otherwise
     """
     return security_context.validate_operation(operation, context)
+
 
 def log_security_operation(operation: str, context: Dict, result: Any):
     """Log a security operation for audit purposes
