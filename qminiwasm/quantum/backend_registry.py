@@ -21,8 +21,8 @@ class QuantumBackend(Protocol):
         compressed_state: Any,
         gammas: Any,
         betas: Any,
-    ) -> Any:
-        ...
+    ) -> Any: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +172,7 @@ class _DefaultQuantumBackend:
     def run_forward(self, compressed_state: Any, gammas: Any, betas: Any) -> Any:
         try:
             import torch
+
             if isinstance(compressed_state, torch.Tensor):
                 out = torch.zeros(
                     compressed_state.shape[0],
@@ -199,6 +200,7 @@ def get_backend(
         qaoa_layers=qaoa_layers,
         diff_method=diff_method,
     )
+
 
 # Predefined backends
 backend_registry.register_backend("ibmq_qasm_simulator", "ibmq")
