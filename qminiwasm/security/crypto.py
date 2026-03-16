@@ -379,7 +379,7 @@ class KeyManager:
     Implements dynamic key rotation and secure key storage for cryptographic operations.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the key manager"""
         self.keys: Dict[str, str] = {}
         self.rotation_schedule: Dict[str, int] = {}
@@ -387,7 +387,7 @@ class KeyManager:
         self.quantum_backend = None
         self._initialize_quantum_backend()
 
-    def _initialize_quantum_backend(self):
+    def _initialize_quantum_backend(self) -> None:
         """Initialize quantum backend for key management"""
         try:
             # Load quantum key management library
@@ -468,7 +468,7 @@ class SecurityContext:
     Manages security policies and context for cryptographic operations.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the security context"""
         self.policies: Dict[str, Any] = {
             "encryption_required": True,
@@ -481,7 +481,7 @@ class SecurityContext:
         self.quantum_enforcer = None
         self._initialize_quantum_enforcer()
 
-    def _initialize_quantum_enforcer(self):
+    def _initialize_quantum_enforcer(self) -> None:
         """Initialize quantum security enforcer"""
         try:
             # Load quantum security library

@@ -408,6 +408,9 @@ class EnhancedHybridQuantumMoE(nn.Module):
         return hidden_states
 
 
+# Public alias for backward compatibility
+HybridQuantumMoE = EnhancedHybridQuantumMoE
+
 # Global enhanced quantum router instance
 enhanced_quantum_router = EnhancedQuantumRouter()
 
