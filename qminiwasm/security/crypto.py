@@ -384,7 +384,7 @@ class KeyManager:
         self.keys: Dict[str, str] = {}
         self.rotation_schedule: Dict[str, int] = {}
         self.logger = logging.getLogger(__name__)
-        self.quantum_backend = None
+        self.quantum_backend: Optional[ctypes.CDLL] = None
         self._initialize_quantum_backend()
 
     def _initialize_quantum_backend(self) -> None:
@@ -478,7 +478,7 @@ class SecurityContext:
             "quantum_enabled": True,
         }
         self.logger = logging.getLogger(__name__)
-        self.quantum_enforcer = None
+        self.quantum_enforcer: Optional[ctypes.CDLL] = None
         self._initialize_quantum_enforcer()
 
     def _initialize_quantum_enforcer(self) -> None:
