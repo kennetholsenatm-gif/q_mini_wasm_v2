@@ -82,9 +82,7 @@ class ApproximateDCPE:
                     self.quantum_backend.rotate_quantum_keys()
                     logging.getLogger(__name__).info("Rotated quantum cryptographic keys")
                 except Exception as e:
-                    logging.getLogger(__name__).warning(
-                        "Quantum key rotation failed: %s", e
-                    )
+                    logging.getLogger(__name__).warning("Quantum key rotation failed: %s", e)
 
     def encrypt(self, vector: torch.Tensor) -> torch.Tensor:
         """Encrypt a vector using Approximate DCPE with quantum enhancement"""
@@ -115,9 +113,7 @@ class ApproximateDCPE:
                 decrypted_ptr = self.quantum_backend.quantum_decrypt(
                     encrypted_array, len(encrypted), self.current_key.encode("utf-8")
                 )
-                decrypted = torch.tensor(
-                    [decrypted_ptr[i] for i in range(len(encrypted))]
-                )
+                decrypted = torch.tensor([decrypted_ptr[i] for i in range(len(encrypted))])
                 return decrypted / self.config.scale_factor
             except Exception as e:
                 logging.getLogger(__name__).warning("Quantum decryption failed: %s", e)
