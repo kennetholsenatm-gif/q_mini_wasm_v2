@@ -3,6 +3,8 @@
 import os
 import sys
 import unittest
+import importlib.util
+
 import torch
 
 # Import only the ternary_optimizer module to avoid pulling in qiskit via router
@@ -10,7 +12,6 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 _ternary_path = os.path.join(_REPO_ROOT, "qminiwasm", "quantum", "ternary_optimizer.py")
-import importlib.util
 
 _spec = importlib.util.spec_from_file_location("ternary_optimizer", _ternary_path)
 _ternary_mod = importlib.util.module_from_spec(_spec)
@@ -71,7 +72,10 @@ class TestTernaryOptimizer(unittest.TestCase):
         opt = GroverTernaryOptimizer(num_iterations=5)
         weight = torch.randn(2, 4)
         target = torch.ones_like(weight)
-        loss_fn = lambda w: (w - target).pow(2).sum()
+
+        def loss_fn(w):
+            return (w - target).pow(2).sum()
+
         out = opt(weight, target_loss_fn=loss_fn)
         self.assertEqual(out.shape, weight.shape)
         self.assertTrue(torch.all((out >= -1) & (out <= 1)))

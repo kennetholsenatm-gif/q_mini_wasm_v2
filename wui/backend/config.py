@@ -66,14 +66,18 @@ class Settings(BaseSettings):
         if self.postgres_host:
             if not self.postgres_user or not self.postgres_password:
                 raise ValueError(
-                    "POSTGRES_HOST is set; set POSTGRES_USER and POSTGRES_PASSWORD (or use DATABASE_URL). "
-                    "See containers/wui/README.md."
+                    (
+                        "POSTGRES_HOST is set; set POSTGRES_USER and POSTGRES_PASSWORD "
+                        "(or use DATABASE_URL). See containers/wui/README.md."
+                    )
                 )
         if self.rabbitmq_host and not self.broker_url:
             if not self.rabbitmq_default_user or not self.rabbitmq_default_pass:
                 raise ValueError(
-                    "RABBITMQ_HOST is set; set RABBITMQ_DEFAULT_USER and RABBITMQ_DEFAULT_PASS (or use BROKER_URL). "
-                    "See containers/wui/README.md."
+                    (
+                        "RABBITMQ_HOST is set; set RABBITMQ_DEFAULT_USER and "
+                        "RABBITMQ_DEFAULT_PASS (or use BROKER_URL). See containers/wui/README.md."
+                    )
                 )
         return self
 

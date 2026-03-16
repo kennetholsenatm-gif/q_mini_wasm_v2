@@ -11,7 +11,8 @@ Key Components:
 - get_device, get_device_name: Device dispatcher (CUDA / XPU / CPU)
 - AcceleratorType: Literal type for accelerator choice
 
-Backend selection: set SYCL_BACKEND=sycl to prefer a native SYCL extension; otherwise stubs are used.
+Backend selection: set SYCL_BACKEND=sycl to prefer a native SYCL extension; otherwise stubs are
+used.
 See docs/SYCL-Integration.md for the integration contract.
 """
 

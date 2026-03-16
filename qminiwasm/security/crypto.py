@@ -13,15 +13,12 @@ The implementation follows the white paper's specifications for:
 """
 
 import logging
-import numpy as np
 from typing import Any, Dict, List, Optional, Tuple
 import torch
 from dataclasses import dataclass
 import hashlib
 import secrets
 import ctypes
-from ctypes import c_float, c_int, POINTER, Structure, pointer
-from typing import List, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 

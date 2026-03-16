@@ -135,7 +135,7 @@ class TestFullHierarchicalPath(unittest.TestCase):
     """Integration test: edge -> state export -> router/QAOA -> ternary (full path)."""
 
     def test_full_pipeline_edge_to_cloud_inference(self):
-        """Run edge cognitive loop -> escalation -> state migration -> hybrid inference (router + ternary)."""
+        """Run edge cognitive loop -> escalation -> state migration -> hybrid inference."""
         try:
             from qminiwasm import QMiniWASM
         except ImportError as e:

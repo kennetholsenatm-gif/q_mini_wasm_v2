@@ -1,34 +1,16 @@
-"""Optional quantum ternary weight optimization (Grover / RC Oracle).
+"""Optional ternary weight optimization (Grover / RC Oracle).
 
-The white paper describes using a modified Grover's search with a Register Counting
-(RC) Oracle to find globally optimal ternary weights. This module provides:
-- A classical combinatorial search that mimics globally optimal ternary weights
-  (beam-style local search minimizing a loss over ternary configurations).
-- STE-style fallback when no loss function is provided or for "no quantum" mode.
-- Quantum Grover's algorithm for optimal ternary weight optimization
+The white paper describes a modified Grover's search with a Register Counting (RC) Oracle to find
+globally optimal ternary weights. In this repository, the default implementation is a **classical**
+combinatorial search that mimics the desired behavior and works without quantum dependencies.
 """
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Union, List, Dict, Any
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
-import numpy as np
-from qiskit import QuantumCircuit, transpile, assemble
-from qiskit.providers.aer import AerSimulator
-from qiskit.circuit.library import GroverOperator
-from qiskit.algorithms import AmplificationProblem, Grover
-from qiskit.utils import QuantumInstance
-from qiskit.opflow import PauliSumOp, PauliSum
-from qiskit.opflow.gradients import Gradient
-
-# Quantum backend registry
-QUANTUM_BACKENDS = {
-    "aer_simulator": AerSimulator(),
-    "qasm_simulator": AerSimulator(method="statevector"),
-    # Add more backends as needed
-}
 
 
 def _ste_ternary(weight: torch.Tensor) -> torch.Tensor:
@@ -36,95 +18,6 @@ def _ste_ternary(weight: torch.Tensor) -> torch.Tensor:
     abs_mean = weight.abs().mean().clamp(min=1e-8)
     w = torch.round(weight / abs_mean).clamp(-1.0, 1.0)
     return w
-
-
-def _create_ternary_oracle(num_qubits: int, target_state: List[int]) -> QuantumCircuit:
-    """Create Grover oracle for ternary weight optimization.
-
-    Args:
-        num_qubits: Number of qubits needed to represent the state space
-        target_state: The target ternary state we're searching for
-
-    Returns:
-        QuantumCircuit: The oracle circuit
-    """
-    oracle = QuantumCircuit(num_qubits)
-    for i, bit in enumerate(target_state):
-        if bit == 1:
-            oracle.x(i)
-    oracle.h(range(num_qubits))
-    oracle.mct(list(range(num_qubits - 1)), num_qubits - 1, None, mode="noancilla")
-    oracle.h(range(num_qubits))
-    for i, bit in enumerate(target_state):
-        if bit == 1:
-            oracle.x(i)
-    return oracle
-
-
-def _quantum_amplitude_estimation(
-    oracle: QuantumCircuit, num_qubits: int, num_iterations: int
-) -> List[int]:
-    """Perform quantum amplitude estimation to find optimal ternary weights.
-
-    Args:
-        oracle: The Grover oracle circuit
-        num_qubits: Number of qubits in the oracle
-        num_iterations: Number of Grover iterations
-
-    Returns:
-        List[int]: The estimated optimal ternary state
-    """
-    # Create Grover operator
-    grover_op = GroverOperator(oracle)
-
-    # Create quantum instance
-    backend = AerSimulator()
-    quantum_instance = QuantumInstance(backend, shots=1024)
-
-    # Run Grover's algorithm
-    problem = AmplificationProblem(oracle, is_good_state=oracle)
-    grover = Grover(quantum_instance=quantum_instance)
-    result = grover.amplify(problem)
-
-    # Extract the most likely state
-    counts = result.circuit_results[0].get_counts()
-    most_likely_state = max(counts, key=counts.get)
-    return [int(bit) for bit in most_likely_state]
-
-
-def _quantum_ternary_optimization(
-    weight: torch.Tensor,
-    target_loss_fn: Callable[[torch.Tensor], torch.Tensor],
-    num_iterations: int = 1,
-) -> torch.Tensor:
-    """Perform quantum optimization for ternary weights using Grover's algorithm.
-
-    Args:
-        weight: Continuous latent weights (any shape)
-        target_loss_fn: Loss function to minimize
-        num_iterations: Number of Grover iterations
-
-    Returns:
-        torch.Tensor: Optimized ternary weights
-    """
-    # Convert weight tensor to numpy array for processing
-    weight_np = weight.detach().cpu().numpy()
-    n = weight_np.size
-
-    # Create initial state (all zeros)
-    initial_state = np.zeros(n, dtype=int)
-
-    # Create oracle for the optimization problem
-    oracle = _create_ternary_oracle(n, initial_state)
-
-    # Perform quantum amplitude estimation
-    optimal_state = _quantum_amplitude_estimation(oracle, n, num_iterations)
-
-    # Convert optimal state back to tensor
-    optimal_weights = torch.tensor(optimal_state, dtype=weight.dtype, device=weight.device)
-    optimal_weights = optimal_weights.view(weight.shape)
-
-    return optimal_weights
 
 
 def ternary_optimizer_classical(
