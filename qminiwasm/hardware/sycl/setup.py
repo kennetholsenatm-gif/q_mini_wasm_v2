@@ -38,7 +38,7 @@ setup(
     ext_modules=ext_modules,
     install_requires=[
         "dpctl>=0.15.0",
-        "numpy>=1.21.0",
+        "numpy>=1.22.0",  # CVE: numpy < 1.22 incomplete string comparison in numpy.core
     ],
     python_requires=">=3.8",
 )
