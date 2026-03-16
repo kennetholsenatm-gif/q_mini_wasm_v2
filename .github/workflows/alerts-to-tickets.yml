@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Get repository alerts
         id: get-alerts
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: alerts } = await github.rest.security.getAlerts({
@@ -41,7 +41,7 @@ jobs:
 
       - name: Create tickets for critical alerts
         if: steps.get-alerts.outputs.has_critical == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const alerts = JSON.parse(context.payload.alerts);
