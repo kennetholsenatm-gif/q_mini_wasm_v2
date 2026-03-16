@@ -21,12 +21,14 @@ def get_model():
     global _model
     if _model is None:
         from qminiwasm.model import QMiniWASM
+
         _model = QMiniWASM(device=torch.device("cpu"))
     return _model
 
 
 class InferRequest(BaseModel):
     """Input for /infer. hidden_states: list of vectors (batch_size, d_model=4096)."""
+
     hidden_states: List[List[float]]
 
 

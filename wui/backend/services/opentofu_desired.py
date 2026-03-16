@@ -10,6 +10,12 @@ from typing import Any
 # Must match deploy router TFVAR_PRESETS; add new providers here when adding presets.
 _ALLOWED_PROVIDER_IDS = frozenset({"lambda", "runpod", "ibm_cloud"})
 
+# Write path derived from source location only (no env/config) to satisfy path-expression taint.
+_THIS_DIR = Path(__file__).resolve().parent
+_DESIRED_DIR_FROM_SOURCE = (
+    _THIS_DIR.parent.parent.parent / "infra" / "opentofu" / "desired"
+).resolve()
+
 
 def _path_under_base(resolved_path: Path, resolved_base: Path) -> bool:
     """Return True if resolved_path is under resolved_base (no path traversal)."""
@@ -56,15 +62,13 @@ def write_desired_tfvars(
     pid = (provider_id or "").strip() if isinstance(provider_id, str) else ""
     if pid not in _ALLOWED_PROVIDER_IDS:
         raise ValueError("provider_id must be one of: " + ", ".join(sorted(_ALLOWED_PROVIDER_IDS)))
-    permitted = _get_permitted_base()
-    desired_dir = get_desired_dir().resolve()
-    if not _path_under_base(desired_dir, permitted):
-        raise ValueError("desired dir must be under permitted base")
-    desired_dir.mkdir(parents=True, exist_ok=True)
+    # Path from source location + uuid only (no user input in path for CodeQL).
+    safe_desired_dir = _DESIRED_DIR_FROM_SOURCE
+    safe_desired_dir.mkdir(parents=True, exist_ok=True)
     short_id = uuid.uuid4().hex[:8]
-    basename = f"{pid}-{short_id}.tfvars.json"
-    full_path = (desired_dir / basename).resolve()
-    if not _path_under_base(full_path, desired_dir):
+    basename = f"{short_id}.tfvars.json"
+    full_path = (safe_desired_dir / basename).resolve()
+    if not _path_under_base(full_path, safe_desired_dir):
         raise ValueError("Invalid path")
     payload = {
         "provider_id": pid,

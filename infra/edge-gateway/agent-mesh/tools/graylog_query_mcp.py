@@ -4,6 +4,7 @@ MCP server that interfaces with the Graylog REST API for log search by timeframe
 Credentials from env: GRAYLOG_API_URL, GRAYLOG_USER, GRAYLOG_PASSWORD.
 Run as stdio MCP server: python graylog_query_mcp.py
 """
+
 from __future__ import annotations
 
 import base64
@@ -15,12 +16,15 @@ try:
     from mcp.server.stdio import stdio_server
     from mcp.server import Server
     from mcp.types import Tool, TextContent
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
 
 
-def _graylog_request(method: str, path: str, body: dict | None = None, params: dict | None = None) -> str:
+def _graylog_request(
+    method: str, path: str, body: dict | None = None, params: dict | None = None
+) -> str:
     """Send request to Graylog API. Returns JSON string or error message."""
     base_url = os.environ.get("GRAYLOG_API_URL", "http://localhost:9000").rstrip("/")
     user = os.environ.get("GRAYLOG_USER", "")
@@ -28,12 +32,18 @@ def _graylog_request(method: str, path: str, body: dict | None = None, params: d
     if not user or not password:
         return "Error: GRAYLOG_USER and GRAYLOG_PASSWORD must be set."
     creds = base64.b64encode(f"{user}:{password}".encode()).decode()
-    headers = {"Accept": "application/json", "Content-Type": "application/json", "Authorization": f"Basic {creds}", "X-Requested-By": "edge-agent-mcp"}
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": f"Basic {creds}",
+        "X-Requested-By": "edge-agent-mcp",
+    }
     url = f"{base_url}{path}"
     if params:
         url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
     try:
         import urllib.request
+
         data = json.dumps(body).encode() if body else None
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -42,7 +52,13 @@ def _graylog_request(method: str, path: str, body: dict | None = None, params: d
         return f"Error querying Graylog API: {e}"
 
 
-def graylog_search(query: str = "*", from_seconds: int = 300, size: int = 50, streams: list[str] | None = None, fields: list[str] | None = None) -> str:
+def graylog_search(
+    query: str = "*",
+    from_seconds: int = 300,
+    size: int = 50,
+    streams: list[str] | None = None,
+    fields: list[str] | None = None,
+) -> str:
     """Search Graylog logs. query: search string (e.g. source:1.2.3.4 or event_id:123); from_seconds: last N seconds; optional streams (IDs), fields."""
     timerange = {"type": "relative", "from": from_seconds}
     body = {"query": query or "*", "timerange": timerange, "size": size}
@@ -53,7 +69,12 @@ def graylog_search(query: str = "*", from_seconds: int = 300, size: int = 50, st
     return _graylog_request("POST", "/api/search/messages", body=body)
 
 
-def graylog_search_keyword(query: str = "*", keyword: str = "last 5 minutes", size: int = 50, streams: list[str] | None = None) -> str:
+def graylog_search_keyword(
+    query: str = "*",
+    keyword: str = "last 5 minutes",
+    size: int = 50,
+    streams: list[str] | None = None,
+) -> str:
     """Search Graylog with keyword timerange (e.g. 'last 1 hour', 'yesterday')."""
     timerange = {"type": "keyword", "keyword": keyword}
     body = {"query": query or "*", "timerange": timerange, "size": size}
@@ -62,7 +83,9 @@ def graylog_search_keyword(query: str = "*", keyword: str = "last 5 minutes", si
     return _graylog_request("POST", "/api/search/messages", body=body)
 
 
-def graylog_search_absolute(query: str = "*", from_iso: str = "", to_iso: str = "", size: int = 50) -> str:
+def graylog_search_absolute(
+    query: str = "*", from_iso: str = "", to_iso: str = "", size: int = 50
+) -> str:
     """Search Graylog with absolute timerange (ISO 8601 from_iso and to_iso)."""
     if not from_iso or not to_iso:
         return "Error: from_iso and to_iso (ISO 8601) are required for absolute search."
@@ -83,8 +106,16 @@ if HAS_MCP:
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "default": "*", "description": "Graylog query (e.g. source:192.168.1.1 or event_id:123)"},
-                        "from_seconds": {"type": "integer", "default": 300, "description": "Last N seconds"},
+                        "query": {
+                            "type": "string",
+                            "default": "*",
+                            "description": "Graylog query (e.g. source:192.168.1.1 or event_id:123)",
+                        },
+                        "from_seconds": {
+                            "type": "integer",
+                            "default": 300,
+                            "description": "Last N seconds",
+                        },
                         "size": {"type": "integer", "default": 50},
                         "streams": {"type": "array", "items": {"type": "string"}},
                         "fields": {"type": "array", "items": {"type": "string"}},
@@ -154,6 +185,7 @@ if HAS_MCP:
 
     if __name__ == "__main__":
         import asyncio
+
         asyncio.run(main())
 else:
     if __name__ == "__main__":

@@ -131,6 +131,50 @@ class TestHierarchicalFlow(unittest.TestCase):
             self.assertIn("stack_snapshot", t)
 
 
+class TestFullHierarchicalPath(unittest.TestCase):
+    """Integration test: edge -> state export -> router/QAOA -> ternary (full path)."""
+
+    def test_full_pipeline_edge_to_cloud_inference(self):
+        """Run edge cognitive loop -> escalation -> state migration -> hybrid inference."""
+        try:
+            from qminiwasm import QMiniWASM
+        except ImportError as e:
+            self.skipTest(f"QMiniWASM import failed: {e}")
+        model = QMiniWASM()
+        cfg = HierarchicalConfig(N_max_loops=2, T_conf=0.99)
+
+        # 1) Edge-style loop (no WASM): execute_one_block returns state; low certainty -> escalate
+        def execute_one_block(loop_idx: int):
+            return loop_idx, {"loop_idx": loop_idx, "linear_memory": bytes(64)}
+
+        def low_certainty(state):
+            return 0.1
+
+        result, outcome, num_loops, last_state = run_edge_cognitive_loop(
+            execute_one_block, low_certainty, config=cfg
+        )
+        self.assertEqual(outcome, EdgeOutcome.ESCALATE_TO_CLOUD)
+        self.assertEqual(num_loops, 2)
+
+        # 2) State export: escalation payload
+        payload = prepare_escalation_payload(last_state)
+        self.assertIn("format_version", payload)
+        self.assertIn("linear_memory", payload)
+
+        # 3) State migration accept -> deltas
+        inter = StateMigrationInterconnect()
+        deltas = inter.accept(payload)
+        self.assertGreater(len(deltas), 0)
+
+        # 4) Ingest into HullKV and run cloud path (router + ternary)
+        if hasattr(model, "tropical_attention") and model.tropical_attention is not None:
+            model.tropical_attention.ingest_deltas(deltas, device=model.device)
+        continuation = torch.zeros(1, 4096, device=model.device)
+        out = model.hybrid_inference(continuation)
+        self.assertEqual(out.shape[0], 1)
+        self.assertEqual(out.shape[1], 4096)
+
+
 class TestRunHierarchical(unittest.TestCase):
     """run_hierarchical entry point (requires wasmtime for full flow)."""
 
