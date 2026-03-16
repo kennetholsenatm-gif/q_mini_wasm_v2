@@ -54,7 +54,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.xml
@@ -92,14 +92,14 @@ jobs:
         continue-on-error: true
 
       - name: Upload Bandit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bandit-report
           path: bandit-report.json
         continue-on-error: true
 
       - name: Upload pip-audit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pip-audit-report
           path: pip-audit-report.json
@@ -136,7 +136,7 @@ jobs:
             --format table --output /out/trivy-image-report.txt \
             qminiwasm-backend:${{ github.sha }} || true
       - name: Upload Trivy image report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always() && hashFiles('trivy-image-report.txt') != ''
         with:
           name: trivy-image-report
@@ -146,7 +146,7 @@ jobs:
         run: |
           docker run --rm -v "${{ github.workspace }}:/out" aquasec/trivy image --format cyclonedx --output /out/trivy-image-sbom.json qminiwasm-backend:${{ github.sha }} || true
       - name: Upload Trivy image SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trivy-image-sbom
           path: trivy-image-sbom.json
@@ -168,13 +168,13 @@ jobs:
         run: |
           docker run --rm -v "${{ github.workspace }}:/out" aquasec/trivy image --format spdx-json --output /out/sbom-backend-trivy.spdx.json qminiwasm-backend:${{ github.sha }} || true
       - name: Upload SPDX SBOM artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-spdx
           path: sbom-backend.spdx.json
         continue-on-error: true
       - name: Upload Trivy SPDX SBOM (if present)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: hashFiles('sbom-backend-trivy.spdx.json') != ''
         with:
           name: sbom-spdx-trivy
