@@ -55,9 +55,7 @@ class TestEnhancedApproximateDCPE(unittest.TestCase):
         for i in range(10):
             for j in range(i + 1, 10):
                 original_dist = torch.norm(vectors[i] - vectors[j]).item()
-                encrypted_dist = torch.norm(
-                    encrypted_vectors[i] - encrypted_vectors[j]
-                ).item()
+                encrypted_dist = torch.norm(encrypted_vectors[i] - encrypted_vectors[j]).item()
                 scaled_encrypted = encrypted_dist / scale
                 self.assertAlmostEqual(
                     original_dist,
