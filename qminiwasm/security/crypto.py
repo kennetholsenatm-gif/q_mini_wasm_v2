@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import hashlib
 import secrets
 import ctypes
+from ctypes import c_float
 
 logger = logging.getLogger(__name__)
 

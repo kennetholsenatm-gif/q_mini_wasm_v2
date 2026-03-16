@@ -143,7 +143,7 @@ class TestFullHierarchicalPath(unittest.TestCase):
         model = QMiniWASM()
         cfg = HierarchicalConfig(N_max_loops=2, T_conf=0.99)
 
-        # 1) Edge-style loop (no WASM): execute_one_block returns state; certainty stays low -> escalate
+        # 1) Edge-style loop (no WASM): execute_one_block returns state; low certainty -> escalate
         def execute_one_block(loop_idx: int):
             return loop_idx, {"loop_idx": loop_idx, "linear_memory": bytes(64)}
 

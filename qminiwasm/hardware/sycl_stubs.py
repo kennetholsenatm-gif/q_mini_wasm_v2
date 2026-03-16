@@ -5,7 +5,7 @@ It uses a real SYCL backend when available, falling back to stubs when not.
 """
 
 import logging
-from typing import List, Optional, Type
+from typing import List
 import os
 
 # Try to import the real SYCL implementation

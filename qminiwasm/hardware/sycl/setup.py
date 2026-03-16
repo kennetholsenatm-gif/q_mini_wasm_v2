@@ -1,8 +1,6 @@
 """Setup script for SYCL hardware extension"""
 
 from setuptools import setup, Extension
-import os
-import sys
 
 # Check if dpctl is available
 try:

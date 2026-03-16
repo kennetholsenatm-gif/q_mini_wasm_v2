@@ -9,7 +9,6 @@ from typing import List
 import numpy as np
 import dpctl
 import dpctl.tensor as dpt
-import dpctl.tensor.numpy_usm_shared as usm_np
 
 
 class SYCLHardware:
@@ -152,8 +151,8 @@ class SYCLHardware:
         # In a real implementation, we would use SYCL's USM (Unified Shared Memory)
         # to manage memory across host and device
         try:
-            # Create a USM allocation
-            usm_memory = dpt.usm_alloc(size, dtype=np.float32, device=self.device)
+            # Create a USM allocation (allocation is the side effect; no use of buffer here)
+            _ = dpt.usm_alloc(size, dtype=np.float32, device=self.device)
             self.logger.debug("Created USM allocation for memory paging")
         except Exception as e:
             self.logger.warning(f"Failed to create USM allocation: {e}")
