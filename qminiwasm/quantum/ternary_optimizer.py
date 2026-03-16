@@ -55,14 +55,16 @@ def ternary_optimizer_classical(
     best_loss = target_loss_fn(best_w).detach()
 
     for _ in range(num_iterations):
-        idx = torch.randint(0, n, (1,), device=device).item()
-        current_val = best_w.flatten()[idx].item()
+        idx_tensor = torch.randint(0, n, (1,), device=device)
+        idx = int(idx_tensor.item())
+        current_val = float(best_w.flatten()[idx].item())
         candidates = [-1.0, 0.0, 1.0]
         for v in candidates:
             if v == current_val:
                 continue
             trial = best_w.detach().clone()
-            trial.flatten()[idx] = v
+            flat = trial.flatten()
+            flat[idx] = v
             loss = target_loss_fn(trial).detach()
             if loss < best_loss:
                 best_loss = loss
