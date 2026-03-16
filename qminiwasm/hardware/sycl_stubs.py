@@ -88,22 +88,39 @@ class SYCLHardware:
         return [[sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix]
 
     def pack_ternary_weights(self, weights: List[int]) -> bytes:
-        """Pack ternary weights using C for Metal (CM) strategy.
+        """Pack ternary weights: 5 trits per byte (3^5 = 243 states).
 
-        This method implements ternary weight packing:
-        - Packs 5 trits into 1 byte (99.06% efficiency)
-        - Uses bitwise operations for packing
-        - Prepares data for XMX systolic arrays
+        Encodes -1 -> 0, 0 -> 1, 1 -> 2; packs 5 trits per byte for XMX.
 
         Args:
             weights: List of ternary weights (-1, 0, 1)
 
         Returns:
-            Packed bytes
+            Packed bytes (ceil(len(weights)/5) bytes).
         """
-        # Placeholder implementation - would pack ternary weights
-        self.logger.info("Packing ternary weights using C for Metal strategy")
-        return b""  # Return empty bytes as placeholder
+        out: List[int] = []
+        for i in range(0, len(weights), 5):
+            byte_val = 0
+            for j in range(5):
+                idx = i + j
+                if idx >= len(weights):
+                    break
+                w = weights[idx]
+                trit = 0 if w == -1 else (1 if w == 0 else 2)
+                byte_val += trit * (3**j)
+            out.append(byte_val & 0xFF)
+        self.logger.debug("Packed %d trits into %d bytes", len(weights), len(out))
+        return bytes(out)
+
+    def unpack_ternary_weights(self, packed: bytes) -> List[int]:
+        """Unpack bytes to ternary weights (-1, 0, 1). 5 trits per byte."""
+        weights: List[int] = []
+        for byte_val in packed:
+            for j in range(5):
+                trit = (byte_val // (3**j)) % 3
+                w = -1 if trit == 0 else (0 if trit == 1 else 1)
+                weights.append(w)
+        return weights
 
     def driver_memory_paging(self, memory: List[float], size: int) -> None:
         """Implement driver-level memory paging.

@@ -15,7 +15,7 @@ permissions:
   contents: read
   security-events: read
   issues: write
-  projects: write
+  repository-projects: write
 
 jobs:
   check-alerts-and-create-tickets:

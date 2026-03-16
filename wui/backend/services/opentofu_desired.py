@@ -20,16 +20,25 @@ def _path_under_base(resolved_path: Path, resolved_base: Path) -> bool:
         return False
 
 
+def _get_permitted_base() -> Path:
+    """Return a single permitted base path (resolved) for desired dir. No user input."""
+    base = os.environ.get("LLM_PRACT_ROOT", os.getcwd())
+    return Path(base).resolve()
+
+
 def get_desired_dir() -> Path:
-    """Return the directory for desired tfvars (repo root relative)."""
+    """Return the directory for desired tfvars (under permitted base only)."""
     from ..config import get_settings
 
+    permitted = _get_permitted_base()
+    default_desired = permitted / "infra" / "opentofu" / "desired"
     s = get_settings()
-    if s.opentofu_desired_dir:
-        return Path(s.opentofu_desired_dir)
-    # Default: infra/opentofu/desired relative to repo root (assume cwd or env)
-    base = os.environ.get("LLM_PRACT_ROOT", os.getcwd())
-    return Path(base) / "infra" / "opentofu" / "desired"
+    if not s.opentofu_desired_dir:
+        return default_desired
+    candidate = Path(s.opentofu_desired_dir).resolve()
+    if not _path_under_base(candidate, permitted):
+        raise ValueError("opentofu_desired_dir must be under permitted base")
+    return candidate
 
 
 def write_desired_tfvars(
@@ -47,7 +56,10 @@ def write_desired_tfvars(
     pid = (provider_id or "").strip() if isinstance(provider_id, str) else ""
     if pid not in _ALLOWED_PROVIDER_IDS:
         raise ValueError("provider_id must be one of: " + ", ".join(sorted(_ALLOWED_PROVIDER_IDS)))
+    permitted = _get_permitted_base()
     desired_dir = get_desired_dir().resolve()
+    if not _path_under_base(desired_dir, permitted):
+        raise ValueError("desired dir must be under permitted base")
     desired_dir.mkdir(parents=True, exist_ok=True)
     short_id = uuid.uuid4().hex[:8]
     basename = f"{pid}-{short_id}.tfvars.json"

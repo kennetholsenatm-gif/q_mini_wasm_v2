@@ -8,7 +8,12 @@ include = ["qminiwasm*"]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv", "build", "dist"]
-skips = ["B101"]  # assert_used allowed in test code
+skips = [
+  "B101",   # assert_used allowed in test code
+  "B311",   # random: used for synthetic data/fault injection only, not crypto
+  "B404",   # subprocess import: wasm engine uses it for compiler invocation
+  "B603",   # subprocess without shell: engine runs fixed compiler with controlled args
+]
 
 [tool.black]
 line-length = 100

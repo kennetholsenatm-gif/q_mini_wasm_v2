@@ -8,6 +8,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -76,6 +79,7 @@ jobs:
           fetch-depth: 0
         continue-on-error: true
 
+      # Uses repo-root .gitleaks.toml allowlist for .env.example and example docs
       - name: Gitleaks (secret scan)
         uses: gitleaks/gitleaks-action@v2
         env:
