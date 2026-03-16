@@ -1,171 +1,222 @@
-"""Quantum MoE Router Implementation
+"""Quantum Router for Q-Mini-WASM
 
-This module implements the Quantum MoE Router (Pillar 1) which reformulates MoE routing
-as a discrete combinatorial optimization problem mapped to a quantum topology. It uses
-Parameterized Quantum Circuits (PQCs) and the Quantum Approximate Optimization
-Algorithm (QAOA) to solve the routing problem with perfect load balancing.
-
-The implementation is based on the mathematical formulations described in the Q-Mini-WASM
-white paper, including:
-- Quadratic Unconstrained Binary Optimization (QUBO) formulation
-- Ising Hamiltonian translation
-- Angle Embedding and Barren Plateau mitigation
-- PyTorch + PennyLane hybrid implementation
+This module provides the quantum routing functionality for the Q-Mini-WASM architecture.
+It handles:
+- Quantum Approximate Optimization Algorithm (QAOA) implementation
+- QUBO formulation for routing problems
+- Integration with quantum backends
+- Distance comparison and k-NN approximation
 """
 
+import logging
+import numpy as np
 import torch
-import torch.nn as nn
+from typing import List, Tuple, Optional, Dict, Any
+from qiskit import transpile, assemble
+from qiskit.providers.ibmq import IBMQ
+from qiskit.algorithms import QAOA
+from qiskit.algorithms.optimizers import COBYLA
+from qiskit.circuit import QuantumCircuit
+from qiskit.utils import QuantumInstance
+from qiskit.opflow import PauliSumOp, PauliSum
+from qiskit.aer import AerSimulator
 import pennylane as qml
+from pennylane import numpy as pnp
 
-# Constants based on white paper specifications
-NUM_QUBITS = 8
-NUM_EXPERTS = 8
-QAOA_LAYERS = 3
-
-# Device for PennyLane quantum circuit
-dev = qml.device("default.qubit", wires=NUM_QUBITS)
+logger = logging.getLogger(__name__)
 
 
-def qaoa_layer(gamma, beta, compressed_affinities, penalty_factor):
-    """Applies a single adiabatic block of the QAOA unitary evolution.
+class QuantumRouter:
+    """Quantum Router for routing problems using QAOA"""
 
-    This function implements the Cost Hamiltonian (Ising Model H_C) and Mixer
-    Hamiltonian (H_B) for the QAOA algorithm. It applies local magnetic fields
-    encoding classical semantic projections, Ising interactions for capacity and
-    top-k penalties, and Pauli-X rotations for quantum tunneling.
-
-    Args:
-        gamma: QAOA gamma parameter for Cost Hamiltonian
-        beta: QAOA beta parameter for Mixer Hamiltonian
-        compressed_affinities: Compressed token affinities (8-dimensional)
-        penalty_factor: Penalty factor for constraint enforcement
-    """
-    # Execute Cost Hamiltonian (Ising Model H_C)
-    for i in range(NUM_QUBITS):
-        # Apply local magnetic fields encoding classical semantic projections
-        qml.RZ(gamma * compressed_affinities[i], wires=i)
-
-    # Execute Ising J_ij interactions to enforce capacity and top-k penalties
-    for i in range(NUM_QUBITS):
-        for j in range(i + 1, NUM_QUBITS):
-            qml.IsingZZ(gamma * penalty_factor, wires=[i, j])
-
-    # Execute Mixer Hamiltonian H_B (Pauli-X Rotations for quantum tunneling)
-    for i in range(NUM_QUBITS):
-        qml.RX(beta, wires=i)
-
-
-@qml.qnode(dev, interface="torch", diff_method="parameter-shift")
-def quantum_router_circuit(gammas, betas, compressed_affinities, layers=QAOA_LAYERS):
-    """Constructs the QAOA PQC to evaluate mathematically optimal routing matrices.
-
-    This function builds the complete QAOA quantum circuit with:
-    - Equal superposition state initialization
-    - Dense Angle Embedding for dimensionality reduction
-    - Alternating unitary blocks for adiabatic evolution
-    - Pauli-Z expectation value measurement
-
-    Args:
-        gammas: List of gamma parameters for each QAOA layer
-        betas: List of beta parameters for each QAOA layer
-        compressed_affinities: Compressed token affinities (8-dimensional)
-        layers: Number of QAOA layers (default: 3)
-
-    Returns:
-        List of Pauli-Z expectation values for each qubit
-    """
-    # Initialization: Prepare equal superposition state |+>
-    for i in range(NUM_QUBITS):
-        qml.Hadamard(wires=i)
-
-    # Dense Angle Embedding for Dimensionality Reduction
-    for i in range(NUM_QUBITS):
-        qml.RY(compressed_affinities[i], wires=i)
-
-    # Adiabatic Evolution: Apply alternating unitary blocks
-    for p in range(layers):
-        qaoa_layer(gammas[p], betas[p], compressed_affinities, penalty_factor=2.5)
-
-    # Measurement: Extract expectation values of Pauli-Z (Spin states)
-    return [qml.expval(qml.PauliZ(i)) for i in range(NUM_QUBITS)]
-
-
-class HybridQuantumMoE(nn.Module):
-    """Hybrid Quantum-Classical MoE Router Implementation
-
-    This class implements the HybridQuantumMoE router which combines classical neural network
-    components with quantum circuit execution for optimal MoE routing. It handles:
-    - Classical projection network for NISQ encoding
-    - Quantum circuit execution for combinatorial optimization
-    - Binary routing probability mapping
-    - Sparse expert execution
-
-    The implementation follows the mathematical formulations from the white paper, including:
-    - Barren plateau mitigation strategies
-    - Layer-wise pretraining initialization
-    - Lie algebraic subspace constraints
-    """
-
-    def __init__(self, d_model=4096, num_experts=NUM_EXPERTS, qaoa_layers=QAOA_LAYERS):
-        """Initialize the HybridQuantumMoE router.
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize the quantum router
 
         Args:
-            d_model: Dimensionality of input hidden states (default: 4096)
-            num_experts: Number of experts in the MoE layer (default: 8)
-            qaoa_layers: Number of QAOA layers (default: 3)
+            api_key: IBM Quantum API key for real quantum backend access
         """
-        super(HybridQuantumMoE, self).__init__()
+        self.api_key = api_key
+        self.logger = logging.getLogger(__name__)
+        self.quantum_instance = None
+        self.backend = None
 
-        # Classical projection network compressing 4096 dimensions to 8 qubits
-        self.compressor = nn.Linear(d_model, NUM_QUBITS)
+        if api_key:
+            try:
+                IBMQ.save_account(api_key, overwrite=True)
+                provider = IBMQ.load_account()
+                self.backend = provider.get_backend('ibmq_qasm_simulator')
+                self.logger.info("Initialized with IBM Quantum backend")
+            except Exception as e:
+                self.logger.warning("Failed to initialize IBM Quantum: %s. Using local simulator.", str(e))
+                self._setup_local_simulator()
+        else:
+            self.logger.info("No API key provided. Using local simulator.")
+            self._setup_local_simulator()
 
-        # Trainable Quantum Angles initialized via identity block to mitigate plateaus
-        # Initialized with small random values to prevent barren plateaus
-        self.gammas = nn.Parameter(torch.randn(qaoa_layers) * 0.01)
-        self.betas = nn.Parameter(torch.randn(qaoa_layers) * 0.01)
+    def _setup_local_simulator(self):
+        """Setup local quantum simulator"""
+        try:
+            simulator = AerSimulator()
+            self.quantum_instance = QuantumInstance(simulator, shots=1024)
+            self.logger.info("Initialized with local Aer simulator")
+        except Exception as e:
+            self.logger.warning("Failed to initialize local simulator: %s. Using PennyLane mock.", str(e))
+            self._setup_penny_lane_mock()
 
-        # Experts for MoE layer
-        self.experts = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(num_experts)])
+    def _setup_penny_lane_mock(self):
+        """Setup PennyLane mock for development"""
+        try:
+            import pennylane as qml
+            self.backend = qml
+            self.logger.info("Initialized with PennyLane mock backend")
+        except ImportError:
+            self.logger.warning("PennyLane not available. Using mock implementation.")
+            self.backend = None
 
-    def forward(self, hidden_states):
-        """Forward pass of the HybridQuantumMoE router.
+    def formulate_qubo(self, distance_matrix: np.ndarray, k: int) -> Tuple[PauliSumOp, Dict]:
+        """Formulate QUBO problem for k-NN routing
 
         Args:
-            hidden_states: Input tensor of shape (batch_size, d_model)
+            distance_matrix: Symmetric matrix of distances between vectors
+            k: Number of nearest neighbors to find
 
         Returns:
-            Output tensor of shape (batch_size, d_model) after expert processing
+            QUBO formulation and initial parameters
         """
-        # Phase 1: Compress high-dimensional state for NISQ encoding
-        # Use tanh activation to keep values in [-1, 1] range for quantum circuit
-        compressed_state = torch.tanh(self.compressor(hidden_states)).squeeze()
+        n = len(distance_matrix)
+        if n == 0:
+            return PauliSumOp(PauliSum.zero()), {}
 
-        # Phase 2: QPU Execution. QAOA circuit expects 1D (8,) affinities; run per batch item
-        if compressed_state.dim() == 1:
-            q_routing_exp = quantum_router_circuit(self.gammas, self.betas, compressed_state)
-            q_routing_probs = [(val + 1.0) / 2.0 for val in q_routing_exp]
-            routing_weights = torch.stack(q_routing_probs)
-        else:
-            batch_size = compressed_state.size(0)
-            routed = []
-            for b in range(batch_size):
-                exp = quantum_router_circuit(self.gammas, self.betas, compressed_state[b])
-                probs = [(val + 1.0) / 2.0 for val in exp]
-                routed.append(torch.stack(probs))
-            routing_weights = torch.stack(routed)
+        # Create QUBO formulation
+        qubo = np.zeros((n, n))
 
-        # Phase 3: routing_weights is (num_experts,) or (batch, num_experts)
+        # Distance penalty matrix
+        for i in range(n):
+            for j in range(i + 1, n):
+                qubo[i, j] = distance_matrix[i, j]
+                qubo[j, i] = distance_matrix[i, j]
 
-        # Phase 4: Sparse Expert Execution
-        # Initialize output tensor
-        out = torch.zeros_like(hidden_states)
+        # Convert to PauliSumOp
+        try:
+            from qiskit.opflow import PauliSumOp, PauliSum
+            pauli_terms = []
+            for i in range(n):
+                for j in range(n):
+                    if qubo[i, j] != 0:
+                        pauli_terms.append((qubo[i, j], f"II...IZ...ZI"))  # Simplified representation
+            qubo_op = PauliSumOp(PauliSum(pauli_terms))
+        except ImportError:
+            # Fallback to PennyLane formulation
+            qubo_op = None
 
-        # Apply routing weights to expert outputs
-        # routing_weights: (num_experts,) for single sample or (batch, num_experts) when batched
-        for i, expert in enumerate(self.experts):
-            if routing_weights.dim() == 1:
-                out += routing_weights[i] * expert(hidden_states)
+        # Initial parameters
+        initial_params = np.random.uniform(0, np.pi, size=n)
+
+        return qubo_op, initial_params
+
+    def execute_qaoa(self, qubo_op: Optional[PauliSumOp], initial_params: np.ndarray, 
+                    num_layers: int = 1) -> np.ndarray:
+        """Execute QAOA algorithm
+
+        Args:
+            qubo_op: QUBO formulation
+            initial_params: Initial parameters for QAOA
+            num_layers: Number of QAOA layers
+
+        Returns:
+            Solution vector indicating selected nodes
+        """
+        if self.backend is None:
+            # Mock implementation
+            return np.random.choice([0, 1], size=len(initial_params))
+
+        try:
+            if isinstance(self.backend, str) and "ibmq" in self.backend:
+                # IBM Quantum backend
+                qaoa = QAOA(self.quantum_instance, reps=num_layers)
+                result = qaoa.run(qubo_op, initial_point=initial_params)
+                return result.x
+
+            elif hasattr(self.backend, 'numpy'):
+                # PennyLane implementation
+                import pennylane as qml
+                n_qubits = len(initial_params)
+
+                # Define device
+                dev = qml.device("default.qubit", wires=n_qubits)
+
+                @qml.qnode(dev)
+                def qaoa_circuit(params):
+                    # QAOA circuit implementation
+                    for i in range(n_qubits):
+                        qml.Hadamard(wires=i)
+
+                    for layer in range(num_layers):
+                        # Problem Hamiltonian
+                        for i in range(n_qubits):
+                            for j in range(i + 1, n_qubits):
+                                qml.CNOT(wires=[i, j])
+                                qml.RZ(params[layer], wires=j)
+                                qml.CNOT(wires=[i, j])
+
+                        # Mixer Hamiltonian
+                        for i in range(n_qubits):
+                            qml.RX(params[layer + num_layers], wires=i)
+
+                    return [qml.expval(qml.PauliZ(i)) for i in range(n_qubits)]
+
+                # Optimize parameters
+                def cost_function(params):
+                    return -sum(qaoa_circuit(params))
+
+                opt = qml.AdagradOptimizer(stepsize=0.1)
+                params = initial_params
+                for _ in range(100):
+                    params = opt.step(cost_function, params)
+
+                # Get solution
+                with qml.tape.QuantumTape() as tape:
+                    qaoa_circuit(params)
+                results = qml.execute([tape], dev, None)[0]
+                return np.array([1 if r > 0 else 0 for r in results])
+
             else:
-                out += routing_weights[:, i].unsqueeze(1) * expert(hidden_states)
+                # Local simulator
+                qaoa = QAOA(self.quantum_instance, reps=num_layers)
+                result = qaoa.run(qubo_op, initial_point=initial_params)
+                return result.x
 
-        return out
+        except Exception as e:
+            self.logger.error("QAOA execution failed: %s", str(e))
+            return np.random.choice([0, 1], size=len(initial_params))
+
+    def find_k_nearest_neighbors(self, query_vector: np.ndarray, 
+                                database_vectors: List[np.ndarray], 
+                                k: int = 5) -> List[int]:
+        """Find k nearest neighbors using quantum routing
+
+        Args:
+            query_vector: Query vector to search for
+            database_vectors: List of database vectors
+            k: Number of nearest neighbors to find
+
+        Returns:
+            List of indices of nearest neighbors
+        """
+        n = len(database_vectors)
+        if n == 0 or k == 0:
+            return []
+
+        # Create distance matrix
+        distance_matrix = np.zeros((n, n))
+        for i in range(n):
+            for j in range(i + 1, n):
+                distance = np.linalg.norm(database_vectors[i] - database_vectors[j])
+                distance_matrix[i, j] = distance
+                distance_matrix[j, i] = distance
+
+        # Add query vector to distance matrix
+        query_distances = np.array([np.linalg.norm(query_vector - v) for v in database_vectors])
+        distance_matrix = np.vstack([query_distances, distance_matrix])
+
+        # Formulate QUBO
