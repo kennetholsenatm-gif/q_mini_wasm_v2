@@ -30,6 +30,38 @@ docker run --rm -p 8000:8000 qminiwasm-wui:0.1.0
 
 The container runs as **non-root** (uid 1000).
 
+## WUI backend → Data Stack connection
+
+When the WUI backend (this container or the standalone backend image) must connect to the **data stack** (PostgreSQL, RabbitMQ) running in Docker or on another host, set these environment variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `POSTGRES_HOST` | Data stack PostgreSQL host | `host.docker.internal`, or hostname of the data-stack host |
+| `POSTGRES_PORT` | PostgreSQL port | `5432` |
+| `POSTGRES_USER` | PostgreSQL user | `qminiwasm` (match data-stack `.env`) |
+| `POSTGRES_PASSWORD` | PostgreSQL password | (from data-stack `.env`) |
+| `POSTGRES_DB` | Database name | `qminiwasm_db` |
+| `DATABASE_URL` | Alternative: full URL | `postgresql://user:password@host:5432/qminiwasm_db` |
+| `RABBITMQ_HOST` | RabbitMQ host | `host.docker.internal` or data-stack host |
+| `RABBITMQ_PORT` | AMQP port | `5672` |
+| `RABBITMQ_DEFAULT_USER` | RabbitMQ user | `qminiwasm` |
+| `RABBITMQ_DEFAULT_PASS` | RabbitMQ password | (from data-stack `.env`) |
+| `BROKER_URL` | Alternative: full URL | `amqp://user:password@host:5672/` |
+
+Example with Docker and data stack on same host:
+
+```bash
+docker run -d -p 8000:8000 \
+  -e POSTGRES_HOST=host.docker.internal -e POSTGRES_PORT=5432 \
+  -e POSTGRES_USER=qminiwasm -e POSTGRES_PASSWORD=your_postgres_password \
+  -e POSTGRES_DB=qminiwasm_db \
+  -e RABBITMQ_HOST=host.docker.internal -e RABBITMQ_PORT=5672 \
+  -e RABBITMQ_DEFAULT_USER=qminiwasm -e RABBITMQ_DEFAULT_PASS=your_rabbitmq_password \
+  --name wui-backend qminiwasm-wui:0.1.0
+```
+
+See [docs/Greenfield-Deployment.md](../../docs/Greenfield-Deployment.md) Step 4 for the full deployment order.
+
 ## DockerOS standard (AlmaLinux, Foreman, Smart Proxy)
 
 - **Host OS:** AlmaLinux 9 (or 10 when available) for nodes running Docker/Kubernetes.

@@ -10,7 +10,10 @@ It handles:
 import logging
 from typing import Any, Dict, List, Optional, Protocol
 
-from qiskit import IBMQ
+try:
+    from qiskit.providers.ibmq import IBMQ
+except ImportError:
+    IBMQ = None  # type: ignore[misc, assignment]
 
 
 class QuantumBackend(Protocol):
@@ -65,12 +68,14 @@ class QuantumBackendRegistry:
 
         try:
             if backend_type == "ibmq":
-                if api_key:
+                if api_key and IBMQ is not None:
                     IBMQ.save_account(api_key, overwrite=True)
                     provider = IBMQ.load_account()
                     backend_info["provider"] = provider
                     backend_info["initialized"] = True
                     self.logger.info("Initialized IBM Quantum backend: %s", name)
+                elif api_key:
+                    self.logger.warning("IBMQ not available; install qiskit-ibmq-provider for IBM Quantum backend")
                 else:
                     self.logger.warning("No API key provided for IBM Quantum backend")
 
@@ -183,7 +188,10 @@ class _DefaultQuantumBackend:
                 return out
             # numpy or other: return slice
             return compressed_state[:, : self.num_qubits]
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                "run_forward fallback (compressed_state slice): %s", e, exc_info=False
+            )
             return compressed_state[:, : self.num_qubits]
 
 

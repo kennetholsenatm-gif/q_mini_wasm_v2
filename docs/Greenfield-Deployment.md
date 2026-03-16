@@ -2,6 +2,8 @@
 
 Step-by-step, zero-to-hero guide for deploying Q-Mini-WASM on a **completely clean, air-gapped ruggedized node**. Assumes no pre-existing containers, databases, or identity providers. Follow the steps in order; each step assumes the previous one is complete. The result is a node (and optional central stacks) capable of running the **event-driven SASE edge product**—edge agents connecting over **DMVPN** to the central Solace mesh—with the host, security, data, and application stacks in place to support it.
 
+**Automation:** You can run the security and data stacks in sequence using [scripts/greenfield-deploy.sh](../scripts/greenfield-deploy.sh) (Linux/macOS) or [scripts/greenfield-deploy.ps1](../scripts/greenfield-deploy.ps1) (Windows). Use `--yes` to skip prompts, `--packer-validate` to validate Packer (no build), and `--skip-wui` to omit WUI instructions. The script checks for `.env` in each stack before starting.
+
 ---
 
 ## Prerequisites (one-time)
@@ -65,7 +67,7 @@ On the node (or a dedicated host with Docker), run the Zero Trust security stack
 
 4. **Keycloak:** The `qminiwasm` realm is auto-imported from `keycloak-init/qminiwasm-realm.json`. Alternatively, use **OpenTofu** to manage the realm, groups, and test users: see [infra/opentofu/keycloak-provisioning/README.md](../infra/opentofu/keycloak-provisioning/README.md). Configure the Teleport OIDC client (redirect URIs, client secret) and user registration; see [containers/security-stack/keycloak-init/README.md](../containers/security-stack/keycloak-init/README.md). For developer login via Teleport (SSH/Kubernetes), use [scripts/teleport-login.ps1](../scripts/teleport-login.ps1) or [scripts/teleport-login.sh](../scripts/teleport-login.sh) after Teleport is deployed (see [wiki/Development](https://github.com/kennetholsenatm-gif/LLM_Pract/wiki/Development)).
 
-5. **Production:** Replace Vault dev mode with a proper seal (Transit, cloud KMS); do not use the dev root token in production.
+5. **Production:** Replace Vault dev mode with a proper seal (Transit, cloud KMS); do not use the dev root token in production. See [docs/Vault-Production.md](Vault-Production.md) for seal configuration, unseal flow, token/AppRole policy, and rotating secrets.
 
 ---
 
@@ -100,7 +102,10 @@ Run the Q-Mini-WASM Web UI (FastAPI backend + React frontend). You can run it wi
    docker build -f wui/backend/Dockerfile -t qminiwasm-backend:latest .
    docker run -d -p 8000:8000 --name wui-backend qminiwasm-backend:latest
    ```
-   If the WUI needs to reach the data stack or security stack, run on the same host or use the appropriate network and env vars (e.g. `POSTGRES_HOST`, `RABBITMQ_HOST`).
+   **WUI → Data Stack connection:** When the WUI backend runs in Docker and must reach the data stack (PostgreSQL, RabbitMQ) on the same host or another host, set these environment variables (e.g. in `docker run -e` or in your compose/env):
+   - **PostgreSQL:** `POSTGRES_HOST` (e.g. `host.docker.internal` or the data-stack host), `POSTGRES_PORT` (default `5432`), `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` (default `qminiwasm_db`). Alternatively a single `DATABASE_URL=postgresql://user:password@host:5432/qminiwasm_db`.
+   - **RabbitMQ:** `RABBITMQ_HOST`, `RABBITMQ_PORT` (default `5672`), `RABBITMQ_DEFAULT_USER`, `RABBITMQ_DEFAULT_PASS`. Alternatively `BROKER_URL=amqp://user:password@host:5672/`.
+   See [containers/wui/README.md](../containers/wui/README.md) for a full list and defaults.
 
 2. **Frontend:** Build and serve the React app (e.g. `wui/frontend/`) and point it to the backend API URL. See [containers/wui/README.md](../containers/wui/README.md) for full container build options.
 
@@ -143,6 +148,7 @@ After the main steps, you can add network source-of-truth and SDN:
 ## Air-gap and ruggedized notes
 
 - **Air-gap:** Pre-download all container images and the Packer ISO on a connected machine; copy them and the repo (or tarball) to the target node. Use `docker load` and local file paths for Packer (`iso_url` = local path). No default passwords; set all secrets via `.env` or environment.
+  - **Export/import scripts:** On a connected host, run [scripts/airgap-export.sh](../scripts/airgap-export.sh) to save required images to tarballs and list compose/env files to copy. On the target (air-gapped) node, copy the tarballs and repo (or `containers/` + `.env` files), then run [scripts/airgap-import.sh](../scripts/airgap-import.sh) to load images. See the script comments for the exact image list and paths.
 - **Ruggedized:** The Packer-built image is minimal and hardened (chrony, firewalld, non-root SSH). Run containers with resource limits (already set in the provided `docker-compose.yml` files) and restrict exposed ports to what is necessary.
 
 ---

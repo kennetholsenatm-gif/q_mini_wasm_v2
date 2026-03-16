@@ -37,7 +37,7 @@ flowchart LR
 
 - Docker and Docker Compose.
 - For Envoy TLS: server certificate and key in `proxy/certs/` (or path set in `TLS_CERT_PATH`).
-- For production: replace Vault dev mode with a proper seal (Transit, cloud KMS); do not commit secrets.
+- For production: replace Vault dev mode with a proper seal (Transit, cloud KMS); do not commit secrets. See [docs/Vault-Production.md](../../docs/Vault-Production.md) for seal configuration, unseal flow, and token/AppRole policy.
 
 ## Quick start
 
@@ -95,7 +95,7 @@ flowchart LR
 ## Security
 
 - No default passwords in repo; set all secrets in `.env` (in `.gitignore`).
-- Vault dev mode is for local use only; production must use a real seal and secure token storage.
+- Vault dev mode is for local use only; production must use a real seal and secure token storage. See [docs/Vault-Production.md](../../docs/Vault-Production.md) for the production runbook.
 - Restrict exposed ports; use Envoy with TLS in production and avoid exposing Keycloak/Vault directly.
 - Rotate Keycloak admin password and Vault root token in production.
 

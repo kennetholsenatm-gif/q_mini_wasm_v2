@@ -11,7 +11,12 @@ It handles:
 import logging
 import numpy as np
 from typing import List, Optional, Tuple
-from qiskit.providers.ibmq import IBMQ
+
+try:
+    from qiskit.providers.ibmq import IBMQ
+except ImportError:
+    IBMQ = None  # type: ignore[misc, assignment]
+
 from qiskit.algorithms import QAOA
 from qiskit.utils import QuantumInstance
 from qiskit.opflow import PauliSumOp, PauliSum
@@ -34,7 +39,7 @@ class QuantumRouter:
         self.quantum_instance = None
         self.backend = None
 
-        if api_key:
+        if api_key and IBMQ is not None:
             try:
                 IBMQ.save_account(api_key, overwrite=True)
                 provider = IBMQ.load_account()
