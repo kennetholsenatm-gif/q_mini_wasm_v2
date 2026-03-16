@@ -8,8 +8,21 @@ It handles:
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional, Protocol
+
 from qiskit import IBMQ
+
+
+class QuantumBackend(Protocol):
+    """Protocol for interconnect backends that support run_forward."""
+
+    def run_forward(
+        self,
+        compressed_state: Any,
+        gammas: Any,
+        betas: Any,
+    ) -> Any:
+        ...
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +152,53 @@ class QuantumBackendRegistry:
 
 # Global backend registry instance
 backend_registry = QuantumBackendRegistry()
+
+
+class _DefaultQuantumBackend:
+    """Minimal backend for interconnect: run_forward returns routing weights (zeros stub)."""
+
+    def __init__(
+        self,
+        backend_id: str,
+        num_qubits: int = 4,
+        qaoa_layers: int = 3,
+        diff_method: str = "parameter-shift",
+    ):
+        self.backend_id = backend_id
+        self.num_qubits = num_qubits
+        self.qaoa_layers = qaoa_layers
+        self.diff_method = diff_method
+
+    def run_forward(self, compressed_state: Any, gammas: Any, betas: Any) -> Any:
+        try:
+            import torch
+            if isinstance(compressed_state, torch.Tensor):
+                out = torch.zeros(
+                    compressed_state.shape[0],
+                    self.num_qubits,
+                    device=compressed_state.device,
+                    dtype=compressed_state.dtype,
+                )
+                return out
+            # numpy or other: return slice
+            return compressed_state[:, : self.num_qubits]
+        except Exception:
+            return compressed_state[:, : self.num_qubits]
+
+
+def get_backend(
+    backend_id: str,
+    num_qubits: int = 4,
+    qaoa_layers: int = 3,
+    diff_method: str = "parameter-shift",
+) -> QuantumBackend:
+    """Factory for interconnect: returns a backend that supports run_forward."""
+    return _DefaultQuantumBackend(
+        backend_id=backend_id,
+        num_qubits=num_qubits,
+        qaoa_layers=qaoa_layers,
+        diff_method=diff_method,
+    )
 
 # Predefined backends
 backend_registry.register_backend("ibmq_qasm_simulator", "ibmq")

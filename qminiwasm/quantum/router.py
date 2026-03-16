@@ -72,7 +72,9 @@ class QuantumRouter:
             self.logger.warning("PennyLane not available. Using mock implementation.")
             self.backend = None
 
-    def formulate_qubo(self, distance_matrix: np.ndarray, k: int) -> Tuple[PauliSumOp, Dict]:
+    def formulate_qubo(
+        self, distance_matrix: np.ndarray, k: int
+    ) -> Tuple[Optional[PauliSumOp], np.ndarray]:
         """Formulate QUBO problem for k-NN routing
 
         Args:
@@ -84,7 +86,7 @@ class QuantumRouter:
         """
         n = len(distance_matrix)
         if n == 0:
-            return PauliSumOp(PauliSum.zero()), {}
+            return PauliSumOp(PauliSum.zero()), np.array([])
 
         # Create QUBO formulation
         qubo = np.zeros((n, n))
@@ -223,4 +225,11 @@ class QuantumRouter:
         query_distances = np.array([np.linalg.norm(query_vector - v) for v in database_vectors])
         distance_matrix = np.vstack([query_distances, distance_matrix])
 
-        # Formulate QUBO
+        # Formulate QUBO and return k nearest indices (simplified: first k by distance)
+        qubo_op, _ = self.formulate_qubo(distance_matrix, k)
+        if qubo_op is not None:
+            result = self.execute_qaoa(qubo_op, np.zeros(n), num_layers=1)
+            indices = np.argsort(result)[:k]
+            return indices.tolist()
+        # Fallback: return first k indices by query distance
+        return np.argsort(query_distances)[:k].tolist()

@@ -12,7 +12,7 @@ Key Components:
 - Intel Quantum: Optional Intel Quantum SDK / Intel QS integration (intel_backend)
 """
 
-from .router import HybridQuantumMoE
+from .router import QuantumRouter as HybridQuantumMoE
 from .backend_registry import get_backend
 from . import intel_backend
 

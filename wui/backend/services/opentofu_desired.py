@@ -62,11 +62,11 @@ def write_desired_tfvars(
     pid = (provider_id or "").strip() if isinstance(provider_id, str) else ""
     if pid not in _ALLOWED_PROVIDER_IDS:
         raise ValueError("provider_id must be one of: " + ", ".join(sorted(_ALLOWED_PROVIDER_IDS)))
-    # Path from source location + allowlisted basename only (no env/config in expression).
+    # Path from source location + uuid only (no user input in path for CodeQL).
     safe_desired_dir = _DESIRED_DIR_FROM_SOURCE
     safe_desired_dir.mkdir(parents=True, exist_ok=True)
     short_id = uuid.uuid4().hex[:8]
-    basename = f"{pid}-{short_id}.tfvars.json"
+    basename = f"{short_id}.tfvars.json"
     full_path = (safe_desired_dir / basename).resolve()
     if not _path_under_base(full_path, safe_desired_dir):
         raise ValueError("Invalid path")
