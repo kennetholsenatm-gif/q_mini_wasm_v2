@@ -57,14 +57,16 @@ def write_desired_tfvars(
     if pid not in _ALLOWED_PROVIDER_IDS:
         raise ValueError("provider_id must be one of: " + ", ".join(sorted(_ALLOWED_PROVIDER_IDS)))
     permitted = _get_permitted_base()
-    desired_dir = get_desired_dir().resolve()
-    if not _path_under_base(desired_dir, permitted):
+    # Build write path only from permitted base + fixed segments + allowlisted basename
+    # so CodeQL does not treat the path as uncontrolled (no config-derived path in expression).
+    safe_desired_dir = (permitted / "infra" / "opentofu" / "desired").resolve()
+    if not _path_under_base(safe_desired_dir, permitted):
         raise ValueError("desired dir must be under permitted base")
-    desired_dir.mkdir(parents=True, exist_ok=True)
+    safe_desired_dir.mkdir(parents=True, exist_ok=True)
     short_id = uuid.uuid4().hex[:8]
     basename = f"{pid}-{short_id}.tfvars.json"
-    full_path = (desired_dir / basename).resolve()
-    if not _path_under_base(full_path, desired_dir):
+    full_path = (safe_desired_dir / basename).resolve()
+    if not _path_under_base(full_path, safe_desired_dir):
         raise ValueError("Invalid path")
     payload = {
         "provider_id": pid,
