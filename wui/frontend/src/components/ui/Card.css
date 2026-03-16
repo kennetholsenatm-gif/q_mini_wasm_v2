@@ -1,0 +1,283 @@
+/* 
+ * Q-Mini-WASM Card Component Styles
+ * Based on UX/UI Design Style Guide
+ */
+
+/* ========================================
+   CARD BASE STYLES
+   ======================================== */
+
+.card {
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  
+  /* Background */
+  background-color: var(--color-neutral-0);
+  
+  /* Transitions */
+  transition: all var(--duration-fast) var(--easing-in-out);
+  
+  /* Accessibility */
+  outline: none;
+}
+
+/* ========================================
+   CARD VARIANTS
+   ======================================== */
+
+/* Default Card */
+.card-default {
+  background-color: var(--color-neutral-0);
+  border: var(--border-width-1) solid var(--border-color-default);
+}
+
+/* Elevated Card */
+.card-elevated {
+  background-color: var(--color-neutral-0);
+  border: var(--border-width-1) solid var(--border-color-default);
+  box-shadow: var(--shadow-md);
+}
+
+.card-elevated:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+/* Outlined Card */
+.card-outlined {
+  background-color: var(--color-neutral-0);
+  border: var(--border-width-2) solid var(--color-primary-200);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-outlined:hover {
+  border-color: var(--color-primary-300);
+  box-shadow: var(--shadow-md);
+}
+
+/* ========================================
+   CARD PADDING
+   ======================================== */
+
+.card-padding-none {
+  padding: 0;
+}
+
+.card-padding-sm {
+  padding: var(--spacing-sm);
+}
+
+.card-padding-md {
+  padding: var(--spacing-md);
+}
+
+.card-padding-lg {
+  padding: var(--spacing-lg);
+}
+
+/* ========================================
+   CARD ROUNDED CORNERS
+   ======================================== */
+
+.card-rounded-sm {
+  border-radius: var(--border-radius-sm);
+}
+
+.card-rounded-md {
+  border-radius: var(--border-radius-md);
+}
+
+.card-rounded-lg {
+  border-radius: var(--border-radius-lg);
+}
+
+.card-rounded-full {
+  border-radius: var(--border-radius-full);
+}
+
+/* ========================================
+   CARD SHADOWS
+   ======================================== */
+
+.card-shadow-none {
+  box-shadow: none;
+}
+
+.card-shadow-sm {
+  box-shadow: var(--shadow-sm);
+}
+
+.card-shadow-md {
+  box-shadow: var(--shadow-md);
+}
+
+.card-shadow-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+/* ========================================
+   CARD HEADER
+   ======================================== */
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.card-header-border {
+  border-bottom: var(--border-width-1) solid var(--border-color-default);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+}
+
+/* ========================================
+   CARD CONTENT
+   ======================================== */
+
+.card-content {
+  flex: 1 1 auto;
+}
+
+/* ========================================
+   CARD FOOTER
+   ======================================== */
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+}
+
+.card-footer-border {
+  border-top: var(--border-width-1) solid var(--border-color-default);
+}
+
+/* ========================================
+   CARD FOCUS STYLES
+   ======================================== */
+
+.card:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+/* ========================================
+   DARK MODE SUPPORT
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+  .card-default {
+    background-color: var(--color-neutral-900);
+    border-color: var(--border-color-default);
+  }
+  
+  .card-elevated {
+    background-color: var(--color-neutral-900);
+    border-color: var(--border-color-default);
+  }
+  
+  .card-outlined {
+    background-color: var(--color-neutral-900);
+    border-color: var(--color-primary-800);
+  }
+  
+  .card-header-border {
+    border-bottom-color: var(--border-color-default);
+  }
+  
+  .card-footer-border {
+    border-top-color: var(--border-color-default);
+  }
+}
+
+/* ========================================
+   HIGH CONTRAST SUPPORT
+   ======================================== */
+
+@media (prefers-contrast: high) {
+  .card {
+    border-width: var(--border-width-2);
+  }
+  
+  .card-outlined {
+    border-width: var(--border-width-4);
+  }
+  
+  .card-header-border,
+  .card-footer-border {
+    border-width: var(--border-width-2);
+  }
+}
+
+/* ========================================
+   REDUCED MOTION SUPPORT
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+  
+  .card-elevated:hover {
+    transform: none;
+  }
+}
+
+/* ========================================
+   RESPONSIVE ADJUSTMENTS
+   ======================================== */
+
+@media (max-width: 768px) {
+  .card-padding-sm {
+    padding: var(--spacing-xs);
+  }
+  
+  .card-padding-md {
+    padding: var(--spacing-sm);
+  }
+  
+  .card-padding-lg {
+    padding: var(--spacing-md);
+  }
+  
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+  
+  .card-footer {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* ========================================
+   PRINT STYLES
+   ======================================== */
+
+@media print {
+  .card {
+    background-color: #ffffff;
+    border: var(--border-width-1) solid #000000;
+    box-shadow: none;
+  }
+  
+  .card-header-border {
+    border-bottom: var(--border-width-1) solid #000000;
+  }
+  
+  .card-footer-border {
+    border-top: var(--border-width-1) solid #000000;
+  }
+}
