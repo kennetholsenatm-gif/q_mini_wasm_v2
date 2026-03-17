@@ -74,12 +74,19 @@ def run_edge_cognitive_loop(
 
 
 def _should_attempt_memory_reconstruction(state: Dict) -> bool:
-    """Check if memory reconstruction should be attempted"""
-    # Look for memory-related patterns in state
-    memory_indicators = ["memory", "state", "context", "execution_state", "stack"]
+    """Check if memory reconstruction should be attempted.
 
-    state_str = str(state).lower()
-    return any(indicator in state_str for indicator in memory_indicators)
+    Only attempt when state has Vec2Text-style execution_state with 'stack' and
+    'memory' (e.g. from a prior Vec2Text schema). Avoids triggering on minimal
+    edge state (e.g. linear_memory) or WASM engine state (hidden_state/target_state)
+    so escalation path can be exercised when intended.
+    """
+    if not isinstance(state, dict):
+        return False
+    es = state.get("execution_state")
+    if not isinstance(es, dict):
+        return False
+    return "stack" in es and "memory" in es
 
 
 def _attempt_memory_reconstruction(state: Dict) -> Optional[str]:
