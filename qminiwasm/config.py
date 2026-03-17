@@ -30,6 +30,40 @@ class HierarchicalConfig:
     top_k_experts: Optional[int] = None
     expert_capacity: Optional[int] = None
 
+    # Failure Taxonomy and Fallback Mechanisms
+    max_convex_hull_size: int = 1000
+    """Maximum size of convex hull cache for geometric state recovery."""
+    qpu_fidelity_threshold: float = 0.90
+    """Threshold for QPU fidelity before degradation mode activation."""
+
+    # Mathematical Bridge (Tropical Geometry)
+    d_model: int = 4096
+    """Model dimension for tropical attention operations."""
+    num_attention_heads: int = 8
+    """Number of attention heads for tropical attention."""
+
+    # Hardware Deployment (Intel ARC)
+    qaoa_circuit_depth: int = 10
+    """Circuit depth for QAOA optimization."""
+    qaoa_parameter_count: int = 20
+    """Number of parameters for QAOA optimization."""
+    use_battlemage: bool = False
+    """Whether to use Intel ARC Battlemage (Xe2-HPG) instead of Alchemist."""
+
+    # Security and Privacy Enhancements
+    dcpe_scale_factor: float = 1.0
+    """Scale factor for DCPE encryption."""
+    dcpe_perturbation_variance: float = 0.1
+    """Perturbation variance for DCPE encryption."""
+    vec2text_diffusion_steps: int = 50
+    """Number of diffusion steps for Vec2Text inversion."""
+    vec2text_masking_probability: float = 0.1
+    """Masking probability for Vec2Text inversion."""
+    max_memory_bank_size: int = 1000
+    """Maximum size of memory bank for Vec2Text-RAG."""
+    enable_quantum_routing: bool = True
+    """Whether to enable quantum-accelerated routing."""
+
     @classmethod
     def from_env(cls) -> "HierarchicalConfig":
         """Build config from environment variables with defaults."""
