@@ -38,7 +38,7 @@ This architecture relies on a strict zero-trust boundary between resource-constr
 
 **Security & Compliance Posture:**
 * **Zero-Trust Boundary:** Absolute cryptographic isolation between edge and cloud. 
-* **Military-Grade Encryption:** Uses Approximate Distance-Comparison-Preserving Encryption (DCPE) and dynamic key rotation to defend against chosen-plaintext attacks.
+* **Encryption:** Uses Approximate Distance-Comparison-Preserving Encryption (DCPE) and dynamic key rotation to defend against chosen-plaintext attacks.
 * **SPARSE Noise Injection:** Defends against manifold alignment attacks through dimension-selective noise.
 * **Compliance Ready:** Designed specifically to map to **STIG** compliance and **CMMC 2.0** adherence for AI systems handling Controlled Unclassified Information (CUI).
 
@@ -67,7 +67,3 @@ For full mathematical models, rigorous algorithmic compensation for encryption a
 * **Installation & Deployment:** See our [Getting Started Guide](wiki/Deployment-Guide.md) for setting up the local Wasm Edge Agent and testing the Quantum Router simulator.
 * **Contributions:** We welcome contributions from autonomous systems researchers, security architects, and quantum computing engineers. See `CONTRIBUTING.md`.
 * **Support & Licensing:** Apache 2.0 Licensed. Contact support@edgequantum.ai for architectural queries.
-
-## Additional Resources
-
-- **NotebookLM Documentation:** [Hierarchical Edge-Quantum AI Architecture Notebook](https://notebooklm.google.com/notebook/62d6c7ee-8f93-4c5f-ac67-19b1a8956219)
