@@ -11,6 +11,8 @@ import enum
 import logging
 from typing import Any, Callable, Dict, Optional, Tuple
 
+import torch
+
 from ..config import HierarchicalConfig
 from .vec2text import reconstruct_memory, validate_reconstructed_text
 
@@ -110,8 +112,6 @@ def _attempt_memory_reconstruction(state: Dict) -> Optional[str]:
 
 def _extract_query_vector(state: Dict) -> torch.Tensor:
     """Extract query vector from state for memory reconstruction"""
-    import torch
-
     # Simplified vector extraction - in production, use proper embedding
     state_str = str(state)
     hash_val = hash(state_str) % 1000000

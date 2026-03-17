@@ -14,7 +14,7 @@ import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List, Optional, Tuple, Dict, Union
+from typing import Dict, List, Optional, Tuple
 import json
 import math
 import re
@@ -449,9 +449,11 @@ class ConditionalMaskedDiffusion(nn.Module):
         text = ""
         for token_seq in tokens:
             # Create a structured JSON representation
+            ts_day = (token_seq[1] % 28) + 1
+            ts_h, ts_m = (token_seq[2] % 24), (token_seq[3] % 60)
             json_obj = {
                 "state_id": f"state_{token_seq[0] % 1000}",
-                "timestamp": f"2026-01-{(token_seq[1] % 28) + 1:02d}T{(token_seq[2] % 24):02d}:{(token_seq[3] % 60):02d}:00Z",
+                "timestamp": f"2026-01-{ts_day:02d}T{ts_h:02d}:{ts_m:02d}:00Z",
                 "execution_state": {
                     "memory": {
                         "var1": token_seq[4] % 100,
