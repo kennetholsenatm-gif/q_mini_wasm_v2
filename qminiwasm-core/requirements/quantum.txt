@@ -1,0 +1,9 @@
+# Quantum Circuit Libraries (from white paper). Core uses default.qubit; plugins optional.
+pennylane>=0.28.0
+pennylane-qiskit>=0.28.0
+# Optional backends (install if needed; may have platform-specific deps)
+pennylane-cirq>=0.22
+pennylane-qulacs>=0.22
+pennylane-lightning>=0.28
+# Built-in simulator (shipped with pennylane)
+# pennylane-forest, pennylane-qiskit-aer, pennylane-aer-simulator: add if needed

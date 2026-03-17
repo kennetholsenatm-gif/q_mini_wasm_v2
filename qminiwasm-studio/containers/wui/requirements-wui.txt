@@ -1,0 +1,9 @@
+# Minimal runtime dependencies for the WUI deployment tool container.
+# Keeps image small and Iron Bank surface minimal.
+# Database/Celery/cloud SDKs omitted; add to k8s.txt for full stack.
+
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6

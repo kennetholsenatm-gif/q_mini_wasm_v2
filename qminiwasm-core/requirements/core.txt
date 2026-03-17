@@ -1,0 +1,6 @@
+# Core Machine Learning & Hybrid Architecture Dependencies
+# Use torch>=2.0 so CI and local installs resolve (2.9+ may not be on all indexes)
+torch>=2.0.0
+
+# Pin to fix CVE-2026-26007 (transitive dependency)
+cryptography>=46.0.5

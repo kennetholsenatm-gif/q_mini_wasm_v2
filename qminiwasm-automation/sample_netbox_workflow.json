@@ -1,0 +1,131 @@
+{
+  "name": "IT/OT Integration - Netbox IPAM Query",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/ipam/prefixes/",
+        "queryParams": {
+          "limit": 100
+        },
+        "useBasicAuthentication": true,
+        "username": "netbox_user",
+        "password": "netbox_pass"
+      },
+      "id": "n1",
+      "name": "Netbox API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "returnAll": true
+        }
+      },
+      "id": "n2",
+      "name": "Process Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "returnAll": true
+        }
+      },
+      "id": "n3",
+      "name": "Filter Critical",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "returnAll": true
+        }
+      },
+      "id": "n4",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "options": {
+          "returnAll": true
+        }
+      },
+      "id": "n5",
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Netbox API": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Response": {
+      "main": [
+        [
+          {
+            "node": "Filter Critical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Critical": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateId": "",
+    "templateVersion": "",
+    "templateInstanceId": "",
+    "templateInstanceCreatedFrom": "",
+    "templateInstanceUpdatedBy": "",
+    "templateInstanceUpdatedOn": "",
+    "templateInstanceUpdatedFrom": "",
+    "templateInstanceUpdatedTo": "",
+    "templateInstanceUpdatedType": "",
+    "templateInstanceUpdatedStatus

@@ -1,0 +1,489 @@
+{
+  "name": "JIT Docker Instance Management",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jit/request-service",
+        "responseFormat": "json",
+        "options": {
+          "bodyContentType": "json",
+          "jsonParameters": true,
+          "bodyParametersJson": "{\"service_id\": \"{{ $json[\"service_id\"] }}\", \"requested_by\": \"{{ $json[\"requested_by\"] || 'api' }}\"}"
+        },
+        "url": "http://jit-resource-manager:8080/api/v1/service-request",
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer jit-api-token"
+        }
+      },
+      "name": "Request Service Start",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Send service start request to JIT Resource Manager",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const service_id = $json[\"service_id\"];\nconst requested_by = $json[\"requested_by\"] || 'api';\nconst request_source = $json[\"request_source\"] || 'n8n';\n\nreturn {\n  service_id,\n  requested_by,\n  request_source,\n  request_type: 'start',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "name": "Prepare Service Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Prepare and validate service request parameters",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "jit/services/status",
+        "responseFormat": "json",
+        "url": "http://jit-resource-manager:8080/api/v1/services/status"
+      },
+      "name": "Get Service Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        200,
+        100
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Check current service status before processing",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json[\"services\"] }}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Services Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        100
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Check if any services are available",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  error: \"No services available\",\n  timestamp: new Date().toISOString()\n};"
+      },
+      "name": "Handle No Services",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        600,
+        50
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Handle case when no services are available",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "jit/resources/available",
+        "responseFormat": "json",
+        "url": "http://jit-resource-manager:8080/api/v1/resources/available"
+      },
+      "name": "Check Resource Availability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        200,
+        500
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Check if sufficient resources are available",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json[\"available_cpu_cores\"] }}",
+              "operation": "greaterThan",
+              "value2": 0
+            },
+            {
+              "value1": "={{ $json[\"available_memory_gb\"] }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "Resources Sufficient?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        500
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Check if sufficient resources are available for service",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  error: \"Insufficient resources\",\n  available_resources: $json,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "name": "Handle Insufficient Resources",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        600,
+        450
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Handle case when insufficient resources are available",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jit/service/stop",
+        "responseFormat": "json",
+        "options": {
+          "bodyContentType": "json",
+          "jsonParameters": true,
+          "bodyParametersJson": "{\"service_id\": \"{{ $json[\"service_id\"] }}\", \"reason\": \"idle_timeout\"}"
+        },
+        "url": "http://jit-resource-manager:8080/api/v1/service-stop",
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "Authorization",
+          "value": "Bearer jit-api-token"
+        }
+      },
+      "name": "Stop Idle Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Stop service due to idle timeout",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const service_id = $json[\"service_id\"];\nconst reason = $json[\"reason\"] || 'manual';\n\nreturn {\n  service_id,\n  reason,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "name": "Prepare Stop Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Prepare and validate service stop request",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "jit/health",
+        "responseFormat": "json",
+        "url": "http://jit-resource-manager:8080/api/v1/health"
+      },
+      "name": "Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Check JIT Resource Manager health",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json[\"status\"] }}",
+              "operation": "equal",
+              "value2": "healthy"
+            }
+          ]
+        }
+      },
+      "name": "JIT Manager Healthy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Check if JIT Resource Manager is healthy",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  error: \"JIT Resource Manager is not healthy\",\n  status: $json[\"status\"],\n  timestamp: new Date().toISOString()\n};"
+      },
+      "name": "Handle Manager Unhealthy",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        600,
+        250
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Handle case when JIT Resource Manager is not healthy",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "jit/events",
+        "responseFormat": "json",
+        "url": "http://jit-resource-manager:8080/api/v1/events",
+        "options": {
+          "queryParametersJson": "{\"limit\": 100, \"service_id\": \"{{ $json[\"service_id\"] }}\"}"
+        }
+      },
+      "name": "Get Service Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        800,
+        500
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Get service events for monitoring and debugging",
+          "timestamp": 1709577600000
+        }
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const events = $json[\"events\"];\n\nconst summary = {\n  service_id: $json[\"service_id\"],\n  total_events: events.length,\n  event_types: {},\n  recent_events: events.slice(-10),\n  timestamp: new Date().toISOString()\n};\n\n// Count event types\nfor (const event of events) {\n  const type = event.event_type;\n  summary.event_types[type] = (summary.event_types[type] || 0) + 1;\n}\n\nreturn summary;"
+      },
+      "name": "Summarize Events",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        500
+      ],
+      "notesInExecutionOrder": [
+        {
+          "message": "Summarize service events for reporting",
+          "timestamp": 1709577600000
+        }
+      ]
+    }
+  ],
+  "connections": {
+    "Health Check": {
+      "main": [
+        [
+          {
+            "node": "JIT Manager Healthy?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JIT Manager Healthy?": {
+      "main": [
+        [
+          {
+            "node": "Get Service Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Manager Unhealthy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Service Status": {
+      "main": [
+        [
+          {
+            "node": "Services Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Services Available?": {
+      "main": [
+        [
+          {
+            "node": "Check Resource Availability",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle No Services",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Resource Availability": {
+      "main": [
+        [
+          {
+            "node": "Resources Sufficient?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resources Sufficient?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Service Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Insufficient Resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Service Request": {
+      "main": [
+        [
+          {
+            "node": "Request Service Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Service Start": {
+      "main": [
+        [
+          {
+            "node": "Get Service Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Service Events": {
+      "main": [
+        [
+          {
+            "node": "Summarize Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Stop Request": {
+      "main": [
+        [
+          {
+            "node": "Stop Idle Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "1",
+  "notes": "## JIT Docker Instance Management Workflow\n\nThis workflow provides comprehensive management of JIT Docker instances:\n\n### Main Features:\n1. **Service Request Management**: Start/stop services on demand\n2. **Resource Monitoring**: Check available resources before starting services\n3. **Health Monitoring**: Monitor JIT Resource Manager health\n4. **Event Tracking**: Track service lifecycle events\n5. **Idle Timeout Management**: Automatically stop idle services\n\n### Usage:\n- Trigger: Manual, API, or event-driven\n- Input: Service ID and request parameters\n- Output: Service status and resource information\n\n### Integration Points:\n- Solace Message VPN for event triggers\n- JIT Resource Manager API\n- Prometheus for monitoring\n- Vault for secure API tokens",
+  "notesInExecutionOrder": [
+    {
+      "message": "Complete JIT Docker instance management workflow for n8n",
+      "timestamp": 1709577600000
+    }
+  ]
+}

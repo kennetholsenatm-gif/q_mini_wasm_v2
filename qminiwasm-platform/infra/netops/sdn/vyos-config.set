@@ -1,0 +1,39 @@
+# VyOS configuration template: VXLAN + BGP EVPN overlay and firewall.
+# Substitute: VXLAN_VNI (e.g. 100), BGP_AS (e.g. 65001), VTEP_LOCAL (this node IP),
+# VTEP_REMOTE (peer VTEP), BGP_NEIGHBOR_IP (EVPN peer), LOOPBACK_IP (e.g. 192.168.100.1/32),
+# DATA_IF (e.g. eth0), DATA_IF_ADDRESS (e.g. 192.168.1.1/24).
+# Apply manually or via automation (Ansible, expect). One command per line (set-style).
+
+# Interfaces
+set interfaces ethernet {{ DATA_IF }} address '{{ DATA_IF_ADDRESS }}'
+set interfaces loopback lo address '{{ LOOPBACK_IP }}'
+
+# VXLAN overlay
+set interfaces vxlan vxlan0 vni '{{ VXLAN_VNI }}'
+set interfaces vxlan vxlan0 source-address '{{ VTEP_LOCAL }}'
+set interfaces vxlan vxlan0 remote '{{ VTEP_REMOTE }}'
+set interfaces vxlan vxlan0 bridge access '10'
+
+# Bridge for VXLAN and LAN
+set interfaces bridge br10 address '10.10.10.1/24'
+set interfaces bridge br10 member interface vxlan0
+set interfaces bridge br10 member interface {{ DATA_IF }}
+
+# BGP EVPN
+set protocols bgp {{ BGP_AS }} parameters router-id '{{ VTEP_LOCAL }}'
+set protocols bgp {{ BGP_AS }} neighbor '{{ BGP_NEIGHBOR_IP }}' remote-as '{{ BGP_AS }}'
+set protocols bgp {{ BGP_AS }} neighbor '{{ BGP_NEIGHBOR_IP }}' address-family l2vpn-evpn advertise-all-vni
+set protocols bgp {{ BGP_AS }} address-family l2vpn-evpn advertise ipv4 unicast
+set protocols bgp {{ BGP_AS }} address-family l2vpn-evpn advertise ipv6 unicast
+
+# Firewall: allow VXLAN and BGP, restrict management
+set firewall name EVPN-IN default-action drop
+set firewall name EVPN-IN rule 10 action accept
+set firewall name EVPN-IN rule 10 protocol udp
+set firewall name EVPN-IN rule 10 destination port 4789
+set firewall name EVPN-IN rule 20 action accept
+set firewall name EVPN-IN rule 20 protocol tcp
+set firewall name EVPN-IN rule 20 destination port 179
+set firewall name EVPN-IN rule 30 action accept
+set firewall name EVPN-IN rule 30 protocol icmp
+set interfaces ethernet {{ DATA_IF }} firewall in name EVPN-IN

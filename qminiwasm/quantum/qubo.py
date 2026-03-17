@@ -377,11 +377,19 @@ def encrypted_qubo_optimization(
         Optimized (linear_coeffs, quad_coeffs) for QUBO in encrypted space
     """
     if optimization_level == "basic":
-        return encrypted_qubo_hamiltonian(encrypted_affinity, K, C, lambda1=1.5e6, lambda2=1.5e6, quantum_noise_factor=0.05)
+        return encrypted_qubo_hamiltonian(
+            encrypted_affinity, K, C, lambda1=1.5e6, lambda2=1.5e6, quantum_noise_factor=0.05
+        )
     elif optimization_level == "enhanced":
-        return encrypted_qubo_hamiltonian(encrypted_affinity, K, C, lambda1=2e6, lambda2=2e6, quantum_noise_factor=0.1)
+        return encrypted_qubo_hamiltonian(
+            encrypted_affinity, K, C, lambda1=2e6, lambda2=2e6, quantum_noise_factor=0.1
+        )
     elif optimization_level == "ultra":
-        return encrypted_qubo_hamiltonian(encrypted_affinity, K, C, lambda1=3e6, lambda2=3e6, quantum_noise_factor=0.2)
+        return encrypted_qubo_hamiltonian(
+            encrypted_affinity, K, C, lambda1=3e6, lambda2=3e6, quantum_noise_factor=0.2
+        )
     else:
         # Default to enhanced
-        return encrypted_qubo_hamiltonian(encrypted_affinity, K, C, lambda1=2e6, lambda2=2e6, quantum_noise_factor=0.1)
+        return encrypted_qubo_hamiltonian(
+            encrypted_affinity, K, C, lambda1=2e6, lambda2=2e6, quantum_noise_factor=0.1
+        )

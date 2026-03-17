@@ -94,7 +94,7 @@ class EnhancedQuantumRouter(QuantumRouter):
         self.barren_mitigation = BarrenPlateauMitigator()
         self.logger = logging.getLogger(__name__)
         self._initialize_enhanced_quantum_backend()
-        
+
         # Initialize cryptographic components for encrypted vector support
         self.crypto_config = CryptoConfig()
         self.dcpe_encryptor = EnhancedApproximateDCPE(config=self.crypto_config)
@@ -429,14 +429,14 @@ class EnhancedQuantumRouter(QuantumRouter):
             # Convert to numpy for distance calculation
             v1_np = vec1.detach().cpu().numpy()
             v2_np = vec2.detach().cpu().numpy()
-            
+
             # Calculate L2 distance in encrypted space
             distance = np.linalg.norm(v1_np - v2_np)
-            
+
             # Apply quantum-aware scaling for encrypted data
             quantum_scale = 1.0 + 0.05  # Small enhancement factor for encrypted space
             return float(distance * quantum_scale)
-            
+
         except Exception as e:
             self.logger.warning("Encrypted distance calculation failed: %s", e)
             # Fallback to simple difference
@@ -672,15 +672,15 @@ class BarrenPlateauMitigator:
         # Enhanced initial parameter generation for encrypted data
         # Use quantum-aware parameter initialization with encryption-specific considerations
         initial_params = np.random.uniform(0, np.pi, size=n_qubits)
-        
+
         # Apply encryption-specific parameter scaling
         encryption_scale = 1.0 + 0.1  # Enhanced scaling for encrypted data
         initial_params = initial_params * encryption_scale
-        
+
         # Add quantum noise consideration for encrypted data
         noise = np.random.normal(0, 0.05, size=n_qubits)
         initial_params = initial_params + noise
-        
+
         return initial_params
 
     def apply_mitigation(self, device, params: np.ndarray, n_qubits: int):
@@ -804,7 +804,9 @@ class TernaryOptimizer:
             for i in range(n_qubits):
                 # Apply encryption-aware rotation angles for ternary weights
                 encrypted_ry_angle = params[i] * (1.0 + 0.05)  # Enhanced angle for encrypted data
-                encrypted_rz_angle = params[i + n_qubits] * (1.0 + 0.05)  # Enhanced angle for encrypted data
+                encrypted_rz_angle = params[i + n_qubits] * (
+                    1.0 + 0.05
+                )  # Enhanced angle for encrypted data
                 qml.RY(encrypted_ry_angle, wires=i)
                 qml.RZ(encrypted_rz_angle, wires=i)
 
@@ -819,11 +821,11 @@ class TernaryOptimizer:
         # Enhanced implementation for encrypted data
         # Use encryption-aware ternary optimization with improved accuracy
         ternary_weights = torch.sign(weights)
-        
+
         # Apply encryption-specific ternary optimization
         # This helps maintain ternary precision in encrypted space
         ternary_weights = ternary_weights * (1.0 + 0.02)  # Small enhancement for encrypted data
-        
+
         return ternary_weights
 
 

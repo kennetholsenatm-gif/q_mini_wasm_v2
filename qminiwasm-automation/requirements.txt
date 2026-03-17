@@ -1,0 +1,10 @@
+# Automation and workflow requirements
+# n8n, workflow automation, and integration tools
+requests>=2.31.0
+n8n-client>=0.1.0
+pyyaml>=6.0.0
+click>=8.1.0
+python-dotenv>=1.0.0
+schedule>=1.2.0
+celery>=5.3.0
+redis>=4.6.0

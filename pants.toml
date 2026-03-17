@@ -1,0 +1,46 @@
+[GLOBAL]
+pants_version = "2.25.0"
+backend_packages = [
+  "pants.backend.python",
+  "pants.backend.python.lint.black",
+  "pants.backend.python.lint.flake8", 
+  "pants.backend.python.typecheck.mypy",
+  "pants.backend.docker",
+  "pants.backend.experimental.docker.registries",
+  "pants.backend.experimental.docker.dockerfile",
+  "pants.backend.experimental.docker.dockerfile.lint.hadolint",
+]
+
+[source]
+root_patterns = [
+  "qminiwasm-core/",
+  "qminiwasm-studio/",
+  "qminiwasm-platform/",
+  "qminiwasm-automation/",
+]
+
+[python]
+interpreter_constraints = [">=3.8"]
+resolves = {
+  "core": "qminiwasm-core/requirements.txt",
+  "studio": "qminiwasm-studio/requirements.txt", 
+  "platform": "qminiwasm-platform/requirements.txt",
+  "automation": "qminiwasm-automation/requirements.txt",
+}
+
+[docker]
+default_registries = ["@dockerhub"]
+
+[registries.dockerhub]
+address = "docker.io"
+default = true
+
+[lint.black]
+args = ["--line-length=100"]
+
+[lint.flake8]
+max_line_length = 100
+extend_ignore = ["E203", "W503"]
+
+[typecheck.mypy]
+args = ["--python-version=3.11"]
