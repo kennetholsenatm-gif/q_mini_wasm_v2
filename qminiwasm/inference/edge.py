@@ -55,14 +55,14 @@ def run_edge_cognitive_loop(
         last_result, last_state = execute_one_block(loop_idx)
         num_loops = loop_idx + 1
         certainty = compute_certainty(last_state)
-        
+
         # Check for memory reconstruction opportunity
         if _should_attempt_memory_reconstruction(last_state):
             memory_result = _attempt_memory_reconstruction(last_state)
             if memory_result:
                 logger.info("Memory reconstructed at loop %d", num_loops)
                 return memory_result, EdgeOutcome.MEMORY_RECONSTRUCTED, num_loops, last_state
-        
+
         if certainty >= cfg.T_conf:
             logger.info("Edge resolved at loop %d (certainty=%.4f)", num_loops, certainty)
             return last_result, EdgeOutcome.RESOLVED_LOCAL, num_loops, last_state
@@ -74,14 +74,8 @@ def run_edge_cognitive_loop(
 def _should_attempt_memory_reconstruction(state: Dict) -> bool:
     """Check if memory reconstruction should be attempted"""
     # Look for memory-related patterns in state
-    memory_indicators = [
-        "memory",
-        "state",
-        "context",
-        "execution_state",
-        "stack"
-    ]
-    
+    memory_indicators = ["memory", "state", "context", "execution_state", "stack"]
+
     state_str = str(state).lower()
     return any(indicator in state_str for indicator in memory_indicators)
 
@@ -91,13 +85,13 @@ def _attempt_memory_reconstruction(state: Dict) -> Optional[str]:
     try:
         # Extract query vector from state (simplified for now)
         query_vector = _extract_query_vector(state)
-        
+
         # Create candidate vectors (simplified)
         candidate_vectors = _create_candidate_vectors(state)
-        
+
         # Attempt reconstruction
         reconstructed_text = reconstruct_memory(query_vector, candidate_vectors)
-        
+
         if reconstructed_text:
             # Validate the reconstruction
             is_valid, error_msg = validate_reconstructed_text(reconstructed_text)
@@ -106,9 +100,9 @@ def _attempt_memory_reconstruction(state: Dict) -> Optional[str]:
                 return reconstructed_text
             else:
                 logger.warning("Memory reconstruction failed validation: %s", error_msg)
-        
+
         return None
-        
+
     except Exception as e:
         logger.warning("Memory reconstruction attempt failed: %s", str(e))
         return None
@@ -117,37 +111,37 @@ def _attempt_memory_reconstruction(state: Dict) -> Optional[str]:
 def _extract_query_vector(state: Dict) -> torch.Tensor:
     """Extract query vector from state for memory reconstruction"""
     import torch
-    
+
     # Simplified vector extraction - in production, use proper embedding
     state_str = str(state)
     hash_val = hash(state_str) % 1000000
     vector = torch.zeros(1024, dtype=torch.float32)
-    
+
     for i in range(1024):
         vector[i] = (hash_val * (i + 1)) % 1000000 / 1000000.0
-        
+
     return vector
 
 
 def _create_candidate_vectors(state: Dict) -> list:
     """Create candidate vectors for memory reconstruction"""
     import torch
-    
+
     # Create multiple candidate vectors based on state variations
     candidates = []
     state_str = str(state)
-    
+
     for i in range(5):  # Create 5 candidate vectors
         # Add some variation to create different candidates
         variation = state_str + f"_variation_{i}"
         hash_val = hash(variation) % 1000000
         vector = torch.zeros(1024, dtype=torch.float32)
-        
+
         for j in range(1024):
             vector[j] = (hash_val * (j + 1)) % 1000000 / 1000000.0
-            
+
         candidates.append(vector)
-    
+
     return candidates
 
 
@@ -167,10 +161,10 @@ def default_certainty_heuristic(state: Dict) -> float:
 def enhanced_certainty_heuristic(state: Dict) -> float:
     """Enhanced certainty heuristic that considers memory reconstruction potential"""
     base_certainty = default_certainty_heuristic(state)
-    
+
     # Boost certainty if memory reconstruction is possible
     if _should_attempt_memory_reconstruction(state):
         memory_potential = 0.3  # Additional certainty from memory potential
         return min(1.0, base_certainty + memory_potential)
-    
+
     return base_certainty

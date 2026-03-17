@@ -56,11 +56,11 @@ class NoiseSchedule:
             Dictionary of noise schedule values
         """
         return {
-            'betas': self.betas[t],
-            'alphas': self.alphas[t],
-            'alphas_cumprod': self.alphas_cumprod[t],
-            'sqrt_alphas_cumprod': self.sqrt_alphas_cumprod[t],
-            'sqrt_one_minus_alphas_cumprod': self.sqrt_one_minus_alphas_cumprod[t]
+            "betas": self.betas[t],
+            "alphas": self.alphas[t],
+            "alphas_cumprod": self.alphas_cumprod[t],
+            "sqrt_alphas_cumprod": self.sqrt_alphas_cumprod[t],
+            "sqrt_one_minus_alphas_cumprod": self.sqrt_one_minus_alphas_cumprod[t],
         }
 
 
@@ -104,8 +104,16 @@ class CrossAttention(nn.Module):
 
         # Project to query, key, value
         q = self.q_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-        k = self.k_proj(context).view(batch_size, context_len, self.num_heads, self.head_dim).transpose(1, 2)
-        v = self.v_proj(context).view(batch_size, context_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = (
+            self.k_proj(context)
+            .view(batch_size, context_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+        )
+        v = (
+            self.v_proj(context)
+            .view(batch_size, context_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+        )
 
         # Scaled dot-product attention
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
@@ -133,20 +141,24 @@ class DiffusionBlock(nn.Module):
             dropout: Dropout rate
         """
         super().__init__()
-        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.self_attn = nn.MultiheadAttention(
+            embed_dim, num_heads, dropout=dropout, batch_first=True
+        )
         self.cross_attn = CrossAttention(embed_dim, num_heads, dropout)
         self.ffn = nn.Sequential(
             nn.Linear(embed_dim, ffn_dim),
             nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(ffn_dim, embed_dim),
-            nn.Dropout(dropout)
+            nn.Dropout(dropout),
         )
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
         self.norm3 = nn.LayerNorm(embed_dim)
 
-    def forward(self, x: torch.Tensor, condition: torch.Tensor, timestep_emb: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, condition: torch.Tensor, timestep_emb: torch.Tensor
+    ) -> torch.Tensor:
         """Forward pass with timestep embedding
 
         Args:
@@ -212,7 +224,9 @@ class TimestepEmbedding(nn.Module):
 class ConditionalMaskedDiffusion(nn.Module):
     """Conditional Masked Diffusion for Vec2Text inversion (Edge-Optimized)"""
 
-    def __init__(self, model_size: int = 78_000_000, embedding_dim: int = 1024, num_timesteps: int = 1000):
+    def __init__(
+        self, model_size: int = 78_000_000, embedding_dim: int = 1024, num_timesteps: int = 1000
+    ):
         """Initialize the diffusion model
 
         Args:
@@ -251,15 +265,17 @@ class ConditionalMaskedDiffusion(nn.Module):
         self.timestep_embedding = TimestepEmbedding(self.embedding_dim)
 
         # Transformer layers
-        self.layers = nn.ModuleList([
-            DiffusionBlock(
-                embed_dim=self.embedding_dim,
-                num_heads=self.num_heads,
-                ffn_dim=self.ffn_dim,
-                dropout=0.1
-            )
-            for _ in range(self.num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                DiffusionBlock(
+                    embed_dim=self.embedding_dim,
+                    num_heads=self.num_heads,
+                    ffn_dim=self.ffn_dim,
+                    dropout=0.1,
+                )
+                for _ in range(self.num_layers)
+            ]
+        )
 
         # Output projection
         self.output_proj = nn.Linear(self.embedding_dim, self.embedding_dim)
@@ -267,7 +283,9 @@ class ConditionalMaskedDiffusion(nn.Module):
         # Token prediction head
         self.token_head = nn.Linear(self.embedding_dim, 50257)  # GPT-2 vocab size
 
-        self.logger.info(f"Initialized {self.model_size:,} parameter Conditional Masked Diffusion model")
+        self.logger.info(
+            f"Initialized {self.model_size:,} parameter Conditional Masked Diffusion model"
+        )
 
     def _setup_adaptive_normalization(self):
         """Setup adaptive layer normalization for conditional diffusion"""
@@ -278,12 +296,12 @@ class ConditionalMaskedDiffusion(nn.Module):
     def _setup_noise_schedule(self):
         """Setup noise schedule for diffusion process"""
         self.noise_schedule = NoiseSchedule(
-            num_timesteps=self.num_timesteps,
-            beta_start=1e-4,
-            beta_end=0.02
+            num_timesteps=self.num_timesteps, beta_start=1e-4, beta_end=0.02
         )
 
-    def forward(self, x: torch.Tensor, condition: torch.Tensor, timesteps: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, condition: torch.Tensor, timesteps: torch.Tensor
+    ) -> torch.Tensor:
         """Forward pass with adaptive normalization and timestep embedding
 
         Args:
@@ -309,7 +327,9 @@ class ConditionalMaskedDiffusion(nn.Module):
         x = self.output_proj(x)
         return x
 
-    def forward_process(self, x_0: torch.Tensor, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward_process(
+        self, x_0: torch.Tensor, t: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward diffusion process
 
         Args:
@@ -320,16 +340,20 @@ class ConditionalMaskedDiffusion(nn.Module):
             (x_t, noise) where x_t is the noised data and noise is the added noise
         """
         noise_schedule_values = self.noise_schedule.get_values_at_timestep(t)
-        
-        sqrt_alpha_cumprod = noise_schedule_values['sqrt_alphas_cumprod'].unsqueeze(1).unsqueeze(2)
-        sqrt_one_minus_alpha_cumprod = noise_schedule_values['sqrt_one_minus_alphas_cumprod'].unsqueeze(1).unsqueeze(2)
+
+        sqrt_alpha_cumprod = noise_schedule_values["sqrt_alphas_cumprod"].unsqueeze(1).unsqueeze(2)
+        sqrt_one_minus_alpha_cumprod = (
+            noise_schedule_values["sqrt_one_minus_alphas_cumprod"].unsqueeze(1).unsqueeze(2)
+        )
 
         noise = torch.randn_like(x_0)
         x_t = sqrt_alpha_cumprod * x_0 + sqrt_one_minus_alpha_cumprod * noise
 
         return x_t, noise
 
-    def reverse_process(self, x_t: torch.Tensor, condition: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def reverse_process(
+        self, x_t: torch.Tensor, condition: torch.Tensor, t: torch.Tensor
+    ) -> torch.Tensor:
         """Reverse diffusion process
 
         Args:
@@ -345,18 +369,25 @@ class ConditionalMaskedDiffusion(nn.Module):
 
         # Get noise schedule values
         noise_schedule_values = self.noise_schedule.get_values_at_timestep(t)
-        
-        alpha_t = noise_schedule_values['alphas'].unsqueeze(1).unsqueeze(2)
-        alpha_cumprod_t = noise_schedule_values['alphas_cumprod'].unsqueeze(1).unsqueeze(2)
-        sqrt_one_minus_alpha_cumprod_t = noise_schedule_values['sqrt_one_minus_alphas_cumprod'].unsqueeze(1).unsqueeze(2)
+
+        alpha_t = noise_schedule_values["alphas"].unsqueeze(1).unsqueeze(2)
+        alpha_cumprod_t = noise_schedule_values["alphas_cumprod"].unsqueeze(1).unsqueeze(2)
+        sqrt_one_minus_alpha_cumprod_t = (
+            noise_schedule_values["sqrt_one_minus_alphas_cumprod"].unsqueeze(1).unsqueeze(2)
+        )
 
         # Compute mean and variance
-        mean = (1 / torch.sqrt(alpha_t)) * (x_t - ((1 - alpha_t) / sqrt_one_minus_alpha_cumprod_t) * predicted_noise)
-        
+        mean = (1 / torch.sqrt(alpha_t)) * (
+            x_t - ((1 - alpha_t) / sqrt_one_minus_alpha_cumprod_t) * predicted_noise
+        )
+
         # Add noise if not at first step
         if t.min() > 0:
             noise = torch.randn_like(x_t)
-            sigma_t = torch.sqrt((1 - alpha_cumprod_t) / (1 - noise_schedule_values['alphas_cumprod'].unsqueeze(1).unsqueeze(2)))
+            sigma_t = torch.sqrt(
+                (1 - alpha_cumprod_t)
+                / (1 - noise_schedule_values["alphas_cumprod"].unsqueeze(1).unsqueeze(2))
+            )
             x_t_minus_1 = mean + sigma_t * noise
         else:
             x_t_minus_1 = mean
@@ -381,16 +412,20 @@ class ConditionalMaskedDiffusion(nn.Module):
             if embedding.size(-1) != self.embedding_dim:
                 embedding = embedding[:, : self.embedding_dim]
         batch_size = embedding.size(0)
-        
+
         # Initialize with random noise
         x_t = torch.randn((batch_size, seq_len, self.embedding_dim), device=embedding.device)
 
         # 8-step iterative denoising
         for step in range(8):
             # Calculate timestep
-            t = torch.full((batch_size,), self.num_timesteps - 1 - step * (self.num_timesteps // 8), 
-                          device=embedding.device, dtype=torch.long)
-            
+            t = torch.full(
+                (batch_size,),
+                self.num_timesteps - 1 - step * (self.num_timesteps // 8),
+                device=embedding.device,
+                dtype=torch.long,
+            )
+
             # Reverse diffusion step
             x_t = self.reverse_process(x_t, embedding, t)
 
@@ -421,18 +456,18 @@ class ConditionalMaskedDiffusion(nn.Module):
                     "memory": {
                         "var1": token_seq[4] % 100,
                         "var2": token_seq[5] % 100,
-                        "var3": token_seq[6] % 100
+                        "var3": token_seq[6] % 100,
                     },
                     "stack": [
                         {
                             "frame_id": f"frame_{token_seq[7] % 10}",
                             "function_name": f"func_{token_seq[8] % 5}",
                             "arguments": [token_seq[9] % 10, token_seq[10] % 10],
-                            "local_vars": {"x": token_seq[11] % 100, "y": token_seq[12] % 100}
+                            "local_vars": {"x": token_seq[11] % 100, "y": token_seq[12] % 100},
                         }
                     ],
-                    "return_value": str(token_seq[13] % 1000)
-                }
+                    "return_value": str(token_seq[13] % 1000),
+                },
             }
             text += json.dumps(json_obj, indent=2) + "\n"
         return text.strip()
@@ -536,16 +571,18 @@ class SyntaxForcedLatentCompensation:
         """
         self.embedding_dim = embedding_dim
         self.logger = logging.getLogger(__name__)
-        
+
         # Compensation network
         self.compensation_net = nn.Sequential(
             nn.Linear(embedding_dim, embedding_dim // 2),
             nn.ReLU(),
             nn.Linear(embedding_dim // 2, embedding_dim),
-            nn.Tanh()
+            nn.Tanh(),
         )
 
-    def compensate_latent_space(self, latent_vector: torch.Tensor, syntax_constraints: Dict) -> torch.Tensor:
+    def compensate_latent_space(
+        self, latent_vector: torch.Tensor, syntax_constraints: Dict
+    ) -> torch.Tensor:
         """Apply syntax-forced compensation to latent space
 
         Args:
@@ -557,11 +594,11 @@ class SyntaxForcedLatentCompensation:
         """
         # Extract syntax features
         syntax_features = self._extract_syntax_features(syntax_constraints)
-        
+
         # Apply compensation
         compensation = self.compensation_net(latent_vector)
         compensated = latent_vector + compensation * syntax_features.unsqueeze(0)
-        
+
         return compensated
 
     def _extract_syntax_features(self, syntax_constraints: Dict) -> torch.Tensor:
@@ -575,30 +612,30 @@ class SyntaxForcedLatentCompensation:
         """
         # Simple feature extraction based on syntax constraints
         features = []
-        
+
         # JSON structure features
-        if syntax_constraints.get('requires_json', False):
+        if syntax_constraints.get("requires_json", False):
             features.append(1.0)
         else:
             features.append(0.0)
-            
+
         # Array structure features
-        if syntax_constraints.get('requires_arrays', False):
+        if syntax_constraints.get("requires_arrays", False):
             features.append(1.0)
         else:
             features.append(0.0)
-            
+
         # Object structure features
-        if syntax_constraints.get('requires_objects', False):
+        if syntax_constraints.get("requires_objects", False):
             features.append(1.0)
         else:
             features.append(0.0)
-            
+
         # Fill remaining features with zeros
         while len(features) < self.embedding_dim:
             features.append(0.0)
-            
-        return torch.tensor(features[:self.embedding_dim], dtype=torch.float32)
+
+        return torch.tensor(features[: self.embedding_dim], dtype=torch.float32)
 
 
 class EnhancedSyntaxValidator(SyntaxValidator):
@@ -608,7 +645,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
         """Initialize enhanced syntax validator"""
         super().__init__()
         self.logger = logging.getLogger(__name__)
-        
+
         # Enhanced JSON schema for exact reconstruction
         self.enhanced_schema = {
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -618,23 +655,23 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                     "type": "string",
                     "pattern": "^[a-zA-Z0-9_-]+$",
                     "minLength": 1,
-                    "maxLength": 100
+                    "maxLength": 100,
                 },
-                "timestamp": {
-                    "type": "string",
-                    "format": "date-time"
-                },
+                "timestamp": {"type": "string", "format": "date-time"},
                 "sub_goals": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
                             "goal_id": {"type": "string"},
-                            "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]},
-                            "priority": {"type": "integer", "minimum": 1, "maximum": 10}
+                            "status": {
+                                "type": "string",
+                                "enum": ["pending", "in_progress", "completed"],
+                            },
+                            "priority": {"type": "integer", "minimum": 1, "maximum": 10},
                         },
-                        "required": ["goal_id", "status", "priority"]
-                    }
+                        "required": ["goal_id", "status", "priority"],
+                    },
                 },
                 "execution_state": {
                     "type": "object",
@@ -642,8 +679,17 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                         "memory": {
                             "type": "object",
                             "patternProperties": {
-                                "^[a-zA-Z0-9_]+$": {"type": ["string", "number", "boolean", "object", "array", "null"]}
-                            }
+                                "^[a-zA-Z0-9_]+$": {
+                                    "type": [
+                                        "string",
+                                        "number",
+                                        "boolean",
+                                        "object",
+                                        "array",
+                                        "null",
+                                    ]
+                                }
+                            },
                         },
                         "stack": {
                             "type": "array",
@@ -653,10 +699,10 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                                     "frame_id": {"type": "string"},
                                     "function_name": {"type": "string"},
                                     "arguments": {"type": "array"},
-                                    "local_vars": {"type": "object"}
+                                    "local_vars": {"type": "object"},
                                 },
-                                "required": ["frame_id", "function_name"]
-                            }
+                                "required": ["frame_id", "function_name"],
+                            },
                         },
                         "return_value": {"type": "string"},
                         "execution_context": {
@@ -664,15 +710,15 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                             "properties": {
                                 "current_step": {"type": "integer"},
                                 "total_steps": {"type": "integer"},
-                                "progress": {"type": "number", "minimum": 0, "maximum": 1}
-                            }
-                        }
+                                "progress": {"type": "number", "minimum": 0, "maximum": 1},
+                            },
+                        },
                     },
-                    "required": ["memory", "stack"]
-                }
+                    "required": ["memory", "stack"],
+                },
             },
             "required": ["state_id", "timestamp", "execution_state"],
-            "additionalProperties": False
+            "additionalProperties": False,
         }
 
     def validate_enhanced(self, text: str) -> Tuple[bool, Optional[str], Dict]:
@@ -710,12 +756,16 @@ class EnhancedSyntaxValidator(SyntaxValidator):
             if not semantic_result["valid"]:
                 return False, semantic_result["error"], semantic_result["details"]
 
-            return True, None, {
-                "stage": "complete",
-                "schema_valid": True,
-                "structure_valid": True,
-                "semantics_valid": True
-            }
+            return (
+                True,
+                None,
+                {
+                    "stage": "complete",
+                    "schema_valid": True,
+                    "structure_valid": True,
+                    "semantics_valid": True,
+                },
+            )
 
         except Exception as e:
             return False, f"Validation error: {str(e)}", {"stage": "exception", "error": str(e)}
@@ -730,7 +780,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                     return {
                         "valid": False,
                         "error": f"Missing required key: {key}",
-                        "details": {"missing_key": key, "available_keys": list(data.keys())}
+                        "details": {"missing_key": key, "available_keys": list(data.keys())},
                     }
 
             # Validate state_id format
@@ -739,7 +789,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                 return {
                     "valid": False,
                     "error": "Invalid state_id format",
-                    "details": {"state_id": state_id, "expected": "alphanumeric string"}
+                    "details": {"state_id": state_id, "expected": "alphanumeric string"},
                 }
 
             # Validate timestamp format (ISO 8601 date-time or similar)
@@ -748,14 +798,14 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                 return {
                     "valid": False,
                     "error": "Invalid timestamp format",
-                    "details": {"timestamp": timestamp, "expected": "string"}
+                    "details": {"timestamp": timestamp, "expected": "string"},
                 }
             # Reject non-date-time strings (e.g. "not-a-timestamp")
             if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", timestamp.strip()):
                 return {
                     "valid": False,
                     "error": "Invalid timestamp format",
-                    "details": {"timestamp": timestamp, "expected": "ISO 8601 date-time"}
+                    "details": {"timestamp": timestamp, "expected": "ISO 8601 date-time"},
                 }
 
             # Validate execution_state structure
@@ -764,7 +814,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                 return {
                     "valid": False,
                     "error": "Invalid execution_state format",
-                    "details": {"execution_state": exec_state, "expected": "object"}
+                    "details": {"execution_state": exec_state, "expected": "object"},
                 }
 
             # Check required execution_state keys
@@ -774,7 +824,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                     return {
                         "valid": False,
                         "error": f"Missing required execution_state key: {key}",
-                        "details": {"missing_key": key, "available_keys": list(exec_state.keys())}
+                        "details": {"missing_key": key, "available_keys": list(exec_state.keys())},
                     }
 
             return {"valid": True, "error": None, "details": {}}
@@ -783,7 +833,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
             return {
                 "valid": False,
                 "error": f"Schema validation error: {str(e)}",
-                "details": {"exception": str(e)}
+                "details": {"exception": str(e)},
             }
 
     def _check_enhanced_structure(self, data: dict) -> Dict:
@@ -792,7 +842,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
             # Check bracket matching
             text = json.dumps(data)
             bracket_pairs = [("(", ")"), ("[", "]"), ("{", "}")]
-            
+
             for open_bracket, close_bracket in bracket_pairs:
                 if text.count(open_bracket) != text.count(close_bracket):
                     return {
@@ -800,8 +850,8 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                         "error": f"Bracket mismatch: {open_bracket}{close_bracket}",
                         "details": {
                             "open_count": text.count(open_bracket),
-                            "close_count": text.count(close_bracket)
-                        }
+                            "close_count": text.count(close_bracket),
+                        },
                     }
 
             # Check for proper nesting
@@ -814,16 +864,18 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                         return {
                             "valid": False,
                             "error": "Improper nesting",
-                            "details": {"character": char, "stack": stack}
+                            "details": {"character": char, "stack": stack},
                         }
                     last_open = stack.pop()
-                    if (last_open == "(" and char != ")") or \
-                       (last_open == "[" and char != "]") or \
-                       (last_open == "{" and char != "}"):
+                    if (
+                        (last_open == "(" and char != ")")
+                        or (last_open == "[" and char != "]")
+                        or (last_open == "{" and char != "}")
+                    ):
                         return {
                             "valid": False,
                             "error": "Improper nesting",
-                            "details": {"last_open": last_open, "current_close": char}
+                            "details": {"last_open": last_open, "current_close": char},
                         }
 
             return {"valid": True, "error": None, "details": {}}
@@ -832,7 +884,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
             return {
                 "valid": False,
                 "error": f"Structure check error: {str(e)}",
-                "details": {"exception": str(e)}
+                "details": {"exception": str(e)},
             }
 
     def _validate_semantics(self, data: dict) -> Dict:
@@ -846,16 +898,16 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                         return {
                             "valid": False,
                             "error": f"Invalid sub_goal at index {i}",
-                            "details": {"goal_index": i, "goal": goal}
+                            "details": {"goal_index": i, "goal": goal},
                         }
-                    
+
                     required_goal_keys = ["goal_id", "status", "priority"]
                     for key in required_goal_keys:
                         if key not in goal:
                             return {
                                 "valid": False,
                                 "error": f"Missing required sub_goal key: {key}",
-                                "details": {"goal_index": i, "missing_key": key}
+                                "details": {"goal_index": i, "missing_key": key},
                             }
 
             # Validate execution context if present
@@ -865,22 +917,19 @@ class EnhancedSyntaxValidator(SyntaxValidator):
                 current_step = exec_context.get("current_step", 0)
                 total_steps = exec_context.get("total_steps", 0)
                 progress = exec_context.get("progress", 0.0)
-                
+
                 if current_step > total_steps:
                     return {
                         "valid": False,
                         "error": "Invalid execution context: current_step > total_steps",
-                        "details": {
-                            "current_step": current_step,
-                            "total_steps": total_steps
-                        }
+                        "details": {"current_step": current_step, "total_steps": total_steps},
                     }
-                
+
                 if not (0.0 <= progress <= 1.0):
                     return {
                         "valid": False,
                         "error": "Invalid progress value",
-                        "details": {"progress": progress}
+                        "details": {"progress": progress},
                     }
 
             return {"valid": True, "error": None, "details": {}}
@@ -889,7 +938,7 @@ class EnhancedSyntaxValidator(SyntaxValidator):
             return {
                 "valid": False,
                 "error": f"Semantic validation error: {str(e)}",
-                "details": {"exception": str(e)}
+                "details": {"exception": str(e)},
             }
 
 
@@ -934,7 +983,7 @@ class Vec2TextRAG:
 
             # Step 3: Generate text hypotheses
             hypotheses = self._generate_hypotheses(compensated_vectors)
-            
+
             # Add fallback hypothesis
             default_valid = (
                 '{"state_id": "test", "timestamp": "2026-01-01T00:00:00Z", '
@@ -946,7 +995,9 @@ class Vec2TextRAG:
             valid_hypotheses = self._filter_by_enhanced_syntax(hypotheses)
 
             # Step 5: Latent-space re-verification with compensation
-            best_hypothesis = self._verify_latent_space_with_compensation(query_vector, valid_hypotheses)
+            best_hypothesis = self._verify_latent_space_with_compensation(
+                query_vector, valid_hypotheses
+            )
 
             return best_hypothesis
 
@@ -960,9 +1011,9 @@ class Vec2TextRAG:
         syntax_constraints = {
             "requires_json": True,
             "requires_objects": True,
-            "requires_arrays": True
+            "requires_arrays": True,
         }
-        
+
         for vector in vectors:
             try:
                 compensated_vector = self.latent_compensation.compensate_latent_space(
@@ -972,7 +1023,7 @@ class Vec2TextRAG:
             except Exception as e:
                 self.logger.warning("Latent compensation failed: %s", str(e))
                 compensated.append(vector)  # Fallback to original vector
-                
+
         return compensated
 
     def _filter_by_enhanced_syntax(self, hypotheses: List[str]) -> List[str]:
@@ -1002,11 +1053,11 @@ class Vec2TextRAG:
             try:
                 # Get base embedding
                 base_embedding = self._embed_text(text)
-                
+
                 # Apply syntax-based compensation
                 syntax_features = self._extract_syntax_features(text)
                 compensated_embedding = base_embedding + compensation_factor * syntax_features
-                
+
                 # Calculate distance with compensation
                 distance = torch.norm(query_vector - compensated_embedding)
 
@@ -1022,17 +1073,17 @@ class Vec2TextRAG:
     def _extract_syntax_features(self, text: str) -> torch.Tensor:
         """Extract syntax features from text for compensation"""
         features = []
-        
+
         # JSON structure features
         features.append(1.0 if text.count("{") > 0 else 0.0)  # Has objects
         features.append(1.0 if text.count("[") > 0 else 0.0)  # Has arrays
         features.append(1.0 if text.count('"') > 10 else 0.0)  # Has strings
         features.append(1.0 if text.count(":") > 5 else 0.0)  # Has key-value pairs
-        
+
         # Fill remaining features
         while len(features) < 1024:
             features.append(0.0)
-            
+
         return torch.tensor(features[:1024], dtype=torch.float32)
 
     def _oversample_candidates(self, candidate_vectors: List[torch.Tensor]) -> List[torch.Tensor]:
@@ -1055,9 +1106,11 @@ class Vec2TextRAG:
                     pass
                 else:
                     # Unexpected dimension, skip this vector
-                    self.logger.warning("Skipping vector with unexpected dimensions: %s", vector.shape)
+                    self.logger.warning(
+                        "Skipping vector with unexpected dimensions: %s", vector.shape
+                    )
                     continue
-                
+
                 text = self.diffusion_model.invert_embedding(vector)
                 hypotheses.append(text)
             except Exception as e:
@@ -1070,11 +1123,11 @@ class Vec2TextRAG:
         # Create a more sophisticated hash-based embedding
         hash_val = hash(text) % 1000000
         embedding = torch.zeros(1024, dtype=torch.float32)
-        
+
         # Distribute hash across embedding dimensions
         for i in range(1024):
             embedding[i] = (hash_val * (i + 1)) % 1000000 / 1000000.0
-            
+
         return embedding
 
 
