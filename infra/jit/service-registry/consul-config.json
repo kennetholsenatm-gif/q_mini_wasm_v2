@@ -1,0 +1,41 @@
+{
+  "datacenter": "local",
+  "data_dir": "/opt/consul/data",
+  "log_level": "INFO",
+  "node_name": "jit-service-registry",
+  "server": true,
+  "bootstrap_expect": 1,
+  "ui": true,
+  "client_addr": "0.0.0.0",
+  "bind_addr": "100.64.0.10",
+  "retry_join": [],
+  "ports": {
+    "http": 8500,
+    "dns": 8600,
+    "serf_lan": 8301,
+    "serf_wan": 8302,
+    "server": 8300
+  },
+  "acl": {
+    "enabled": true,
+    "default_policy": "deny",
+    "enable_token_persistence": true,
+    "tokens": {
+      "master": "master-token-jit-registry",
+      "agent": "agent-token-jit-registry"
+    }
+  },
+  "service": [
+    {
+      "id": "jit-service-registry",
+      "name": "jit-service-registry",
+      "tags": ["jit", "service-registry"],
+      "port": 8500,
+      "check": {
+        "http": "http://100.64.0.10:8500/v1/status/leader",
+        "interval": "10s",
+        "timeout": "5s"
+      }
+    }
+  ]
+}
