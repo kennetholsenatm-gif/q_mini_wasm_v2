@@ -212,8 +212,10 @@ class TimestepEmbedding(nn.Module):
             Timestep embedding (batch, embed_dim)
         """
         half_dim = self.embed_dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float32, device=timesteps.device) * -emb)
+        inv_scale = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(
+            torch.arange(half_dim, dtype=torch.float32, device=timesteps.device) * -inv_scale
+        )
         emb = timesteps.float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
         if self.embed_dim % 2 == 1:
