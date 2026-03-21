@@ -120,6 +120,19 @@ Configuration is loaded from environment variables or defaults:
 - `NUM_QUBITS`: Number of qubits for QAOA (default: `8`)
 - `QAOA_LAYERS`: QAOA circuit depth (default: `3`)
 
+## ML engine training (data sources and metrics)
+
+The `engine` package runs `run_training_loop` via:
+
+```bash
+pip install -e ".[training]"   # Hugging Face datasets (optional; for hf_tabular)
+python -m engine
+```
+
+**Data modes** (`TRAINING_DATA_SOURCE`): **`mesh`** (embedded C→WASM + memory snapshots), **`corpus`** (manifest of `.wasm` binaries under [`corpus/`](corpus/)), or **`hf_tabular`** (e.g. CodeSearchNet — encodes text to 4096-d vectors; not the same as WASM execution).
+
+Full tables, **CodeSearchNet / `whole_func_string`** guidance, **example loss behavior**, and **environment variables** are documented in **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
+
 ## Project Structure
 
 ```
@@ -134,8 +147,9 @@ qminiwasm-core/
 │   ├── model.py                # Main QMiniWASM interface
 │   └── training/
 │       └── loop.py             # Training loop
-├── engine/                     # Training entrypoint
-├── docs/                       # Documentation
+├── engine/                     # Training entrypoint (`python -m engine`)
+├── corpus/                     # Example bare-wasm manifest + scratch.wasm
+├── docs/                       # Documentation (see docs/TRAINING_DATA.md)
 └── requirements.txt
 ```
 

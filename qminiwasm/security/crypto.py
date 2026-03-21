@@ -12,16 +12,33 @@ The implementation follows the white paper's specifications for:
 - Quantum MoE and ternary weight optimization
 """
 
-import logging
-from typing import Any, Dict, List, Optional, Tuple
-import torch
-from dataclasses import dataclass
 import hashlib
+import logging
 import secrets
+import sys
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
+
 import ctypes
+import torch
 from ctypes import c_float
 
 logger = logging.getLogger(__name__)
+
+
+def try_load_optional_native_lib(path: str) -> Optional[ctypes.CDLL]:
+    """Load a native shared library when available.
+
+    On Windows, optional Unix ``.so`` dependencies are skipped with no log noise.
+    On other platforms, missing libraries log at DEBUG only.
+    """
+    if sys.platform == "win32":
+        return None
+    try:
+        return ctypes.CDLL(path)
+    except OSError as e:
+        logger.debug("Optional native library not loaded (%s): %s", path, e)
+        return None
 
 
 @dataclass
@@ -50,14 +67,9 @@ class ApproximateDCPE:
     def _initialize_quantum_backend(self):
         """Initialize quantum backend for cryptographic operations"""
         if self.config.quantum_enabled:
-            try:
-                self.quantum_backend = ctypes.CDLL("libquantum_crypto.so")
+            self.quantum_backend = try_load_optional_native_lib("libquantum_crypto.so")
+            if self.quantum_backend is not None:
                 logging.getLogger(__name__).info("Initialized quantum cryptographic backend")
-            except Exception as e:
-                logging.getLogger(__name__).warning(
-                    "Quantum cryptographic backend initialization failed: %s", e
-                )
-                self.quantum_backend = None
 
     def _generate_key(self) -> str:
         """Generate a new cryptographic key"""
@@ -296,13 +308,9 @@ class WebAssemblyEnclave:
     def _initialize_quantum_enclave(self):
         """Initialize quantum-enhanced enclave capabilities"""
         if self.config.quantum_enabled:
-            try:
-                # Load quantum enclave library
-                self.quantum_enclave = ctypes.CDLL("libquantum_enclave.so")
+            self.quantum_enclave = try_load_optional_native_lib("libquantum_enclave.so")
+            if self.quantum_enclave is not None:
                 self.logger.info("Initialized quantum-enhanced WebAssembly enclave")
-            except Exception as e:
-                self.logger.warning("Quantum enclave initialization failed: %s", e)
-                self.quantum_enclave = None
 
     def _create_isolation_context(self) -> Dict:
         """Create isolation context for cryptographic operations"""
@@ -389,13 +397,9 @@ class KeyManager:
 
     def _initialize_quantum_backend(self) -> None:
         """Initialize quantum backend for key management"""
-        try:
-            # Load quantum key management library
-            self.quantum_backend = ctypes.CDLL("libquantum_keys.so")
+        self.quantum_backend = try_load_optional_native_lib("libquantum_keys.so")
+        if self.quantum_backend is not None:
             self.logger.info("Initialized quantum key management backend")
-        except Exception as e:
-            self.logger.warning("Quantum key management initialization failed: %s", e)
-            self.quantum_backend = None
 
     def generate_key(self, key_id: str, key_type: str = "symmetric") -> str:
         """Generate a new cryptographic key
@@ -483,13 +487,9 @@ class SecurityContext:
 
     def _initialize_quantum_enforcer(self) -> None:
         """Initialize quantum security enforcer"""
-        try:
-            # Load quantum security library
-            self.quantum_enforcer = ctypes.CDLL("libquantum_security.so")
+        self.quantum_enforcer = try_load_optional_native_lib("libquantum_security.so")
+        if self.quantum_enforcer is not None:
             self.logger.info("Initialized quantum security enforcer")
-        except Exception as e:
-            self.logger.warning("Quantum security enforcer initialization failed: %s", e)
-            self.quantum_enforcer = None
 
     def validate_operation(self, operation: str, context: Dict) -> bool:
         """Validate if an operation is allowed in the current context

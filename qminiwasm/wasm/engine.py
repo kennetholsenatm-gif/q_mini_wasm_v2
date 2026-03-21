@@ -34,6 +34,8 @@ MESH_EXPORT_NAMES: Dict[str, str] = {
 class WasmEngine:
     """WASM Engine for compiling and executing WASM modules"""
 
+    _successful_init_log_count = 0
+
     def __init__(self, use_mock: bool = False):
         """Initialize the WASM engine
 
@@ -53,7 +55,14 @@ class WasmEngine:
             try:
                 # Test WASM compilation capability
                 self._test_wasm_compilation()
-                self.logger.info("WASM engine initialized with actual compilation")
+                WasmEngine._successful_init_log_count += 1
+                if WasmEngine._successful_init_log_count == 1:
+                    self.logger.info("WASM engine initialized with actual compilation")
+                else:
+                    self.logger.debug(
+                        "WASM engine initialized with actual compilation (instance %s)",
+                        WasmEngine._successful_init_log_count,
+                    )
             except Exception as e:
                 self.logger.warning(
                     "WASM compilation not available: %s. Using mock implementation.", str(e)

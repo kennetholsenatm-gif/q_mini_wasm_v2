@@ -14,6 +14,9 @@ def main(config: EngineConfig | None = None) -> dict:
     if getattr(config, "mesh_algorithms", None):
         mesh_algos = [a.strip() for a in str(config.mesh_algorithms).split(",") if a.strip()]
 
+    _lp = getattr(config, "lr_plateau_patience", None)
+    lr_plateau_patience = _lp if _lp and _lp > 0 else None
+
     return run_training_loop(
         epochs=config.epochs,
         batch_size=config.batch_size,
@@ -27,4 +30,17 @@ def main(config: EngineConfig | None = None) -> dict:
         training_data_source=getattr(config, "training_data_source", "mesh"),
         mesh_algorithms=mesh_algos,
         hf_dataset_config=getattr(config, "hf_dataset_config", None),
+        hf_num_samples=getattr(config, "hf_num_samples", None),
+        hf_split=getattr(config, "hf_split", "train"),
+        hf_text_fields=getattr(config, "hf_text_fields", None),
+        seed=getattr(config, "seed", None),
+        grad_clip_norm=getattr(config, "grad_clip_norm", None),
+        lr_plateau_patience=lr_plateau_patience,
+        lr_plateau_factor=float(getattr(config, "lr_plateau_factor", 0.5)),
+        lr_plateau_min_lr=float(getattr(config, "lr_plateau_min_lr", 1e-7)),
+        early_stop_patience=(
+            int(p)
+            if (p := getattr(config, "early_stop_patience", None)) is not None and p > 0
+            else None
+        ),
     )
