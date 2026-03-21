@@ -11,7 +11,6 @@ In environments without Qiskit, it falls back to classical/mock behavior so test
 hierarchical inference can run without quantum dependencies.
 """
 
-import ctypes
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -36,7 +35,7 @@ except ImportError:
     QAOA = QuantumInstance = PauliSumOp = PauliSum = AerSimulator = None  # type: ignore[misc]
 
 # Import cryptographic infrastructure
-from qminiwasm.security.crypto import CryptoConfig, EnhancedApproximateDCPE
+from qminiwasm.security.crypto import CryptoConfig, EnhancedApproximateDCPE, try_load_optional_native_lib
 
 logger = logging.getLogger(__name__)
 
@@ -92,15 +91,9 @@ class EnhancedQuantumRouter(QuantumRouter):
     def _initialize_enhanced_quantum_backend(self):
         """Initialize enhanced quantum backend with barren plateau mitigation"""
         if self.config.quantum_enabled:
-            try:
-                # Load enhanced quantum cryptographic library
-                self.quantum_backend = ctypes.CDLL("libquantum_crypto.so")
+            self.quantum_backend = try_load_optional_native_lib("libquantum_crypto.so")
+            if self.quantum_backend is not None:
                 self.logger.info("Initialized enhanced quantum cryptographic backend")
-            except Exception as e:
-                self.logger.warning(
-                    "Enhanced quantum cryptographic backend initialization failed: %s", e
-                )
-                self.quantum_backend = None
 
     def formulate_qubo(
         self, distance_matrix: np.ndarray, k: int, T: int, E: int, C: int

@@ -5,9 +5,31 @@ It uses Intel oneAPI SYCL to provide native hardware acceleration for vector and
 """
 
 import logging
-from typing import List
+import sys
+from typing import Any, List, Optional
+
 import numpy as np
 import warnings
+
+
+def _select_dpctl_device(dpctl: Any) -> Optional[Any]:
+    """Pick a default SYCL device across dpctl versions (get_current_device is not always present)."""
+    for name in ("get_current_device", "select_default_device"):
+        fn = getattr(dpctl, name, None)
+        if callable(fn):
+            try:
+                dev = fn()
+                if dev is not None:
+                    return dev
+            except Exception:
+                pass
+    try:
+        ctor = getattr(dpctl, "SyclDevice", None)
+        if callable(ctor):
+            return ctor()
+    except Exception:
+        pass
+    return None
 
 
 class SYCLHardware:
@@ -45,12 +67,14 @@ class SYCLHardware:
             except Exception:
                 self._tensor = None
 
-            try:
-                self.device = dpctl.get_current_device()
+            self.device = _select_dpctl_device(dpctl)
+            if self.device is not None:
                 self.logger.info("Using SYCL device: %s", getattr(self.device, "name", "unknown"))
-            except Exception as e:
-                self.logger.warning("Failed to get SYCL device: %s", e)
-                self.device = None
+            else:
+                logfn = self.logger.debug if sys.platform == "win32" else self.logger.warning
+                logfn(
+                    "No default SYCL device from dpctl (optional on CPU-only hosts); using NumPy fallback."
+                )
         except Exception as e:
             self.logger.info("SYCL backend unavailable; falling back to NumPy (%s)", e)
             self._sycl = None

@@ -234,7 +234,7 @@ class QMiniWASM:
             # Apply ternary quantization for WASM experts
             ternary_output = self.ternary_expert(routed_output)
 
-            self.logger.info("Completed hybrid inference")
+            self.logger.debug("Completed hybrid inference")
             return ternary_output
 
         except Exception as e:
