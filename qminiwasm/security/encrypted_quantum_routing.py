@@ -11,18 +11,15 @@ the operational utility of k-NN searches over encrypted manifolds.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Any, Dict, List
 from dataclasses import dataclass
 import time
 import numpy as np
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
-import torch
-from scipy.spatial.distance import euclidean
 import math
 
 from ..config import HierarchicalConfig
-from ..wasm.engine import WasmEngine
 
 
 @dataclass

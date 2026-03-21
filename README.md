@@ -46,13 +46,13 @@ Training Data → TernaryWASMExpert → WASM Compilation → Execution
 git clone <repository-url>
 cd qminiwasm-core
 
-# Install dependencies
+# Install dependencies (includes PennyLane for local simulators)
 pip install -e .
 
-# For quantum routing support
-pip install -e ".[quantum]"
+# Optional: FastAPI inference server (engine/serve.py)
+pip install -e ".[serve]"
 
-# For Intel ARC (XPU) support
+# Optional: Intel ARC (XPU) / dpctl
 pip install -e ".[arc]"
 ```
 

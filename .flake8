@@ -1,0 +1,17 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203, W503
+exclude = .git, __pycache__, .venv, venv, build, dist, .eggs, *.egg-info
+# Legacy / diagnostic modules: suppress style noise until refactored.
+per-file-ignores =
+    qminiwasm/quantum/integration_tester.py: E501, F401, F841
+    qminiwasm/hardware/intel_sycl_integration.py: F401
+    qminiwasm/hardware/sycl/dpas_lowering.py: F401, F841
+    qminiwasm/layers/failure_taxonomy.py: F401, F841
+    qminiwasm/layers/ternary_quantization.py: F401, F841
+    qminiwasm/layers/tropical_geometry.py: F401, E501
+    qminiwasm/quantum/backend_registry.py: F841
+    qminiwasm/quantum/performance_optimizer.py: E501, F401, F841
+    qminiwasm/quantum/qaoa_integration.py: F401
+    qminiwasm/quantum/qubo.py: E501
+    qminiwasm/quantum/router.py: E501

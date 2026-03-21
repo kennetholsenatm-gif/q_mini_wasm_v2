@@ -3,37 +3,17 @@ pants_version = "2.25.0"
 backend_packages = [
   "pants.backend.python",
   "pants.backend.python.lint.black",
-  "pants.backend.python.lint.flake8", 
+  "pants.backend.python.lint.flake8",
   "pants.backend.python.typecheck.mypy",
-  "pants.backend.docker",
-  "pants.backend.experimental.docker.registries",
-  "pants.backend.experimental.docker.dockerfile",
-  "pants.backend.experimental.docker.dockerfile.lint.hadolint",
 ]
 
+# Alpha layout: single Python package at repo root (no nested monorepo copies).
 [source]
-root_patterns = [
-  "qminiwasm-core/",
-  "qminiwasm-studio/",
-  "qminiwasm-platform/",
-  "qminiwasm-automation/",
-]
+root_patterns = ["."]
 
 [python]
 interpreter_constraints = [">=3.8"]
-resolves = {
-  "core": "qminiwasm-core/requirements.txt",
-  "studio": "qminiwasm-studio/requirements.txt", 
-  "platform": "qminiwasm-platform/requirements.txt",
-  "automation": "qminiwasm-automation/requirements.txt",
-}
-
-[docker]
-default_registries = ["@dockerhub"]
-
-[registries.dockerhub]
-address = "docker.io"
-default = true
+resolves = { "core": "requirements.txt" }
 
 [lint.black]
 args = ["--line-length=100"]

@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="llm-pract",
     version="0.1.0",
-    description="Q-Mini-WASM: Quantum-Classical Hybrid AI Architecture",
+    description="Q-Mini-WASM: ternary-quantized models with local WASM execution",
     long_description=(Path(__file__).parent / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="Q-Mini-WASM Team",
@@ -22,18 +22,7 @@ setup(
         "pywasm>=2.0.0",
         "numpy>=1.24.0",
         "scipy>=1.10.0",
-        "networkx>=3.1.0",
-        "sympy>=1.12.0",
-        "pandas>=2.0.0",
-        "matplotlib>=3.7.0",
-        "scikit-learn>=1.3.0",
-        "tqdm>=4.65.0",
-        "rich>=13.7.0",
-        "click>=8.1.0",
-        "python-dotenv>=1.0.0",
-        "loguru>=0.7.0",
-        "pydantic>=2.5.0",
-        "pydantic-settings>=2.1.0",
+        "cryptography>=46.0.5",
     ],
     extras_require={
         "dev": [
@@ -46,8 +35,10 @@ setup(
             "mkdocs>=1.5.0",
             "mkdocs-material>=9.0.0",
         ],
-        "quantum": [
-            "pennylane>=0.28",
+        "serve": [
+            "fastapi>=0.109.0",
+            "uvicorn[standard]>=0.27.0",
+            "pydantic>=2.5.0",
         ],
         "wasm": [
             "wasmtime>=14.0.0",
@@ -59,14 +50,17 @@ setup(
         "arc": [
             "dpctl>=0.15.0",
         ],
-        "intel-quantum": [],
+        "scripts": [
+            "click>=8.1.0",
+            "python-dotenv>=1.0.0",
+            "loguru>=0.7.0",
+        ],
         "security": [
             "bandit>=1.7.0",
             "safety>=2.3.0",
             "pip-audit>=2.6.0",
         ],
     },
-    # Entry point reserved until qminiwasm.cli is implemented
     python_requires=">=3.8",
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -83,7 +77,7 @@ setup(
         "Topic :: Software Development :: Build Tools",
     ],
     license="MIT",
-    keywords="quantum machine learning AI wasm hybrid architecture",
+    keywords="quantum machine learning wasm ternary quantization",
     project_urls={
         "Documentation": "https://github.com/kennetholsenatm-gif/LLM_Pract",
         "Source": "https://github.com/kennetholsenatm-gif/LLM_Pract",

@@ -174,6 +174,10 @@ class SYCLHardware:
         # In a real implementation, SYCL's USM (Unified Shared Memory) would be used
         # to manage memory across host and device
         try:
+            dpt = self._tensor
+            if dpt is None:
+                self.logger.warning("dpctl.tensor not available; skipping USM allocation")
+                return
             # Create a USM allocation (allocation is the side effect; no use of buffer here)
             _ = dpt.usm_alloc(size, dtype=np.float32, device=self.device)
             self.logger.debug("Created USM allocation for memory paging")

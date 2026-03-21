@@ -1,5 +1,4 @@
-# WASM Compilation and Execution Requirements
-wasmtime==12.0.0
-pywasm==2.0.0
-# cffi>=2.0 required by cryptography>=46.0.5 (CVE-2026-26007)
+# WASM compilation and execution (align with setuptools install_requires)
+wasmtime>=14.0.0
+pywasm>=2.0.0
 cffi>=2.0.0

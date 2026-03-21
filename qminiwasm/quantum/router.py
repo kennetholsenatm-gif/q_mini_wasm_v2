@@ -13,7 +13,7 @@ hierarchical inference can run without quantum dependencies.
 
 import ctypes
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -36,14 +36,7 @@ except ImportError:
     QAOA = QuantumInstance = PauliSumOp = PauliSum = AerSimulator = None  # type: ignore[misc]
 
 # Import cryptographic infrastructure
-from qminiwasm.security.crypto import (
-    EnhancedApproximateDCPE,
-    encrypt_vector,
-    decrypt_vector,
-    validate_security_context,
-    log_security_operation,
-    CryptoConfig,
-)
+from qminiwasm.security.crypto import CryptoConfig, EnhancedApproximateDCPE
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +87,7 @@ class EnhancedQuantumRouter(QuantumRouter):
         self.crypto_config = CryptoConfig()
         self.dcpe_encryptor = EnhancedApproximateDCPE(config=self.crypto_config)
         self.encryption_enabled = True
-        self.encrypted_vector_cache = {}
+        self.encrypted_vector_cache: Dict[str, Any] = {}
 
     def _initialize_enhanced_quantum_backend(self):
         """Initialize enhanced quantum backend with barren plateau mitigation"""
