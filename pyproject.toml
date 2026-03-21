@@ -2,6 +2,57 @@
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# PEP 621 metadata required by setuptools when building editable installs from pyproject.toml.
+# Detailed metadata and extras remain in setup.py for now.
+[project]
+name = "llm-pract"
+version = "0.1.0"
+description = "Q-Mini-WASM: ternary-quantized models with local WASM execution"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "torch>=2.0.0",
+    "pennylane>=0.28",
+    "wasmtime>=14.0.0",
+    "pywasm>=2.0.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "cryptography>=46.0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "bandit>=1.7",
+    "black>=23.7.0",
+    "flake8>=6.0.0",
+    "mypy>=1.4.0",
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+]
+serve = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+]
+wasm = [
+    "wasmtime>=14.0.0",
+    "pywasm>=2.0.0",
+]
+gpu = ["dpctl>=0.15.0"]
+arc = ["dpctl>=0.15.0"]
+scripts = [
+    "click>=8.1.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.0",
+]
+security = [
+    "bandit>=1.7.0",
+    "safety>=2.3.0",
+    "pip-audit>=2.6.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["qminiwasm*"]
