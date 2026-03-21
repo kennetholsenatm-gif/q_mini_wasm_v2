@@ -171,7 +171,7 @@ class SYCLHardware:
 
         self.logger.info("Executing driver-level memory paging using SYCL")
 
-        # In a real implementation, we would use SYCL's USM (Unified Shared Memory)
+        # In a real implementation, SYCL's USM (Unified Shared Memory) would be used
         # to manage memory across host and device
         try:
             # Create a USM allocation (allocation is the side effect; no use of buffer here)

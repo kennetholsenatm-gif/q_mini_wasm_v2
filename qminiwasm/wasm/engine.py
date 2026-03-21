@@ -276,7 +276,7 @@ class WasmCompiler:
         Returns:
             WASM module if compilation succeeds, None otherwise
         """
-        # Check if we already compiled this algorithm
+        # Check if this algorithm was already compiled
         if algorithm_name in self.engine._module_cache:
             return self.engine._module_cache[algorithm_name]
 

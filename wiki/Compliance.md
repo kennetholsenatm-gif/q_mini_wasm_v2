@@ -188,7 +188,7 @@ Q-Mini-WASM implements comprehensive legal and compliance frameworks to ensure a
 
 ## Getting Started with Compliance
 
-Ready to implement comprehensive legal and compliance frameworks in your quantum computing projects? Follow our [Development Workflow](Development) guide to set up your development environment with robust compliance practices.
+Ready to implement comprehensive legal and compliance frameworks in your quantum computing projects? Follow the [Development Workflow](Development) guide to set up your development environment with robust compliance practices.
 
 ---
 

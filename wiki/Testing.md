@@ -207,7 +207,7 @@ def test_performance_benchmark():
 
 ## Getting Started with Testing
 
-Ready to implement comprehensive testing in your quantum computing projects? Follow our [Development Workflow](Development) guide to set up your development environment with robust testing practices.
+Ready to implement comprehensive testing in your quantum computing projects? Follow the [Development Workflow](Development) guide to set up your development environment with robust testing practices.
 
 ---
 

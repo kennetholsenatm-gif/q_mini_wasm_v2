@@ -79,12 +79,12 @@ class ProblemHamiltonian(nn.Module):
 
         # Initialize problem-specific parameters
         if problem_type == "ternary_optimization":
-            # For ternary optimization, we want to minimize energy
+            # For ternary optimization, energy is minimized
             # based on weight configuration
             self.weight_couplings = nn.Parameter(torch.randn(num_qubits, num_qubits))
             self.bias_terms = nn.Parameter(torch.randn(num_qubits))
         elif problem_type == "routing_optimization":
-            # For routing optimization, we encode routing costs
+            # For routing optimization, routing costs are encoded
             self.routing_matrix = nn.Parameter(torch.randn(num_qubits, num_qubits))
         else:
             raise ValueError(f"Unknown problem type: {problem_type}")

@@ -33,7 +33,7 @@ setup(
     version="0.1.0",
     description="SYCL hardware acceleration for Q-Mini-WASM",
     author="Q-Mini-WASM Team",
-    author_email="team@qminiwasm.org",
+    author_email="[REDACTED]",
     packages=["qminiwasm.hardware.sycl"],
     ext_modules=ext_modules,
     install_requires=[

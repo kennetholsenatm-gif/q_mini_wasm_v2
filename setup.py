@@ -9,7 +9,7 @@ setup(
     long_description=(Path(__file__).parent / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="Q-Mini-WASM Team",
-    author_email="team@q-mini-wasm.org",
+    author_email="[REDACTED]",
     url="https://github.com/kennetholsenatm-gif/LLM_Pract",
     packages=find_packages(),
     package_data={
@@ -48,7 +48,6 @@ setup(
         ],
         "quantum": [
             "pennylane>=0.28",
-            "pennylane-qiskit>=0.28",
         ],
         "wasm": [
             "wasmtime>=14.0.0",
@@ -61,12 +60,6 @@ setup(
             "dpctl>=0.15.0",
         ],
         "intel-quantum": [],
-        "cloud": [
-            "requests>=2.31",
-            "boto3>=1.28",
-            "google-cloud>=1.33",
-            "azure-core>=1.28",
-        ],
         "security": [
             "bandit>=1.7.0",
             "safety>=2.3.0",

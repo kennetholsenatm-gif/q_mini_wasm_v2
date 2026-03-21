@@ -292,7 +292,7 @@ class HullKVCache:
 
     def _project_to_tropical_2d(self, vector: np.ndarray) -> np.ndarray:
         """Project high-dimensional vector to 2D in tropical space"""
-        # In tropical geometry, we often use logarithmic coordinates
+        # In tropical geometry, logarithmic coordinates are often used
         # This projects to the first two logarithmic coordinates
         log_vector = np.log(np.abs(vector) + 1e-8)  # Add small epsilon to avoid log(0)
         return log_vector[:2]

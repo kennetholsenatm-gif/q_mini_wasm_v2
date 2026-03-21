@@ -1,2 +1,0 @@
-# Place tls.crt and tls.key here when using proxy/envoy-tls.yaml (TLS 1.3 + PQC).
-# Do not commit private keys; add *.key to .gitignore if needed.

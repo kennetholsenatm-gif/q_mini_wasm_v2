@@ -276,7 +276,7 @@ flowchart TB
 
 ## Getting Started
 
-Ready to begin your quantum computing journey with Q-Mini-WASM? Follow our [Development Workflow](Development) guide to set up your development environment and start building quantum applications today.
+Ready to begin your quantum computing journey with Q-Mini-WASM? Follow the [Development Workflow](Development) guide to set up your development environment and start building quantum applications today.
 
 ---
 

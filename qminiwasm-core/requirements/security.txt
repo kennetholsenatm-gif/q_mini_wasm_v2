@@ -1,9 +1,0 @@
-# Security scanning and compliance (used by pip install -e .[security] and CI)
-# OpenSCAP is invoked via subprocess (OS-level: openscap-scanner, scap-security-guide)
-# Trivy is a standalone binary; install separately for container/filesystem scans.
-
-bandit>=1.7.0
-safety>=2.3.0
-pip-audit>=2.6.0
-click>=8.1.0
-loguru>=0.7.0

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Q-Mini-WASM's roadmap outlines our strategic vision for the future development of this quantum computing framework. Our roadmap is designed to deliver continuous innovation, enhanced capabilities, and improved user experiences while maintaining our commitment to security, performance, and compliance.
+Q-Mini-WASM's roadmap outlines the strategic vision for the future development of this quantum computing framework. The roadmap is designed to deliver continuous innovation, enhanced capabilities, and improved user experiences while maintaining the commitment to security
 
 ## Strategic Vision
 
@@ -13,7 +13,7 @@ Q-Mini-WASM's roadmap outlines our strategic vision for the future development o
 - **Innovation Leadership**: Maintain leadership in quantum computing innovation
 
 ### Core Principles
-- **Security First**: Security remains our top priority
+- **Security First**: Security remains the top priority
 - **Performance Excellence**: Continuous performance optimization
 - **User Experience**: Enhanced user experience and accessibility
 - **Community Driven**: Community-driven development and innovation
@@ -142,7 +142,7 @@ Q-Mini-WASM's roadmap outlines our strategic vision for the future development o
 
 ## Getting Involved
 
-Ready to help shape the future of quantum computing? Follow our [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
+Ready to help shape the future of quantum computing? Follow the [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
 
 ---
 

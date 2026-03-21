@@ -188,9 +188,9 @@ class ApproximateDCPE:
         return decrypted_vector
 
     def _remove_perturbation(self, vector: np.ndarray) -> np.ndarray:
-        """Remove perturbation (approximation since we can't perfectly reverse noise)"""
+        """Remove perturbation (approximation since perfect reversal is not possible)"""
         # In practice, this would use the Vec2Text inversion to recover the original
-        # For now, we return the vector as-is since perfect reversal is not possible
+        # For now, the vector is returned as-is since perfect reversal is not possible
         return vector
 
     def _remove_scaling(self, vector: np.ndarray) -> np.ndarray:
@@ -200,9 +200,9 @@ class ApproximateDCPE:
     def _validate_distance_preservation(self, original: np.ndarray, encrypted: np.ndarray) -> bool:
         """Validate that distance comparisons are preserved after encryption"""
         # This is a simplified validation
-        # In practice, we would compare distance rankings between multiple vectors
+        # In practice, distance rankings would be compared between multiple vectors
 
-        # For single vector, we can't validate distance preservation
+        # For single vector, distance preservation cannot be validated
         # This method would be used with multiple vectors in a real implementation
         return True
 

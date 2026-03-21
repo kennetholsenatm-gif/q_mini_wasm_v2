@@ -25,11 +25,6 @@ except ImportError:
     qml = None  # type: ignore[misc, assignment]
 
 try:
-    from qiskit.providers.ibmq import IBMQ
-except ImportError:
-    IBMQ = None  # type: ignore[misc, assignment]
-
-try:
     from qiskit.algorithms import QAOA
     from qiskit.utils import QuantumInstance
     from qiskit.opflow import PauliSumOp, PauliSum
@@ -87,7 +82,7 @@ class EnhancedQuantumRouter(QuantumRouter):
         """Initialize the enhanced quantum router
 
         Args:
-            api_key: IBM Quantum API key for real quantum backend access
+            api_key: Deprecated - API keys are no longer used. System defaults to local simulators.
         """
         super().__init__(api_key)
         self.ternary_optimizer = TernaryOptimizer()
@@ -228,13 +223,7 @@ class EnhancedQuantumRouter(QuantumRouter):
             return self.barren_mitigation.mock_solution(len(initial_params))
 
         try:
-            if isinstance(self.backend, str) and "ibmq" in self.backend:
-                # IBM Quantum backend with ternary expert support
-                qaoa = QAOA(self.quantum_instance, reps=num_layers)
-                result = qaoa.run(qubo_op, initial_point=initial_params)
-                return result.x
-
-            elif hasattr(self.backend, "numpy"):
+            if hasattr(self.backend, "numpy"):
                 # PennyLane implementation with barren plateau mitigation
                 import pennylane as qml
 
@@ -573,13 +562,7 @@ class EnhancedQuantumRouter(QuantumRouter):
             return self.barren_mitigation.mock_encrypted_solution(len(initial_params))
 
         try:
-            if isinstance(self.backend, str) and "ibmq" in self.backend:
-                # IBM Quantum backend with enhanced encrypted data support
-                qaoa = QAOA(self.quantum_instance, reps=num_layers)
-                result = qaoa.run(qubo_op, initial_point=initial_params)
-                return result.x
-
-            elif hasattr(self.backend, "numpy"):
+            if hasattr(self.backend, "numpy"):
                 # PennyLane implementation with enhanced encrypted data support
                 import pennylane as qml
 

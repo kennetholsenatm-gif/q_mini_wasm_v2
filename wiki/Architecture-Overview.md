@@ -1,12 +1,12 @@
 # Architecture Overview: Infrastructure & DevSecOps
 
-This document provides a comprehensive overview of our infrastructure architecture and DevSecOps practices for the Hierarchical Edge-Quantum AI Architecture.
+This document provides a comprehensive overview of the infrastructure architecture and DevSecOps practices for the Hierarchical Edge-Quantum AI Architecture.
 
 ## System Architecture
 
 ### Three-Tier Hierarchical Design
 
-Our architecture follows a strict three-tier hierarchy that separates concerns while maintaining security and performance:
+The architecture follows a strict three-tier hierarchy that separates concerns while maintaining security and performance:
 
 #### Tier 1: Edge Environment (Sub-100MB Footprint)
 **Purpose:** Local processing and memory reconstruction
@@ -54,7 +54,7 @@ Our architecture follows a strict three-tier hierarchy that separates concerns w
 
 ### Container Architecture
 
-Our system is built on a container-first architecture using Docker and Kubernetes:
+The system is built on a container-first architecture using Docker and Kubernetes:
 
 #### Application Containers
 - **WUI Backend:** FastAPI service for web interface
@@ -98,7 +98,7 @@ Our system is built on a container-first architecture using Docker and Kubernete
 
 ### Security-First Development
 
-Our DevSecOps pipeline integrates security at every stage of development:
+The DevSecOps pipeline integrates security at every stage of development:
 
 #### Pre-Commit Security
 - **Static Analysis:** Bandit, Semgrep, and MyPy for code analysis
@@ -142,7 +142,7 @@ Our DevSecOps pipeline integrates security at every stage of development:
 
 ### Comprehensive Monitoring Stack
 
-Our monitoring architecture provides complete visibility into system health and performance:
+The monitoring architecture provides complete visibility into system health and performance:
 
 #### Infrastructure Monitoring
 - **Prometheus:** Metrics collection and time-series database

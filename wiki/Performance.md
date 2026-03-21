@@ -223,7 +223,7 @@ graph TD
 
 ## Getting Started with Performance
 
-Ready to optimize performance in your quantum computing projects? Follow our [Development Workflow](Development) guide to set up your development environment with comprehensive performance practices.
+Ready to optimize performance in your quantum computing projects? Follow the [Development Workflow](Development) guide to set up your development environment with comprehensive performance practices.
 
 ---
 

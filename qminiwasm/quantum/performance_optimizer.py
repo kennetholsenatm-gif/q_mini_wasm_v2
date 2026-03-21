@@ -169,7 +169,7 @@ class MicrosecondOptimizer:
         # Generate optimization key
         key = f"{encrypted_affinity.shape}_{K}_{C}_{optimization_level}"
 
-        # Check if we have precomputed results
+        # Check if precomputed results exist
         if key in self.precomputed_affinities:
             return (
                 self.precomputed_affinities[key],

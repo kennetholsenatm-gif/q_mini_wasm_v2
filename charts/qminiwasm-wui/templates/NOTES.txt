@@ -1,8 +1,0 @@
-Q-Mini-WASM Deployment Tool (WUI) is running.
-
-  Port-forward to access locally:
-  kubectl port-forward svc/{{ include "qminiwasm-wui.fullname" . }} 8000:8000 -n {{ .Release.Namespace }}
-
-  Health: http://localhost:8000/health
-  API:    http://localhost:8000/api/
-  UI:     http://localhost:8000/

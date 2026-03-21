@@ -235,7 +235,7 @@ pwsh -File scripts/devsecops-workflow.ps1
 
 ## Getting Started with DevSecOps
 
-Ready to implement DevSecOps in your quantum computing projects? Follow our [Development Workflow](Development) guide to set up your development environment with comprehensive security practices.
+Ready to implement DevSecOps in your quantum computing projects? Follow the [Development Workflow](Development) guide to set up your development environment with comprehensive security practices.
 
 ---
 

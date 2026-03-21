@@ -1,6 +1,6 @@
 # Concepts Explained: Analogies for Complex Technologies
 
-This document provides simple analogies to help understand the complex technologies behind our Hierarchical Edge-Quantum AI Architecture.
+This document provides simple analogies to help understand the complex technologies behind the Hierarchical Edge-Quantum AI Architecture.
 
 ## Quantum Computing: The Ultimate Search Engine
 
@@ -10,7 +10,7 @@ This document provides simple analogies to help understand the complex technolog
 - **Traditional computer:** Like reading every book in a library sequentially
 - **Quantum computer:** Like having X-ray vision that lets you see the exact page you need in every book at once
 
-**Why it matters:** This allows our system to search through years of encrypted memories in microseconds, making perfect recall practical.
+**Why it matters:** This allows the system to search through years of encrypted memories in microseconds, making perfect recall practical.
 
 ## Vec2Text-RAG: The Mathematical Translator
 
@@ -30,7 +30,7 @@ This document provides simple analogies to help understand the complex technolog
 - **Regular encryption:** Like putting documents in a safe - you can't see or compare them without the key
 - **Approximate DCPE:** Like putting documents in special envelopes that let you compare their shapes and sizes without opening them
 
-**Why it matters:** This allows our system to search through encrypted memories to find related information without ever exposing the sensitive content.
+**Why it matters:** This allows the system to search through encrypted memories to find related information without ever exposing the sensitive content.
 
 ## WebAssembly Enclaves: The Secure Vault
 
@@ -70,7 +70,7 @@ This document provides simple analogies to help understand the complex technolog
 - **Traditional routing:** Like checking each possible route one by one
 - **Quantum routing:** Like seeing all possible routes at once and instantly knowing which is best
 
-**Why it matters:** This allows our system to find the right memory or piece of information instantly, even in massive databases.
+**Why it matters:** This allows the system to find the right memory or piece of information instantly, even in massive databases.
 
 ## Conditional Masked Diffusion: The Perfect Reconstruction
 
@@ -92,7 +92,7 @@ Imagine you have a brilliant personal assistant who:
 5. **Finds information instantly** (Quantum Routing)
 6. **Reconstructs memories perfectly** (Conditional Masked Diffusion)
 
-That's what our Hierarchical Edge-Quantum AI Architecture provides - a secure, intelligent memory system that never forgets and never compromises your privacy.
+That's what the Hierarchical Edge-Quantum AI Architecture provides - a secure, intelligent memory system that never forgets and never compromises your privacy.
 
 ---
 

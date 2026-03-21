@@ -159,7 +159,7 @@ def default_certainty_heuristic(state: Dict) -> float:
     es = state.get("execution_state") or state.get("execution_state_dict")
     if es is None:
         return 0.0
-    # Simple heuristic: if we have a return value and memory/stack keys, assume progress
+    # Simple heuristic: if there is a return value and memory/stack keys, assume progress
     if isinstance(es, dict) and ("memory" in es or "stack" in es or "return_value" in str(es)):
         return 0.5
     return 0.3

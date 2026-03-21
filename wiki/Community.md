@@ -2,7 +2,7 @@
 
 ## Overview
 
-Q-Mini-WASM fosters a vibrant and inclusive community of quantum computing enthusiasts, developers, and researchers. Our community and support framework provides comprehensive resources, collaboration opportunities, and assistance channels to help users succeed with quantum computing applications.
+Q-Mini-WASM fosters a vibrant and inclusive community of quantum computing enthusiasts, developers, and researchers. The community and support framework provides comprehensive resources, collaboration opportunities, and assistance channels to help users succeed with quantum computing applications.
 
 ## Community Structure
 
@@ -175,7 +175,7 @@ Q-Mini-WASM fosters a vibrant and inclusive community of quantum computing enthu
 
 ## Getting Involved
 
-Ready to join our community? Follow our [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
+Ready to join the community? Follow the [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
 
 ---
 

@@ -4,7 +4,7 @@
 This document outlines the security practices, policies, and compliance measures implemented in the Q-Mini-WASM project following NIST SP 800-53, CMMC2.0, and STIG standards. It is the **Security policy** for this repository and appears on the [Security tab](https://github.com/kennetholsenatm-gif/LLM_Pract/security). That tab also shows **Security advisories** (reported and published vulnerabilities), **Dependabot** (dependency alerts; see [.github/dependabot.yml](.github/dependabot.yml)), and—when enabled—code scanning.
 
 ## Reporting a vulnerability
-**Do not report security vulnerabilities in public issues.** Please report them privately so we can fix and disclose them in a coordinated way.
+**Do not report security vulnerabilities in public issues.** Please report them privately so I can fix and disclose them in a coordinated way.
 
 - **Preferred:** [Open a private security advisory](https://github.com/kennetholsenatm-gif/LLM_Pract/security/advisories/new) on this repository. Maintainers will be notified and can work with you on a fix and disclosure.
 - **Alternative:** Use the contact or process described in [CONTRIBUTING.md](CONTRIBUTING.md#vulnerability-management) if you cannot use GitHub advisories.

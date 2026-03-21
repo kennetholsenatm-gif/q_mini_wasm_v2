@@ -252,7 +252,7 @@ Q-Mini-WASM implements a comprehensive security framework that protects quantum 
 
 ## Getting Started with Security
 
-Ready to implement comprehensive security in your quantum computing projects? Follow our [Development Workflow](Development) guide to set up your development environment with robust security practices.
+Ready to implement comprehensive security in your quantum computing projects? Follow the [Development Workflow](Development) guide to set up your development environment with robust security practices.
 
 ---
 

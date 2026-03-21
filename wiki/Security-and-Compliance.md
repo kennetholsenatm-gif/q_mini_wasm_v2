@@ -1,6 +1,6 @@
 # Security and Compliance: Zero-Trust Architecture
 
-This document details our comprehensive security and compliance framework for the Hierarchical Edge-Quantum AI Architecture.
+This document details the comprehensive security and compliance framework for the Hierarchical Edge-Quantum AI Architecture.
 
 ## Zero-Trust Security Model
 

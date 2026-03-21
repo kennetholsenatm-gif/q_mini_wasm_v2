@@ -263,7 +263,7 @@ For how this satisfies IA-2, AC-3, and AU-2/AU-3, see [SECURITY.md](../SECURITY.
 
 ## Getting Started
 
-Ready to start developing with Q-Mini-WASM? Follow our [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
+Ready to start developing with Q-Mini-WASM? Follow the [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
 
 ---
 

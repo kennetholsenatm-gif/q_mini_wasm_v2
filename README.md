@@ -1,69 +1,144 @@
-# Hierarchical Edge-Quantum AI Architecture
+# Q-Mini-WASM: Ternary Network Execution Framework
 
-**Tagline:** Zero-degradation autonomous agents with quantum-accelerated privacy-preserving memory persistence.
+A framework for training and executing BitNet-style ternary quantized neural networks within a WebAssembly runtime environment.
 
-Welcome to the Hierarchical Edge-Quantum AI Architecture repository. Because this project spans quantum computing, advanced cryptography, and edge infrastructure, we have organized our documentation into three tracks. 
+## What It Is
 
-Please select the track that best fits your background:
+This framework provides a pipeline for converting neural network weights to ternary values (`{-1, 0, 1}`) and executing them in a WASM-based environment. The core components are:
 
----
+- **Ternary Quantization**: Forces continuous weights into strict `{-1, 0, 1}` states using a Straight-Through Estimator (STE) during training
+- **WASM Execution Engine**: Compiles and executes WASM modules with deterministic stack mechanics
+- **Quantum-Classical Hybrid Routing**: Optional quantum-accelerated routing for model inference (defaults to local PennyLane simulator)
 
-## 🟢 Track 1: The Layperson's Overview (What does this do?)
+The ternary quantization approach reduces model size and enables deterministic execution, making it suitable for resource-constrained edge environments.
 
-**The Problem:** Currently, AI agents suffer from two massive problems. First, they "forget" things over time (cognitive degradation). Second, if you want an AI to remember highly sensitive data, storing that data in a cloud database is a massive security and privacy risk. 
+## How Ternary Quantization Works
 
-**The Solution:**
-We have built a system that gives AI a "perfect, unhackable memory." 
+The `TernaryWASMExpert` layer implements ternary quantization:
 
-Here is how it works:
-1. **The Edge (Your Device):** When the AI learns something, a tiny, secure program on the local device translates that memory into a puzzle of numbers (vectors) and locks it with a specialized mathematical key. 
-2. **The Cloud (Storage):** These locked numbers are sent to the cloud. The actual text or data is *never* sent or stored, meaning even if the cloud is hacked, the hackers get nothing but meaningless numbers.
-3. **Quantum Search:** When the AI needs to remember something, we use an ultra-fast Quantum Computer. It is specially designed to search through the *locked* numbers to find the right memory instantly, without ever needing to unlock them.
-4. **Perfect Recall:** The locked numbers are sent back to your secure local device, unlocked, and perfectly translated back into the exact original text without any loss of detail. 
+1. **Adaptive Thresholding**: Weights are normalized by their absolute mean
+2. **Discretization**: Values are rounded to the nearest integer and clamped to `[-1, 1]`
+3. **Straight-Through Estimator**: During backpropagation, gradients flow through the continuous weights while forward passes use discrete ternary values
 
-**Why it matters:** It allows for highly secure, military-grade AI assistants that never forget a detail and never compromise your privacy.
+This maintains differentiability during training while ensuring deterministic execution at inference time.
 
----
+## Pipeline Overview
 
-## 🔵 Track 2: DevSecOps & Infrastructure (How is it deployed and secured?)
+```
+Training Data → TernaryWASMExpert → WASM Compilation → Execution
+```
 
-**Target Audience:** Infrastructure Engineers, CISO, DevSecOps Managers
+1. **Training**: Model weights are quantized to ternary values using STE
+2. **Compilation**: WASM modules are compiled from C source or bytecode
+3. **Execution**: The WASM engine runs the compiled modules with captured stack/memory state
 
-This architecture relies on a strict zero-trust boundary between resource-constrained Edge environments and high-compute Cloud/Quantum clusters. 
+## Prerequisites
 
-**Key Architectural Components:**
-* **Edge Environment (Sub-100MB Footprint):** Agents run inside secure WebAssembly (Wasm) sandboxes (using WasmEdge or QMiniWasm). The edge handles all plaintext operations, JSON formatting, embedding, cryptographic locking, and memory reconstruction. 
-* **Network Transit:** Only encrypted vector manifolds are transmitted across TLS fabrics. No plaintext payload ever traverses the network or hits the central database.
-* **Cloud Infrastructure:** Centralized vector databases store chronological encrypted states. A quantum cluster manages routing optimization.
+- Python 3.8+
+- PyTorch 2.0+
+- `clang` (for C-to-WASM compilation) or pre-compiled WASM modules
+- PennyLane (for quantum routing, optional)
 
-**Security & Compliance Posture:**
-* **Zero-Trust Boundary:** Absolute cryptographic isolation between edge and cloud. 
-* **Encryption:** Uses Approximate Distance-Comparison-Preserving Encryption (DCPE) and dynamic key rotation to defend against chosen-plaintext attacks.
-* **SPARSE Noise Injection:** Defends against manifold alignment attacks through dimension-selective noise.
-* **Compliance Ready:** Designed specifically to map to **STIG** compliance and **CMMC 2.0** adherence for AI systems handling Controlled Unclassified Information (CUI).
+## Installation
 
-**Deployment:**
-The edge runtime is highly optimized for devices with limited computational resources, keeping the memory footprint under 100MB. 
+```bash
+# Clone the repository
+git clone <repository-url>
+cd qminiwasm-core
 
----
+# Install dependencies
+pip install -e .
 
-## 🟣 Track 3: Academic & Theoretical (How does the math/physics work?)
+# For quantum routing support
+pip install -e ".[quantum]"
 
-**Target Audience:** Quantum Physicists, Cryptographers, AI Researchers
+# For Intel ARC (XPU) support
+pip install -e ".[arc]"
+```
 
-This framework integrates Vec2Text-RAG and Approximate DCPE to enable continuous-looping autonomous agents without cognitive degradation, operating over a mathematically obfuscated latent space.
+## Basic Usage
 
-**Core Scientific Paradigms:**
-* **Vec2Text Inversion:** We bypass standard LLM context rot by inverting the embedding process. Memory reconstruction is handled securely at the edge via a **Conditional Masked Diffusion** module, allowing exact syntactic reconstruction of historical continuous dense vectors.
-* **Approximate DCPE:** Edge gateways encrypt episodic vectors using Scale-and-Perturb encryption. This preserves distance comparisons (enabling k-NN) without revealing the underlying metric space, intentionally discarding plaintext payloads prior to storage.
-* **Quantum Routing via QAOA:** Centralized routing and approximate k-Nearest Neighbor searches are executed over the encrypted manifold via a **Quantum Approximate Optimization Algorithm (QAOA)** operating on a software-defined quantum router with a holographic metasurface.
-* **Thermodynamic Optimization:** The quantum hardware architecture relies on specialized Cryo-CMOS controllers optimized for 10-millikelvin thermodynamic limits, preventing physical bottlenecks during extreme computational parallelism.
+### Training a Ternary Model
 
-For full mathematical models, rigorous algorithmic compensation for encryption approximation errors, and cryptographic threat modeling, please refer to the [Academic Wiki Track](wiki/Mathematical-Formulation.md).
+```python
+from qminiwasm.model import QMiniWASM
+import torch
 
----
+# Initialize model (defaults to CPU or Intel ARC if available)
+model = QMiniWASM()
 
-## Getting Started & Contributing
-* **Installation & Deployment:** See our [Getting Started Guide](wiki/Deployment-Guide.md) for setting up the local Wasm Edge Agent and testing the Quantum Router simulator.
-* **Contributions:** We welcome contributions from autonomous systems researchers, security architects, and quantum computing engineers. See `CONTRIBUTING.md`.
-* **Support & Licensing:** Apache 2.0 Licensed. Contact support@edgequantum.ai for architectural queries.
+# Prepare training data
+hidden_states = torch.randn(32, 4096)  # batch_size=32, dim=4096
+targets = torch.randn(32, 4096)
+
+# Run training loop
+from qminiwasm.training.loop import run_training_loop
+
+results = run_training_loop(
+    epochs=10,
+    batch_size=32,
+    learning_rate=1e-4,
+    quantum_backend="penny_lane",  # or None to disable quantum routing
+    num_qubits=8,
+    qaoa_layers=3,
+)
+```
+
+### Executing WASM Code
+
+```python
+from qminiwasm.model import QMiniWASM
+
+model = QMiniWASM()
+
+# Execute a WASM function
+wasm_code = b"...your wasm bytecode..."
+result, execution_state = model.execute_wasm(
+    wasm_code=wasm_code,
+    func_name="add",
+    args=[5, 3]
+)
+
+print(f"Result: {result}")
+print(f"Execution state: {execution_state}")
+```
+
+### Hybrid Inference
+
+```python
+# Run inference with quantum-classical hybrid routing
+hidden_states = torch.randn(1, 4096)
+output = model.hybrid_inference(hidden_states)
+```
+
+## Configuration
+
+Configuration is loaded from environment variables or defaults:
+
+- `ACCELERATOR`: `"cuda"`, `"xpu"`, or `"cpu"` (default: auto-detect)
+- `QUANTUM_BACKEND`: `"penny_lane"` or `None` (default: `"penny_lane"`)
+- `NUM_QUBITS`: Number of qubits for QAOA (default: `8`)
+- `QAOA_LAYERS`: QAOA circuit depth (default: `3`)
+
+## Project Structure
+
+```
+qminiwasm-core/
+├── qminiwasm/
+│   ├── layers/
+│   │   └── ternary.py          # TernaryWASMExpert implementation
+│   ├── wasm/
+│   │   └── engine.py           # WASM compilation and execution
+│   ├── quantum/
+│   │   └── router.py           # Quantum routing (QAOA)
+│   ├── model.py                # Main QMiniWASM interface
+│   └── training/
+│       └── loop.py             # Training loop
+├── engine/                     # Training entrypoint
+├── docs/                       # Documentation
+└── requirements.txt
+```
+
+## License
+
+MIT License

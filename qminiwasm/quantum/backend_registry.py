@@ -10,11 +10,6 @@ It handles:
 import logging
 from typing import Any, Dict, List, Optional, Protocol
 
-try:
-    from qiskit.providers.ibmq import IBMQ
-except ImportError:
-    IBMQ = None  # type: ignore[misc, assignment]
-
 
 class QuantumBackend(Protocol):
     """Protocol for interconnect backends that support run_forward."""
@@ -45,7 +40,7 @@ class QuantumBackendRegistry:
 
         Args:
             name: Name of the backend
-            backend_type: Type of backend (e.g., 'ibmq', 'local', 'pennylane')
+            backend_type: Type of backend (e.g., 'local', 'pennylane')
             api_key: API key for external providers
         """
         self.backends[name] = {"type": backend_type, "api_key": api_key, "initialized": False}
@@ -67,21 +62,7 @@ class QuantumBackendRegistry:
         api_key = backend_info["api_key"]
 
         try:
-            if backend_type == "ibmq":
-                if api_key and IBMQ is not None:
-                    IBMQ.save_account(api_key, overwrite=True)
-                    provider = IBMQ.load_account()
-                    backend_info["provider"] = provider
-                    backend_info["initialized"] = True
-                    self.logger.info("Initialized IBM Quantum backend: %s", name)
-                elif api_key:
-                    self.logger.warning(
-                        "IBMQ not available; install qiskit-ibmq-provider for IBM Quantum backend"
-                    )
-                else:
-                    self.logger.warning("No API key provided for IBM Quantum backend")
-
-            elif backend_type == "local":
+            if backend_type == "local":
                 # Local simulator - no initialization needed
                 backend_info["initialized"] = True
                 self.logger.info("Initialized local backend: %s", name)
@@ -211,6 +192,5 @@ def get_backend(
 
 
 # Predefined backends
-backend_registry.register_backend("ibmq_qasm_simulator", "ibmq")
 backend_registry.register_backend("local_simulator", "local")
 backend_registry.register_backend("pennylane", "pennylane")

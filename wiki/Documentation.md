@@ -202,7 +202,7 @@ Q-Mini-WASM implements a comprehensive documentation framework that ensures all 
 
 ## Getting Started with Documentation
 
-Ready to implement comprehensive documentation in your quantum computing projects? Follow our [Development Workflow](Development) guide to set up your development environment with robust documentation practices.
+Ready to implement comprehensive documentation in your quantum computing projects? Follow the [Development Workflow](Development) guide to set up your development environment with robust documentation practices.
 
 ---
 

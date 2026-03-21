@@ -6,4 +6,3 @@
 -r requirements/hardware.txt
 -r requirements/wasm.txt
 -r requirements/dev.txt
--r requirements/k8s.txt

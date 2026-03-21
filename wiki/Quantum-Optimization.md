@@ -55,7 +55,7 @@ The circuit depth for QAOA with \( p \) layers is:
 D_{\text{QAOA}} = 2p \times (D_{\text{entangling}} + D_{\text{single-qubit}})
 \]
 
-For our implementation:
+For this implementation:
 - \( D_{\text{entangling}} \approx 10 \) (CNOT gates)
 - \( D_{\text{single-qubit}} \approx 5 \) (RZ, RX rotations)
 - \( p = 3 \) (optimized depth)
@@ -70,7 +70,7 @@ Total depth: \( D_{\text{QAOA}} \approx 90 \) gate operations
 \]
 where \( C_{\text{QAOA}} \) is the cost achieved by QAOA and \( C_{\text{optimal}} \) is the optimal cost.
 
-For our routing problem:
+For the routing problem:
 \[
 \rho \geq 0.85 \text{ with } p = 3
 \]
@@ -81,21 +81,12 @@ T_{\text{QAOA}} = O(p \cdot n \cdot T_{\text{gate}})
 \]
 where \( n \) is the number of qubits and \( T_{\text{gate}} \) is the gate operation time.
 
-For our system:
+For this system:
 - \( n = 50 \) qubits
 - \( T_{\text{gate}} \approx 100 \text{ ns} \)
 - \( T_{\text{QAOA}} \approx 15 \mu\text{s} \)
 
-## Holographic Metasurface Implementation
-
-### Metasurface Design
-
-The holographic metasurface enables quantum random access memory (QRAM) with:
-- **Resolution**: \( 1024 \times 1024 \) pixels
-- **Response Time**: \( < 1 \text{ ns} \)
-- **Efficiency**: \( > 90\% \) photon efficiency
-
-### Quantum Memory Access
+## Quantum Memory Access (QRAM)
 
 The QRAM implementation provides:
 \[
@@ -170,7 +161,7 @@ The system achieves quantum advantage when:
 T_{\text{quantum}} < T_{\text{classical}}
 \]
 
-For our routing problem:
+For the routing problem:
 - **Classical**: \( T_{\text{classical}} \approx 100 \text{ ms} \)
 - **Quantum**: \( T_{\text{quantum}} \approx 15 \mu\text{s} \)
 - **Speedup**: \( \approx 6,700 \times \)

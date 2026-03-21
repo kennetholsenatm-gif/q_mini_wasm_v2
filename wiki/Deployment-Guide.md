@@ -518,9 +518,9 @@ find /var/log -name "*.log" -mtime +30 -delete
 - Community Forum: https://community.qminiwasm.com
 
 ### Professional Support
-- Enterprise Support: support@qminiwasm.com
-- Training and Consulting: training@qminiwasm.com
-- Security Incidents: security@qminiwasm.com
+- Enterprise Support: [REDACTED]
+- Training and Consulting: [REDACTED]
+- Security Incidents: [REDACTED]
 
 ---
 
