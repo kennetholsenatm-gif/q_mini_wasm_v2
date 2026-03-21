@@ -44,6 +44,9 @@ setup(
             "wasmtime>=14.0.0",
             "pywasm>=2.0.0",
         ],
+        "training": [
+            "datasets>=2.14.0",
+        ],
         "gpu": [
             "dpctl>=0.15.0",
         ],

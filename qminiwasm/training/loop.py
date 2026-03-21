@@ -7,13 +7,15 @@ Uses DataPipeline and Wasmtime traces when available; STE is handled by TernaryW
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, List, Literal, cast
 
 import torch
 
+from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
-from ..data.pipeline import DataPipeline
+
+TrainingDataSource = Literal["mesh", "corpus", "hf_tabular"]
 
 
 def run_training_loop(
@@ -26,6 +28,9 @@ def run_training_loop(
     num_qubits: int = 8,
     qaoa_layers: int = 3,
     data_path: str | None = None,
+    training_data_source: TrainingDataSource | str = "mesh",
+    mesh_algorithms: List[str] | None = None,
+    hf_dataset_config: str | None = None,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -38,7 +43,12 @@ def run_training_loop(
         quantum_backend: Quantum backend id (used when building router; default penny_lane).
         num_qubits: Number of qubits for QAOA (for backend registry).
         qaoa_layers: QAOA layers (for backend registry).
-        data_path: Optional path to data; ignored if DataPipeline has no loader.
+        data_path: Path to corpus manifest (when training_data_source is ``corpus``)
+            or Hugging Face dataset id (when ``hf_tabular``).
+        training_data_source: ``mesh`` (embedded C/WASM curriculum), ``corpus`` (manifest JSON),
+            or ``hf_tabular`` (row encoding; not WASM-semantics — see hf_loader module doc).
+        mesh_algorithms: Subset of hash/encrypt/network/routing/consensus for mesh mode.
+        hf_dataset_config: Optional HF config name for load_dataset.
 
     Returns:
         Dict with "epochs_run", "final_loss", "metrics" (placeholder).
@@ -59,9 +69,40 @@ def run_training_loop(
     )
 
     pipeline = DataPipeline()
-    processed_data = pipeline.generate_training_data(
-        algorithms=["default"], num_samples=max(1, batch_size * 4)
-    )
+    source = (training_data_source or "mesh").strip().lower()
+    num_samples = max(1, batch_size * 4)
+
+    if source == "corpus":
+        if not data_path:
+            raise ValueError("data_path must point to a corpus manifest JSON when training_data_source=corpus")
+        processed_data = pipeline.generate_training_data_from_corpus(
+            data_path, num_samples=num_samples, seed=42
+        )
+    elif source == "hf_tabular":
+        if not data_path:
+            raise ValueError(
+                "data_path must be a Hugging Face dataset id when training_data_source=hf_tabular"
+            )
+        from .hf_loader import load_hf_tabular_samples
+
+        processed_data = load_hf_tabular_samples(
+            data_path,
+            num_samples,
+            config_name=hf_dataset_config,
+        )
+    else:
+        algos = mesh_algorithms or [
+            "hash",
+            "encrypt",
+            "network",
+            "routing",
+            "consensus",
+        ]
+        processed_data = pipeline.generate_training_data(
+            algorithms=algos,
+            num_samples=max(1, num_samples // max(1, len(algos))),
+        )
+
     if not processed_data:
         processed_data = [
             {"hidden": torch.randn(4096), "target": torch.randn(4096)}

@@ -21,6 +21,9 @@ class EngineConfig:
         batch_size: int = 32,
         learning_rate: float = 1e-4,
         data_path: Optional[str] = None,
+        training_data_source: Optional[str] = None,
+        mesh_algorithms: Optional[str] = None,
+        hf_dataset_config: Optional[str] = None,
     ):
         self.accelerator = accelerator or os.environ.get("ACCELERATOR", "").strip() or None
         _idx = os.environ.get("DEVICE_INDEX", "")
@@ -39,3 +42,12 @@ class EngineConfig:
         self.batch_size = int(os.environ.get("BATCH_SIZE", str(batch_size)))
         self.learning_rate = float(os.environ.get("LEARNING_RATE", str(learning_rate)))
         self.data_path = data_path or os.environ.get("DATA_PATH")
+        self.training_data_source = (
+            training_data_source
+            or os.environ.get("TRAINING_DATA_SOURCE", "mesh")
+        ).strip()
+        self.mesh_algorithms = mesh_algorithms or os.environ.get(
+            "MESH_ALGORITHMS",
+            "hash,encrypt,network,routing,consensus",
+        )
+        self.hf_dataset_config = hf_dataset_config or os.environ.get("HF_DATASET_CONFIG")

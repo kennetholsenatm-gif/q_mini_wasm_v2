@@ -255,9 +255,10 @@ class QMiniWASM:
             epochs: Number of training epochs
         """
         try:
-            # Use data pipeline for training
+            # Use data pipeline for training (mesh curriculum; matches training loop defaults)
             self.data_pipeline.generate_training_data(
-                algorithms=["default"], num_samples=len(training_data)
+                algorithms=["hash", "encrypt", "network", "routing", "consensus"],
+                num_samples=max(1, len(training_data)),
             )
 
             # Train model (placeholder implementation)

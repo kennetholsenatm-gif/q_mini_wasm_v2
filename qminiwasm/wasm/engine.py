@@ -9,14 +9,26 @@ Q-Mini-WASM architecture. It handles:
 """
 
 import logging
+import os
+import struct
 import subprocess
 import tempfile
-import os
 import wasmtime
 from typing import Any, Dict, List, Optional, Tuple
 import torch
 
+from .memory_encode import encode_linear_memory
+
 logger = logging.getLogger(__name__)
+
+# Mesh curriculum: pipeline algorithm key -> exported WASM function name (clang --export-all).
+MESH_EXPORT_NAMES: Dict[str, str] = {
+    "hash": "simple_hash",
+    "encrypt": "simple_encrypt",
+    "network": "process_packet",
+    "routing": "update_routing",
+    "consensus": "consensus_vote",
+}
 
 
 class WasmEngine:
@@ -31,6 +43,8 @@ class WasmEngine:
         self.use_mock = use_mock
         self.logger = logging.getLogger(__name__)
         self._module_cache: Dict[str, Optional[Any]] = {}
+        # wasmtime.Module must be instantiated with the Store that created it.
+        self._module_exec_cache: Dict[int, Tuple[Any, Any]] = {}
         # Keep store for last compile_wasm so Instance can use same engine (no cross-Engine)
         self._compiled_store: Optional[Any] = None
         self._compiled_module: Optional[Any] = None
@@ -47,23 +61,24 @@ class WasmEngine:
                 self.use_mock = True
 
     def _test_wasm_compilation(self):
-        """Test WASM compilation capability"""
-        test_c_code = """
-        int add(int a, int b) {
-            return a + b;
-        }
+        """Verify wasmtime can load and instantiate a tiny module (no clang required)."""
+        wat = """
+        (module
+          (func $add (param i32 i32) (result i32)
+            local.get 0
+            local.get 1
+            i32.add)
+          (export "add" (func $add)))
         """
-        with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as c_file:
-            c_file.write(test_c_code.encode())
-            c_file_path = c_file.name
-
         try:
-            wasm_module = self.compile_c_to_wasm(c_file_path)
-            os.unlink(c_file_path)
-            return wasm_module is not None
+            wasm_bytes = wasmtime.wat2wasm(wat)
+            store = wasmtime.Store()
+            module = wasmtime.Module(store.engine, wasm_bytes)  # type: ignore[attr-defined]
+            instance = wasmtime.Instance(store, module, [])
+            add_fn = instance.exports(store)["add"]  # type: ignore[index]
+            _ = add_fn(store, 1, 2)
+            return True
         except Exception:
-            if os.path.exists(c_file_path):
-                os.unlink(c_file_path)
             raise
 
     def compile_c_to_wasm(self, c_file_path: str) -> Optional[wasmtime.Module]:
@@ -108,6 +123,7 @@ class WasmEngine:
                         wasm_bytes = f.read()
                     store = wasmtime.Store()
                     module = wasmtime.Module(store.engine, wasm_bytes)  # type: ignore[attr-defined]
+                    self._module_exec_cache[id(module)] = (store, module)
                     return module
                 except Exception as e:
                     self.logger.error("Failed to load WASM module: %s", str(e))
@@ -139,6 +155,7 @@ class WasmEngine:
         try:
             store = wasmtime.Store()
             module = wasmtime.Module(store.engine, wasm_code)  # type: ignore[attr-defined]
+            self._module_exec_cache[id(module)] = (store, module)
             self._compiled_store = store
             self._compiled_module = module
             return module
@@ -163,52 +180,77 @@ class WasmEngine:
             (result, execution_state) with execution_state containing
             hidden_state and target_state.
         """
-        output, hidden_state, target_state = self.execute_wasm(module, func_name, args)
+        output, hidden_state, target_state, pre_mem, post_mem = self.execute_wasm(
+            module, func_name, args
+        )
         execution_state: Dict[str, Any] = {
             "hidden_state": hidden_state,
             "target_state": target_state,
+            "wasm_memory_pre": pre_mem,
+            "wasm_memory_post": post_mem,
         }
         return output, execution_state
 
+    def _store_for_module(self, module: Any) -> Optional[Any]:
+        pair = self._module_exec_cache.get(id(module))
+        if pair is not None:
+            return pair[0]
+        if self._compiled_store is not None and self._compiled_module is module:
+            return self._compiled_store
+        return None
+
+    @staticmethod
+    def _read_linear_memory(instance: Any, store: Any) -> bytes:
+        try:
+            mem = instance.exports(store)["memory"]  # type: ignore[index]
+        except KeyError:
+            return b""
+        n = mem.data_len(store)
+        if n <= 0:
+            return b""
+        return bytes(mem.read(store, 0, n))
+
     def execute_wasm(
         self, module: Optional[wasmtime.Module], func_name: str, args: List[int]
-    ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor]]:
-        """Execute WASM function and capture state
-
-        Args:
-            module: WASM module to execute
-            func_name: Name of the function to execute
-            args: Arguments to pass to the function
+    ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]:
+        """Execute WASM function and capture state.
 
         Returns:
-            Tuple of (output, hidden_state, target_state)
+            (output, hidden_state, target_state, pre_memory_bytes, post_memory_bytes)
         """
         if self.use_mock or module is None:
             return self._execute_mock(func_name, args)
-        if self._compiled_store is None or self._compiled_module is not module:
-            self.logger.error("Module was not compiled by this engine; use compile_wasm first.")
-            return 0, None, None
-        store = self._compiled_store
+        store = self._store_for_module(module)
+        if store is None:
+            self.logger.error("Module store missing; compile via compile_wasm or compile_c_to_wasm.")
+            return 0, None, None, b"", b""
         try:
             instance = wasmtime.Instance(store, module, [])
+            pre_mem = self._read_linear_memory(instance, store)
+            first_arg = int(args[0]) if args else 0
+            hidden_state = encode_linear_memory(
+                pre_mem, result_i32=0, first_arg=first_arg
+            )
+
             func = instance.exports(store)[func_name]  # type: ignore[index]
-            # wasmtime-py: call with (store, *args); export is a Func at runtime
             result = func(store, *args)  # type: ignore[operator]
-            # Unwrap single-value tuple if needed (wasmtime can return (value,))
             raw = result[0] if isinstance(result, tuple) and len(result) == 1 else result
             output = int(raw) if raw is not None else 0  # type: ignore[arg-type]
-            hidden_state = torch.tensor([args[0], output, len(args)], dtype=torch.float32)
-            target_state = torch.tensor([args[0], output + 1, len(args) + 1], dtype=torch.float32)
 
-            return output, hidden_state, target_state
+            post_mem = self._read_linear_memory(instance, store)
+            target_state = encode_linear_memory(
+                post_mem, result_i32=output, first_arg=first_arg
+            )
+
+            return output, hidden_state, target_state, pre_mem, post_mem
 
         except Exception as e:
             self.logger.error("WASM execution error: %s", str(e))
-            return 0, None, None
+            return 0, None, None, b"", b""
 
     def _execute_mock(
         self, func_name: str, args: List[int]
-    ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]:
         """Mock WASM execution for testing/development
 
         Args:
@@ -216,41 +258,46 @@ class WasmEngine:
             args: Arguments to pass to the function
 
         Returns:
-            Tuple of (output, hidden_state, target_state)
+            Tuple of (output, hidden_state, target_state, pre_mem, post_mem)
         """
-        # Simulate different algorithms with distinct behaviors
+        def _mock_mem(phase: int, out: int) -> bytes:
+            packed = struct.pack(
+                "<6I",
+                phase,
+                args[0] if args else 0,
+                args[1] if len(args) > 1 else 0,
+                len(args),
+                out & 0xFFFFFFFF,
+                (out ^ 0xFFFFFFFF) & 0xFFFFFFFF,
+            )
+            return packed + b"\x00" * 512
+
         if func_name == "hash":
             output = sum(args) * 2654435761 % 1000000
-            hidden = torch.tensor([args[0], output, len(args)], dtype=torch.float32)
-            target = torch.tensor([args[0], output + 1, len(args) + 1], dtype=torch.float32)
 
         elif func_name == "encrypt":
             key = 12345
             output = args[0] ^ key
-            hidden = torch.tensor([args[0], key, output], dtype=torch.float32)
-            target = torch.tensor([args[0], key, output ^ 0xFF], dtype=torch.float32)
 
         elif func_name == "network":
             output = (args[0] + 1) % 256
-            hidden = torch.tensor([args[0], output, 0], dtype=torch.float32)
-            target = torch.tensor([args[0], output, 1], dtype=torch.float32)
 
         elif func_name == "routing":
             output = args[0] + args[1]
-            hidden = torch.tensor([args[0], args[1], output], dtype=torch.float32)
-            target = torch.tensor([args[0], args[1], output + 1], dtype=torch.float32)
 
         elif func_name == "consensus":
             output = (args[0] + args[1]) // 2
-            hidden = torch.tensor([args[0], args[1], output], dtype=torch.float32)
-            target = torch.tensor([args[0], args[1], (output + 1) // 2], dtype=torch.float32)
 
         else:
             output = sum(args) % 1000
-            hidden = torch.tensor([args[0], output, len(args)], dtype=torch.float32)
-            target = torch.tensor([args[0], output + 1, len(args) + 1], dtype=torch.float32)
 
-        return output, hidden, target
+        fa = args[0] if args else 0
+        pre_b = _mock_mem(0, 0)
+        post_b = _mock_mem(1, output)
+        hidden = encode_linear_memory(pre_b, result_i32=0, first_arg=fa)
+        target = encode_linear_memory(post_b, result_i32=output, first_arg=fa)
+
+        return output, hidden, target, pre_b, post_b
 
 
 class WasmCompiler:
@@ -312,7 +359,8 @@ class WasmCompiler:
 MESH_ALGORITHMS = {
     "hash": """
     #include <stdint.h>
-    uint32_t simple_hash(uint32_t input) {
+    uint32_t simple_hash(uint32_t input, uint32_t unused) {
+        (void)unused;
         return input * 2654435761;
     }
     """,
@@ -324,7 +372,8 @@ MESH_ALGORITHMS = {
     """,
     "network": """
     #include <stdint.h>
-    uint32_t process_packet(uint32_t packet) {
+    uint32_t process_packet(uint32_t packet, uint32_t unused) {
+        (void)unused;
         return packet + 1;
     }
     """,

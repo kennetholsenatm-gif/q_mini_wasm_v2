@@ -11,14 +11,18 @@ The implementation follows the white paper's specifications for:
 - Continuous pre-training and CISPO integration
 """
 
+import hashlib
+import json
 import logging
 import random
 import struct
-import torch
-from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
-import hashlib
-from qminiwasm.wasm import WasmEngine, WasmCompiler, MESH_ALGORITHMS
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import torch
+
+from qminiwasm.wasm import MESH_EXPORT_NAMES, WasmCompiler, WasmEngine, MESH_ALGORITHMS
 
 BytesLike = Union[bytes, bytearray, memoryview]
 
@@ -127,9 +131,13 @@ class DataPipeline:
                 # Fallback to mock execution if compilation fails
                 for _ in range(num_samples):
                     inputs = [random.randint(0, 1000), random.randint(0, 1000)]
-                    output, hidden_state, target_state = self.wasm_engine._execute_mock(
-                        algo_name, inputs
-                    )
+                    (
+                        output,
+                        hidden_state,
+                        target_state,
+                        pre_mem,
+                        post_mem,
+                    ) = self.wasm_engine._execute_mock(algo_name, inputs)
                     self.hullkv_cache.store_valid_state(hidden_state, target_state)
                     sample = {
                         "algorithm": algo_name,
@@ -137,6 +145,8 @@ class DataPipeline:
                         "output": output,
                         "hidden": hidden_state,
                         "target": target_state,
+                        "wasm_memory": post_mem,
+                        "stack_snapshot": [output],
                         "execution_state": {
                             "instruction_pointer": 0,
                             "memory_size": hidden_state.numel(),
@@ -145,21 +155,28 @@ class DataPipeline:
                     training_data.append(sample)
                 continue
 
+            export_name = MESH_EXPORT_NAMES.get(algo_name, algo_name)
             for _ in range(num_samples):
                 # Generate random inputs (2 integers for simplicity)
                 inputs = [random.randint(0, 1000), random.randint(0, 1000)]
 
                 try:
-                    # Execute algorithm and capture states
-                    output, hidden_state, target_state = self.wasm_engine.execute_wasm(
-                        wasm_module, algo_name, inputs
-                    )
+                    (
+                        output,
+                        hidden_state,
+                        target_state,
+                        pre_mem,
+                        post_mem,
+                    ) = self.wasm_engine.execute_wasm(wasm_module, export_name, inputs)
 
                     if hidden_state is None or target_state is None:
-                        # Fallback to mock execution if WASM execution fails
-                        output, hidden_state, target_state = self.wasm_engine._execute_mock(
-                            algo_name, inputs
-                        )
+                        (
+                            output,
+                            hidden_state,
+                            target_state,
+                            pre_mem,
+                            post_mem,
+                        ) = self.wasm_engine._execute_mock(algo_name, inputs)
 
                     # Store valid state transition in HullKVCache
                     self.hullkv_cache.store_valid_state(hidden_state, target_state)
@@ -171,6 +188,8 @@ class DataPipeline:
                         "output": output,
                         "hidden": hidden_state,
                         "target": target_state,
+                        "wasm_memory": post_mem,
+                        "stack_snapshot": [output],
                         "execution_state": {
                             "instruction_pointer": 0,
                             "memory_size": hidden_state.numel(),
@@ -183,6 +202,113 @@ class DataPipeline:
 
         self.logger.info("Generated %d training samples", len(training_data))
         return training_data
+
+    def generate_training_data_from_corpus(
+        self,
+        manifest_path: str,
+        num_samples: int,
+        seed: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Load bare wasm32 modules from a JSON manifest and emit training samples.
+
+        Manifest schema (minimal):
+            {
+              "version": 1,
+              "base_dir": "<optional, relative to manifest parent>",
+              "entries": [
+                {
+                  "id": "optional",
+                  "wasm_path": "relative/or/absolute/path.wasm",
+                  "export_func": "run",
+                  "num_args": 2,
+                  "arg_max": 1000
+                }
+              ]
+            }
+        """
+        path = Path(manifest_path).resolve()
+        if not path.is_file():
+            self.logger.error("Corpus manifest not found: %s", manifest_path)
+            return []
+
+        with path.open("r", encoding="utf-8") as f:
+            manifest = json.load(f)
+
+        manifest_base = path.parent
+        if manifest.get("base_dir"):
+            manifest_base = (manifest_base / str(manifest["base_dir"])).resolve()
+
+        entries = manifest.get("entries") or []
+        if not entries:
+            self.logger.warning("Corpus manifest has no entries: %s", manifest_path)
+            return []
+
+        rng = random.Random(seed if seed is not None else 42)
+        out: List[Dict[str, Any]] = []
+        n_entries = len(entries)
+        per_entry_base = num_samples // n_entries
+        rem = num_samples % n_entries
+
+        for i, entry in enumerate(entries):
+            n_here = per_entry_base + (1 if i < rem else 0)
+            if n_here <= 0:
+                continue
+            rel = entry.get("wasm_path")
+            export_func = entry.get("export_func")
+            if not rel or not export_func:
+                self.logger.warning("Skipping corpus entry missing wasm_path/export_func: %s", entry)
+                continue
+            wasm_file = Path(rel)
+            if not wasm_file.is_file():
+                wasm_file = (manifest_base / rel).resolve()
+            if not wasm_file.is_file():
+                self.logger.error("WASM file not found for corpus: %s", rel)
+                continue
+
+            wasm_bytes = wasm_file.read_bytes()
+            module = self.wasm_engine.compile_wasm(wasm_bytes)
+            if module is None:
+                self.logger.error("Failed to load WASM module: %s", wasm_file)
+                continue
+
+            num_args = int(entry.get("num_args", 2))
+            arg_max = int(entry.get("arg_max", 1000))
+            entry_id = entry.get("id", wasm_file.stem)
+
+            for _ in range(n_here):
+                inputs = [rng.randint(0, arg_max) for _ in range(num_args)]
+                try:
+                    (
+                        output,
+                        hidden_state,
+                        target_state,
+                        pre_mem,
+                        post_mem,
+                    ) = self.wasm_engine.execute_wasm(module, export_func, inputs)
+                    if hidden_state is None or target_state is None:
+                        continue
+                    self.hullkv_cache.store_valid_state(hidden_state, target_state)
+                    out.append(
+                        {
+                            "algorithm": str(entry_id),
+                            "inputs": inputs,
+                            "output": output,
+                            "hidden": hidden_state,
+                            "target": target_state,
+                            "wasm_memory": post_mem,
+                            "stack_snapshot": [output],
+                            "execution_state": {
+                                "instruction_pointer": 0,
+                                "memory_size": hidden_state.numel(),
+                                "wasm_path": str(wasm_file),
+                            },
+                        }
+                    )
+                except Exception as e:
+                    self.logger.error("Corpus sample failed for %s: %s", wasm_file, e)
+
+        self.logger.info("Generated %d corpus training samples", len(out))
+        return out
 
     def inject_faults(self, training_data: List[Dict], fault_types: List[str]) -> List[Dict]:
         """Inject faults into training data for robustness.
@@ -215,11 +341,10 @@ class DataPipeline:
             # Apply each fault type probabilistically
             for fault_type in fault_types:
                 if fault_type == "bit_flip" and random.random() < fault_probabilities["bit_flip"]:
-                    # Flip random bits in the hidden state tensor
-                    bit_flip_mask = torch.bernoulli(
-                        torch.full_like(corrupted_sample["hidden"], 0.01)
-                    )
-                    corrupted_sample["hidden"] = corrupted_sample["hidden"] ^ bit_flip_mask
+                    h = corrupted_sample["hidden"]
+                    bit_flip_mask = torch.bernoulli(torch.full_like(h, 0.01))
+                    noise = torch.randn_like(h) * 0.1
+                    corrupted_sample["hidden"] = h + bit_flip_mask * noise
                     corrupted_sample["faults"] = corrupted_sample.get("faults", []) + ["bit_flip"]
 
                 elif (

@@ -31,6 +31,8 @@ class TestDataPipeline(unittest.TestCase):
             self.assertIn("algorithm", sample)
             self.assertIn("inputs", sample)
             self.assertIn("output", sample)
+            self.assertIn("hidden", sample)
+            self.assertIn("target", sample)
             self.assertIn("wasm_memory", sample)
             self.assertIn("stack_snapshot", sample)
             self.assertIn("execution_state", sample)
@@ -111,11 +113,10 @@ class TestDataPipeline(unittest.TestCase):
         payload = compress_deltas(current, baseline)
 
         self.assertIsNotNone(payload)
-        self.assertIsInstance(payload, dict)
-        self.assertIn("format_version", payload)
-        self.assertIn("length", payload)
-        self.assertIn("checksum", payload)
-        self.assertIn("deltas", payload)
+        self.assertEqual(payload.format_version, 1)
+        self.assertGreater(payload.length, 0)
+        self.assertTrue(payload.checksum)
+        self.assertIsInstance(payload.deltas, list)
 
         logger.info("compress_deltas test passed!")
 

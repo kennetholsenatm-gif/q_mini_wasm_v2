@@ -8,6 +8,6 @@ Q-Mini-WASM architecture. It handles:
 - Error handling and validation
 """
 
-from .engine import WasmEngine, WasmCompiler, MESH_ALGORITHMS
+from .engine import MESH_EXPORT_NAMES, WasmEngine, WasmCompiler, MESH_ALGORITHMS
 
-__all__ = ["WasmEngine", "WasmCompiler", "MESH_ALGORITHMS"]
+__all__ = ["WasmEngine", "WasmCompiler", "MESH_ALGORITHMS", "MESH_EXPORT_NAMES"]

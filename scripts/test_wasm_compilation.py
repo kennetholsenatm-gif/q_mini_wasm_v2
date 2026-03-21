@@ -1,8 +1,12 @@
 """Test script for WASM compilation and execution"""
 
-import unittest
-from qminiwasm.wasm import WasmEngine, MESH_ALGORITHMS
 import logging
+import os
+import random
+import tempfile
+import unittest
+
+from qminiwasm.wasm import MESH_ALGORITHMS, MESH_EXPORT_NAMES, WasmEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,8 +25,11 @@ class TestWasmCompilation(unittest.TestCase):
         logger.info("Testing WASM compilation for all algorithms...")
         for algo_name, c_code in MESH_ALGORITHMS.items():
             try:
-                # Compile the algorithm
-                module = self.wasm_engine.compile_c_to_wasm(c_code)
+                with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as c_file:
+                    c_file.write(c_code.encode())
+                    c_path = c_file.name
+                module = self.wasm_engine.compile_c_to_wasm(c_path)
+                os.unlink(c_path)
                 self.assertIsNotNone(module, f"Failed to compile {algo_name}")
                 logger.info("Successfully compiled %s", algo_name)
             except Exception as e:
@@ -35,20 +42,26 @@ class TestWasmCompilation(unittest.TestCase):
         logger.info("Testing WASM execution for all algorithms...")
         for algo_name in self.mesh_algorithms:
             try:
-                # Get the WASM module
-                module = self.wasm_engine.compile_c_to_wasm(MESH_ALGORITHMS[algo_name])
+                with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as c_file:
+                    c_file.write(MESH_ALGORITHMS[algo_name].encode())
+                    c_path = c_file.name
+                module = self.wasm_engine.compile_c_to_wasm(c_path)
+                os.unlink(c_path)
                 self.assertIsNotNone(module, f"Failed to compile {algo_name}")
+                export = MESH_EXPORT_NAMES[algo_name]
 
                 # Test execution with sample inputs
                 for _ in range(3):
                     inputs = [random.randint(0, 1000), random.randint(0, 1000)]
-                    output, hidden, target = self.wasm_engine.execute_wasm(
-                        module, algo_name, inputs
+                    output, hidden, target, _pre, _post = self.wasm_engine.execute_wasm(
+                        module, export, inputs
                     )
 
                     self.assertIsNotNone(output, f"Execution failed for {algo_name}")
                     self.assertIsNotNone(hidden, f"Execution failed for {algo_name}")
                     self.assertIsNotNone(target, f"Execution failed for {algo_name}")
+                    self.assertEqual(hidden.numel(), 4096)
+                    self.assertEqual(target.numel(), 4096)
 
                     logger.info("Executed %s with inputs %s: output=%s", algo_name, inputs, output)
 
@@ -68,7 +81,9 @@ class TestWasmCompilation(unittest.TestCase):
                 # Test execution with mock
                 for _ in range(3):
                     inputs = [random.randint(0, 1000), random.randint(0, 1000)]
-                    output, hidden, target = mock_engine.execute_wasm(None, algo_name, inputs)
+                    output, hidden, target, _p, _q = mock_engine.execute_wasm(
+                        None, algo_name, inputs
+                    )
 
                     self.assertIsNotNone(output, f"Mock execution failed for {algo_name}")
                     self.assertIsNotNone(hidden, f"Mock execution failed for {algo_name}")
@@ -90,9 +105,15 @@ class TestWasmCompilation(unittest.TestCase):
 
         # Test with invalid function name
         try:
-            module = engine.compile_c_to_wasm(MESH_ALGORITHMS["hash"])
+            with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as c_file:
+                c_file.write(MESH_ALGORITHMS["hash"].encode())
+                c_path = c_file.name
+            module = engine.compile_c_to_wasm(c_path)
+            os.unlink(c_path)
             self.assertIsNotNone(module)
-            output, hidden, target = engine.execute_wasm(module, "invalid_function", [1, 2])
+            output, hidden, target, _pre, _post = engine.execute_wasm(
+                module, "invalid_function", [1, 2]
+            )
             self.assertEqual(output, 0, "Should return 0 for invalid function")
             self.assertIsNone(hidden, "Hidden state should be None for invalid function")
             self.assertIsNone(target, "Target state should be None for invalid function")
