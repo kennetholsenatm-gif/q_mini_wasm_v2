@@ -64,6 +64,8 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 | `HF_NUM_SAMPLES` | Cap rows loaded; if unset for `hf_tabular`, auto slice uses floor **32k**, cap **300k**, scales with batch (×512) |
 | `HF_WASI_SLICE_ONLY` | If `1` / `true`, **stream** the split and keep only rows whose encoded blob matches WASI markers (e.g. `wasi_snapshot_preview`, `wasm32-wasip`); use with `HF_NUM_SAMPLES=100000` for large WASI-heavy slices |
 | `HF_WASI_MAX_SCAN` | Optional cap on how many **source** rows to scan before stopping (loader default **12_000_000** if unset when `HF_WASI_SLICE_ONLY` is on) |
+| `HF_DATASET_REVISION` | Git ref / commit for `datasets.load_dataset` (default **`main`** when unset) |
+| `HF_MESH_BLEND_FRACTION` | For `hf_tabular` only: append mesh curriculum samples equal to **fraction × len(HF rows)** (min 1); combined list is **shuffled** when `SEED` is set |
 | `HF_TEXT_FIELDS` | Comma-separated row keys for text blob |
 | `HF_CONTEXT_FIELDS` | `0` / `off` / `false` disables `[context]` prefix; comma list selects metadata keys; unset uses defaults in auto mode only |
 | `SEED` | Reproducibility (Python / NumPy / torch) |
@@ -83,6 +85,13 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 | `STOP_ON_TARGET_MSE` | If `1` / `true`, stop early when the threshold is met (prefers **holdout eval** when `EVAL_EVERY_EPOCH=1`; otherwise train mean MSE — see training loop warning) |
 | `HYBRID_ADAPTER` | If `1` / `true`, enable residual MLP after ternary (see subsection above) |
 | `HYBRID_ADAPTER_HIDDEN` | Bottleneck width (integer ≥ 32; default **1024**) |
+| `CASCADE_RL`, `CASCADE_POLICY_LR`, `CASCADE_STEPS_PER_EPOCH`, `CASCADE_GROUP_SIZE`, `CASCADE_STATE_DIM`, `CASCADE_NUM_ACTIONS`, `CASCADE_MOPD_LAMBDA`, `CASCADE_SEED_FROM_HIDDEN` | Cascade GRPO phase before each epoch’s MSE batches (see `.env.example`) |
+| `CASCADE_COUPLE_FORWARD` | If `0` / `false`, digest uses **input hidden mean only**; otherwise (default) blends **0.5 × input mean + 0.5 × `hybrid_inference` output mean** per batch |
+| `USE_CASCADE_ROUTER` | Attach `CascadeRouter` on the model (trained by cascade optimizer, not main AdamW) |
+| `CASCADE_LEARNED_PROJECTOR` | Loop-owned `CascadeRouter` when model has no router |
+| `CASCADE_ROUTER_HIDDEN` | Router MLP width |
+
+**`hf_tabular` defaults (when env vars are unset):** `TARGET_MEAN_MSE=1e-4`, `GRAD_CLIP_NORM=1`, `CASCADE_POLICY_LR = 0.5 × learning_rate`, and `learning_rate=1.5e-4` when the engine constructor LR is the default **1e-4** and `LEARNING_RATE` is not set. Set env vars explicitly to override.
 
 **Tokens:** Put the value in a local `.env` or your shell profile. **Do not commit** secrets; `.env` is gitignored. Create a read token at [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
 
@@ -104,9 +113,9 @@ export EVAL_EVERY_EPOCH=1   # optional; else eval runs once at the end
 python -m engine
 ```
 
-3. **Serving:** run the API with the same file (see README): set `QMINIWASM_CHECKPOINT` to the saved path so `POST /infer` uses trained weights.
+3. **Serving:** run the API with the same file: set `QMINIWASM_CHECKPOINT` (or `CHECKPOINT_LOAD_PATH`) so `POST /infer` uses trained weights. Optional **`USE_CASCADE_ROUTER=1`** and matching **`CASCADE_STATE_DIM` / `CASCADE_NUM_ACTIONS` / `CASCADE_ROUTER_HIDDEN`** align with training; responses may include **`cascade_logits`** per row. Set **`HYBRID_ADAPTER=1`** if the checkpoint contains `hybrid_adapter` weights (or rely on auto-attach on load).
 
-Checkpoint files include `format_version`, `d_model`, `quantum_router`, `ternary_expert`, and optional `meta` (training tags). Loading uses `strict=False` and logs missing/unexpected keys.
+Checkpoint files include `format_version`, `d_model`, `quantum_router`, `ternary_expert`, optional **`hybrid_adapter`**, optional **`cascade_policy`** (same tensors as `model.cascade_router` when used), and optional `meta` (training tags). Loading uses `strict=False` and logs missing/unexpected keys.
 
 Run from repo root:
 
@@ -143,6 +152,8 @@ Runs depend on **hardware**, **seed**, **sample count**, and **epochs**. The fol
 - `metrics.epoch_eval_mean_mse` when `EVAL_EVERY_EPOCH=1`
 - `metrics.target_mean_mse_goal`, `metrics.target_mse_met`, `metrics.target_mse_reported_value`, `metrics.target_mse_reported_name` when `TARGET_MEAN_MSE` is set
 - `metrics.stopped_on_target_mse` when early exit on target is used
+- `metrics.cascade_couple_forward`, `metrics.cascade_policy_mode` when cascade RL is enabled
+- `metrics.hf_mesh_blend_fraction` when `hf_tabular` and blend > 0
 - `checkpoint_saved`, `checkpoint_best_saved`, `checkpoint_load_path`, `checkpoint_save_path`, `checkpoint_best_path`
 
 Use these series to compare runs with the same `SEED`, `HF_NUM_SAMPLES`, and `BATCH_SIZE`.
