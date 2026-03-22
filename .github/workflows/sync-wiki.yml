@@ -1,11 +1,19 @@
-# Sync the wiki/ directory to the GitHub Wiki
-# https://github.com/kennetholsenatm-gif/LLM_Pract/wiki
+# Sync the wiki/ directory to the GitHub Wiki for this repository.
+#
+# PREREQUISITE (one-time): GitHub does not create <repo>.wiki.git until Wikis are enabled
+# and the first page exists. Otherwise the deploy step fails with "repository not found":
+#   1. Repo → Settings → General → Features → enable Wikis
+#   2. Wiki tab → Create the first page (e.g. Home) → Save
+# If push still fails with 403, add secret WIKI_DEPLOY_TOKEN (PAT with repo contents write).
+# See: .github/WIKI_SYNC.md
+#
+# Wiki: https://github.com/kennetholsenatm-gif/qminiwasm-core/wiki
 name: Sync wiki
 
 on:
   push:
     branches: [main, master]
-    paths: ['wiki/**']
+    paths: ["wiki/**"]
   workflow_dispatch:
 
 env:
