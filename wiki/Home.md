@@ -1,87 +1,53 @@
 # Hierarchical Edge-Quantum AI Architecture
 
-## 🟢 Track 1: General Overview (For Leadership & Laypersons)
+## Track 1: General Overview (For Leadership & Laypersons)
 
-Welcome to the Hierarchical Edge-Quantum AI Architecture! This track provides a high-level understanding of what I'm building and why it matters, without requiring technical expertise.
+Welcome. This track summarizes what the **qminiwasm-core** / Q-Mini-WASM effort is aiming for and why it matters, without assuming a technical background.
 
-### What Problem Does This Solve?
+### What problem does this address?
 
-**The Memory Problem:** Imagine having a brilliant AI assistant that helps you with complex tasks, but every time you ask it to remember something important, it slowly forgets the details. This is the reality of current AI systems - they suffer from "cognitive degradation" where memories fade over time.
+**Stateful AI at the edge.** Many assistants lose context over long sessions or depend on a large cloud footprint. Teams also want models and tooling that can run closer to data—on laptops, servers, or constrained devices—while still using cloud services when appropriate.
 
-**The Security Problem:** Now imagine that same AI assistant needs to remember your most sensitive information - financial data, medical records, or classified information. Storing this data in the cloud creates massive security risks. Even the most secure databases can be hacked.
+**Trust and isolation.** Sensitive workflows benefit from strong isolation (for example **WebAssembly** sandboxes) and cryptography where it fits the threat model. Real systems are never “unhackable”; goals here are **reduced attack surface**, **local processing** where it helps, and **auditable** components—not absolute guarantees.
 
-### The Solution: Perfect, Unhackable Memory
+### What we combine
 
-This system gives AI a "perfect, unhackable memory" by combining three revolutionary technologies:
+1. **Edge-oriented execution** — WASM-backed runtimes and encodings so ML pipelines can align with **linear memory** and deployment shapes you actually ship.
+2. **Hybrid classical–quantum-style routing** — Quantum-inspired or backend-driven routing (for example **QAOA**-style layers in the stack) to explore structured search over internal state. This is not a claim that every workload runs on a fault-tolerant quantum computer today; behavior depends on backend and configuration.
+3. **Modern ML training and inference** — Supervised training (`python -m engine`), optional cascade reinforcement-learning warm-up, checkpoints, and HTTP inference. For design rationale, see **[AI Training Pipeline](AI-Training-Pipeline.md)**.
 
-1. **Quantum Computing** - Ultra-fast processing that can search through massive amounts of data instantly
-2. **Advanced Cryptography** - Mathematical locks so strong that even quantum computers can't break them
-3. **Edge Computing** - Processing happens locally on your device, not in the cloud
+### Why it matters
 
-### How It Works (In Simple Terms)
+- **Operations:** Smaller deployable units and clearer boundaries between edge and cloud.
+- **Security and privacy:** More inference can stay local; combine encryption and sandboxing to match your compliance story.
+- **Research and product:** One place to experiment with WASM traces, Hub-scale tabular pretraining, and deployment-aligned **mesh/corpus** data.
 
-Think of it like this: When your AI learns something important, it doesn't store the actual information. Instead, it:
+### Example directions
 
-1. **Transforms** the information into a complex mathematical puzzle
-2. **Locks** that puzzle with an unbreakable mathematical key
-3. **Stores** the locked puzzle in the cloud (where hackers can't access the real information)
-4. **Retrieves** the puzzle when needed and unlocks it locally on your device
-5. **Reconstructs** the original information perfectly, without any loss
+- **Defense and regulated environments** — Air-gapped or teleported access patterns (see **[Development](Development.md)** and security docs).
+- **Healthcare and finance** — When policies require local inference or strict data residency; always validate against your own legal and security review.
+- **Developer tooling** — Encoding code and WASM artifacts into fixed-width vectors for hybrid models.
 
-### Why This Matters
+### How this differs from generic LLM stacks
 
-**For Businesses:** Never lose critical institutional knowledge. Your AI can remember every important detail about your operations, customers, and processes.
+- An explicit path for **WASM linear memory encoding** alongside optional **large-scale text / Hugging Face** pretraining.
+- A **training loop** that can mix cascade (GRPO) micro-steps with supervised MSE on 4096-d vectors—not only next-token language modeling.
+- Focus on **reproducible, env-driven** runs and **checkpoint → serve** alignment.
 
-**For Security:** Handle the most sensitive data without fear. Even if hackers access your cloud storage, they get nothing but meaningless mathematical puzzles.
+### Looking ahead
 
-**For Privacy:** Keep personal data secure. Medical records, financial information, and personal preferences stay protected.
-
-**For Performance:** Get instant access to memories without waiting. Quantum computing makes searching through years of memories feel instantaneous.
-
-### Real-World Applications
-
-- **Military & Defense:** Secure handling of classified information with perfect recall
-- **Healthcare:** Protect patient data while maintaining complete medical history access
-- **Finance:** Secure financial modeling and customer data protection
-- **Research:** Preserve scientific discoveries and experimental data indefinitely
-- **Customer Service:** Remember every customer interaction perfectly while protecting privacy
-
-### The Technology Behind It
-
-While the details are complex, here are the key concepts:
-
-- **Vec2Text-RAG:** A method that allows AI to remember information as mathematical vectors instead of text
-- **Approximate DCPE:** A special type of encryption that preserves the ability to search through encrypted data
-- **Quantum Routing:** Using quantum computers to find the right memory instantly, even in massive databases
-- **WebAssembly Enclaves:** Secure containers that keep sensitive operations isolated
-
-### What Makes This Different
-
-Unlike traditional AI systems that:
-- Forget information over time
-- Store data in vulnerable cloud databases
-- Require constant retraining
-- Have limited memory capacity
-
-The system:
-- Never forgets (zero-degradation memory)
-- Keeps data secure through advanced encryption
-- Maintains perfect recall indefinitely
-- Scales to handle massive amounts of information
-
-### The Future
-
-This technology represents a fundamental breakthrough in AI memory systems. It enables applications that were previously impossible due to security or memory limitations. The project builds the foundation for truly intelligent, trustworthy AI assistants that can handle the most sensitive and important information.
+The project evolves with hardware (CPU, CUDA, Intel **XPU**) and optional quantum backends. What you get depends on configuration, dataset licenses, and environment flags.
 
 ---
 
-**Ready to learn more about the technical implementation?** Visit [Track 2: Infrastructure & DevSecOps](Architecture-Overview.md) for deployment and security details, or [Track 3: Academic & Theoretical](Mathematical-Formulation.md) for the deep technical concepts.
+**Ready for implementation detail?** See [Track 2: Infrastructure & DevSecOps](Architecture-Overview.md) and [Track 3: Academic & Theoretical](Mathematical-Formulation.md).
 
 ---
 
-**Last Updated:** 2026-03-16
-**Version:** 2.0
+**Last Updated:** 2026-03-22  
+**Version:** 2.1
 
 ## Related Resources
 
-- **NotebookLM Documentation:** [Hierarchical Edge-Quantum AI Architecture Notebook](https://notebooklm.google.com/notebook/62d6c7ee-8f93-4c5f-ac67-19b1a8956219)
+- **Wiki — AI training (why and how):** [AI Training Pipeline](AI-Training-Pipeline.md)
+- **NotebookLM documentation:** [Hierarchical Edge-Quantum AI Architecture Notebook](https://notebooklm.google.com/notebook/62d6c7ee-8f93-4c5f-ac67-19b1a8956219)

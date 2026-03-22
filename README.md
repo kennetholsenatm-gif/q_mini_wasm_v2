@@ -9,6 +9,7 @@ This framework provides a pipeline for converting neural network weights to tern
 - **Ternary Quantization**: Forces continuous weights into strict `{-1, 0, 1}` states using a Straight-Through Estimator (STE) during training
 - **WASM Execution Engine**: Compiles and executes WASM modules with deterministic stack mechanics
 - **Quantum-Classical Hybrid Routing**: Optional quantum-accelerated routing for model inference (defaults to local PennyLane simulator)
+- **Cascade RL and MOPD**: Optional per-epoch GRPO warm-up on a toy routing MDP with optional multi-domain-style feature loss; see [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
 
 The ternary quantization approach reduces model size and enables deterministic execution, making it suitable for resource-constrained edge environments.
 

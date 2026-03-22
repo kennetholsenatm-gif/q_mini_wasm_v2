@@ -34,6 +34,36 @@ def test_checkpoint_round_trip_changes_hybrid_output():
         path.unlink(missing_ok=True)
 
 
+def test_checkpoint_loads_cascade_policy_into_model_cascade_router():
+    device = torch.device("cpu")
+    m1 = QMiniWASM(
+        device=device,
+        use_cascade_router=True,
+        cascade_state_dim=8,
+        cascade_num_actions=4,
+    )
+    m2 = QMiniWASM(
+        device=device,
+        use_cascade_router=True,
+        cascade_state_dim=8,
+        cascade_num_actions=4,
+    )
+    assert m1.cascade_router is not None and m2.cascade_router is not None
+    with torch.no_grad():
+        m1.cascade_router.projector.weight.fill_(0.33)
+    with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
+        path = Path(f.name)
+    try:
+        save_checkpoint(path, m1, meta={"tag": "cr"}, cascade_policy=m1.cascade_router)
+        load_checkpoint_into_model(m2, path, map_location=device)
+        assert torch.allclose(
+            m1.cascade_router.projector.weight,
+            m2.cascade_router.projector.weight,
+        )
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def test_checkpoint_saves_and_loads_cascade_policy():
     device = torch.device("cpu")
     m1 = QMiniWASM(device=device)

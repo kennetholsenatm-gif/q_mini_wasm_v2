@@ -59,8 +59,8 @@ keycloak --version
 #### Step 1: Environment Setup
 ```bash
 # Clone the repository
-git clone https://github.com/kennetholsenatm-gif/LLM_Pract.git
-cd LLM_Pract
+git clone https://github.com/kennetholsenatm-gif/qminiwasm-core.git
+cd qminiwasm-core
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -513,7 +513,7 @@ find /var/log -name "*.log" -mtime +30 -delete
 - [API Documentation](https://docs.qminiwasm.com)
 
 ### Community Support
-- GitHub Issues: https://github.com/kennetholsenatm-gif/LLM_Pract/issues
+- GitHub Issues: https://github.com/kennetholsenatm-gif/qminiwasm-core/issues
 - Documentation: https://docs.qminiwasm.com
 - Community Forum: https://community.qminiwasm.com
 

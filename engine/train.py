@@ -75,8 +75,15 @@ def main(config: EngineConfig | None = None) -> dict:
         cascade_state_dim=int(getattr(config, "cascade_state_dim", 8)),
         cascade_num_actions=int(getattr(config, "cascade_num_actions", 4)),
         cascade_mopd_lambda=float(getattr(config, "cascade_mopd_lambda", 0.0) or 0.0),
+        cascade_mopd_feat_loss=str(
+            getattr(config, "cascade_mopd_feat_loss", "mse") or "mse"
+        ),
         cascade_seed_from_hidden=bool(getattr(config, "cascade_seed_from_hidden", True)),
         use_cascade_router=bool(getattr(config, "use_cascade_router", False)),
         cascade_learned_projector=bool(getattr(config, "cascade_learned_projector", False)),
         cascade_router_hidden=int(getattr(config, "cascade_router_hidden", 32) or 32),
+        cascade_couple_forward=bool(getattr(config, "cascade_couple_forward", True)),
+        hf_mesh_blend_fraction=float(
+            getattr(config, "hf_mesh_blend_fraction", 0.0) or 0.0
+        ),
     )

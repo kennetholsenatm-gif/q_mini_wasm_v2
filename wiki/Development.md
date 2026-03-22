@@ -15,8 +15,8 @@ The Q-Mini-WASM development workflow is designed to be comprehensive, secure, an
 ### Initial Setup
 ```bash
 # Clone the repository
-git clone https://github.com/kennetholsenatm-gif/LLM_Pract.git
-cd LLM_Pract
+git clone https://github.com/kennetholsenatm-gif/qminiwasm-core.git
+cd qminiwasm-core
 
 # Install dependencies
 pip install -r requirements.txt
@@ -132,6 +132,27 @@ For how this satisfies IA-2, AC-3, and AU-2/AU-3, see [SECURITY.md](../SECURITY.
 - **Load Testing**: Load testing for scalability assessment
 - **Memory Testing**: Memory usage and leak detection
 - **Optimization**: Performance optimization and tuning
+
+## ML engine training and inference
+
+**Wiki overview (goals and design rationale):** [AI Training Pipeline](AI-Training-Pipeline.md).
+
+Training runs from the **qminiwasm-core** repository:
+
+```bash
+pip install -e ".[training]"
+python -m engine
+```
+
+**Canonical reference:** [docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md) (data sources, env table, checkpoints, metrics).
+
+**Highlights (recent pipeline behavior):**
+
+- **`hf_tabular`** — When `TARGET_MEAN_MSE` is unset, the engine defaults it to **1e-4**; optional defaults also include **grad clip 1.0**, **cascade policy LR = 0.5 × main LR**, and a slightly higher default **learning rate (1.5e-4)** when `LEARNING_RATE` is unset and the constructor LR is the stock **1e-4**. Override any of these with explicit env vars.
+- **`HF_MESH_BLEND_FRACTION`** — Appends mesh-generated samples (fraction × HF row count) to Hugging Face tabular data, then shuffles when `SEED` is set, so training mixes WASM curriculum with Hub rows.
+- **Cascade RL** — GRPO toy routing runs before each epoch’s supervised MSE phase by default. **`CASCADE_COUPLE_FORWARD`** (default on) blends mean **input hidden** and mean **`hybrid_inference` output** for the cascade digest (tighter coupling to the live model). Disable with `CASCADE_COUPLE_FORWARD=0`.
+- **Checkpoints** — `cascade_policy` weights load into **`model.cascade_router`** when present and the model was constructed with **`USE_CASCADE_ROUTER=1`**.
+- **Serving** — `uvicorn engine.serve:app` with **`QMINIWASM_CHECKPOINT`**, optional **`HYBRID_ADAPTER`**, **`USE_CASCADE_ROUTER`**, and matching **`CASCADE_*`** dims. **`POST /infer`** returns **`cascade_logits`** per row when the router is attached.
 
 ## Pull Request Process
 
@@ -267,5 +288,5 @@ Ready to start developing with Q-Mini-WASM? Follow the [Development Workflow](De
 
 ---
 
-**Last Updated**: 2026-03-12
-**Version**: 1.4.0
+**Last Updated**: 2026-03-22
+**Version**: 1.4.1

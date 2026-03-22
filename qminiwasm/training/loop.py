@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
+from .cascade_mopd_teacher import build_noise_state_mopd_fns
 from .cascade_rl import (
     CascadeRouter,
     TinyCascadePolicy,
@@ -41,6 +42,32 @@ from ..rl.cascade_grpo import CascadeGRPO, CascadeGRPOConfig
 logger = logging.getLogger(__name__)
 
 _D_MODEL = 4096
+
+
+def _normalize_cascade_mopd_feat_loss(name: str) -> str:
+    v = (name or "mse").strip().lower()
+    if v in ("cosine", "cos"):
+        return "cosine"
+    return "mse"
+
+
+def _cascade_digest_from_blend(
+    blend_1d: torch.Tensor,
+    *,
+    cascade_policy: nn.Module,
+    state_dim: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """Map a single 4096-d blend vector (e.g. input/output mean mix) to toy MDP state."""
+    v = blend_1d.detach()
+    if isinstance(cascade_policy, CascadeRouter):
+        return cascade_policy.project_hidden(v).detach()
+    return hidden_digest_for_cascade(
+        v,
+        state_dim=int(state_dim),
+        d_model=_D_MODEL,
+        device=device,
+    )
 
 
 def _clip_grad_norm_xpu_safe(
@@ -187,10 +214,13 @@ def run_training_loop(
     cascade_state_dim: int = 8,
     cascade_num_actions: int = 4,
     cascade_mopd_lambda: float = 0.0,
+    cascade_mopd_feat_loss: str = "mse",
     cascade_seed_from_hidden: bool = True,
     use_cascade_router: bool = False,
     cascade_learned_projector: bool = False,
     cascade_router_hidden: int = 32,
+    cascade_couple_forward: bool = True,
+    hf_mesh_blend_fraction: float = 0.0,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -253,6 +283,7 @@ def run_training_loop(
         cascade_group_size: Trajectories per GRPO step (>=2 recommended for normalized advantages).
         cascade_state_dim / cascade_num_actions: Toy MDP shape.
         cascade_mopd_lambda: If >0, add MOPD feature loss vs noisy teacher on state embeddings.
+        cascade_mopd_feat_loss: ``mse`` or ``cosine`` for MOPD feature term (see :class:`MOPDLossConfig`).
         cascade_seed_from_hidden: If True, each supervised batch updates a digest from mean
             ``hidden``; the next epoch's toy MDP resets from that digest (bridges cascade to model inputs).
         use_cascade_router: If True, attach :class:`CascadeRouter` on ``QMiniWASM`` (trained by the
@@ -260,6 +291,11 @@ def run_training_loop(
         cascade_learned_projector: If True and ``use_cascade_router`` is False, create a loop-owned
             :class:`CascadeRouter`; otherwise use :class:`TinyCascadePolicy` on latent state only.
         cascade_router_hidden: MLP hidden width inside :class:`CascadeRouter`.
+        cascade_couple_forward: If True (default), cascade digest blends mean input hidden and mean
+            ``hybrid_inference`` output each batch (one forward), tying the toy MDP to the live model.
+        hf_mesh_blend_fraction: When ``training_data_source`` is ``hf_tabular``, append this fraction
+            of the HF row count as extra mesh-generated samples (WASM curriculum) and shuffle when
+            ``seed`` is set (0 disables).
 
     Returns:
         Dict with ``epochs_run``, ``final_loss``, ``metrics``, checkpoint path fields.
@@ -362,6 +398,24 @@ def run_training_loop(
             wasi_slice_only=hf_wasi_slice_only,
             max_scan_rows=hf_wasi_max_scan,
         )
+        frac = float(hf_mesh_blend_fraction)
+        if frac > 0.0 and len(processed_data) > 0:
+            n_extra = max(1, int(len(processed_data) * frac))
+            algos_mb = mesh_algorithms or [
+                "hash",
+                "encrypt",
+                "network",
+                "routing",
+                "consensus",
+            ]
+            mesh_samples = pipeline.generate_training_data(
+                algorithms=algos_mb,
+                num_samples=n_extra,
+            )
+            processed_data = list(processed_data) + mesh_samples
+            if seed is not None:
+                rng = random.Random(int(seed))
+                rng.shuffle(processed_data)
     else:
         algos = mesh_algorithms or [
             "hash",
@@ -471,11 +525,35 @@ def run_training_loop(
     for epoch in range(epochs):
         if use_cascade_rl and int(cascade_steps_per_epoch) > 0:
             assert cascade_policy is not None and cascade_optimizer is not None
+            if cascade_seed_from_hidden and train_samples:
+                with torch.no_grad():
+                    npre = min(batch_size, len(train_samples))
+                    pre = train_samples[:npre]
+                    hlist = [_as_d_model("hidden", b["hidden"]) for b in pre]
+                    h_pre = torch.stack(hlist).to(device)
+                    if cascade_couple_forward:
+                        out_pre = model.hybrid_inference(h_pre)
+                        blend0 = 0.5 * (h_pre.mean(0) + out_pre.mean(0))
+                    else:
+                        blend0 = h_pre.mean(0)
+                    digest_holder[0] = _cascade_digest_from_blend(
+                        blend0,
+                        cascade_policy=cascade_policy,
+                        state_dim=int(cascade_state_dim),
+                        device=device,
+                    )
             c_loss_acc = 0.0
             c_ret_acc = 0.0
             mopd_mod: MOPDLoss | None = None
+            _mopd_feat = _normalize_cascade_mopd_feat_loss(str(cascade_mopd_feat_loss))
             if float(cascade_mopd_lambda) > 0.0:
-                mopd_mod = MOPDLoss(MOPDLossConfig(lambda_kl=0.0, lambda_feat=1.0))
+                mopd_mod = MOPDLoss(
+                    MOPDLossConfig(
+                        lambda_kl=0.0,
+                        lambda_feat=1.0,
+                        feat_loss=_mopd_feat,
+                    )
+                )
 
             def _env_factory() -> ToyRoutingEnv:
                 init = digest_holder[0] if cascade_seed_from_hidden else None
@@ -487,15 +565,9 @@ def run_training_loop(
                     initial_state=init,
                 )
 
+            _student_h, _teacher_h = build_noise_state_mopd_fns(noise_std=0.05)
             for _ in range(int(cascade_steps_per_epoch)):
                 if mopd_mod is not None:
-
-                    def _student_h(s: torch.Tensor) -> dict[str, torch.Tensor]:
-                        return {"emb": s.unsqueeze(0)}
-
-                    def _teacher_h(s: torch.Tensor) -> dict[str, torch.Tensor]:
-                        return {"emb": (s + 0.05 * torch.randn_like(s)).unsqueeze(0)}
-
                     cm = cascade_rl_train_step(
                         cascade_policy,
                         cascade_optimizer,
@@ -546,22 +618,20 @@ def run_training_loop(
 
             hidden_states = torch.stack(hidden_list).to(device)
             targets = torch.stack(target_list).to(device)
-            if use_cascade_rl and cascade_seed_from_hidden:
-                hm = hidden_states.mean(0).detach()
-                if isinstance(cascade_policy, CascadeRouter):
-                    digest_holder[0] = cascade_policy.project_hidden(hm).detach()
-                else:
-                    digest_holder[0] = hidden_digest_for_cascade(
-                        hm,
-                        state_dim=int(cascade_state_dim),
-                        d_model=_D_MODEL,
-                        device=device,
-                    )
 
             optimizer.zero_grad()
             if tsign_opt is not None:
                 tsign_opt.zero_grad()
             out = model.hybrid_inference(hidden_states)
+            if use_cascade_rl and cascade_seed_from_hidden:
+                hm = hidden_states.mean(0).detach()
+                blend = 0.5 * (hm + out.detach().mean(0)) if cascade_couple_forward else hm
+                digest_holder[0] = _cascade_digest_from_blend(
+                    blend,
+                    cascade_policy=cascade_policy,
+                    state_dim=int(cascade_state_dim),
+                    device=device,
+                )
             loss = torch.nn.functional.mse_loss(out, targets)
             if not torch.isfinite(loss):
                 skipped_nonfinite_batches += 1
@@ -757,6 +827,8 @@ def run_training_loop(
         metrics["hf_wasi_slice_only"] = True
         if hf_wasi_max_scan is not None:
             metrics["hf_wasi_max_scan"] = int(hf_wasi_max_scan)
+    if source == "hf_tabular" and float(hf_mesh_blend_fraction) > 0.0:
+        metrics["hf_mesh_blend_fraction"] = float(hf_mesh_blend_fraction)
     if hybrid_adapter:
         metrics["hybrid_adapter"] = True
         metrics["hybrid_adapter_hidden"] = int(hybrid_adapter_hidden)
@@ -771,7 +843,12 @@ def run_training_loop(
         metrics["cascade_steps_per_epoch"] = int(cascade_steps_per_epoch)
         metrics["cascade_group_size"] = int(cascade_group_size)
         metrics["cascade_mopd_lambda"] = float(cascade_mopd_lambda)
+        if float(cascade_mopd_lambda) > 0.0:
+            metrics["cascade_mopd_feat_loss"] = _normalize_cascade_mopd_feat_loss(
+                str(cascade_mopd_feat_loss)
+            )
         metrics["cascade_seed_from_hidden"] = bool(cascade_seed_from_hidden)
+        metrics["cascade_couple_forward"] = bool(cascade_couple_forward)
         if cascade_policy_mode is not None:
             metrics["cascade_policy_mode"] = cascade_policy_mode
         if epoch_cascade_loss:
