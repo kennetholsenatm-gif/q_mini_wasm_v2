@@ -38,7 +38,9 @@ def wasm_module_needs_wasi(module: wasmtime.Module) -> bool:
     return False
 
 
-def instantiate_wasmtime_module(store: wasmtime.Store, module: wasmtime.Module) -> wasmtime.Instance:
+def instantiate_wasmtime_module(
+    store: wasmtime.Store, module: wasmtime.Module
+) -> wasmtime.Instance:
     """Instantiate ``module`` with WASI definitions when imports require it."""
     if not wasm_module_needs_wasi(module):
         return wasmtime.Instance(store, module, [])
@@ -110,6 +112,4 @@ def build_clang_wasm_compile_command(
             out_wasm,
             c_file,
         ]
-    raise ValueError(
-        f"Unknown QMINIWASM_WASM_C_LINK={mode!r}; use bare or wasip1"
-    )
+    raise ValueError(f"Unknown QMINIWASM_WASM_C_LINK={mode!r}; use bare or wasip1")

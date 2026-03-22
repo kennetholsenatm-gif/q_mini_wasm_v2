@@ -26,9 +26,7 @@ def is_native_available() -> bool:
         return False
 
 
-def _dot_u8_i8_python(
-    weights_u8: bytes, activations_i8: bytes, offset_per_lane: int = 1
-) -> int:
+def _dot_u8_i8_python(weights_u8: bytes, activations_i8: bytes, offset_per_lane: int = 1) -> int:
     n = min(len(weights_u8), len(activations_i8))
     acc = 0
     for i in range(n):

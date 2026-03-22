@@ -158,7 +158,9 @@ class QMiniWASM:
             params.extend(self.hybrid_adapter.parameters())
         return params
 
-    def trainable_adam_parameters(self, exclude_ternary_weight: bool = False) -> List[torch.nn.Parameter]:
+    def trainable_adam_parameters(
+        self, exclude_ternary_weight: bool = False
+    ) -> List[torch.nn.Parameter]:
         """Subset for AdamW when ternary latent is updated with :class:`TSignSGD` instead."""
         if not exclude_ternary_weight:
             return self.trainable_hybrid_backbone_parameters()

@@ -11,5 +11,7 @@ class TestNativeTernary(unittest.TestCase):
         a = bytes((int(x) & 0xFF) for x in [10, -3, 4, 5])
         off = 1
         y = native_ternary.dot_u8_i8(w, a, off)
-        ref = sum(int(w[i]) * int.from_bytes([a[i]], "little", signed=True) - off for i in range(len(w)))
+        ref = sum(
+            int(w[i]) * int.from_bytes([a[i]], "little", signed=True) - off for i in range(len(w))
+        )
         self.assertEqual(y, ref)

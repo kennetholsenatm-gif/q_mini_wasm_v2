@@ -35,7 +35,5 @@ def encode_linear_memory(
     n = min(BODY_SLOTS, len(mem))
     if n > 0:
         chunk = mem[:n]
-        out[META_SLOTS : META_SLOTS + n] = torch.tensor(
-            list(chunk), dtype=torch.float32
-        ) / 255.0
+        out[META_SLOTS : META_SLOTS + n] = torch.tensor(list(chunk), dtype=torch.float32) / 255.0
     return out

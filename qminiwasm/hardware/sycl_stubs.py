@@ -71,9 +71,7 @@ class SYCLHardware:
         self.logger.debug("Packed %d trits into %d bytes", len(weights), len(out))
         return out
 
-    def unpack_ternary_weights(
-        self, packed: bytes, num_weights: Optional[int] = None
-    ) -> List[int]:
+    def unpack_ternary_weights(self, packed: bytes, num_weights: Optional[int] = None) -> List[int]:
         """Unpack bytes to ternary weights (-1, 0, 1)."""
         if self._backend:
             return self._backend.unpack_ternary_weights(packed, num_weights)

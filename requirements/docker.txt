@@ -1,0 +1,8 @@
+# Container image: quantum + WASM + dotenv; torch installed separately (CPU wheel) in Dockerfile.
+# Omits dpctl (requirements/hardware.txt) for generic Linux without Intel oneAPI.
+-r quantum.txt
+-r wasm.txt
+numpy>=1.24.0
+scipy>=1.10.0
+cryptography>=46.0.5
+python-dotenv>=1.0.0

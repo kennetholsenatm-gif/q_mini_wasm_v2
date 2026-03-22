@@ -105,7 +105,9 @@ class PTQTPLinear(nn.Module):
         return ptqtp_linear_forward(x, self._decomp())
 
 
-def ptqtp_reconstruction_mse(W: torch.Tensor, num_planes: int = 2) -> Tuple[float, PTQTPDecomposition]:
+def ptqtp_reconstruction_mse(
+    W: torch.Tensor, num_planes: int = 2
+) -> Tuple[float, PTQTPDecomposition]:
     """Mean squared error ``||W - W_hat||^2`` for the PTQTP reconstruction."""
     d = decompose_ptqtp(W, num_planes=num_planes)
     with torch.no_grad():

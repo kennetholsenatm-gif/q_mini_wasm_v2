@@ -7,7 +7,10 @@ import torch
 from qminiwasm.config import HierarchicalConfig
 from qminiwasm.inference.edge import EdgeOutcome, fog_escalation_triggered, run_edge_cognitive_loop
 from qminiwasm.inference.escalation import prepare_escalation_payload
-from qminiwasm.inference.semantic_abstraction import attach_semantic_blob_to_state, build_semantic_blob
+from qminiwasm.inference.semantic_abstraction import (
+    attach_semantic_blob_to_state,
+    build_semantic_blob,
+)
 
 
 class TestFogEscalation(unittest.TestCase):

@@ -27,7 +27,11 @@ from .cascade_rl import (
     cascade_rl_train_step,
     hidden_digest_for_cascade,
 )
-from .checkpoint import load_cascade_policy_from_checkpoint, load_checkpoint_into_model, save_checkpoint
+from .checkpoint import (
+    load_cascade_policy_from_checkpoint,
+    load_checkpoint_into_model,
+    save_checkpoint,
+)
 from .distillation import MOPDLoss, MOPDLossConfig
 from .lota_qaf import TSignSGD
 from .repro import set_training_seed
@@ -54,6 +58,7 @@ def _clip_grad_norm_xpu_safe(
         if sig is not None and "foreach" in sig.parameters:
             kwargs["foreach"] = False
     torch.nn.utils.clip_grad_norm_(parameters, max_norm, **kwargs)
+
 
 # Hugging Face: when hf_num_samples is None, load a larger slice than mesh/corpus (still cap download size).
 _HF_AUTO_SAMPLES_FLOOR = 32_768
@@ -323,7 +328,9 @@ def run_training_loop(
 
     if source == "corpus":
         if not data_path:
-            raise ValueError("data_path must point to a corpus manifest JSON when training_data_source=corpus")
+            raise ValueError(
+                "data_path must point to a corpus manifest JSON when training_data_source=corpus"
+            )
         processed_data = pipeline.generate_training_data_from_corpus(
             data_path, num_samples=num_samples, seed=corpus_seed
         )
@@ -442,9 +449,9 @@ def run_training_loop(
             ).to(device)
             cascade_policy_mode = "loop_router"
         else:
-            cascade_policy = TinyCascadePolicy(
-                int(cascade_state_dim), int(cascade_num_actions)
-            ).to(device)
+            cascade_policy = TinyCascadePolicy(int(cascade_state_dim), int(cascade_num_actions)).to(
+                device
+            )
             cascade_policy_mode = "tiny_mlp"
         cascade_optimizer = torch.optim.Adam(
             cascade_policy.parameters(), lr=float(cascade_policy_lr)
@@ -604,7 +611,9 @@ def run_training_loop(
                         )
                         checkpoint_best_saved = checkpoint_best_path
                     except Exception as e:
-                        logger.error("Failed to write best checkpoint %s: %s", checkpoint_best_path, e)
+                        logger.error(
+                            "Failed to write best checkpoint %s: %s", checkpoint_best_path, e
+                        )
             else:
                 epochs_without_improvement += 1
             logger.info(
@@ -627,9 +636,7 @@ def run_training_loop(
                             "epoch": epoch + 1,
                             "epochs_requested": epochs,
                             "epoch_mean_mse": final_loss,
-                            "best_epoch_mean_mse": best_mse
-                            if best_mse < float("inf")
-                            else None,
+                            "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
                             "learning_rate": float(optimizer.param_groups[0]["lr"]),
                         },
                         cascade_policy=_cascade_ckpt_module(),
@@ -643,9 +650,7 @@ def run_training_loop(
                     )
             ev_this: Optional[float] = None
             if eval_every_epoch and eval_samples:
-                ev_this = _mean_mse_on_batches(
-                    model, eval_samples, batch_size, device, _as_d_model
-                )
+                ev_this = _mean_mse_on_batches(model, eval_samples, batch_size, device, _as_d_model)
                 epoch_eval_mean_mse.append(ev_this)
                 logger.info("epoch=%s eval_mean_mse=%.6f", epoch + 1, ev_this)
             if (
@@ -660,7 +665,11 @@ def run_training_loop(
                 else:
                     crit = final_loss
                     crit_name = "train_mean_mse"
-                    if eval_samples and not eval_every_epoch and not target_mse_stop_train_metric_warned:
+                    if (
+                        eval_samples
+                        and not eval_every_epoch
+                        and not target_mse_stop_train_metric_warned
+                    ):
                         logger.warning(
                             "STOP_ON_TARGET_MSE comparing %s to TARGET_MEAN_MSE=%.6e; "
                             "set EVAL_EVERY_EPOCH=1 to gate on holdout eval.",
@@ -693,13 +702,13 @@ def run_training_loop(
                 )
                 break
         else:
-            logger.warning("epoch=%s produced zero batches; check batch_size and data length", epoch + 1)
+            logger.warning(
+                "epoch=%s produced zero batches; check batch_size and data length", epoch + 1
+            )
 
     eval_mean_mse: Optional[float] = None
     if eval_samples and not eval_every_epoch:
-        eval_mean_mse = _mean_mse_on_batches(
-            model, eval_samples, batch_size, device, _as_d_model
-        )
+        eval_mean_mse = _mean_mse_on_batches(model, eval_samples, batch_size, device, _as_d_model)
         logger.info("eval_mean_mse=%.6f (holdout n=%s)", eval_mean_mse, len(eval_samples))
     elif eval_samples and eval_every_epoch and epoch_eval_mean_mse:
         eval_mean_mse = epoch_eval_mean_mse[-1]

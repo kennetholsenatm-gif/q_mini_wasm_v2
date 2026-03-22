@@ -139,7 +139,7 @@ def test_engine_config_hf_token_from_env(monkeypatch):
 
 def test_encoded_blob_references_wasi():
     assert not encoded_blob_references_wasi(b"def foo():\n  return 1\n")
-    assert encoded_blob_references_wasi(b"extern \"wasi\" fn random_get")
+    assert encoded_blob_references_wasi(b'extern "wasi" fn random_get')
     assert encoded_blob_references_wasi(b"wasm32-wasip1-unknown-unknown")
 
 

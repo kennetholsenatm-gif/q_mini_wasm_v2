@@ -74,9 +74,7 @@ class TritKernelInstance:
         self.memory.write(self._store, bytes(weights_u8[:n]), w_off)
         act_u8 = bytes(int(x) & 0xFF for x in activations_i8[:n])
         self.memory.write(self._store, act_u8, a_off)
-        return int(
-            self._dot(self._store, n, w_off, a_off, int(offset_per_lane))
-        )
+        return int(self._dot(self._store, n, w_off, a_off, int(offset_per_lane)))
 
     def dispatch_binop(self, idx: int, a: int, b: int) -> int:
         return int(self._dispatch(self._store, int(idx) % 3, a, b))
