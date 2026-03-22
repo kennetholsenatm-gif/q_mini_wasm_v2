@@ -12,7 +12,6 @@ from qminiwasm.wasm.wasi_link import (
     wasm_module_needs_wasi,
 )
 
-
 _WASI_RANDOM_WAT = """
 (module
   (import "wasi_snapshot_preview1" "random_get" (func (param i32 i32) (result i32)))

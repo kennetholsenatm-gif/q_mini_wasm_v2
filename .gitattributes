@@ -1,0 +1,3 @@
+# Keep Python sources LF so Black in Linux CI matches developer checkouts (avoid CRLF-only diffs).
+* text=auto
+*.py text eol=lf
