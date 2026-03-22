@@ -19,8 +19,13 @@ import torch.nn.functional as F
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
-from .cascade_rl import TinyCascadePolicy, ToyRoutingEnv, cascade_rl_train_step
-from .checkpoint import load_checkpoint_into_model, save_checkpoint
+from .cascade_rl import (
+    TinyCascadePolicy,
+    ToyRoutingEnv,
+    cascade_rl_train_step,
+    hidden_digest_for_cascade,
+)
+from .checkpoint import load_cascade_policy_from_checkpoint, load_checkpoint_into_model, save_checkpoint
 from .distillation import MOPDLoss, MOPDLossConfig
 from .lota_qaf import TSignSGD
 from .repro import set_training_seed
@@ -175,6 +180,7 @@ def run_training_loop(
     cascade_state_dim: int = 8,
     cascade_num_actions: int = 4,
     cascade_mopd_lambda: float = 0.0,
+    cascade_seed_from_hidden: bool = True,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -237,6 +243,8 @@ def run_training_loop(
         cascade_group_size: Trajectories per GRPO step (>=2 recommended for normalized advantages).
         cascade_state_dim / cascade_num_actions: Toy MDP shape.
         cascade_mopd_lambda: If >0, add MOPD feature loss vs noisy teacher on state embeddings.
+        cascade_seed_from_hidden: If True, each supervised batch updates a digest from mean
+            ``hidden``; the next epoch's toy MDP resets from that digest (bridges cascade to model inputs).
 
     Returns:
         Dict with ``epochs_run``, ``final_loss``, ``metrics``, checkpoint path fields.
@@ -403,6 +411,10 @@ def run_training_loop(
     )
     epoch_cascade_loss: List[float] = []
     epoch_cascade_return: List[float] = []
+    digest_holder: list[torch.Tensor | None] = [None]
+
+    def _cascade_ckpt_module() -> TinyCascadePolicy | None:
+        return cascade_policy if (use_cascade_rl and cascade_policy is not None) else None
 
     for epoch in range(epochs):
         if use_cascade_rl and int(cascade_steps_per_epoch) > 0:
@@ -413,6 +425,14 @@ def run_training_loop(
                 cascade_optimizer = torch.optim.Adam(
                     cascade_policy.parameters(), lr=float(cascade_policy_lr)
                 )
+                if checkpoint_load_path:
+                    if load_cascade_policy_from_checkpoint(
+                        cascade_policy, checkpoint_load_path, map_location=device
+                    ):
+                        logger.info(
+                            "Loaded cascade_policy weights from %s",
+                            checkpoint_load_path,
+                        )
             assert cascade_optimizer is not None
             c_loss_acc = 0.0
             c_ret_acc = 0.0
@@ -421,11 +441,13 @@ def run_training_loop(
                 mopd_mod = MOPDLoss(MOPDLossConfig(lambda_kl=0.0, lambda_feat=1.0))
 
             def _env_factory() -> ToyRoutingEnv:
+                init = digest_holder[0] if cascade_seed_from_hidden else None
                 return ToyRoutingEnv(
                     state_dim=int(cascade_state_dim),
                     num_actions=int(cascade_num_actions),
                     max_steps=16,
                     device=device,
+                    initial_state=init,
                 )
 
             for _ in range(int(cascade_steps_per_epoch)):
@@ -487,6 +509,13 @@ def run_training_loop(
 
             hidden_states = torch.stack(hidden_list).to(device)
             targets = torch.stack(target_list).to(device)
+            if use_cascade_rl and cascade_seed_from_hidden:
+                digest_holder[0] = hidden_digest_for_cascade(
+                    hidden_states.mean(0).detach(),
+                    state_dim=int(cascade_state_dim),
+                    d_model=_D_MODEL,
+                    device=device,
+                )
 
             optimizer.zero_grad()
             if tsign_opt is not None:
@@ -537,6 +566,7 @@ def run_training_loop(
                                 "epoch": epoch + 1,
                                 "best_epoch_mean_mse": best_mse,
                             },
+                            cascade_policy=_cascade_ckpt_module(),
                         )
                         checkpoint_best_saved = checkpoint_best_path
                     except Exception as e:
@@ -568,6 +598,7 @@ def run_training_loop(
                             else None,
                             "learning_rate": float(optimizer.param_groups[0]["lr"]),
                         },
+                        cascade_policy=_cascade_ckpt_module(),
                     )
                     checkpoint_latest_saved = checkpoint_latest_path
                 except Exception as e:
@@ -651,6 +682,7 @@ def run_training_loop(
                     "final_loss": final_loss,
                     "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
                 },
+                cascade_policy=_cascade_ckpt_module(),
             )
             checkpoint_saved = checkpoint_save_path
         except Exception as e:
@@ -696,6 +728,7 @@ def run_training_loop(
         metrics["cascade_steps_per_epoch"] = int(cascade_steps_per_epoch)
         metrics["cascade_group_size"] = int(cascade_group_size)
         metrics["cascade_mopd_lambda"] = float(cascade_mopd_lambda)
+        metrics["cascade_seed_from_hidden"] = bool(cascade_seed_from_hidden)
         if epoch_cascade_loss:
             metrics["epoch_cascade_loss"] = epoch_cascade_loss
         if epoch_cascade_return:

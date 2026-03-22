@@ -75,4 +75,5 @@ def main(config: EngineConfig | None = None) -> dict:
         cascade_state_dim=int(getattr(config, "cascade_state_dim", 8)),
         cascade_num_actions=int(getattr(config, "cascade_num_actions", 4)),
         cascade_mopd_lambda=float(getattr(config, "cascade_mopd_lambda", 0.0) or 0.0),
+        cascade_seed_from_hidden=bool(getattr(config, "cascade_seed_from_hidden", True)),
     )

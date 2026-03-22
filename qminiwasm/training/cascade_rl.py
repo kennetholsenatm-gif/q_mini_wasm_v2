@@ -11,6 +11,7 @@ from typing import Any, Callable, Protocol
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ..rl.cascade_grpo import CascadeGRPO
 from .distillation import MOPDLoss
@@ -28,6 +29,24 @@ class CascadeHiddenFn(Protocol):
     def __call__(self, state: torch.Tensor) -> dict[str, torch.Tensor]: ...
 
 
+def hidden_digest_for_cascade(
+    hidden_mean_1d: torch.Tensor,
+    *,
+    state_dim: int,
+    d_model: int = 4096,
+    device: torch.device | None = None,
+) -> torch.Tensor:
+    """Map mean hidden vector ``[d_model]`` to cascade state ``[state_dim]`` (truncate or zero-pad)."""
+    h = hidden_mean_1d.flatten()[:d_model].to(dtype=torch.float32)
+    take = min(int(state_dim), h.numel())
+    out = h[:take].clone()
+    if int(state_dim) > take:
+        out = F.pad(out, (0, int(state_dim) - take))
+    if device is not None:
+        out = out.to(device)
+    return out
+
+
 @dataclass
 class ToyRoutingEnv:
     """Minimal MDP for smoke tests: noisy transition, reward depends on action and state."""
@@ -36,16 +55,28 @@ class ToyRoutingEnv:
     num_actions: int = 4
     max_steps: int = 16
     device: torch.device | None = None
+    initial_state: torch.Tensor | None = None
 
     def __post_init__(self) -> None:
         self._step = 0
         dev = self.device or torch.device("cpu")
-        self._s = torch.randn(self.state_dim, device=dev)
+        if self.initial_state is not None:
+            self._s = self.initial_state.to(dev).flatten()[: self.state_dim].clone()
+            if self._s.numel() < self.state_dim:
+                self._s = F.pad(self._s, (0, self.state_dim - self._s.numel()))
+        else:
+            self._s = torch.randn(self.state_dim, device=dev)
 
     def reset(self) -> torch.Tensor:
         self._step = 0
         dev = self._s.device
-        self._s = torch.randn(self.state_dim, device=dev)
+        if self.initial_state is not None:
+            raw = self.initial_state.to(dev).flatten()[: self.state_dim]
+            self._s = raw.clone()
+            if self._s.numel() < self.state_dim:
+                self._s = F.pad(self._s, (0, self.state_dim - self._s.numel()))
+        else:
+            self._s = torch.randn(self.state_dim, device=dev)
         return self._s.clone()
 
     def step(self, action: int) -> tuple[torch.Tensor, float, bool, dict[str, Any]]:

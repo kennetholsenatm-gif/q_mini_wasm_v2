@@ -8,7 +8,12 @@ from pathlib import Path
 import torch
 
 from qminiwasm.model import QMiniWASM
-from qminiwasm.training.checkpoint import load_checkpoint_into_model, save_checkpoint
+from qminiwasm.training.cascade_rl import TinyCascadePolicy
+from qminiwasm.training.checkpoint import (
+    load_cascade_policy_from_checkpoint,
+    load_checkpoint_into_model,
+    save_checkpoint,
+)
 from qminiwasm.training.loop import split_train_eval_data
 
 
@@ -25,6 +30,25 @@ def test_checkpoint_round_trip_changes_hybrid_output():
         o1 = m1.hybrid_inference(x)
         o2 = m2.hybrid_inference(x)
         assert torch.allclose(o1, o2)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_checkpoint_saves_and_loads_cascade_policy():
+    device = torch.device("cpu")
+    m1 = QMiniWASM(device=device)
+    m2 = QMiniWASM(device=device)
+    c1 = TinyCascadePolicy(8, 4).to(device)
+    c2 = TinyCascadePolicy(8, 4).to(device)
+    with torch.no_grad():
+        c1.net[0].weight.fill_(0.42)
+    with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
+        path = Path(f.name)
+    try:
+        save_checkpoint(path, m1, meta={"tag": "cascade"}, cascade_policy=c1)
+        load_checkpoint_into_model(m2, path, map_location=device)
+        assert load_cascade_policy_from_checkpoint(c2, path, map_location=device)
+        assert torch.allclose(c1.net[0].weight, c2.net[0].weight)
     finally:
         path.unlink(missing_ok=True)
 

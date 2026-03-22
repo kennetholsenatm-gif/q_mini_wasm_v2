@@ -5,8 +5,24 @@ from __future__ import annotations
 import torch
 
 from qminiwasm.rl.cascade_grpo import CascadeGRPO, CascadeGRPOConfig
-from qminiwasm.training.cascade_rl import TinyCascadePolicy, ToyRoutingEnv, cascade_rl_train_step
+from qminiwasm.training.cascade_rl import (
+    TinyCascadePolicy,
+    ToyRoutingEnv,
+    cascade_rl_train_step,
+    hidden_digest_for_cascade,
+)
 from qminiwasm.training.distillation import MOPDLoss, MOPDLossConfig
+
+
+def test_hidden_digest_truncate_and_pad() -> None:
+    h = torch.arange(16, dtype=torch.float32)
+    d8 = hidden_digest_for_cascade(h, state_dim=8, d_model=16)
+    assert d8.shape == (8,)
+    assert torch.allclose(d8, h[:8])
+    d20 = hidden_digest_for_cascade(h, state_dim=20, d_model=16)
+    assert d20.shape == (20,)
+    assert torch.allclose(d20[:16], h)
+    assert torch.all(d20[16:] == 0)
 
 
 def test_grpo_module_shapes() -> None:

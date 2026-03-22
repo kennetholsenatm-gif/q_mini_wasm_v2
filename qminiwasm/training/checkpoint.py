@@ -5,9 +5,10 @@ from __future__ import annotations
 import inspect
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import torch
+import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,11 @@ CHECKPOINT_FORMAT_VERSION = 1
 D_MODEL = 4096
 
 
-def build_checkpoint_payload(model: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def build_checkpoint_payload(
+    model: Any,
+    meta: Optional[Dict[str, Any]] = None,
+    cascade_policy: Optional[Union[nn.Module, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Assemble a checkpoint dict for ``torch.save``."""
     payload: Dict[str, Any] = {
         "format_version": CHECKPOINT_FORMAT_VERSION,
@@ -27,14 +32,24 @@ def build_checkpoint_payload(model: Any, meta: Optional[Dict[str, Any]] = None) 
     ha = getattr(model, "hybrid_adapter", None)
     if ha is not None:
         payload["hybrid_adapter"] = ha.state_dict()
+    if cascade_policy is not None:
+        if isinstance(cascade_policy, dict):
+            payload["cascade_policy"] = cascade_policy
+        else:
+            payload["cascade_policy"] = cascade_policy.state_dict()
     return payload
 
 
-def save_checkpoint(path: str | Path, model: Any, meta: Optional[Dict[str, Any]] = None) -> None:
+def save_checkpoint(
+    path: str | Path,
+    model: Any,
+    meta: Optional[Dict[str, Any]] = None,
+    cascade_policy: Optional[nn.Module] = None,
+) -> None:
     """Persist trainable submodules to a single file (creates parent directories)."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    payload = build_checkpoint_payload(model, meta=meta)
+    payload = build_checkpoint_payload(model, meta=meta, cascade_policy=cascade_policy)
     torch.save(payload, p)
     logger.info("Wrote checkpoint to %s", p)
 
@@ -111,3 +126,28 @@ def load_checkpoint_into_model(
 
     meta = payload.get("meta")
     return dict(meta) if isinstance(meta, dict) else {}
+
+
+def load_cascade_policy_from_checkpoint(
+    policy: nn.Module,
+    path: str | Path,
+    map_location: Any = "cpu",
+) -> bool:
+    """Load ``cascade_policy`` weights from checkpoint if present. Returns True if loaded."""
+    p = Path(path)
+    if not p.is_file():
+        return False
+    payload = _torch_load_compat(p, map_location)
+    if not isinstance(payload, dict):
+        return False
+    cp = payload.get("cascade_policy")
+    if not isinstance(cp, dict) or not cp:
+        return False
+    inc = policy.load_state_dict(cp, strict=False)
+    if inc.missing_keys or inc.unexpected_keys:
+        logger.info(
+            "cascade_policy load_state_dict: missing=%s unexpected=%s",
+            inc.missing_keys,
+            inc.unexpected_keys,
+        )
+    return True

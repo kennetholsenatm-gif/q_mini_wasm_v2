@@ -59,6 +59,7 @@ class EngineConfig:
         cascade_state_dim: Optional[int] = None,
         cascade_num_actions: Optional[int] = None,
         cascade_mopd_lambda: Optional[float] = None,
+        cascade_seed_from_hidden: Optional[bool] = None,
     ):
         self.accelerator = accelerator or os.environ.get("ACCELERATOR", "").strip() or None
         _idx = os.environ.get("DEVICE_INDEX", "")
@@ -323,3 +324,11 @@ class EngineConfig:
                     self.cascade_mopd_lambda = 0.0
             else:
                 self.cascade_mopd_lambda = 0.0
+
+        self.cascade_seed_from_hidden = cascade_seed_from_hidden
+        if self.cascade_seed_from_hidden is None:
+            _csh = os.environ.get("CASCADE_SEED_FROM_HIDDEN", "").strip().lower()
+            if _csh in ("0", "false", "no", "off", "disable", "disabled"):
+                self.cascade_seed_from_hidden = False
+            else:
+                self.cascade_seed_from_hidden = True
