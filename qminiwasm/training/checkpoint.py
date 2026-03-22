@@ -65,6 +65,7 @@ def _torch_load_compat(path: Path, map_location: Any) -> Any:
             return torch.load(str(path), map_location=map_location, weights_only=True)
         except Exception:
             logger.debug("weights_only load failed; retrying full pickle.", exc_info=True)
+    # Legacy checkpoints only; load from trusted paths (see pyproject bandit skip B614).
     return torch.load(str(path), map_location=map_location)
 
 

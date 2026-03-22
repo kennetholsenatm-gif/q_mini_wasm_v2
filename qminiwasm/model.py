@@ -28,6 +28,7 @@ from .quantum.interconnect import StateMigrationInterconnect
 from .layers.ternary import TernaryWASMExpert
 from .layers.lota import LoRALinearSide, merge_lora_into_linear_weight
 from .layers.ptqtp import PTQTPLinear
+from .training.cascade_rl import CascadeRouter
 from .layers.attention import TropicalAttention
 from .wasm.engine import WasmEngine as WasmExecutor
 from .hardware import SYCLHardware
@@ -60,6 +61,10 @@ class QMiniWASM:
         hybrid_adapter_hidden: int = 1024,
         tequila_deadzone: float = 0.0,
         lota_rank: int = 0,
+        use_cascade_router: bool = False,
+        cascade_state_dim: int = 8,
+        cascade_num_actions: int = 4,
+        cascade_router_hidden: int = 32,
     ):
         """Initialize the QMiniWASM model.
 
@@ -70,6 +75,9 @@ class QMiniWASM:
             hybrid_adapter_hidden: Bottleneck width for the adapter (default 1024).
             tequila_deadzone: Tequila deadzone fraction for ``TernaryWASMExpert`` (0 disables).
             lota_rank: If > 0, add a LoRA side branch on the ternary expert path (LoTA-QAF).
+            use_cascade_router: If True, attach a :class:`CascadeRouter` (4096→latent→logits) for
+                cascade RL / escalation hints; trained via the loop's cascade optimizer, not main MSE Adam.
+            cascade_state_dim / cascade_num_actions / cascade_router_hidden: Router shape.
         """
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
@@ -100,6 +108,19 @@ class QMiniWASM:
         self.data_pipeline = DataPipeline()
         self.state_migration = StateMigrationInterconnect()
         self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
+        self.cascade_router: Optional[CascadeRouter] = None
+        if bool(use_cascade_router):
+            self.cascade_router = CascadeRouter(
+                d_model=4096,
+                state_dim=int(cascade_state_dim),
+                num_actions=int(cascade_num_actions),
+                hidden=max(8, int(cascade_router_hidden)),
+            ).to(self.device)
+            self.logger.info(
+                "cascade_router attached (state_dim=%s num_actions=%s)",
+                int(cascade_state_dim),
+                int(cascade_num_actions),
+            )
         self.logger.info("QMiniWASM model initialized on %s", self.device)
 
     def _build_hybrid_adapter(self, hidden: int) -> None:
@@ -150,6 +171,17 @@ class QMiniWASM:
         if self.hybrid_adapter is not None:
             out.extend(self.hybrid_adapter.parameters())
         return out
+
+    def cascade_logits(self, hidden: torch.Tensor) -> Optional[torch.Tensor]:
+        """If ``cascade_router`` is set, return logits ``[num_actions]`` from hidden ``[d_model]`` or ``[B,d_model]`` (mean-pooled)."""
+        if self.cascade_router is None:
+            return None
+        if hidden.dim() == 2:
+            h = hidden.mean(dim=0).detach()
+        else:
+            h = hidden.detach()
+        s = self.cascade_router.project_hidden(h)
+        return self.cascade_router(s)
 
     def merge_lota_into_ternary(self) -> None:
         """Fold LoRA ``B @ A`` into ``ternary_expert.weight`` and zero ``lora_b``."""

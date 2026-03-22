@@ -25,12 +25,14 @@ Runbook (CodeSearchNet Python example, after ``pip install -e ".[training]"``):
 - Plateau: ``hf_tabular`` defaults to ``LR_PLATEAU_PATIENCE=2`` (ReduceLROnPlateau); set ``LR_PLATEAU_PATIENCE=0`` to disable.
   Optional: ``EARLY_STOP_PATIENCE=6``, ``LR_PLATEAU_FACTOR=0.5``, ``LR_PLATEAU_MIN_LR=1e-7``.
 - Auth (optional): set ``HUGGING_FACE_HUB_TOKEN`` or ``HF_TOKEN`` for higher Hub rate limits / gated datasets (never commit tokens; use ``.env`` — gitignored).
+- Reproducible Hub snapshots: set ``HF_DATASET_REVISION`` (git ref / commit); defaults to ``main``.
 - Run: ``python -m engine`` from the repo root (editable install or PYTHONPATH).
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -207,6 +209,7 @@ def load_hf_tabular_samples(
     load_kw: Dict[str, Any] = {}
     if token:
         load_kw["token"] = token
+    hub_revision = os.environ.get("HF_DATASET_REVISION", "main").strip() or "main"
 
     use_streaming = bool(wasi_slice_only)
     if config_name:
@@ -215,10 +218,17 @@ def load_hf_tabular_samples(
             config_name,
             split=split,
             streaming=use_streaming,
+            revision=hub_revision,
             **load_kw,
         )
     else:
-        ds = load_dataset(dataset_id, split=split, streaming=use_streaming, **load_kw)
+        ds = load_dataset(
+            dataset_id,
+            split=split,
+            streaming=use_streaming,
+            revision=hub_revision,
+            **load_kw,
+        )
 
     samples: List[Dict[str, Any]] = []
     if wasi_slice_only:

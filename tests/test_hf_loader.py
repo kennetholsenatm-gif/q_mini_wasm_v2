@@ -159,6 +159,7 @@ def test_load_hf_tabular_samples_passes_token_to_load_dataset(mock_load):
     )
     mock_load.assert_called_once()
     assert mock_load.call_args.kwargs.get("token") == "hf_test_token"
+    assert mock_load.call_args.kwargs.get("revision") == "main"
     assert len(out) == 1
     assert out[0]["hidden"].shape == (4096,)
 
@@ -184,6 +185,7 @@ def test_load_hf_wasi_slice_streams_and_filters(mock_load):
     )
     mock_load.assert_called_once()
     assert mock_load.call_args.kwargs.get("streaming") is True
+    assert mock_load.call_args.kwargs.get("revision") == "main"
     assert len(out) == 1
     assert out[0]["algorithm"] == "hf_tabular_wasi"
     assert out[0]["execution_state"].get("wasi_slice_only") is True

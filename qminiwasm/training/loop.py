@@ -14,12 +14,14 @@ import random
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
 from .cascade_rl import (
+    CascadeRouter,
     TinyCascadePolicy,
     ToyRoutingEnv,
     cascade_rl_train_step,
@@ -181,6 +183,9 @@ def run_training_loop(
     cascade_num_actions: int = 4,
     cascade_mopd_lambda: float = 0.0,
     cascade_seed_from_hidden: bool = True,
+    use_cascade_router: bool = False,
+    cascade_learned_projector: bool = False,
+    cascade_router_hidden: int = 32,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -245,6 +250,11 @@ def run_training_loop(
         cascade_mopd_lambda: If >0, add MOPD feature loss vs noisy teacher on state embeddings.
         cascade_seed_from_hidden: If True, each supervised batch updates a digest from mean
             ``hidden``; the next epoch's toy MDP resets from that digest (bridges cascade to model inputs).
+        use_cascade_router: If True, attach :class:`CascadeRouter` on ``QMiniWASM`` (trained by the
+            cascade optimizer, not main AdamW).
+        cascade_learned_projector: If True and ``use_cascade_router`` is False, create a loop-owned
+            :class:`CascadeRouter`; otherwise use :class:`TinyCascadePolicy` on latent state only.
+        cascade_router_hidden: MLP hidden width inside :class:`CascadeRouter`.
 
     Returns:
         Dict with ``epochs_run``, ``final_loss``, ``metrics``, checkpoint path fields.
@@ -263,6 +273,10 @@ def run_training_loop(
         hybrid_adapter_hidden=hybrid_adapter_hidden,
         tequila_deadzone=float(tequila_deadzone),
         lota_rank=int(lota_rank),
+        use_cascade_router=bool(use_cascade_router),
+        cascade_state_dim=int(cascade_state_dim),
+        cascade_num_actions=int(cascade_num_actions),
+        cascade_router_hidden=int(cascade_router_hidden),
     )
     model.quantum_router.train()
     if hasattr(model, "ternary_expert"):
@@ -404,7 +418,7 @@ def run_training_loop(
     stopped_on_target_mse = False
     target_mse_stop_train_metric_warned = False
 
-    cascade_policy: TinyCascadePolicy | None = None
+    cascade_policy: nn.Module | None = None
     cascade_optimizer: torch.optim.Optimizer | None = None
     grpo_trainer = CascadeGRPO(
         CascadeGRPOConfig(normalize_advantage=bool(int(cascade_group_size) >= 2))
@@ -413,27 +427,43 @@ def run_training_loop(
     epoch_cascade_return: List[float] = []
     digest_holder: list[torch.Tensor | None] = [None]
 
-    def _cascade_ckpt_module() -> TinyCascadePolicy | None:
+    cascade_policy_mode: str | None = None
+    if use_cascade_rl:
+        mr = getattr(model, "cascade_router", None)
+        if mr is not None:
+            cascade_policy = mr
+            cascade_policy_mode = "model_router"
+        elif bool(cascade_learned_projector):
+            cascade_policy = CascadeRouter(
+                d_model=_D_MODEL,
+                state_dim=int(cascade_state_dim),
+                num_actions=int(cascade_num_actions),
+                hidden=max(8, int(cascade_router_hidden)),
+            ).to(device)
+            cascade_policy_mode = "loop_router"
+        else:
+            cascade_policy = TinyCascadePolicy(
+                int(cascade_state_dim), int(cascade_num_actions)
+            ).to(device)
+            cascade_policy_mode = "tiny_mlp"
+        cascade_optimizer = torch.optim.Adam(
+            cascade_policy.parameters(), lr=float(cascade_policy_lr)
+        )
+        if checkpoint_load_path:
+            if load_cascade_policy_from_checkpoint(
+                cascade_policy, checkpoint_load_path, map_location=device
+            ):
+                logger.info(
+                    "Loaded cascade_policy weights from %s",
+                    checkpoint_load_path,
+                )
+
+    def _cascade_ckpt_module() -> nn.Module | None:
         return cascade_policy if (use_cascade_rl and cascade_policy is not None) else None
 
     for epoch in range(epochs):
         if use_cascade_rl and int(cascade_steps_per_epoch) > 0:
-            if cascade_policy is None:
-                cascade_policy = TinyCascadePolicy(
-                    int(cascade_state_dim), int(cascade_num_actions)
-                ).to(device)
-                cascade_optimizer = torch.optim.Adam(
-                    cascade_policy.parameters(), lr=float(cascade_policy_lr)
-                )
-                if checkpoint_load_path:
-                    if load_cascade_policy_from_checkpoint(
-                        cascade_policy, checkpoint_load_path, map_location=device
-                    ):
-                        logger.info(
-                            "Loaded cascade_policy weights from %s",
-                            checkpoint_load_path,
-                        )
-            assert cascade_optimizer is not None
+            assert cascade_policy is not None and cascade_optimizer is not None
             c_loss_acc = 0.0
             c_ret_acc = 0.0
             mopd_mod: MOPDLoss | None = None
@@ -510,12 +540,16 @@ def run_training_loop(
             hidden_states = torch.stack(hidden_list).to(device)
             targets = torch.stack(target_list).to(device)
             if use_cascade_rl and cascade_seed_from_hidden:
-                digest_holder[0] = hidden_digest_for_cascade(
-                    hidden_states.mean(0).detach(),
-                    state_dim=int(cascade_state_dim),
-                    d_model=_D_MODEL,
-                    device=device,
-                )
+                hm = hidden_states.mean(0).detach()
+                if isinstance(cascade_policy, CascadeRouter):
+                    digest_holder[0] = cascade_policy.project_hidden(hm).detach()
+                else:
+                    digest_holder[0] = hidden_digest_for_cascade(
+                        hm,
+                        state_dim=int(cascade_state_dim),
+                        d_model=_D_MODEL,
+                        device=device,
+                    )
 
             optimizer.zero_grad()
             if tsign_opt is not None:
@@ -729,6 +763,8 @@ def run_training_loop(
         metrics["cascade_group_size"] = int(cascade_group_size)
         metrics["cascade_mopd_lambda"] = float(cascade_mopd_lambda)
         metrics["cascade_seed_from_hidden"] = bool(cascade_seed_from_hidden)
+        if cascade_policy_mode is not None:
+            metrics["cascade_policy_mode"] = cascade_policy_mode
         if epoch_cascade_loss:
             metrics["epoch_cascade_loss"] = epoch_cascade_loss
         if epoch_cascade_return:

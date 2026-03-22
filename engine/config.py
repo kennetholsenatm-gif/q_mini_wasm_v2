@@ -60,6 +60,9 @@ class EngineConfig:
         cascade_num_actions: Optional[int] = None,
         cascade_mopd_lambda: Optional[float] = None,
         cascade_seed_from_hidden: Optional[bool] = None,
+        use_cascade_router: Optional[bool] = None,
+        cascade_learned_projector: Optional[bool] = None,
+        cascade_router_hidden: Optional[int] = None,
     ):
         self.accelerator = accelerator or os.environ.get("ACCELERATOR", "").strip() or None
         _idx = os.environ.get("DEVICE_INDEX", "")
@@ -332,3 +335,18 @@ class EngineConfig:
                 self.cascade_seed_from_hidden = False
             else:
                 self.cascade_seed_from_hidden = True
+
+        self.use_cascade_router = use_cascade_router
+        if self.use_cascade_router is None:
+            _ucr = os.environ.get("USE_CASCADE_ROUTER", "").strip().lower()
+            self.use_cascade_router = _ucr in ("1", "true", "yes", "on")
+
+        self.cascade_learned_projector = cascade_learned_projector
+        if self.cascade_learned_projector is None:
+            _clp = os.environ.get("CASCADE_LEARNED_PROJECTOR", "").strip().lower()
+            self.cascade_learned_projector = _clp in ("1", "true", "yes", "on")
+
+        self.cascade_router_hidden = cascade_router_hidden
+        if self.cascade_router_hidden is None:
+            _crh = os.environ.get("CASCADE_ROUTER_HIDDEN", "").strip()
+            self.cascade_router_hidden = int(_crh) if _crh.isdigit() else 32

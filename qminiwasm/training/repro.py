@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import random
+
+_log = logging.getLogger(__name__)
 
 
 def set_training_seed(seed: int) -> None:
@@ -14,7 +17,7 @@ def set_training_seed(seed: int) -> None:
 
         np.random.seed(seed)
     except ImportError:
-        pass
+        _log.debug("NumPy not installed; skipping np.random.seed")
 
     import torch
 
@@ -26,4 +29,4 @@ def set_training_seed(seed: int) -> None:
         if xm is not None and xm.is_available():
             xm.manual_seed(seed)
     except Exception:
-        pass
+        _log.debug("torch.xpu.manual_seed skipped or failed", exc_info=True)

@@ -55,4 +55,12 @@ def prepare_escalation_payload(
         "execution_state": execution_state,
         "semantic_blob": captured_deltas.get("semantic_blob"),
     }
+    for k in (
+        "cascade_action_id",
+        "cascade_action_name",
+        "cascade_logits",
+        "cascade_num_actions",
+    ):
+        if k in captured_deltas:
+            payload[k] = captured_deltas[k]
     return payload

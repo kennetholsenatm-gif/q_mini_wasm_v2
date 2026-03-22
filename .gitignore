@@ -53,6 +53,7 @@ htmlcov/
 
 # Docker (allow multi-container Dockerfiles and root compose)
 .dockerignore
+!.dockerignore
 Dockerfile*
 !/Dockerfile
 !wui/backend/Dockerfile

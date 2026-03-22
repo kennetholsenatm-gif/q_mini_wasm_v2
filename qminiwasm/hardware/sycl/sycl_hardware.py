@@ -14,6 +14,8 @@ import warnings
 
 from qminiwasm.wasm.trit_pack import pack_ternary_list, unpack_ternary_list
 
+_log = logging.getLogger(__name__)
+
 
 def _sycl_device_from_filter(dpctl: Any, filt: str) -> Optional[Any]:
     """Construct a ``SyclDevice`` from a DPC++/SYCL filter string (e.g. ``level_zero:gpu:0``)."""
@@ -61,7 +63,7 @@ def _select_dpctl_device(dpctl: Any) -> Optional[Any]:
                 if dev is not None:
                     return dev
             except Exception:
-                pass
+                _log.debug("dpctl.select_gpu_device failed", exc_info=True)
         for filt in (
             "level_zero:gpu:0",
             "level_zero:gpu",
@@ -82,13 +84,13 @@ def _select_dpctl_device(dpctl: Any) -> Optional[Any]:
                 if dev is not None:
                     return dev
             except Exception:
-                pass
+                _log.debug("dpctl.%s failed", name, exc_info=True)
     try:
         ctor = getattr(dpctl, "SyclDevice", None)
         if callable(ctor):
             return ctor()
     except Exception:
-        pass
+        _log.debug("dpctl.SyclDevice() default ctor failed", exc_info=True)
     return None
 
 

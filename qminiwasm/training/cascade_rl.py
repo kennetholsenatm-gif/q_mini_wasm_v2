@@ -190,3 +190,40 @@ class TinyCascadePolicy(nn.Module):
 
     def forward(self, state: torch.Tensor) -> torch.Tensor:
         return self.net(state)
+
+
+class CascadeRouter(nn.Module):
+    """Learned map ``hidden[d_model] -> latent[state_dim] -> logits[num_actions]`` for cascade RL."""
+
+    def __init__(
+        self,
+        *,
+        d_model: int = 4096,
+        state_dim: int = 8,
+        num_actions: int = 4,
+        hidden: int = 32,
+    ) -> None:
+        super().__init__()
+        self.d_model = int(d_model)
+        self.state_dim = int(state_dim)
+        self.num_actions = int(num_actions)
+        self.hidden = int(hidden)
+        self.projector = nn.Linear(self.d_model, self.state_dim)
+        self.body = nn.Sequential(
+            nn.Linear(self.state_dim, self.hidden),
+            nn.Tanh(),
+            nn.Linear(self.hidden, self.num_actions),
+        )
+
+    def project_hidden(self, hidden_1d: torch.Tensor) -> torch.Tensor:
+        """Map mean hidden ``[d_model]`` to latent state ``[state_dim]``."""
+        dev = self.projector.weight.device
+        dt = self.projector.weight.dtype
+        h = hidden_1d.flatten()[: self.d_model].to(device=dev, dtype=dt)
+        if h.shape[0] < self.d_model:
+            h = F.pad(h, (0, self.d_model - h.shape[0]))
+        return self.projector(h)
+
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
+        """Logits from latent state ``[state_dim]`` (same contract as :class:`TinyCascadePolicy`)."""
+        return self.body(state)

@@ -21,8 +21,43 @@ def test_run_training_loop_includes_cascade_phase_by_default() -> None:
     assert out["epochs_run"] >= 1
     m = out["metrics"]
     assert m.get("use_cascade_rl") is True
+    assert m.get("cascade_policy_mode") == "tiny_mlp"
     assert "epoch_cascade_loss" in m
     assert len(m["epoch_cascade_loss"]) == 1
+
+
+def test_run_training_loop_cascade_learned_projector_mode() -> None:
+    out = run_training_loop(
+        epochs=1,
+        batch_size=2,
+        learning_rate=1e-3,
+        accelerator="cpu",
+        use_cascade_rl=True,
+        cascade_learned_projector=True,
+        cascade_steps_per_epoch=1,
+        cascade_group_size=2,
+        cascade_policy_lr=1e-2,
+        cascade_state_dim=6,
+        cascade_num_actions=3,
+    )
+    assert out["metrics"].get("cascade_policy_mode") == "loop_router"
+
+
+def test_run_training_loop_cascade_model_router_mode() -> None:
+    out = run_training_loop(
+        epochs=1,
+        batch_size=2,
+        learning_rate=1e-3,
+        accelerator="cpu",
+        use_cascade_rl=True,
+        use_cascade_router=True,
+        cascade_steps_per_epoch=1,
+        cascade_group_size=2,
+        cascade_policy_lr=1e-2,
+        cascade_state_dim=6,
+        cascade_num_actions=3,
+    )
+    assert out["metrics"].get("cascade_policy_mode") == "model_router"
 
 
 def test_run_training_loop_cascade_can_be_disabled() -> None:
