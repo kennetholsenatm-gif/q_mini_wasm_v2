@@ -185,6 +185,16 @@ class QMiniWASM:
         s = self.cascade_router.project_hidden(h)
         return self.cascade_router(s)
 
+    def cascade_logits_rows(self, hidden_batch: torch.Tensor) -> Optional[torch.Tensor]:
+        """Per-row cascade logits ``[B, num_actions]`` when ``cascade_router`` is set; else ``None``."""
+        if self.cascade_router is None:
+            return None
+        if hidden_batch.dim() != 2 or hidden_batch.shape[1] != 4096:
+            raise ValueError(f"Expected hidden [B, 4096], got {tuple(hidden_batch.shape)}")
+        cr = self.cascade_router
+        s = cr.projector(hidden_batch.detach())
+        return cr.body(s)
+
     def merge_lota_into_ternary(self) -> None:
         """Fold LoRA ``B @ A`` into ``ternary_expert.weight`` and zero ``lora_b``."""
         if self.lota_branch is None:

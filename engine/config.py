@@ -63,6 +63,8 @@ class EngineConfig:
         use_cascade_router: Optional[bool] = None,
         cascade_learned_projector: Optional[bool] = None,
         cascade_router_hidden: Optional[int] = None,
+        cascade_couple_forward: Optional[bool] = None,
+        hf_mesh_blend_fraction: Optional[float] = None,
     ):
         self.accelerator = accelerator or os.environ.get("ACCELERATOR", "").strip() or None
         _idx = os.environ.get("DEVICE_INDEX", "")
@@ -79,13 +81,20 @@ class EngineConfig:
         self.diff_method = diff_method or os.environ.get("DIFF_METHOD", "parameter-shift")
         self.epochs = int(os.environ.get("EPOCHS", str(epochs)))
         self.batch_size = int(os.environ.get("BATCH_SIZE", str(batch_size)))
-        self.learning_rate = float(os.environ.get("LEARNING_RATE", str(learning_rate)))
+        _lr_env = os.environ.get("LEARNING_RATE", "").strip()
+        self.learning_rate = float(_lr_env) if _lr_env else float(learning_rate)
         self.data_path = data_path or os.environ.get("DATA_PATH")
         self.training_data_source = (
             training_data_source
             or os.environ.get("TRAINING_DATA_SOURCE", "mesh")
         ).strip()
         _tds = self.training_data_source.lower()
+        if (
+            not _lr_env
+            and _tds == "hf_tabular"
+            and float(learning_rate) == 1e-4
+        ):
+            self.learning_rate = 1.5e-4
         self.mesh_algorithms = mesh_algorithms or os.environ.get(
             "MESH_ALGORITHMS",
             "hash,encrypt,network,routing,consensus",
@@ -152,6 +161,8 @@ class EngineConfig:
                     self.grad_clip_norm = v if v > 0 else None
                 except ValueError:
                     self.grad_clip_norm = None
+            elif _tds == "hf_tabular":
+                self.grad_clip_norm = 1.0
 
         self.lr_plateau_patience = lr_plateau_patience
         if self.lr_plateau_patience is None:
@@ -219,6 +230,8 @@ class EngineConfig:
                     self.target_mean_mse = float(_tm)
                 except ValueError:
                     self.target_mean_mse = None
+            elif _tds == "hf_tabular":
+                self.target_mean_mse = 1e-4
 
         self.stop_on_target_mse = stop_on_target_mse
         if self.stop_on_target_mse is None:
@@ -294,6 +307,8 @@ class EngineConfig:
                     self.cascade_policy_lr = float(_cpl)
                 except ValueError:
                     self.cascade_policy_lr = self.learning_rate
+            elif _tds == "hf_tabular":
+                self.cascade_policy_lr = 0.5 * float(self.learning_rate)
             else:
                 self.cascade_policy_lr = self.learning_rate
 
@@ -350,3 +365,22 @@ class EngineConfig:
         if self.cascade_router_hidden is None:
             _crh = os.environ.get("CASCADE_ROUTER_HIDDEN", "").strip()
             self.cascade_router_hidden = int(_crh) if _crh.isdigit() else 32
+
+        self.cascade_couple_forward = cascade_couple_forward
+        if self.cascade_couple_forward is None:
+            _ccf = os.environ.get("CASCADE_COUPLE_FORWARD", "").strip().lower()
+            if _ccf in ("0", "false", "no", "off", "disable", "disabled"):
+                self.cascade_couple_forward = False
+            else:
+                self.cascade_couple_forward = True
+
+        self.hf_mesh_blend_fraction = hf_mesh_blend_fraction
+        if self.hf_mesh_blend_fraction is None:
+            _hmb = os.environ.get("HF_MESH_BLEND_FRACTION", "").strip()
+            if _hmb:
+                try:
+                    self.hf_mesh_blend_fraction = max(0.0, float(_hmb))
+                except ValueError:
+                    self.hf_mesh_blend_fraction = 0.0
+            else:
+                self.hf_mesh_blend_fraction = 0.0

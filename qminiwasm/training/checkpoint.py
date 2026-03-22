@@ -125,6 +125,17 @@ def load_checkpoint_into_model(
                     inc.unexpected_keys,
                 )
 
+    cr_mod = getattr(model, "cascade_router", None)
+    cp_sd = payload.get("cascade_policy")
+    if cr_mod is not None and isinstance(cp_sd, dict) and cp_sd:
+        inc = cr_mod.load_state_dict(cp_sd, strict=False)
+        if inc.missing_keys or inc.unexpected_keys:
+            logger.info(
+                "cascade_router load_state_dict: missing=%s unexpected=%s",
+                inc.missing_keys,
+                inc.unexpected_keys,
+            )
+
     meta = payload.get("meta")
     return dict(meta) if isinstance(meta, dict) else {}
 

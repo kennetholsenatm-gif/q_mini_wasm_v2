@@ -79,4 +79,8 @@ def main(config: EngineConfig | None = None) -> dict:
         use_cascade_router=bool(getattr(config, "use_cascade_router", False)),
         cascade_learned_projector=bool(getattr(config, "cascade_learned_projector", False)),
         cascade_router_hidden=int(getattr(config, "cascade_router_hidden", 32) or 32),
+        cascade_couple_forward=bool(getattr(config, "cascade_couple_forward", True)),
+        hf_mesh_blend_fraction=float(
+            getattr(config, "hf_mesh_blend_fraction", 0.0) or 0.0
+        ),
     )
