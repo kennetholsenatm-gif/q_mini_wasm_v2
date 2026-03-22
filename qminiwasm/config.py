@@ -64,6 +64,15 @@ class HierarchicalConfig:
     enable_quantum_routing: bool = True
     """Whether to enable quantum-accelerated routing."""
 
+    # Tier 1.5 / Fog escalation (deterministic policy hooks)
+    max_sequence_length_proxy: int = 1_000_000
+    """Escalate when reported ``sequence_length_proxy`` in state exceeds this (disabled if <= 0)."""
+    perplexity_spike_factor: float = 0.0
+    """If > 0 and ``baseline_perplexity`` + ``last_perplexity`` present, escalate when
+    ``last_perplexity >= factor * baseline_perplexity``."""
+    contradiction_detected_key: str = "contradiction_detected"
+    """If ``state[contradiction_detected_key]`` is truthy, escalate to Fog tier."""
+
     @classmethod
     def from_env(cls) -> "HierarchicalConfig":
         """Build config from environment variables with defaults."""

@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 from .memory_encode import encode_linear_memory
+from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
 
 logger = logging.getLogger(__name__)
 
@@ -108,17 +109,11 @@ class WasmEngine:
             with tempfile.TemporaryDirectory() as tmpdir:
                 # Compile C to WASM using clang
                 wasm_file = os.path.join(tmpdir, "output.wasm")
-                compile_cmd = [
-                    "clang",
-                    "-target",
-                    "wasm32",
-                    "-nostdlib",
-                    "-Wl,--no-entry",
-                    "-Wl,--export-all",
-                    "-o",
-                    wasm_file,
-                    c_file_path,
-                ]
+                try:
+                    compile_cmd = build_clang_wasm_compile_command(c_file_path, wasm_file)
+                except ValueError as e:
+                    self.logger.error("%s", e)
+                    return None
 
                 result = subprocess.run(compile_cmd, capture_output=True, text=True)
 
@@ -200,6 +195,16 @@ class WasmEngine:
         }
         return output, execution_state
 
+    def get_trit_kernel_instance(self) -> Optional[Any]:
+        """Load prebuilt trit pack / dot / ``call_indirect`` helpers (see ``trit_wasm_runtime``)."""
+        try:
+            from .trit_wasm_runtime import TritKernelInstance
+
+            return TritKernelInstance.instantiate()
+        except Exception as e:
+            self.logger.debug("Trit kernel module unavailable: %s", e)
+            return None
+
     def _store_for_module(self, module: Any) -> Optional[Any]:
         pair = self._module_exec_cache.get(id(module))
         if pair is not None:
@@ -231,15 +236,15 @@ class WasmEngine:
             return self._execute_mock(func_name, args)
         store = self._store_for_module(module)
         if store is None:
-            self.logger.error("Module store missing; compile via compile_wasm or compile_c_to_wasm.")
+            self.logger.error(
+                "Module store missing; compile via compile_wasm or compile_c_to_wasm."
+            )
             return 0, None, None, b"", b""
         try:
-            instance = wasmtime.Instance(store, module, [])
+            instance = instantiate_wasmtime_module(store, module)
             pre_mem = self._read_linear_memory(instance, store)
             first_arg = int(args[0]) if args else 0
-            hidden_state = encode_linear_memory(
-                pre_mem, result_i32=0, first_arg=first_arg
-            )
+            hidden_state = encode_linear_memory(pre_mem, result_i32=0, first_arg=first_arg)
 
             func = instance.exports(store)[func_name]  # type: ignore[index]
             result = func(store, *args)  # type: ignore[operator]
@@ -247,9 +252,7 @@ class WasmEngine:
             output = int(raw) if raw is not None else 0  # type: ignore[arg-type]
 
             post_mem = self._read_linear_memory(instance, store)
-            target_state = encode_linear_memory(
-                post_mem, result_i32=output, first_arg=first_arg
-            )
+            target_state = encode_linear_memory(post_mem, result_i32=output, first_arg=first_arg)
 
             return output, hidden_state, target_state, pre_mem, post_mem
 
@@ -269,6 +272,7 @@ class WasmEngine:
         Returns:
             Tuple of (output, hidden_state, target_state, pre_mem, post_mem)
         """
+
         def _mock_mem(phase: int, out: int) -> bytes:
             packed = struct.pack(
                 "<6I",

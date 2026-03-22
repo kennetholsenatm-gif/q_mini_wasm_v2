@@ -10,14 +10,15 @@ The implementation follows the white paper's specifications for:
 - Quantum-classical hybrid inference
 - Model interface methods
 
-AI training uses Intel ARC (XPU) when available; CUDA is not used.
+AI training prefers Intel XPU (Arc / Iris Xe) when PyTorch XPU is available; CUDA is optional.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
-
+import math
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
 
 from .config import DEFAULT_HIERARCHICAL_CONFIG, HierarchicalConfig
 from .inference.edge import EdgeOutcome, default_certainty_heuristic, run_edge_cognitive_loop
@@ -25,6 +26,9 @@ from .inference.escalation import prepare_escalation_payload
 from .quantum.router import HybridQuantumMoE
 from .quantum.interconnect import StateMigrationInterconnect
 from .layers.ternary import TernaryWASMExpert
+from .layers.lota import LoRALinearSide, merge_lora_into_linear_weight
+from .layers.ptqtp import PTQTPLinear
+from .training.cascade_rl import CascadeRouter
 from .layers.attention import TropicalAttention
 from .wasm.engine import WasmEngine as WasmExecutor
 from .hardware import SYCLHardware
@@ -49,24 +53,175 @@ class QMiniWASM:
     - Model interface methods
     """
 
-    def __init__(self, device=None):
+    def __init__(
+        self,
+        device=None,
+        *,
+        use_hybrid_adapter: bool = False,
+        hybrid_adapter_hidden: int = 1024,
+        tequila_deadzone: float = 0.0,
+        lota_rank: int = 0,
+        use_cascade_router: bool = False,
+        cascade_state_dim: int = 8,
+        cascade_num_actions: int = 4,
+        cascade_router_hidden: int = 32,
+    ):
         """Initialize the QMiniWASM model.
 
         Args:
-            device: Optional torch.device; if None, uses Intel ARC (XPU) when available else CPU.
+            device: Optional torch.device; if None, uses Intel XPU when available else CPU.
+            use_hybrid_adapter: If True, add a trainable residual MLP after the ternary expert
+                (4096 → hidden → 4096) to increase capacity for low-MSE fits on real data.
+            hybrid_adapter_hidden: Bottleneck width for the adapter (default 1024).
+            tequila_deadzone: Tequila deadzone fraction for ``TernaryWASMExpert`` (0 disables).
+            lota_rank: If > 0, add a LoRA side branch on the ternary expert path (LoTA-QAF).
+            use_cascade_router: If True, attach a :class:`CascadeRouter` (4096→latent→logits) for
+                cascade RL / escalation hints; trained via the loop's cascade optimizer, not main MSE Adam.
+            cascade_state_dim / cascade_num_actions / cascade_router_hidden: Router shape.
         """
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         self.device = device if device is not None else get_device()
         # Initialize all components
         self.quantum_router = HybridQuantumMoE().to(self.device)
-        self.ternary_expert = TernaryWASMExpert(4096, 4096).to(self.device)
+        self.ternary_expert = TernaryWASMExpert(
+            4096,
+            4096,
+            tequila_deadzone=float(tequila_deadzone),
+        ).to(self.device)
+        self.lota_branch: Optional[LoRALinearSide] = None
+        if int(lota_rank) > 0:
+            self.lota_branch = LoRALinearSide(4096, 4096, int(lota_rank)).to(self.device)
+            self.logger.info("LoTA-QAF LoRA branch enabled (rank=%s)", int(lota_rank))
+        self._ptqtp_linear: Optional[PTQTPLinear] = None
+        self._use_ptqtp_inference: bool = False
+        self.hybrid_adapter: Optional[nn.Module] = None
+        if use_hybrid_adapter:
+            h_adapt = max(32, int(hybrid_adapter_hidden))
+            self._build_hybrid_adapter(h_adapt)
+            self.logger.info(
+                "hybrid_adapter enabled (hidden=%s) for extra trainable capacity",
+                h_adapt,
+            )
         self.wasm_executor = WasmExecutor()
         self.sycl_hardware = SYCLHardware()
         self.data_pipeline = DataPipeline()
         self.state_migration = StateMigrationInterconnect()
         self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
+        self.cascade_router: Optional[CascadeRouter] = None
+        if bool(use_cascade_router):
+            self.cascade_router = CascadeRouter(
+                d_model=4096,
+                state_dim=int(cascade_state_dim),
+                num_actions=int(cascade_num_actions),
+                hidden=max(8, int(cascade_router_hidden)),
+            ).to(self.device)
+            self.logger.info(
+                "cascade_router attached (state_dim=%s num_actions=%s)",
+                int(cascade_state_dim),
+                int(cascade_num_actions),
+            )
         self.logger.info("QMiniWASM model initialized on %s", self.device)
+
+    def _build_hybrid_adapter(self, hidden: int) -> None:
+        """Residual branch: Linear → GELU → Linear; last layer zero-init so base path starts as ternary-only."""
+        m = nn.Sequential(
+            nn.Linear(4096, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, 4096),
+        ).to(self.device)
+        nn.init.kaiming_uniform_(m[0].weight, a=math.sqrt(5))
+        nn.init.zeros_(m[0].bias)
+        nn.init.zeros_(m[2].weight)
+        nn.init.zeros_(m[2].bias)
+        self.hybrid_adapter = m
+
+    def attach_hybrid_adapter_matching_state(self, state_dict: Dict[str, Any]) -> None:
+        """If no adapter yet, allocate one matching ``state_dict`` (e.g. first checkpoint load)."""
+        if self.hybrid_adapter is not None:
+            return
+        w0 = state_dict.get("0.weight")
+        if w0 is None:
+            return
+        hidden = int(w0.shape[0])
+        self._build_hybrid_adapter(hidden)
+        self.logger.info("Built hybrid_adapter (hidden=%s) to match checkpoint.", hidden)
+
+    def trainable_hybrid_backbone_parameters(self) -> List[torch.nn.Parameter]:
+        """Parameters stepped by the engine training loop (router + ternary + optional adapter)."""
+        params: List[torch.nn.Parameter] = []
+        params.extend(self.quantum_router.parameters())
+        params.extend(self.ternary_expert.parameters())
+        if self.lota_branch is not None:
+            params.extend(self.lota_branch.parameters())
+        if self.hybrid_adapter is not None:
+            params.extend(self.hybrid_adapter.parameters())
+        return params
+
+    def trainable_adam_parameters(
+        self, exclude_ternary_weight: bool = False
+    ) -> List[torch.nn.Parameter]:
+        """Subset for AdamW when ternary latent is updated with :class:`TSignSGD` instead."""
+        if not exclude_ternary_weight:
+            return self.trainable_hybrid_backbone_parameters()
+        out: List[torch.nn.Parameter] = []
+        out.extend(self.quantum_router.parameters())
+        if self.ternary_expert.bias is not None:
+            out.append(self.ternary_expert.bias)
+        if self.lota_branch is not None:
+            out.extend(self.lota_branch.parameters())
+        if self.hybrid_adapter is not None:
+            out.extend(self.hybrid_adapter.parameters())
+        return out
+
+    def cascade_logits(self, hidden: torch.Tensor) -> Optional[torch.Tensor]:
+        """If ``cascade_router`` is set, return logits ``[num_actions]`` from hidden ``[d_model]`` or ``[B,d_model]`` (mean-pooled)."""
+        if self.cascade_router is None:
+            return None
+        if hidden.dim() == 2:
+            h = hidden.mean(dim=0).detach()
+        else:
+            h = hidden.detach()
+        s = self.cascade_router.project_hidden(h)
+        return self.cascade_router(s)
+
+    def merge_lota_into_ternary(self) -> None:
+        """Fold LoRA ``B @ A`` into ``ternary_expert.weight`` and zero ``lora_b``."""
+        if self.lota_branch is None:
+            return
+        merge_lora_into_linear_weight(self.ternary_expert.weight, self.lota_branch)
+
+    def enable_ptqtp_inference(self, num_planes: int = 2) -> None:
+        """Replace ternary expert forward with a frozen PTQTP decomposition (eval-style)."""
+        self._ptqtp_linear = PTQTPLinear(
+            self.ternary_expert.weight.data.detach().clone(),
+            num_planes=int(num_planes),
+        ).to(self.device)
+        self._use_ptqtp_inference = True
+        self.logger.info("PTQTP inference enabled (%s planes)", int(num_planes))
+
+    def disable_ptqtp_inference(self) -> None:
+        self._ptqtp_linear = None
+        self._use_ptqtp_inference = False
+
+    def load_trainable_checkpoint(
+        self, path: str, map_location: Optional[Union[str, torch.device]] = None
+    ) -> Dict:
+        """Load trainable weights from a file saved during training (router, ternary, optional adapter).
+
+        Args:
+            path: Filesystem path to checkpoint.
+            map_location: Passed to ``torch.load``; defaults to ``self.device``.
+
+        Returns:
+            Checkpoint ``meta`` dict (may be empty).
+        """
+        from qminiwasm.training.checkpoint import load_checkpoint_into_model
+
+        loc = map_location if map_location is not None else self.device
+        meta = load_checkpoint_into_model(self, path, map_location=loc)
+        self.logger.info("Loaded trainable checkpoint from %s", path)
+        return meta
 
     def execute_wasm(self, wasm_code: bytes, func_name: str, args: List[int]) -> Tuple[int, Dict]:
         """Execute WASM code using the WASM execution engine.
@@ -141,7 +296,10 @@ class QMiniWASM:
         result, outcome, num_loops, last_state = run_edge_cognitive_loop(
             execute_one_block, certainty_fn, cfg
         )
-        if outcome == EdgeOutcome.ESCALATE_TO_CLOUD:
+        if outcome in (EdgeOutcome.ESCALATE_TO_CLOUD, EdgeOutcome.ESCALATE_TO_FOG):
+            from .inference.semantic_abstraction import attach_semantic_blob_to_state
+
+            attach_semantic_blob_to_state(last_state, device=self.device)
             last_state["escalation_payload"] = prepare_escalation_payload(last_state, cfg)
         return result, outcome, num_loops, last_state
 
@@ -177,7 +335,7 @@ class QMiniWASM:
         result, outcome, num_loops, last_state = self.run_edge_inference(
             wasm_code, func_name, args, compute_certainty=compute_certainty, config=config
         )
-        if outcome == EdgeOutcome.ESCALATE_TO_CLOUD:
+        if outcome in (EdgeOutcome.ESCALATE_TO_CLOUD, EdgeOutcome.ESCALATE_TO_FOG):
             payload = last_state.get("escalation_payload")
             if payload is not None and continuation_hidden_states is not None:
                 self.inference_from_escalation(payload, continuation_hidden_states)
@@ -231,8 +389,14 @@ class QMiniWASM:
             # Perform quantum routing
             routed_output = self.quantum_router(hidden_states)
 
-            # Apply ternary quantization for WASM experts
-            ternary_output = self.ternary_expert(routed_output)
+            if self._use_ptqtp_inference and self._ptqtp_linear is not None:
+                ternary_output = self._ptqtp_linear(routed_output)
+            else:
+                ternary_output = self.ternary_expert(routed_output)
+            if self.lota_branch is not None and not self._use_ptqtp_inference:
+                ternary_output = ternary_output + self.lota_branch(routed_output)
+            if self.hybrid_adapter is not None:
+                ternary_output = ternary_output + self.hybrid_adapter(ternary_output)
 
             self.logger.debug("Completed hybrid inference")
             return ternary_output

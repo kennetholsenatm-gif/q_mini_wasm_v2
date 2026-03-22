@@ -42,6 +42,9 @@ wasm = [
 ]
 gpu = ["dpctl>=0.15.0"]
 arc = ["dpctl>=0.15.0"]
+native = [
+    "pybind11>=2.11.0",
+]
 scripts = [
     "click>=8.1.0",
     "python-dotenv>=1.0.0",
@@ -64,6 +67,7 @@ skips = [
   "B311",   # random: used for synthetic data/fault injection only, not crypto
   "B404",   # subprocess import: wasm engine uses it for compiler invocation
   "B603",   # subprocess without shell: engine runs fixed compiler with controlled args
+  "B614",   # torch.load: weights_only attempted first; full pickle only for trusted local legacy ckpt
 ]
 
 [tool.black]

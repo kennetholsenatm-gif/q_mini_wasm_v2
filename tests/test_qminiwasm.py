@@ -42,7 +42,7 @@ class TestQMiniWASM(unittest.TestCase):
     def test_hybrid_inference(self):
         """Test quantum-classical hybrid inference."""
         # Create test input
-        input_tensor = torch.randn(2, 4096)  # Batch size 2, d_model 4096
+        input_tensor = torch.randn(2, 4096, device=self.model.device)
 
         # Test hybrid inference
         output = self.model.hybrid_inference(input_tensor)
@@ -71,7 +71,7 @@ class TestQMiniWASM(unittest.TestCase):
     def test_ternary_quantization(self):
         """Test ternary quantization."""
         # Create test input
-        input_tensor = torch.randn(2, 4096)
+        input_tensor = torch.randn(2, 4096, device=self.model.device)
 
         # Test ternary quantization
         output = self.model.ternary_expert(input_tensor)
@@ -82,7 +82,7 @@ class TestQMiniWASM(unittest.TestCase):
     def test_quantum_router(self):
         """Test quantum MoE router."""
         # Create test input
-        input_tensor = torch.randn(2, 4096)
+        input_tensor = torch.randn(2, 4096, device=self.model.device)
 
         # Test quantum routing
         output = self.model.quantum_router(input_tensor)

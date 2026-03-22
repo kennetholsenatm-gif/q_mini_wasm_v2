@@ -11,7 +11,17 @@ Key Components:
 - Various specialized layers for hybrid execution
 """
 
-from .ternary import TernaryWASMExpert
 from .attention import TropicalAttention
+from .lota import LoRALinearSide, merge_lora_into_linear_weight
+from .ptqtp import PTQTPLinear, decompose_ptqtp, ptqtp_linear_forward
+from .ternary import TernaryWASMExpert
 
-__all__ = ["TernaryWASMExpert", "TropicalAttention"]
+__all__ = [
+    "TernaryWASMExpert",
+    "TropicalAttention",
+    "LoRALinearSide",
+    "merge_lora_into_linear_weight",
+    "PTQTPLinear",
+    "decompose_ptqtp",
+    "ptqtp_linear_forward",
+]

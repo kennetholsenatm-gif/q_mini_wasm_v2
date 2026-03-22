@@ -36,7 +36,11 @@ jobs:
           pip install -e . --no-deps 2>/dev/null || true
 
       - name: Run Bandit
-        run: .venv/bin/bandit -r qminiwasm/ wui/backend/ -c pyproject.toml -f json -o bandit-report.json
+        run: |
+          set -e
+          PATHS="qminiwasm/"
+          if [ -d wui/backend ]; then PATHS="$PATHS wui/backend/"; fi
+          .venv/bin/bandit -r $PATHS -c pyproject.toml -f json -o bandit-report.json
 
       - name: Run pip-audit
         run: .venv/bin/pip-audit -r requirements.txt -f json -o pip-audit-report.json

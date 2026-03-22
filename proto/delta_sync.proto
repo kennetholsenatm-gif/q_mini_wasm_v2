@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package qminiwasm.delta;
+
+// Sparse tensor delta (COO-style) for P2P weight / KV sync.
+message DeltaTensor {
+  repeated uint64 index = 1;
+  repeated float value = 2;
+  repeated uint64 shape = 3;
+  uint64 baseline_hash = 4;
+  string agent_id = 5;
+}
+
+message DeltaAck {
+  uint64 applied_version = 1;
+  string status = 2;
+}
+
+service DeltaSync {
+  rpc PushDelta(DeltaTensor) returns (DeltaAck);
+  rpc StreamDeltas(stream DeltaTensor) returns (stream DeltaTensor);
+}

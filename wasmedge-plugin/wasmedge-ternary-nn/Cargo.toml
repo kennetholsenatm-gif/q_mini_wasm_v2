@@ -1,0 +1,11 @@
+[package]
+name = "wasmedge-plugin-ternary-nn"
+version = "0.1.0"
+edition = "2021"
+description = "Stub WasmEdge WASI-NN plugin for native ternary tensor ops (WebNN/DirectML hook)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# wasmedge-sdk / wasi-nn bindings would be added when implementing the plugin.

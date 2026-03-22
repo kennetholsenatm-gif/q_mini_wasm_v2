@@ -53,6 +53,7 @@ htmlcov/
 
 # Docker (allow multi-container Dockerfiles and root compose)
 .dockerignore
+!.dockerignore
 Dockerfile*
 !/Dockerfile
 !wui/backend/Dockerfile
@@ -189,6 +190,7 @@ Desktop.ini
 *.py[cod]
 *$py.class
 *.so
+*.pyd
 
 # Distribution
 .Python

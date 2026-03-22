@@ -35,7 +35,11 @@ except ImportError:
     QAOA = QuantumInstance = PauliSumOp = PauliSum = AerSimulator = None  # type: ignore[misc]
 
 # Import cryptographic infrastructure
-from qminiwasm.security.crypto import CryptoConfig, EnhancedApproximateDCPE, try_load_optional_native_lib
+from qminiwasm.security.crypto import (
+    CryptoConfig,
+    EnhancedApproximateDCPE,
+    try_load_optional_native_lib,
+)
 
 logger = logging.getLogger(__name__)
 

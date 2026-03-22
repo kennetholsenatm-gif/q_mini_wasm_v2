@@ -5,15 +5,77 @@ It uses Intel oneAPI SYCL to provide native hardware acceleration for vector and
 """
 
 import logging
+import os
 import sys
 from typing import Any, List, Optional
 
 import numpy as np
 import warnings
 
+from qminiwasm.wasm.trit_pack import pack_ternary_list, unpack_ternary_list
+
+_log = logging.getLogger(__name__)
+
+
+def _sycl_device_from_filter(dpctl: Any, filt: str) -> Optional[Any]:
+    """Construct a ``SyclDevice`` from a DPC++/SYCL filter string (e.g. ``level_zero:gpu:0``)."""
+    ctor = getattr(dpctl, "SyclDevice", None)
+    if not callable(ctor):
+        return None
+    s = filt.strip()
+    if not s:
+        return None
+    try:
+        return ctor(s)
+    except Exception:
+        return None
+
 
 def _select_dpctl_device(dpctl: Any) -> Optional[Any]:
-    """Pick a default SYCL device across dpctl versions (get_current_device is not always present)."""
+    """Pick a SYCL device, preferring Intel GPU (Iris Xe / Arc) when available.
+
+    Order:
+    1. ``QMINIWASM_SYCL_DEVICE`` — explicit filter passed to ``SyclDevice(...)``.
+    2. If ``QMINIWASM_SYCL_PREFER_GPU`` is not disabled: ``select_gpu_device()`` (dpctl) then
+       common GPU filters (Level Zero first, then OpenCL, then generic ``gpu``).
+    3. Legacy defaults: ``get_current_device``, ``select_default_device``, ``SyclDevice()``.
+
+    ``ONEAPI_DEVICE_SELECTOR`` (e.g. ``level_zero:gpu``) is honored by the oneAPI runtime and
+    narrows the device pool before the steps above; set it in the shell for driver-level filtering.
+    """
+    explicit = os.environ.get("QMINIWASM_SYCL_DEVICE", "").strip()
+    if explicit:
+        dev = _sycl_device_from_filter(dpctl, explicit)
+        if dev is not None:
+            return dev
+
+    prefer_gpu = os.environ.get("QMINIWASM_SYCL_PREFER_GPU", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+    if prefer_gpu:
+        sel_gpu = getattr(dpctl, "select_gpu_device", None)
+        if callable(sel_gpu):
+            try:
+                dev = sel_gpu()
+                if dev is not None:
+                    return dev
+            except Exception:
+                _log.debug("dpctl.select_gpu_device failed", exc_info=True)
+        for filt in (
+            "level_zero:gpu:0",
+            "level_zero:gpu",
+            "opencl:gpu:0",
+            "opencl:gpu",
+            "gpu:0",
+            "gpu",
+        ):
+            dev = _sycl_device_from_filter(dpctl, filt)
+            if dev is not None:
+                return dev
+
     for name in ("get_current_device", "select_default_device"):
         fn = getattr(dpctl, name, None)
         if callable(fn):
@@ -22,13 +84,13 @@ def _select_dpctl_device(dpctl: Any) -> Optional[Any]:
                 if dev is not None:
                     return dev
             except Exception:
-                pass
+                _log.debug("dpctl.%s failed", name, exc_info=True)
     try:
         ctor = getattr(dpctl, "SyclDevice", None)
         if callable(ctor):
             return ctor()
     except Exception:
-        pass
+        _log.debug("dpctl.SyclDevice() default ctor failed", exc_info=True)
     return None
 
 
@@ -143,9 +205,9 @@ class SYCLHardware:
         return self._tensor.copy_to_host(result).tolist()
 
     def pack_ternary_weights(self, weights: List[int]) -> bytes:
-        """Pack ternary weights: 5 trits per byte (3^5 = 243 states).
+        """Pack ternary weights: up to 5 trits per byte, MSB-first (see ``trit_pack``).
 
-        Encodes -1 -> 0, 0 -> 1, 1 -> 2; packs 5 trits per byte for XMX.
+        Encodes -1 -> 0, 0 -> 1, 1 -> 2; uses P(D)=sum d'_j 3^{k-1-j} per group.
 
         Args:
             weights: List of ternary weights (-1, 0, 1)
@@ -153,29 +215,22 @@ class SYCLHardware:
         Returns:
             Packed bytes (ceil(len(weights)/5) bytes).
         """
-        out: List[int] = []
-        for i in range(0, len(weights), 5):
-            byte_val = 0
-            for j in range(5):
-                idx = i + j
-                if idx >= len(weights):
-                    break
-                w = weights[idx]
-                trit = 0 if w == -1 else (1 if w == 0 else 2)
-                byte_val += trit * (3**j)
-            out.append(byte_val & 0xFF)
+        out = pack_ternary_list(weights)
         self.logger.debug("Packed %d trits into %d bytes", len(weights), len(out))
-        return bytes(out)
+        return out
 
-    def unpack_ternary_weights(self, packed: bytes) -> List[int]:
-        """Unpack bytes to ternary weights (-1, 0, 1). 5 trits per byte."""
-        weights: List[int] = []
-        for byte_val in packed:
-            for j in range(5):
-                trit = (byte_val // (3**j)) % 3
-                w = -1 if trit == 0 else (0 if trit == 1 else 1)
-                weights.append(w)
-        return weights
+    def unpack_ternary_weights(self, packed: bytes, num_weights: Optional[int] = None) -> List[int]:
+        """Unpack bytes to ternary weights (-1, 0, 1).
+
+        Args:
+            packed: Bytes from :meth:`pack_ternary_weights`.
+            num_weights: Exact number of trits to return (required if the last
+                group has fewer than 5 trits). If omitted, assumes ``5 * len(packed)``
+                trits (only correct when every byte is a full group).
+        """
+        if num_weights is None:
+            num_weights = len(packed) * 5
+        return unpack_ternary_list(packed, num_weights)
 
     def driver_memory_paging(self, memory: List[float], size: int) -> None:
         """Implement driver-level memory paging using SYCL.

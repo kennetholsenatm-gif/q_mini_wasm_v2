@@ -256,7 +256,9 @@ class DataPipeline:
             rel = entry.get("wasm_path")
             export_func = entry.get("export_func")
             if not rel or not export_func:
-                self.logger.warning("Skipping corpus entry missing wasm_path/export_func: %s", entry)
+                self.logger.warning(
+                    "Skipping corpus entry missing wasm_path/export_func: %s", entry
+                )
                 continue
             wasm_file = Path(rel)
             if not wasm_file.is_file():

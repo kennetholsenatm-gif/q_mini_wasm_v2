@@ -43,8 +43,15 @@ jobs:
             pip install --upgrade pip
             pip install black flake8 mypy pytest pytest-cov pypatch==1.0.2
             pip install -r requirements/ci.txt 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true
-            black --check qminiwasm/ tests/ wui/backend/
-            flake8 qminiwasm/ tests/ wui/backend/ --max-line-length=100 --extend-ignore=E203,W503
+            # Only pass wui/backend when it has .py files (Dockerfile-only tree is skipped; avoids black "path does not exist").
+            BLACK_TARGETS=(qminiwasm/ tests/)
+            FLAKE_TARGETS=(qminiwasm/ tests/)
+            if [ -d wui/backend ] && [ -n "$(find wui/backend -type f -name "*.py" -print -quit 2>/dev/null)" ]; then
+              BLACK_TARGETS+=(wui/backend/)
+              FLAKE_TARGETS+=(wui/backend/)
+            fi
+            black --check "${BLACK_TARGETS[@]}"
+            flake8 "${FLAKE_TARGETS[@]}" --max-line-length=100 --extend-ignore=E203,W503
             mypy qminiwasm/ --ignore-missing-imports
             pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term
             '
@@ -84,14 +91,16 @@ jobs:
             . /workspace/.venv/bin/activate
             pip install --upgrade pip
             pip install bandit pip-audit pypatch==1.0.2
-            bandit -r qminiwasm/ wui/backend/ -c pyproject.toml -f json -o bandit-report.json
+            PATHS="qminiwasm/"
+            if [ -d wui/backend ]; then PATHS="$PATHS wui/backend/"; fi
+            bandit -r $PATHS -c pyproject.toml -f json -o bandit-report.json
             pip-audit -r requirements.txt -f json -o pip-audit-report.json
             '
 
       - name: Ensure report files exist
         run: |
-          echo '{"results":[]}' > "$GITHUB_WORKSPACE/bandit-report.json"
-          echo '{"dependencies":[],"vulnerabilities":[]}' > "$GITHUB_WORKSPACE/pip-audit-report.json"
+          if [ ! -f "$GITHUB_WORKSPACE/bandit-report.json" ]; then echo '{"results":[]}' > "$GITHUB_WORKSPACE/bandit-report.json"; fi
+          if [ ! -f "$GITHUB_WORKSPACE/pip-audit-report.json" ]; then echo '{"dependencies":[],"vulnerabilities":[]}' > "$GITHUB_WORKSPACE/pip-audit-report.json"; fi
         continue-on-error: true
 
       - name: Upload Bandit report

@@ -52,7 +52,7 @@ pip install -e .
 # Optional: FastAPI inference server (engine/serve.py)
 pip install -e ".[serve]"
 
-# Optional: Intel ARC (XPU) / dpctl
+# Optional: Intel XPU (Arc / Iris Xe) — dpctl / SYCL helpers (requires oneAPI runtime on PATH)
 pip install -e ".[arc]"
 ```
 
@@ -120,6 +120,30 @@ Configuration is loaded from environment variables or defaults:
 - `NUM_QUBITS`: Number of qubits for QAOA (default: `8`)
 - `QAOA_LAYERS`: QAOA circuit depth (default: `3`)
 
+### Intel Iris Xe / Arc — PyTorch XPU and SYCL (dpctl)
+
+**Training / inference (`QMiniWASM`, `python -m engine`):** use PyTorch **XPU** wheels (see **[docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md)** and `python scripts/install_torch_xpu.py`). Legacy option: [Intel Extension for PyTorch](https://intel.github.io/intel-extension-for-pytorch/) with their pinned `torch` versions. Then set:
+
+```bash
+ACCELERATOR=xpu
+# optional: DEVICE_INDEX=0
+```
+
+If XPU is unavailable, the stack falls back to **CPU** (you will see a warning if `ACCELERATOR=xpu`). **Logs showing “Intel Iris Xe” from dpctl/SYCL do not mean PyTorch is using that GPU**—`torch.nn` training only uses XPU when `torch.xpu.is_available()` is true after installing IPEX (or another XPU-enabled PyTorch).
+
+**SYCL helpers (`SYCLHardware`, matrix/vector paths):** `pip install -e ".[gpu]"` pulls `dpctl`. Install the **Intel oneAPI** runtime / GPU drivers so `dpctl` can load (on Windows, oneAPI DLLs must be on `PATH`). Prefer the integrated or discrete GPU:
+
+```bash
+# Optional: narrow devices for oneAPI (Iris Xe / Arc)
+set ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+# Optional: force a specific SYCL filter for dpctl
+set QMINIWASM_SYCL_DEVICE=level_zero:gpu:0
+```
+
+To fall back to the old “default device” order without trying GPU filters first, set `QMINIWASM_SYCL_PREFER_GPU=0`. List devices: `python -m dpctl --list-devices` (when dpctl loads).
+
+See **[docs/SYCL-Integration.md](docs/SYCL-Integration.md)** for the hardware interface contract.
+
 ## ML engine training (data sources and metrics)
 
 The `engine` package runs `run_training_loop` via:
@@ -130,6 +154,14 @@ python -m engine
 ```
 
 **Data modes** (`TRAINING_DATA_SOURCE`): **`mesh`** (embedded C→WASM + memory snapshots), **`corpus`** (manifest of `.wasm` binaries under [`corpus/`](corpus/)), or **`hf_tabular`** (e.g. CodeSearchNet — encodes text to 4096-d vectors; not the same as WASM execution).
+
+With **`hf_tabular`**, unset **`HF_NUM_SAMPLES`** pulls a deeper default slice (floor **32k** rows, cap **300k**, scales with batch). Auto mode prepends a short **`[context]`** block (`language`, `func_name`, `repo`, `path`) before code so the fixed-width byte encoder sees richer structure; use **`HF_CONTEXT_FIELDS=0`** to turn it off.
+
+For Hub downloads, set **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** in your environment or in a repo-root **`.env`** (loaded automatically when you `pip install -e ".[training]"` and run `python -m engine` or `uvicorn engine.serve:app`). See [`.env.example`](.env.example); do not commit secrets.
+
+**Checkpoints:** set **`CHECKPOINT_SAVE_PATH`** (and optionally **`CHECKPOINT_BEST_PATH`**, **`CHECKPOINT_LOAD_PATH`**, **`EVAL_HOLDOUT_FRACTION`**, **`EVAL_EVERY_EPOCH`**) so weights persist and holdout MSE is reported. See **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
+
+**Inference container:** after `pip install -e ".[serve]"`, run `uvicorn engine.serve:app --host 0.0.0.0 --port 8001` and set **`QMINIWASM_CHECKPOINT`** (or **`CHECKPOINT_LOAD_PATH`**) to the saved `.pt` file. Device follows **`ACCELERATOR`** / `get_device()`.
 
 Full tables, **CodeSearchNet / `whole_func_string`** guidance, **example loss behavior**, and **environment variables** are documented in **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
 

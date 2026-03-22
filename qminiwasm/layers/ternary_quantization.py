@@ -19,6 +19,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Tuple, Callable
 
+from qminiwasm.wasm.trit_pack import pack_ternary_tensor, unpack_ternary_tensor
+
 
 class EnhancedTernaryQuantizer(nn.Module):
     """Enhanced Ternary Quantizer with 1.58-bit precision and quantum optimization.
@@ -166,57 +168,14 @@ class EnhancedTernaryQuantizer(nn.Module):
         return (weight_ternary - weight).detach() + weight
 
     def pack_ternary_weights(self, weights: torch.Tensor) -> torch.Tensor:
-        """Pack ternary weights: 5 trits per byte (3^5 = 243 states).
-
-        Encodes -1 -> 0, 0 -> 1, 1 -> 2; packs 5 trits per byte for memory efficiency.
-
-        Args:
-            weights: Ternary weight tensor
-
-        Returns:
-            Packed weight tensor
-        """
-        # Convert ternary values to packed representation
-        # -1 -> 0, 0 -> 1, 1 -> 2
-        packed_weights = weights.clone()
-        packed_weights[weights == -1] = 0
-        packed_weights[weights == 0] = 1
-        packed_weights[weights == 1] = 2
-
-        # Pack 5 trits per byte
-        packed_size = (weights.numel() + 4) // 5
-        packed_tensor = torch.zeros(packed_size, dtype=torch.uint8, device=weights.device)
-
-        for i in range(packed_size):
-            byte_val = 0
-            for j in range(5):
-                idx = i * 5 + j
-                if idx >= weights.numel():
-                    break
-                trit = packed_weights.view(-1)[idx].item()
-                byte_val += int(trit) * (3**j)
-            packed_tensor[i] = byte_val & 0xFF
-
-        return packed_tensor
+        """Pack ternary weights: MSB-first base-3 groups (see ``qminiwasm.wasm.trit_pack``)."""
+        return pack_ternary_tensor(weights)
 
     def unpack_ternary_weights(
         self, packed: torch.Tensor, original_shape: torch.Size
     ) -> torch.Tensor:
-        """Unpack bytes to ternary weights (-1, 0, 1). 5 trits per byte."""
-        weights = []
-        for byte_val in packed:
-            for j in range(5):
-                trit = (byte_val.item() // (3**j)) % 3
-                w = -1 if trit == 0 else (0 if trit == 1 else 1)
-                weights.append(w)
-                if len(weights) >= original_shape.numel():
-                    break
-            if len(weights) >= original_shape.numel():
-                break
-
-        return torch.tensor(
-            weights[: original_shape.numel()], dtype=torch.float32, device=packed.device
-        ).view(original_shape)
+        """Unpack uint8 tensor to ternary weights (-1, 0, 1)."""
+        return unpack_ternary_tensor(packed, original_shape)
 
     def forward(self, weight: torch.Tensor) -> torch.Tensor:
         """Forward pass of the EnhancedTernaryQuantizer.
