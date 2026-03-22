@@ -1,8 +1,9 @@
-"""Device selection for Intel ARC (XPU), NVIDIA CUDA, and CPU.
+"""Device selection for Intel XPU (Arc / Iris Xe), NVIDIA CUDA, and CPU.
 
 This module provides a unified device dispatcher for AI training and inference.
-It supports Intel ARC (XPU), NVIDIA CUDA, and CPU. When accelerator is not
-specified, behavior is driven by env PREFER_XPU and PREFER_CUDA.
+It supports Intel **XPU** (discrete Arc or integrated **Iris Xe** when PyTorch XPU
+/IPEX is installed), NVIDIA CUDA, and CPU. When accelerator is not specified,
+behavior is driven by env ``PREFER_XPU`` and ``PREFER_CUDA``.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ def _cuda_available() -> bool:
 
 
 def _xpu_available() -> bool:
-    """Return True if Intel XPU (e.g. Intel ARC) is available."""
+    """Return True if Intel XPU is available (Arc, Iris Xe, etc. via PyTorch XPU)."""
     xpu = getattr(torch, "xpu", None)
     if xpu is None:
         return False
@@ -74,9 +75,14 @@ def get_device(
         if accelerator == "xpu":
             if _xpu_available():
                 dev = torch.device(f"xpu:{idx}")
-                logger.info("Using Intel XPU (ARC) device for training/inference: %s", dev)
+                logger.info("Using Intel XPU device for training/inference: %s", dev)
                 return dev
-            logger.info("XPU requested but not available; using CPU")
+            logger.warning(
+                "ACCELERATOR=xpu but PyTorch XPU is not available (torch.xpu.is_available() is false); "
+                "using CPU. Stock PyTorch does not drive Intel integrated/discrete GPUs: install "
+                "Intel Extension for PyTorch (IPEX) with XPU support for your OS/Python. "
+                "SYCL/dpctl seeing Iris Xe only affects SYCLHardware helpers, not torch.nn training."
+            )
             return torch.device("cpu")
         if accelerator == "cpu":
             return torch.device("cpu")
@@ -92,7 +98,7 @@ def get_device(
 
     if use_xpu and _xpu_available():
         dev = torch.device(f"xpu:{idx}")
-        logger.info("Using Intel XPU (ARC) device for training/inference: %s", dev)
+        logger.info("Using Intel XPU device for training/inference: %s", dev)
         return dev
     if use_cuda and _cuda_available():
         dev = torch.device(f"cuda:{idx}")
@@ -109,7 +115,7 @@ def get_device_name(device: torch.device | None = None) -> str:
         device: If None, infer from get_device() with default args.
 
     Returns:
-        e.g. "NVIDIA CUDA (cuda:0)", "Intel ARC (XPU)", or "CPU".
+        e.g. "NVIDIA CUDA (cuda:0)", "Intel XPU (xpu:0)", or "CPU".
     """
     if device is None:
         device = get_device()
@@ -117,5 +123,5 @@ def get_device_name(device: torch.device | None = None) -> str:
         name = getattr(torch.cuda, "get_device_name", lambda i: "NVIDIA GPU")(device.index or 0)
         return f"{name} (cuda:{device.index or 0})"
     if device.type == "xpu":
-        return f"Intel ARC (XPU:{device.index or 0})"
+        return f"Intel XPU (xpu:{device.index or 0})"
     return "CPU"

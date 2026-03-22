@@ -42,6 +42,9 @@ wasm = [
 ]
 gpu = ["dpctl>=0.15.0"]
 arc = ["dpctl>=0.15.0"]
+native = [
+    "pybind11>=2.11.0",
+]
 scripts = [
     "click>=8.1.0",
     "python-dotenv>=1.0.0",

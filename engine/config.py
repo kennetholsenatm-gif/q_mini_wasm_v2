@@ -27,12 +27,31 @@ class EngineConfig:
         hf_num_samples: Optional[int] = None,
         hf_split: Optional[str] = None,
         hf_text_fields: Optional[List[str]] = None,
+        hf_context_fields: Optional[List[str]] = None,
+        hf_wasi_slice_only: Optional[bool] = None,
+        hf_wasi_max_scan: Optional[int] = None,
+        hf_token: Optional[str] = None,
         seed: Optional[int] = None,
         grad_clip_norm: Optional[float] = None,
         lr_plateau_patience: Optional[int] = None,
         lr_plateau_factor: Optional[float] = None,
         lr_plateau_min_lr: Optional[float] = None,
         early_stop_patience: Optional[int] = None,
+        checkpoint_load_path: Optional[str] = None,
+        checkpoint_save_path: Optional[str] = None,
+        checkpoint_best_path: Optional[str] = None,
+        checkpoint_latest_path: Optional[str] = None,
+        eval_holdout_fraction: Optional[float] = None,
+        eval_every_epoch: Optional[bool] = None,
+        target_mean_mse: Optional[float] = None,
+        stop_on_target_mse: Optional[bool] = None,
+        hybrid_adapter: Optional[bool] = None,
+        hybrid_adapter_hidden: Optional[int] = None,
+        tequila_deadzone: Optional[float] = None,
+        lota_rank: Optional[int] = None,
+        use_tsign_ternary: Optional[bool] = None,
+        tsign_learning_rate: Optional[float] = None,
+        lota_merge_every_epoch: Optional[bool] = None,
     ):
         self.accelerator = accelerator or os.environ.get("ACCELERATOR", "").strip() or None
         _idx = os.environ.get("DEVICE_INDEX", "")
@@ -72,6 +91,37 @@ class EngineConfig:
             _htf = os.environ.get("HF_TEXT_FIELDS", "").strip()
             if _htf:
                 self.hf_text_fields = [x.strip() for x in _htf.split(",") if x.strip()]
+
+        self.hf_context_fields = hf_context_fields
+        if self.hf_context_fields is None:
+            _hc = os.environ.get("HF_CONTEXT_FIELDS", "").strip().lower()
+            if _hc in ("0", "false", "none", "off", "disable", "disabled"):
+                self.hf_context_fields = []
+            elif os.environ.get("HF_CONTEXT_FIELDS", "").strip():
+                self.hf_context_fields = [
+                    x.strip()
+                    for x in os.environ.get("HF_CONTEXT_FIELDS", "").split(",")
+                    if x.strip()
+                ]
+            else:
+                self.hf_context_fields = None
+
+        self.hf_wasi_slice_only = hf_wasi_slice_only
+        if self.hf_wasi_slice_only is None:
+            _hw = os.environ.get("HF_WASI_SLICE_ONLY", "").strip().lower()
+            self.hf_wasi_slice_only = _hw in ("1", "true", "yes", "on")
+
+        self.hf_wasi_max_scan = hf_wasi_max_scan
+        if self.hf_wasi_max_scan is None:
+            _hms = os.environ.get("HF_WASI_MAX_SCAN", "").strip()
+            if _hms.isdigit():
+                self.hf_wasi_max_scan = int(_hms)
+
+        self.hf_token = hf_token
+        if self.hf_token is None:
+            _hub = os.environ.get("HUGGING_FACE_HUB_TOKEN", "").strip()
+            _hf = os.environ.get("HF_TOKEN", "").strip()
+            self.hf_token = _hub or _hf or None
 
         self.seed = seed
         if self.seed is None:
@@ -118,3 +168,98 @@ class EngineConfig:
             _es = os.environ.get("EARLY_STOP_PATIENCE", "").strip()
             if _es.isdigit():
                 self.early_stop_patience = int(_es)
+
+        self.checkpoint_load_path = (
+            checkpoint_load_path or os.environ.get("CHECKPOINT_LOAD_PATH", "").strip() or None
+        )
+        self.checkpoint_save_path = (
+            checkpoint_save_path or os.environ.get("CHECKPOINT_SAVE_PATH", "").strip() or None
+        )
+        self.checkpoint_best_path = (
+            checkpoint_best_path or os.environ.get("CHECKPOINT_BEST_PATH", "").strip() or None
+        )
+        self.checkpoint_latest_path = (
+            checkpoint_latest_path
+            or os.environ.get("CHECKPOINT_LATEST_PATH", "").strip()
+            or None
+        )
+
+        self.eval_holdout_fraction = eval_holdout_fraction
+        if self.eval_holdout_fraction is None:
+            _eh = os.environ.get("EVAL_HOLDOUT_FRACTION", "").strip()
+            if _eh:
+                try:
+                    self.eval_holdout_fraction = float(_eh)
+                except ValueError:
+                    self.eval_holdout_fraction = 0.0
+            else:
+                self.eval_holdout_fraction = 0.0
+
+        self.eval_every_epoch = eval_every_epoch
+        if self.eval_every_epoch is None:
+            _ee = os.environ.get("EVAL_EVERY_EPOCH", "").strip().lower()
+            self.eval_every_epoch = _ee in ("1", "true", "yes", "on")
+
+        self.target_mean_mse = target_mean_mse
+        if self.target_mean_mse is None:
+            _tm = os.environ.get("TARGET_MEAN_MSE", "").strip()
+            if _tm:
+                try:
+                    self.target_mean_mse = float(_tm)
+                except ValueError:
+                    self.target_mean_mse = None
+
+        self.stop_on_target_mse = stop_on_target_mse
+        if self.stop_on_target_mse is None:
+            _so = os.environ.get("STOP_ON_TARGET_MSE", "").strip().lower()
+            self.stop_on_target_mse = _so in ("1", "true", "yes", "on")
+
+        self.hybrid_adapter = hybrid_adapter
+        if self.hybrid_adapter is None:
+            _hy = os.environ.get("HYBRID_ADAPTER", "").strip().lower()
+            self.hybrid_adapter = _hy in ("1", "true", "yes", "on")
+
+        self.hybrid_adapter_hidden = hybrid_adapter_hidden
+        if self.hybrid_adapter_hidden is None:
+            _hh = os.environ.get("HYBRID_ADAPTER_HIDDEN", "").strip()
+            if _hh.isdigit():
+                self.hybrid_adapter_hidden = max(32, int(_hh))
+            else:
+                self.hybrid_adapter_hidden = 1024
+
+        self.tequila_deadzone = tequila_deadzone
+        if self.tequila_deadzone is None:
+            _td = os.environ.get("TEQUILA_DEADZONE", "").strip()
+            if _td:
+                try:
+                    self.tequila_deadzone = float(_td)
+                except ValueError:
+                    self.tequila_deadzone = 0.0
+            else:
+                self.tequila_deadzone = 0.0
+
+        self.lota_rank = lota_rank
+        if self.lota_rank is None:
+            _lr = os.environ.get("LOTA_RANK", "").strip()
+            self.lota_rank = int(_lr) if _lr.isdigit() else 0
+
+        self.use_tsign_ternary = use_tsign_ternary
+        if self.use_tsign_ternary is None:
+            _ut = os.environ.get("TSIGN_SGD_TERNARY", "").strip().lower()
+            self.use_tsign_ternary = _ut in ("1", "true", "yes", "on")
+
+        self.tsign_learning_rate = tsign_learning_rate
+        if self.tsign_learning_rate is None:
+            _tsl = os.environ.get("TSIGN_LEARNING_RATE", "").strip()
+            if _tsl:
+                try:
+                    self.tsign_learning_rate = float(_tsl)
+                except ValueError:
+                    self.tsign_learning_rate = 1e-3
+            else:
+                self.tsign_learning_rate = 1e-3
+
+        self.lota_merge_every_epoch = lota_merge_every_epoch
+        if self.lota_merge_every_epoch is None:
+            _lm = os.environ.get("LOTA_MERGE_EVERY_EPOCH", "").strip().lower()
+            self.lota_merge_every_epoch = _lm in ("1", "true", "yes", "on")

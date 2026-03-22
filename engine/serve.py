@@ -2,13 +2,23 @@
 
 Loads QMiniWASM and exposes POST /infer and GET /health.
 Run: uvicorn engine.serve:app --host 0.0.0.0 --port 8001
+
+Optional: set ``QMINIWASM_CHECKPOINT`` to a file saved during training (same format as
+``CHECKPOINT_SAVE_PATH`` / ``CHECKPOINT_BEST_PATH``). If the file contains ``hybrid_adapter``
+weights, the model **constructs** that submodule on load (no need to set ``HYBRID_ADAPTER``).
+Device follows ``ACCELERATOR`` / ``get_device()`` when unset use CPU for predictable containers.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any, List, Optional
 
 import torch
+
+from ._dotenv import load_dotenv_if_available
+
+load_dotenv_if_available()
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -20,9 +30,16 @@ _model: Optional[Any] = None
 def get_model():
     global _model
     if _model is None:
+        from qminiwasm.hardware.device import get_device
         from qminiwasm.model import QMiniWASM
 
-        _model = QMiniWASM(device=torch.device("cpu"))
+        dev = get_device()
+        _model = QMiniWASM(device=dev)
+        ckpt = os.environ.get("QMINIWASM_CHECKPOINT", "").strip() or os.environ.get(
+            "CHECKPOINT_LOAD_PATH", ""
+        ).strip()
+        if ckpt:
+            _model.load_trainable_checkpoint(ckpt, map_location=dev)
     return _model
 
 

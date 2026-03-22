@@ -189,6 +189,7 @@ Desktop.ini
 *.py[cod]
 *$py.class
 *.so
+*.pyd
 
 # Distribution
 .Python

@@ -53,5 +53,6 @@ def prepare_escalation_payload(
         "stack_snapshot": stack_snapshot,
         "instruction_pointer": instruction_pointer,
         "execution_state": execution_state,
+        "semantic_blob": captured_deltas.get("semantic_blob"),
     }
     return payload

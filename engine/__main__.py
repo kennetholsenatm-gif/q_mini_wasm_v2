@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 
+from ._dotenv import load_dotenv_if_available
 from .train import main
 
 
@@ -20,6 +21,7 @@ def _quiet_third_party_loggers() -> None:
 
 
 if __name__ == "__main__":
+    load_dotenv_if_available()
     level = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
     # Use stdout so PowerShell does not treat every INFO line as NativeCommandError (stderr).
     logging.basicConfig(

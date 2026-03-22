@@ -5,8 +5,10 @@ It uses a real SYCL backend when available, falling back to stubs when not.
 """
 
 import logging
-from typing import List
 import os
+from typing import List, Optional
+
+from qminiwasm.wasm.trit_pack import pack_ternary_list, unpack_ternary_list
 
 # Try to import the real SYCL implementation
 try:
@@ -62,34 +64,22 @@ class SYCLHardware:
         return [[sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix]
 
     def pack_ternary_weights(self, weights: List[int]) -> bytes:
-        """Pack ternary weights: 5 trits per byte (3^5 = 243 states)."""
+        """Pack ternary weights (MSB-first groups; see ``qminiwasm.wasm.trit_pack``)."""
         if self._backend:
             return self._backend.pack_ternary_weights(weights)
-        out: List[int] = []
-        for i in range(0, len(weights), 5):
-            byte_val = 0
-            for j in range(5):
-                idx = i + j
-                if idx >= len(weights):
-                    break
-                w = weights[idx]
-                trit = 0 if w == -1 else (1 if w == 0 else 2)
-                byte_val += trit * (3**j)
-            out.append(byte_val & 0xFF)
+        out = pack_ternary_list(weights)
         self.logger.debug("Packed %d trits into %d bytes", len(weights), len(out))
-        return bytes(out)
+        return out
 
-    def unpack_ternary_weights(self, packed: bytes) -> List[int]:
-        """Unpack bytes to ternary weights (-1, 0, 1). 5 trits per byte."""
+    def unpack_ternary_weights(
+        self, packed: bytes, num_weights: Optional[int] = None
+    ) -> List[int]:
+        """Unpack bytes to ternary weights (-1, 0, 1)."""
         if self._backend:
-            return self._backend.unpack_ternary_weights(packed)
-        weights: List[int] = []
-        for byte_val in packed:
-            for j in range(5):
-                trit = (byte_val // (3**j)) % 3
-                w = -1 if trit == 0 else (0 if trit == 1 else 1)
-                weights.append(w)
-        return weights
+            return self._backend.unpack_ternary_weights(packed, num_weights)
+        if num_weights is None:
+            num_weights = len(packed) * 5
+        return unpack_ternary_list(packed, num_weights)
 
     def driver_memory_paging(self, memory: List[float], size: int) -> None:
         """Implement driver-level memory paging."""

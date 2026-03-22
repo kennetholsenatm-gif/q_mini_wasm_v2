@@ -6,10 +6,23 @@ This document describes how a future C++/DPCPP SYCL extension would plug into th
 
 The package supports an optional backend switch via environment variable:
 
-- **`SYCL_BACKEND=sycl`** — Prefer a native SYCL backend (e.g. `qminiwasm.hardware.sycl_native`). If that module is not installed or fails to load, fall back to the Python stubs.
-- **Unset or `SYCL_BACKEND=stubs`** — Use the built-in Python stubs only (default).
+- **`SYCL_BACKEND=sycl`** — Prefer a native SYCL extension module (`qminiwasm.hardware.sycl_native`) when present. If that module is not installed, import falls back to [qminiwasm/hardware/sycl_stubs.py](../qminiwasm/hardware/sycl_stubs.py).
+- **Unset** — [qminiwasm/hardware/__init__.py](../qminiwasm/hardware/__init__.py) loads **stubs** from `sycl_stubs.py`. That module still delegates to the **Python dpctl** implementation in [qminiwasm/hardware/sycl/sycl_hardware.py](../qminiwasm/hardware/sycl/sycl_hardware.py) when `SYCL_BACKEND=sycl` inside the stub loader (default there) and `import qminiwasm.hardware.sycl` succeeds.
+- **`SYCL_BACKEND=stubs`** — Force stub behavior only (no dpctl backend inside `sycl_stubs`).
 
 See [qminiwasm/hardware/__init__.py](../qminiwasm/hardware/__init__.py) for the import logic.
+
+## Intel Iris Xe / Arc (dpctl device selection)
+
+For **integrated Iris Xe** or **discrete Arc** GPUs, install Intel GPU drivers and the **oneAPI** SYCL runtime so `import dpctl` succeeds. Then:
+
+| Variable | Purpose |
+|----------|---------|
+| `ONEAPI_DEVICE_SELECTOR` | Standard oneAPI filter (e.g. `level_zero:gpu`) to expose only GPU devices. |
+| `QMINIWASM_SYCL_DEVICE` | Explicit filter for `dpctl.SyclDevice(...)`, e.g. `level_zero:gpu:0`. |
+| `QMINIWASM_SYCL_PREFER_GPU` | If `1` (default), try `select_gpu_device()` and common `level_zero`/`opencl`/`gpu` filters before CPU default. Set `0` to skip. |
+
+PyTorch **training** on GPU uses **`ACCELERATOR=xpu`** and a PyTorch build with XPU support (separate from dpctl); dpctl backs `SYCLHardware` helpers (e.g. matrix engine paths), not the main `torch.nn` modules unless you add explicit integration.
 
 ## Interface contract
 

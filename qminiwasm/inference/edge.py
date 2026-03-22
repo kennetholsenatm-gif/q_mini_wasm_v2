@@ -19,11 +19,38 @@ from .vec2text import reconstruct_memory, validate_reconstructed_text
 logger = logging.getLogger(__name__)
 
 
+def fog_escalation_triggered(state: Dict, config: HierarchicalConfig) -> bool:
+    """Deterministic Fog-tier escalation from optional runtime metrics in ``state``."""
+    if not isinstance(state, dict):
+        return False
+    key = getattr(config, "contradiction_detected_key", "contradiction_detected")
+    if state.get(key):
+        return True
+    mlen = int(getattr(config, "max_sequence_length_proxy", 0) or 0)
+    if mlen > 0:
+        sl = state.get("sequence_length_proxy")
+        if sl is not None and int(sl) > mlen:
+            return True
+    fac = float(getattr(config, "perplexity_spike_factor", 0.0) or 0.0)
+    if fac > 0.0:
+        base = state.get("baseline_perplexity")
+        last = state.get("last_perplexity")
+        if base is not None and last is not None:
+            try:
+                if float(last) >= fac * float(base):
+                    return True
+            except (TypeError, ValueError):
+                pass
+    return False
+
+
 class EdgeOutcome(enum.Enum):
     """Result of edge cognitive loop."""
 
     RESOLVED_LOCAL = "resolved_local"
     """Task resolved at edge; certainty breached T_conf."""
+    ESCALATE_TO_FOG = "escalate_to_fog"
+    """Policy trigger (contradiction, length, perplexity); escalate to Fog before cloud."""
     ESCALATE_TO_CLOUD = "escalate_to_cloud"
     """N-loop limit exceeded or certainty never breached; escalate to Tier 3."""
     MEMORY_RECONSTRUCTED = "memory_reconstructed"
@@ -68,6 +95,10 @@ def run_edge_cognitive_loop(
         if certainty >= cfg.T_conf:
             logger.info("Edge resolved at loop %d (certainty=%.4f)", num_loops, certainty)
             return last_result, EdgeOutcome.RESOLVED_LOCAL, num_loops, last_state
+
+        if fog_escalation_triggered(last_state, cfg):
+            logger.info("Fog escalation at loop %d (policy trigger)", num_loops)
+            return last_result, EdgeOutcome.ESCALATE_TO_FOG, num_loops, last_state
 
     logger.info("Edge escalation after N=%d loops (certainty never > T_conf)", cfg.N_max_loops)
     return last_result, EdgeOutcome.ESCALATE_TO_CLOUD, num_loops, last_state

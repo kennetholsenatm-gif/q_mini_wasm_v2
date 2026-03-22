@@ -35,7 +35,14 @@ class TernaryWASMExpert(nn.Linear):
     - Initializing weights with variance scaling for ternary parameters
     """
 
-    def __init__(self, in_features, out_features, bias=False, precision="ternary"):
+    def __init__(
+        self,
+        in_features,
+        out_features,
+        bias=False,
+        precision="ternary",
+        tequila_deadzone: float = 0.0,
+    ):
         """Initialize the TernaryWASMExpert.
 
         Args:
@@ -43,9 +50,13 @@ class TernaryWASMExpert(nn.Linear):
             out_features: Number of output features
             bias: Whether to include bias term (default: False)
             precision: Precision mode ("ternary" or "float")
+            tequila_deadzone: If > 0, fraction of adaptive scale defining a deadzone
+                around zero; trapped weights are quantized to 0 and their pre-quant
+                mass is added as a per-output bias (Tequila-style).
         """
         super(TernaryWASMExpert, self).__init__(in_features, out_features, bias)
         self.precision = precision
+        self.tequila_deadzone = float(tequila_deadzone)
 
         # Sustain the variance during initialization for ternary parameters
         # Based on variance scaling for ternary quantization
@@ -91,11 +102,27 @@ class TernaryWASMExpert(nn.Linear):
             Output tensor of shape (batch_size, out_features)
         """
         if self.precision == "ternary":
-            # Apply ternary quantization with STE
+            if self.tequila_deadzone > 0.0:
+                discrete_weight, bias_tequila = self._binarize_ternary_tequila(self.weight)
+                b = self.bias
+                if b is None:
+                    b = bias_tequila
+                else:
+                    b = b + bias_tequila
+                return F.linear(input_tensor, discrete_weight, b)
             discrete_weight = self.binarize_ternary(self.weight)
         else:
-            # Use continuous weights for non-ternary precision
             discrete_weight = self.weight
 
-        # Linear transformation with F.linear (equivalent to torch.nn.functional.linear)
         return F.linear(input_tensor, discrete_weight, self.bias)
+
+    def _binarize_ternary_tequila(self, weight: torch.Tensor):
+        """Ternary STE with deadzone trapping mass moved to per-row bias."""
+        abs_mean = weight.abs().mean().clamp(min=1e-8)
+        dz = self.tequila_deadzone * abs_mean
+        trap = weight.abs() < dz
+        w_scaled = torch.round(weight / abs_mean).clamp(-1.0, 1.0)
+        w_scaled = torch.where(trap, torch.zeros_like(w_scaled), w_scaled)
+        discrete = (w_scaled - weight).detach() + weight
+        bias_tequila = (weight * trap.to(weight.dtype)).sum(dim=1)
+        return discrete, bias_tequila

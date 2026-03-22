@@ -1,8 +1,31 @@
+import os
 from pathlib import Path
 
 from setuptools import find_packages, setup
 
-setup(
+_ext_modules = []
+_cmdclass = {}
+if os.environ.get("QMINIWASM_BUILD_NATIVE", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+):
+    try:
+        from pybind11.setup_helpers import Pybind11Extension, build_ext
+
+        _ext_modules = [
+            Pybind11Extension(
+                "qminiwasm._native_ternary",
+                ["native/ternary_packed/bindings.cpp"],
+                cxx_std=17,
+            ),
+        ]
+        _cmdclass["build_ext"] = build_ext
+    except ImportError:
+        print("WARNING: pybind11 not found; install pybind11 to build native ternary extension.")
+
+_setup_kw = dict(
     name="llm-pract",
     version="0.1.0",
     description="Q-Mini-WASM: ternary-quantized models with local WASM execution",
@@ -39,6 +62,7 @@ setup(
             "fastapi>=0.109.0",
             "uvicorn[standard]>=0.27.0",
             "pydantic>=2.5.0",
+            "python-dotenv>=1.0.0",
         ],
         "wasm": [
             "wasmtime>=14.0.0",
@@ -46,12 +70,16 @@ setup(
         ],
         "training": [
             "datasets>=2.14.0",
+            "python-dotenv>=1.0.0",
         ],
         "gpu": [
             "dpctl>=0.15.0",
         ],
         "arc": [
             "dpctl>=0.15.0",
+        ],
+        "native": [
+            "pybind11>=2.11.0",
         ],
         "scripts": [
             "click>=8.1.0",
@@ -87,3 +115,7 @@ setup(
         "Tracker": "https://github.com/kennetholsenatm-gif/LLM_Pract/issues",
     },
 )
+if _ext_modules:
+    _setup_kw["ext_modules"] = _ext_modules
+    _setup_kw["cmdclass"] = _cmdclass
+setup(**_setup_kw)

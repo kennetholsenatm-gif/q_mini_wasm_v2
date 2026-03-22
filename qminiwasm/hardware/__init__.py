@@ -2,7 +2,7 @@
 
 This module implements hardware-specific components for the Q-Mini-WASM architecture, including:
 - SYCL/Intel hardware mapping stubs
-- Unified device selection: CUDA, Intel ARC (XPU), and CPU
+- Unified device selection: CUDA, Intel XPU (Arc / Iris Xe), and CPU
 - Driver-level memory paging stubs
 - Hardware acceleration interfaces
 
