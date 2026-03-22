@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
+from .cascade_mopd_teacher import build_noise_state_mopd_fns
 from .cascade_rl import (
     CascadeRouter,
     TinyCascadePolicy,
@@ -41,6 +42,13 @@ from ..rl.cascade_grpo import CascadeGRPO, CascadeGRPOConfig
 logger = logging.getLogger(__name__)
 
 _D_MODEL = 4096
+
+
+def _normalize_cascade_mopd_feat_loss(name: str) -> str:
+    v = (name or "mse").strip().lower()
+    if v in ("cosine", "cos"):
+        return "cosine"
+    return "mse"
 
 
 def _cascade_digest_from_blend(
@@ -206,6 +214,7 @@ def run_training_loop(
     cascade_state_dim: int = 8,
     cascade_num_actions: int = 4,
     cascade_mopd_lambda: float = 0.0,
+    cascade_mopd_feat_loss: str = "mse",
     cascade_seed_from_hidden: bool = True,
     use_cascade_router: bool = False,
     cascade_learned_projector: bool = False,
@@ -274,6 +283,7 @@ def run_training_loop(
         cascade_group_size: Trajectories per GRPO step (>=2 recommended for normalized advantages).
         cascade_state_dim / cascade_num_actions: Toy MDP shape.
         cascade_mopd_lambda: If >0, add MOPD feature loss vs noisy teacher on state embeddings.
+        cascade_mopd_feat_loss: ``mse`` or ``cosine`` for MOPD feature term (see :class:`MOPDLossConfig`).
         cascade_seed_from_hidden: If True, each supervised batch updates a digest from mean
             ``hidden``; the next epoch's toy MDP resets from that digest (bridges cascade to model inputs).
         use_cascade_router: If True, attach :class:`CascadeRouter` on ``QMiniWASM`` (trained by the
@@ -535,8 +545,15 @@ def run_training_loop(
             c_loss_acc = 0.0
             c_ret_acc = 0.0
             mopd_mod: MOPDLoss | None = None
+            _mopd_feat = _normalize_cascade_mopd_feat_loss(str(cascade_mopd_feat_loss))
             if float(cascade_mopd_lambda) > 0.0:
-                mopd_mod = MOPDLoss(MOPDLossConfig(lambda_kl=0.0, lambda_feat=1.0))
+                mopd_mod = MOPDLoss(
+                    MOPDLossConfig(
+                        lambda_kl=0.0,
+                        lambda_feat=1.0,
+                        feat_loss=_mopd_feat,
+                    )
+                )
 
             def _env_factory() -> ToyRoutingEnv:
                 init = digest_holder[0] if cascade_seed_from_hidden else None
@@ -548,15 +565,9 @@ def run_training_loop(
                     initial_state=init,
                 )
 
+            _student_h, _teacher_h = build_noise_state_mopd_fns(noise_std=0.05)
             for _ in range(int(cascade_steps_per_epoch)):
                 if mopd_mod is not None:
-
-                    def _student_h(s: torch.Tensor) -> dict[str, torch.Tensor]:
-                        return {"emb": s.unsqueeze(0)}
-
-                    def _teacher_h(s: torch.Tensor) -> dict[str, torch.Tensor]:
-                        return {"emb": (s + 0.05 * torch.randn_like(s)).unsqueeze(0)}
-
                     cm = cascade_rl_train_step(
                         cascade_policy,
                         cascade_optimizer,
@@ -836,6 +847,10 @@ def run_training_loop(
         metrics["cascade_steps_per_epoch"] = int(cascade_steps_per_epoch)
         metrics["cascade_group_size"] = int(cascade_group_size)
         metrics["cascade_mopd_lambda"] = float(cascade_mopd_lambda)
+        if float(cascade_mopd_lambda) > 0.0:
+            metrics["cascade_mopd_feat_loss"] = _normalize_cascade_mopd_feat_loss(
+                str(cascade_mopd_feat_loss)
+            )
         metrics["cascade_seed_from_hidden"] = bool(cascade_seed_from_hidden)
         metrics["cascade_couple_forward"] = bool(cascade_couple_forward)
         if cascade_policy_mode is not None:

@@ -85,7 +85,7 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 | `STOP_ON_TARGET_MSE` | If `1` / `true`, stop early when the threshold is met (prefers **holdout eval** when `EVAL_EVERY_EPOCH=1`; otherwise train mean MSE — see training loop warning) |
 | `HYBRID_ADAPTER` | If `1` / `true`, enable residual MLP after ternary (see subsection above) |
 | `HYBRID_ADAPTER_HIDDEN` | Bottleneck width (integer ≥ 32; default **1024**) |
-| `CASCADE_RL`, `CASCADE_POLICY_LR`, `CASCADE_STEPS_PER_EPOCH`, `CASCADE_GROUP_SIZE`, `CASCADE_STATE_DIM`, `CASCADE_NUM_ACTIONS`, `CASCADE_MOPD_LAMBDA`, `CASCADE_SEED_FROM_HIDDEN` | Cascade GRPO phase before each epoch’s MSE batches (see `.env.example`) |
+| `CASCADE_RL`, `CASCADE_POLICY_LR`, `CASCADE_STEPS_PER_EPOCH`, `CASCADE_GROUP_SIZE`, `CASCADE_STATE_DIM`, `CASCADE_NUM_ACTIONS`, `CASCADE_MOPD_LAMBDA`, `CASCADE_MOPD_FEAT_LOSS`, `CASCADE_SEED_FROM_HIDDEN` | Cascade GRPO phase before each epoch’s MSE batches (see `.env.example` and **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**) |
 | `CASCADE_COUPLE_FORWARD` | If `0` / `false`, digest uses **input hidden mean only**; otherwise (default) blends **0.5 × input mean + 0.5 × `hybrid_inference` output mean** per batch |
 | `USE_CASCADE_ROUTER` | Attach `CascadeRouter` on the model (trained by cascade optimizer, not main AdamW) |
 | `CASCADE_LEARNED_PROJECTOR` | Loop-owned `CascadeRouter` when model has no router |
@@ -94,6 +94,12 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 **`hf_tabular` defaults (when env vars are unset):** `TARGET_MEAN_MSE=1e-4`, `GRAD_CLIP_NORM=1`, `CASCADE_POLICY_LR = 0.5 × learning_rate`, and `learning_rate=1.5e-4` when the engine constructor LR is the default **1e-4** and `LEARNING_RATE` is not set. Set env vars explicitly to override.
 
 **Tokens:** Put the value in a local `.env` or your shell profile. **Do not commit** secrets; `.env` is gitignored. Create a read token at [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
+
+### Cascade RL and MOPD
+
+The training loop runs a short **cascade GRPO** phase (toy routing MDP) before each epoch’s supervised MSE when `CASCADE_RL` is enabled. Optional **`CASCADE_MOPD_LAMBDA`** > 0 adds a **MOPD feature loss** during that phase: student features are the final MDP state `s`; the teacher is currently a **synthetic** stop-gradient target **`s + noise`** (regularization), not distillation from another model. **`CASCADE_MOPD_FEAT_LOSS`** selects `mse` vs `cosine` for that feature term.
+
+Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**.
 
 ### Checkpoints and evaluation (making training useful)
 

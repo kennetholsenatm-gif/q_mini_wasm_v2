@@ -24,6 +24,7 @@ Q-Mini-WASM implements a comprehensive documentation framework that ensures all 
 - **API Documentation**: Detailed API documentation for developers
 - **Contribution Guidelines**: Contribution guidelines and processes
 - **Runtime and training**: [AI Training Pipeline](AI-Training-Pipeline.md) — data sources, cascade vs MSE phases, checkpoints, and links to full env reference in the repo
+- **Cascade RL and MOPD**: [Cascade-RL-and-MOPD](Cascade-RL-and-MOPD.md) — GRPO toy MDP, optional MOPD feature term, env vars, link to `docs/CASCADE_AND_MOPD.md`
 
 ### Security Documentation
 - **Security Policies**: Security policies and procedures

@@ -59,6 +59,7 @@ class EngineConfig:
         cascade_state_dim: Optional[int] = None,
         cascade_num_actions: Optional[int] = None,
         cascade_mopd_lambda: Optional[float] = None,
+        cascade_mopd_feat_loss: Optional[str] = None,
         cascade_seed_from_hidden: Optional[bool] = None,
         use_cascade_router: Optional[bool] = None,
         cascade_learned_projector: Optional[bool] = None,
@@ -342,6 +343,14 @@ class EngineConfig:
                     self.cascade_mopd_lambda = 0.0
             else:
                 self.cascade_mopd_lambda = 0.0
+
+        self.cascade_mopd_feat_loss = cascade_mopd_feat_loss
+        if self.cascade_mopd_feat_loss is None:
+            _cmfl = os.environ.get("CASCADE_MOPD_FEAT_LOSS", "").strip().lower()
+            if _cmfl in ("cosine", "cos"):
+                self.cascade_mopd_feat_loss = "cosine"
+            else:
+                self.cascade_mopd_feat_loss = "mse"
 
         self.cascade_seed_from_hidden = cascade_seed_from_hidden
         if self.cascade_seed_from_hidden is None:

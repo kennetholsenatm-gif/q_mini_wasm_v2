@@ -54,7 +54,7 @@ Before the main supervised batches, the loop runs a small number of **GRPO** upd
 
 **`CASCADE_COUPLE_FORWARD` (default on):** The digest blends **0.5 × mean(input hidden) + 0.5 × mean(`hybrid_inference` output)** each batch (one forward). **Why:** Tie the toy MDP to the **live** model, not only raw inputs. Set to `0` to use **input hidden mean only**.
 
-Optional **`CASCADE_MOPD_LAMBDA`:** Adds a feature-alignment term (MOPD) against a teacher on state embeddings when configured.
+Optional **`CASCADE_MOPD_LAMBDA`** and **`CASCADE_MOPD_FEAT_LOSS`:** Adds a feature-alignment term (MOPD) during the cascade phase. Details, equations, and the current synthetic teacher behavior: **[Cascade RL and MOPD](Cascade-RL-and-MOPD.md)** and **[docs/CASCADE_AND_MOPD.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/CASCADE_AND_MOPD.md)**.
 
 ### Supervised phase
 
@@ -76,6 +76,7 @@ See the **Serving** and **Checkpoints** sections in [docs/TRAINING_DATA.md](http
 
 ## Related wiki pages
 
+- **[Cascade RL and MOPD](Cascade-RL-and-MOPD.md)** — GRPO cascade phase and MOPD feature loss.
 - **[Development](Development.md)** — clone, tests, and ML quick start.
 - **[Architecture Overview](Architecture-Overview.md)** — infrastructure context.
 
