@@ -23,6 +23,7 @@ Q-Mini-WASM implements a comprehensive documentation framework that ensures all 
 - **Development Guidelines**: Development standards and best practices
 - **API Documentation**: Detailed API documentation for developers
 - **Contribution Guidelines**: Contribution guidelines and processes
+- **Runtime and training**: [AI Training Pipeline](AI-Training-Pipeline.md) — data sources, cascade vs MSE phases, checkpoints, and links to full env reference in the repo
 
 ### Security Documentation
 - **Security Policies**: Security policies and procedures
@@ -206,5 +207,5 @@ Ready to implement comprehensive documentation in your quantum computing project
 
 ---
 
-**Last Updated**: 2026-03-12
-**Version**: 1.4.0
+**Last Updated**: 2026-03-22
+**Version**: 1.4.1

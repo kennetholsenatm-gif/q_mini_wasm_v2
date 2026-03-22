@@ -15,8 +15,8 @@ The Q-Mini-WASM development workflow is designed to be comprehensive, secure, an
 ### Initial Setup
 ```bash
 # Clone the repository
-git clone https://github.com/kennetholsenatm-gif/LLM_Pract.git
-cd LLM_Pract
+git clone https://github.com/kennetholsenatm-gif/qminiwasm-core.git
+cd qminiwasm-core
 
 # Install dependencies
 pip install -r requirements.txt
@@ -135,7 +135,9 @@ For how this satisfies IA-2, AC-3, and AU-2/AU-3, see [SECURITY.md](../SECURITY.
 
 ## ML engine training and inference
 
-Training runs from the **main repo** (this wiki documents **qminiwasm-core** workflows):
+**Wiki overview (goals and design rationale):** [AI Training Pipeline](AI-Training-Pipeline.md).
+
+Training runs from the **qminiwasm-core** repository:
 
 ```bash
 pip install -e ".[training]"
@@ -286,5 +288,5 @@ Ready to start developing with Q-Mini-WASM? Follow the [Development Workflow](De
 
 ---
 
-**Last Updated**: 2026-03-12
-**Version**: 1.4.0
+**Last Updated**: 2026-03-22
+**Version**: 1.4.1

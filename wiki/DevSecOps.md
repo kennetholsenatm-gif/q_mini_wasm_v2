@@ -182,17 +182,17 @@ pwsh -File scripts/devsecops-workflow.ps1
 ### Host Appliance (Packer / QEMU)
 - **Location:** `infra/image-builder/`
 - **Purpose:** Golden AlmaLinux 9 QCOW2 with K3s and STIG-like hardening (SSH, chrony, firewalld). Used for tactical edge host baseline.
-- **Docs:** [infra/image-builder/README.md](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/infra/image-builder/README.md)
+- **Docs:** [infra/image-builder/README.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/infra/image-builder/README.md)
 
 ### Data Stack (Event-Driven)
 - **Location:** `containers/data-stack/`
 - **Components:** PostgreSQL (pgvector), RabbitMQ, Apache NiFi; all with `deploy.resources`. Optional mTLS for Postgres via Vault PKI (`postgres-mtls.conf`).
-- **Docs:** [containers/data-stack/README.md](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/containers/data-stack/README.md)
+- **Docs:** [containers/data-stack/README.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/containers/data-stack/README.md)
 
 ### Security Stack (Zero Trust / PQC)
 - **Location:** `containers/security-stack/`
 - **Components:** Keycloak (FIDO2/Passkeys, OIDC for Teleport), Vault (PKI, short-lived mTLS certs), Envoy (TLS 1.3, PQC-ready curves).
-- **Docs:** [containers/security-stack/README.md](https://github.com/kennetholsenatm-gif/LLM_Pract/blob/main/containers/security-stack/README.md)
+- **Docs:** [containers/security-stack/README.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/containers/security-stack/README.md)
 
 ### Kubernetes / OpenTofu
 - **Location:** `infra/opentofu/` (Kubernetes provider, Helm releases for Teleport, Kyverno, Falco), `infra/teleport/`, `infra/kyverno/`, `infra/falco/`

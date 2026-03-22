@@ -104,7 +104,7 @@ Start here if you want to understand **the deep technical and mathematical found
 - **[API Documentation](https://docs.qminiwasm.com)** - Technical API references
 
 ### Community and Support
-- **GitHub Issues**: https://github.com/kennetholsenatm-gif/LLM_Pract/issues
+- **GitHub Issues**: https://github.com/kennetholsenatm-gif/qminiwasm-core/issues
 - **Documentation**: https://docs.qminiwasm.com
 - **Community Forum**: https://community.qminiwasm.com
 - **Professional Support**: [REDACTED]
