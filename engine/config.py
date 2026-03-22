@@ -52,6 +52,13 @@ class EngineConfig:
         use_tsign_ternary: Optional[bool] = None,
         tsign_learning_rate: Optional[float] = None,
         lota_merge_every_epoch: Optional[bool] = None,
+        use_cascade_rl: Optional[bool] = None,
+        cascade_policy_lr: Optional[float] = None,
+        cascade_steps_per_epoch: Optional[int] = None,
+        cascade_group_size: Optional[int] = None,
+        cascade_state_dim: Optional[int] = None,
+        cascade_num_actions: Optional[int] = None,
+        cascade_mopd_lambda: Optional[float] = None,
     ):
         self.accelerator = accelerator or os.environ.get("ACCELERATOR", "").strip() or None
         _idx = os.environ.get("DEVICE_INDEX", "")
@@ -263,3 +270,56 @@ class EngineConfig:
         if self.lota_merge_every_epoch is None:
             _lm = os.environ.get("LOTA_MERGE_EVERY_EPOCH", "").strip().lower()
             self.lota_merge_every_epoch = _lm in ("1", "true", "yes", "on")
+
+        # Cascade RL (GRPO toy routing) runs before each epoch's supervised MSE phase by default.
+        self.use_cascade_rl = use_cascade_rl
+        if self.use_cascade_rl is None:
+            _cr = os.environ.get("CASCADE_RL", "").strip().lower()
+            if _cr in ("0", "false", "no", "off", "disable", "disabled"):
+                self.use_cascade_rl = False
+            elif _cr in ("1", "true", "yes", "on"):
+                self.use_cascade_rl = True
+            else:
+                self.use_cascade_rl = True
+
+        self.cascade_policy_lr = cascade_policy_lr
+        if self.cascade_policy_lr is None:
+            _cpl = os.environ.get("CASCADE_POLICY_LR", "").strip()
+            if _cpl:
+                try:
+                    self.cascade_policy_lr = float(_cpl)
+                except ValueError:
+                    self.cascade_policy_lr = self.learning_rate
+            else:
+                self.cascade_policy_lr = self.learning_rate
+
+        self.cascade_steps_per_epoch = cascade_steps_per_epoch
+        if self.cascade_steps_per_epoch is None:
+            _cse = os.environ.get("CASCADE_STEPS_PER_EPOCH", "").strip()
+            self.cascade_steps_per_epoch = int(_cse) if _cse.isdigit() else 2
+
+        self.cascade_group_size = cascade_group_size
+        if self.cascade_group_size is None:
+            _cgs = os.environ.get("CASCADE_GROUP_SIZE", "").strip()
+            self.cascade_group_size = int(_cgs) if _cgs.isdigit() else 4
+
+        self.cascade_state_dim = cascade_state_dim
+        if self.cascade_state_dim is None:
+            _csd = os.environ.get("CASCADE_STATE_DIM", "").strip()
+            self.cascade_state_dim = int(_csd) if _csd.isdigit() else 8
+
+        self.cascade_num_actions = cascade_num_actions
+        if self.cascade_num_actions is None:
+            _cna = os.environ.get("CASCADE_NUM_ACTIONS", "").strip()
+            self.cascade_num_actions = int(_cna) if _cna.isdigit() else 4
+
+        self.cascade_mopd_lambda = cascade_mopd_lambda
+        if self.cascade_mopd_lambda is None:
+            _cml = os.environ.get("CASCADE_MOPD_LAMBDA", "").strip()
+            if _cml:
+                try:
+                    self.cascade_mopd_lambda = float(_cml)
+                except ValueError:
+                    self.cascade_mopd_lambda = 0.0
+            else:
+                self.cascade_mopd_lambda = 0.0

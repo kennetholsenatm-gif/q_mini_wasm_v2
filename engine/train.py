@@ -68,4 +68,11 @@ def main(config: EngineConfig | None = None) -> dict:
         use_tsign_ternary=bool(getattr(config, "use_tsign_ternary", False)),
         tsign_learning_rate=float(getattr(config, "tsign_learning_rate", 1e-3) or 1e-3),
         lota_merge_every_epoch=bool(getattr(config, "lota_merge_every_epoch", False)),
+        use_cascade_rl=bool(getattr(config, "use_cascade_rl", True)),
+        cascade_policy_lr=float(getattr(config, "cascade_policy_lr", config.learning_rate)),
+        cascade_steps_per_epoch=int(getattr(config, "cascade_steps_per_epoch", 2)),
+        cascade_group_size=int(getattr(config, "cascade_group_size", 4)),
+        cascade_state_dim=int(getattr(config, "cascade_state_dim", 8)),
+        cascade_num_actions=int(getattr(config, "cascade_num_actions", 4)),
+        cascade_mopd_lambda=float(getattr(config, "cascade_mopd_lambda", 0.0) or 0.0),
     )

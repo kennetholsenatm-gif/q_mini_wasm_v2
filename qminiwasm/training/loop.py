@@ -19,9 +19,13 @@ import torch.nn.functional as F
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
+from .cascade_rl import TinyCascadePolicy, ToyRoutingEnv, cascade_rl_train_step
 from .checkpoint import load_checkpoint_into_model, save_checkpoint
+from .distillation import MOPDLoss, MOPDLossConfig
 from .lota_qaf import TSignSGD
 from .repro import set_training_seed
+
+from ..rl.cascade_grpo import CascadeGRPO, CascadeGRPOConfig
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +168,13 @@ def run_training_loop(
     use_tsign_ternary: bool = False,
     tsign_learning_rate: float = 1e-3,
     lota_merge_every_epoch: bool = False,
+    use_cascade_rl: bool = True,
+    cascade_policy_lr: float = 1e-4,
+    cascade_steps_per_epoch: int = 2,
+    cascade_group_size: int = 4,
+    cascade_state_dim: int = 8,
+    cascade_num_actions: int = 4,
+    cascade_mopd_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -219,6 +230,13 @@ def run_training_loop(
             other trainable params with AdamW.
         tsign_learning_rate: Learning rate for t-SignSGD when enabled.
         lota_merge_every_epoch: If True, merge LoRA into ternary base after each epoch.
+        use_cascade_rl: If True (default), run on-policy cascade (GRPO) micro-steps on a toy
+            routing MDP before each epoch's supervised MSE batches (escalation policy warm-up).
+        cascade_policy_lr: Adam LR for the cascade policy (defaults to ``learning_rate`` from engine).
+        cascade_steps_per_epoch: Number of ``cascade_rl_train_step`` calls per epoch.
+        cascade_group_size: Trajectories per GRPO step (>=2 recommended for normalized advantages).
+        cascade_state_dim / cascade_num_actions: Toy MDP shape.
+        cascade_mopd_lambda: If >0, add MOPD feature loss vs noisy teacher on state embeddings.
 
     Returns:
         Dict with ``epochs_run``, ``final_loss``, ``metrics``, checkpoint path fields.
@@ -378,7 +396,83 @@ def run_training_loop(
     stopped_on_target_mse = False
     target_mse_stop_train_metric_warned = False
 
+    cascade_policy: TinyCascadePolicy | None = None
+    cascade_optimizer: torch.optim.Optimizer | None = None
+    grpo_trainer = CascadeGRPO(
+        CascadeGRPOConfig(normalize_advantage=bool(int(cascade_group_size) >= 2))
+    )
+    epoch_cascade_loss: List[float] = []
+    epoch_cascade_return: List[float] = []
+
     for epoch in range(epochs):
+        if use_cascade_rl and int(cascade_steps_per_epoch) > 0:
+            if cascade_policy is None:
+                cascade_policy = TinyCascadePolicy(
+                    int(cascade_state_dim), int(cascade_num_actions)
+                ).to(device)
+                cascade_optimizer = torch.optim.Adam(
+                    cascade_policy.parameters(), lr=float(cascade_policy_lr)
+                )
+            assert cascade_optimizer is not None
+            c_loss_acc = 0.0
+            c_ret_acc = 0.0
+            mopd_mod: MOPDLoss | None = None
+            if float(cascade_mopd_lambda) > 0.0:
+                mopd_mod = MOPDLoss(MOPDLossConfig(lambda_kl=0.0, lambda_feat=1.0))
+
+            def _env_factory() -> ToyRoutingEnv:
+                return ToyRoutingEnv(
+                    state_dim=int(cascade_state_dim),
+                    num_actions=int(cascade_num_actions),
+                    max_steps=16,
+                    device=device,
+                )
+
+            for _ in range(int(cascade_steps_per_epoch)):
+                if mopd_mod is not None:
+
+                    def _student_h(s: torch.Tensor) -> dict[str, torch.Tensor]:
+                        return {"emb": s.unsqueeze(0)}
+
+                    def _teacher_h(s: torch.Tensor) -> dict[str, torch.Tensor]:
+                        return {"emb": (s + 0.05 * torch.randn_like(s)).unsqueeze(0)}
+
+                    cm = cascade_rl_train_step(
+                        cascade_policy,
+                        cascade_optimizer,
+                        grpo_trainer,
+                        group_size=int(cascade_group_size),
+                        env_factory=_env_factory,
+                        mopd=mopd_mod,
+                        student_hidden_fn=_student_h,
+                        teacher_hidden_fn=_teacher_h,
+                        lambda_mopd=float(cascade_mopd_lambda),
+                    )
+                else:
+                    cm = cascade_rl_train_step(
+                        cascade_policy,
+                        cascade_optimizer,
+                        grpo_trainer,
+                        group_size=int(cascade_group_size),
+                        env_factory=_env_factory,
+                    )
+                c_loss_acc += float(cm.get("loss", 0.0))
+                c_ret_acc += float(cm.get("return_mean", 0.0))
+
+            c_loss_acc /= max(1, int(cascade_steps_per_epoch))
+            c_ret_acc /= max(1, int(cascade_steps_per_epoch))
+            epoch_cascade_loss.append(c_loss_acc)
+            epoch_cascade_return.append(c_ret_acc)
+            logger.info(
+                "epoch=%s/%s cascade_rl mean_loss=%.6f mean_return=%.6f (steps=%s group=%s)",
+                epoch + 1,
+                epochs,
+                c_loss_acc,
+                c_ret_acc,
+                int(cascade_steps_per_epoch),
+                int(cascade_group_size),
+            )
+
         epoch_loss = 0.0
         n_batches = 0
         for i in range(0, len(train_samples), batch_size):
@@ -597,6 +691,15 @@ def run_training_loop(
         metrics["lota_rank"] = int(lota_rank)
         metrics["use_tsign_ternary"] = bool(use_tsign_ternary)
         metrics["lota_merge_every_epoch"] = bool(lota_merge_every_epoch)
+    if use_cascade_rl:
+        metrics["use_cascade_rl"] = True
+        metrics["cascade_steps_per_epoch"] = int(cascade_steps_per_epoch)
+        metrics["cascade_group_size"] = int(cascade_group_size)
+        metrics["cascade_mopd_lambda"] = float(cascade_mopd_lambda)
+        if epoch_cascade_loss:
+            metrics["epoch_cascade_loss"] = epoch_cascade_loss
+        if epoch_cascade_return:
+            metrics["epoch_cascade_return"] = epoch_cascade_return
     if grad_clip_norm is not None:
         metrics["grad_clip_norm"] = float(grad_clip_norm)
     if scheduler is not None and lr_plateau_patience is not None:
