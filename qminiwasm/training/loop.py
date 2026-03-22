@@ -625,11 +625,7 @@ def run_training_loop(
             out = model.hybrid_inference(hidden_states)
             if use_cascade_rl and cascade_seed_from_hidden:
                 hm = hidden_states.mean(0).detach()
-                blend = (
-                    0.5 * (hm + out.detach().mean(0))
-                    if cascade_couple_forward
-                    else hm
-                )
+                blend = 0.5 * (hm + out.detach().mean(0)) if cascade_couple_forward else hm
                 digest_holder[0] = _cascade_digest_from_blend(
                     blend,
                     cascade_policy=cascade_policy,

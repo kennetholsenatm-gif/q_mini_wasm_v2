@@ -19,7 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1
 
-COPY requirements/docker.txt requirements/ setup.py pyproject.toml README.md ./
+# Copy whole requirements/ so paths like requirements/docker.txt and -r includes resolve.
+COPY requirements ./requirements
+COPY setup.py pyproject.toml README.md ./
 COPY qminiwasm ./qminiwasm
 COPY engine ./engine
 
