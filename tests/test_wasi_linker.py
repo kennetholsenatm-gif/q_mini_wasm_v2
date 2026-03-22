@@ -68,7 +68,10 @@ class TestWasiLinker(unittest.TestCase):
     def test_build_clang_wasip1_requires_sdk(self) -> None:
         with self.assertRaises(ValueError):
             build_clang_wasm_compile_command(
-                "/tmp/a.c", "/tmp/o.wasm", link="wasip1", wasi_sdk_path=None
+                "/tmp/a.c",
+                "/tmp/o.wasm",
+                link="wasip1",
+                wasi_sdk_path=None,
             )
 
 
