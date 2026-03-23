@@ -1,3 +1,4 @@
+# Informational only: real branch protection is configured in GitHub repo Settings → Rules.
 name: Branch Protection
 on:
   push:

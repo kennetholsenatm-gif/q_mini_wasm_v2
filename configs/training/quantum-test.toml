@@ -3,8 +3,8 @@
 # Requested data_source=hybrid_mesh_hf_tabular -> source=hf_tabular + mesh_blend_fraction>0
 
 [hardware]
-accelerator = "xpu"
-quantum_backend = "ibm_kingston"
+accelerator = "cuda"
+quantum_backend = "penny_lane"
 device_index = 0
 
 [training]

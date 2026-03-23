@@ -103,9 +103,9 @@ class QMiniWASM:
                 use_neural_prediction=False,
                 execution_mode=mode,
                 ibm_shots=int(ibm_qaoa_shots),
-                engine_quantum_backend=str(quantum_backend).strip()
-                if mode == "qiskit_ibm"
-                else None,
+                engine_quantum_backend=(
+                    str(quantum_backend).strip() if mode == "qiskit_ibm" else None
+                ),
             )
             self.logger.info(
                 "quantum_router: QAOA via Qiskit (%s, num_qubits=%s layers=%s)",

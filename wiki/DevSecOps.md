@@ -15,7 +15,7 @@ The project uses GitHub Actions for automated CI/CD with these workflows:
 - **Type Checking**: MyPy
 - **Testing**: Unit tests with coverage (pytest, coverage.xml)
 - **Security**: Bandit SAST, pip-audit dependency scanning
-- **Trivy image**: Builds `wui/backend/Dockerfile`, runs Trivy with CRITICAL/HIGH severity and `ignore-unfixed` (only fixable vulns fail the job); uploads SARIF and SBOM (CycloneDX). Accepted risks can be listed in [.trivyignore](.trivyignore). Image scan can be gated in-cluster via Kyverno.
+- **Trivy image**: Builds `docker/Dockerfile.backend`, runs Trivy with CRITICAL/HIGH severity and `ignore-unfixed` (only fixable vulns fail the job); uploads SARIF and SBOM (CycloneDX). Accepted risks can be listed in [.trivyignore](.trivyignore). Image scan can be gated in-cluster via Kyverno.
 
 #### Security Scans Workflow (`.github/workflows/security-scans.yml`)
 - **Trigger**: Push and pull requests to `main`/`master`
@@ -195,9 +195,9 @@ pwsh -File scripts/devsecops-workflow.ps1
 - **Docs:** [containers/security-stack/README.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/containers/security-stack/README.md)
 
 ### Kubernetes / OpenTofu
-- **Location:** `infra/opentofu/` (Kubernetes provider, Helm releases for Teleport, Kyverno, Falco), `infra/teleport/`, `infra/kyverno/`, `infra/falco/`
-- **Admission:** Kyverno policies (e.g. pod-security-stig, image-scan-gate). Runtime: Falco.
-- **Deployment:** See `.github/workflows/opentofu-infra.yml` and `infra/opentofu/desired/*.tfvars.json`.
+- **RunPod (this repo):** `infra/runpod/` — OpenTofu for RunPod pods. CI: `.github/workflows/runpod-opentofu.yml` (fmt/validate/plan; optional `RUNPOD_API_KEY` for plan).
+- **Optional / other layouts:** If you add `infra/opentofu/` (Kubernetes, Helm, etc.), wire a separate workflow or extend CI as needed. Legacy `infra/opentofu/desired/*.tfvars.json` automation was removed in favor of RunPod paths above.
+- **Admission:** Kyverno policies (e.g. pod-security-stig, image-scan-gate). Runtime: Falco (when those stacks are present).
 
 ### OpenSCAP Compliance
 - **Script:** `scripts/security/run_openscap_scan.py` — runs `oscap xccdf eval`, produces HTML report and ARF; can fail on critical/kernel-memory findings.

@@ -65,7 +65,8 @@ security = [
 ]
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["qminiwasm*"]
+# Include engine/ so editable installs match setup.py find_packages() (python -m engine).
+include = ["qminiwasm*", "engine*"]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv", "build", "dist"]

@@ -1,0 +1,61 @@
+# OpenTofu validation for RunPod stack under infra/runpod (replaces legacy infra/opentofu/desired flow).
+# Plan runs on PR/push when Terraform changes; full plan needs RUNPOD_API_KEY in repo secrets.
+# Apply is intentionally not automated here — use local WUI, tofu.sh, or a protected Environment workflow.
+name: RunPod OpenTofu
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "infra/runpod/**"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "infra/runpod/**"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    name: fmt validate plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: "1.9.0"
+          tofu_wrapper: false
+
+      - name: Format check
+        working-directory: infra/runpod
+        run: tofu fmt -check -recursive
+
+      - name: Init
+        working-directory: infra/runpod
+        run: tofu init -input=false
+
+      - name: Validate configuration
+        working-directory: infra/runpod
+        run: tofu validate
+
+      - name: Plan (optional, requires RUNPOD_API_KEY secret)
+        working-directory: infra/runpod
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+        run: |
+          if [ -z "${RUNPOD_API_KEY:-}" ]; then
+            echo "::notice::RUNPOD_API_KEY not set — skipping tofu plan (fmt/validate already passed)."
+            exit 0
+          fi
+          tofu plan -input=false -no-color

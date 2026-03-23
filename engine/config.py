@@ -32,7 +32,8 @@ class EngineConfig:
         qaoa_layers: Optional[int] = None,
         qaoa_execution_mode: Optional[str] = None,
         ibm_qaoa_shots: Optional[int] = None,
-        #: WUI / env QUANTUM_EXECUTION_POLICY: hardware_only | prefer_hardware_fallback | simulator_only
+        #: WUI / env QUANTUM_EXECUTION_POLICY:
+        #: hardware_only | prefer_hardware_fallback | simulator_only
         quantum_execution_policy: Optional[str] = None,
         diff_method: Optional[str] = None,
         epochs: Optional[int] = None,
@@ -127,12 +128,16 @@ class EngineConfig:
             .strip()
             .lower()
         )
-        # WUI "hardware only" must enable the Qiskit IBM QAOA path; default pennylane leaves MoE as identity.
-        if self.quantum_execution_policy == "hardware_only" and self.qaoa_execution_mode == "pennylane":
+        # WUI "hardware only" must enable the Qiskit IBM QAOA path;
+        # default pennylane leaves MoE as identity.
+        if (
+            self.quantum_execution_policy == "hardware_only"
+            and self.qaoa_execution_mode == "pennylane"
+        ):
             _log = logging.getLogger(__name__)
             _log.info(
                 "QUANTUM_EXECUTION_POLICY=hardware_only: using qaoa_execution_mode=qiskit_ibm "
-                "(default pennylane would skip real QAOA in HybridQuantumMoE)"
+                "(pennylane would skip real QAOA in HybridQuantumMoE)"
             )
             self.qaoa_execution_mode = "qiskit_ibm"
         self.diff_method = (

@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   add-to-project:
-    if: github.repository == 'kennetholsenatm-gif/LLM_Pract'
+    if: github.repository_owner == 'kennetholsenatm-gif'
     runs-on: ubuntu-latest
     steps:
       - name: Get project ID

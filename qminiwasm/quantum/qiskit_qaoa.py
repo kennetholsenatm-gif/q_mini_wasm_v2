@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import suppress
 from typing import Any, List, Optional
 
 import numpy as np
@@ -66,8 +67,10 @@ def resolve_ibm_backend_name(
     if ibm and ibm.lower() not in ("auto", "penny_lane"):
         return ibm
     qb_cfg = (config_quantum_backend or "").strip()
-    if qb_cfg and qb_cfg.lower() not in ("auto", "penny_lane") and qb_cfg.lower().startswith(
-        "ibm_"
+    if (
+        qb_cfg
+        and qb_cfg.lower() not in ("auto", "penny_lane")
+        and qb_cfg.lower().startswith("ibm_")
     ):
         return qb_cfg
     qb = os.environ.get("QUANTUM_BACKEND", "").strip()
@@ -150,9 +153,7 @@ def run_z_expectations_statevector(
     """Exact ⟨Z_i⟩ via statevector estimator (local, no IBM)."""
     from qiskit.primitives import StatevectorEstimator
 
-    qc = build_qaoa_circuit_qiskit(
-        num_qubits, num_layers, weights, gamma, beta, bias, coupling
-    )
+    qc = build_qaoa_circuit_qiskit(num_qubits, num_layers, weights, gamma, beta, bias, coupling)
     obs = _pauli_z_observables(num_qubits)
     est = StatevectorEstimator()
     job = est.run([(qc, obs)])
@@ -208,11 +209,9 @@ def run_z_expectations_ibm(
 
     service = None
     for ch in ("ibm_quantum", "ibm_cloud", "ibm_quantum_platform"):
-        try:
+        with suppress(Exception):
             service = QiskitRuntimeService(channel=ch, token=token)
             break
-        except Exception:
-            continue
     if service is None:
         service = QiskitRuntimeService(token=token)
 
@@ -225,9 +224,7 @@ def run_z_expectations_ibm(
         pm = generate_preset_pass_manager(optimization_level=1, backend=backend)
         isa_circuit = pm.run(qc)
         if isa_circuit.layout is not None:
-            obs_isa = [
-                op.apply_layout(isa_circuit.layout, isa_circuit.num_qubits) for op in obs
-            ]
+            obs_isa = [op.apply_layout(isa_circuit.layout, isa_circuit.num_qubits) for op in obs]
         else:
             obs_isa = obs
 
@@ -236,12 +233,13 @@ def run_z_expectations_ibm(
         result = job.result()
         evs = np.asarray(result[0].data.evs, dtype=np.float64).flatten()
         if evs.size != num_qubits:
-            raise RuntimeError(f"IBM Estimator: expected {num_qubits} Z expectations, got {evs.size}")
+            raise RuntimeError(
+                f"IBM Estimator: expected {num_qubits} Z expectations, got {evs.size}"
+            )
         return evs
     except Exception as e:
-        if (
-            _ibm_fallback_to_statevector_enabled()
-            and ibm_error_suggests_quota_or_capacity_fallback(e)
+        if _ibm_fallback_to_statevector_enabled() and ibm_error_suggests_quota_or_capacity_fallback(
+            e
         ):
             logger.warning(
                 "IBM Runtime failed (%s: %s); falling back to local qiskit_statevector "

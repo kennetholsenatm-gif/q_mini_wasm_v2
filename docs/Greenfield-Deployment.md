@@ -99,7 +99,7 @@ Run the Q-Mini-WASM Web UI (FastAPI backend + React frontend). You can run it wi
 
 1. **Build and run the WUI backend** (from repo root):
    ```bash
-   docker build -f wui/backend/Dockerfile -t qminiwasm-backend:latest .
+   docker build -f docker/Dockerfile.backend -t qminiwasm-backend:latest .
    docker run -d -p 8000:8000 --name wui-backend qminiwasm-backend:latest
    ```
    **WUI → Data Stack connection:** When the WUI backend runs in Docker and must reach the data stack (PostgreSQL, RabbitMQ) on the same host or another host, set these environment variables (e.g. in `docker run -e` or in your compose/env):

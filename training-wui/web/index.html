@@ -4,49 +4,136 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>QMiniWASM — training</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #0b1220;
-      --panel: #131d31;
-      --panel-soft: #17253d;
-      --text: #e8edf5;
-      --muted: #92a3bf;
-      --accent: #4f8fff;
-      --ok: #3fb950;
-      --warn: #e3b341;
-      --err: #f85149;
-      --border: #2b3f62;
-      --shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+      /* Tactical Dark Theme (Sec 3.1.1) */
+      --bg-tactical-black: #0a0a0a;
+      --surface-command-gray: #1e1e1e;
+      --surface-interface-gray: #2d2d2d;
+      --action-primary-blue: #0078d4;
+      --alert-warning-orange: #ff8c00;
+      --alert-critical-red: #d13438;
+      --alert-success-green: #107c10;
+      --text-primary: #ffffff;
+      --text-secondary: #8c8c8c;
+      /* 8-point spacing (Sec 3.4) */
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      /* Modular typography scale */
+      --text-xs: 0.75rem;
+      --text-sm: 0.875rem;
+      --text-base: 1rem;
+      --text-lg: 1.125rem;
+      --text-xl: 1.25rem;
+      --text-2xl: 1.5rem;
+      /* Compatibility aliases */
+      --bg: var(--bg-tactical-black);
+      --panel: var(--surface-command-gray);
+      --panel-soft: var(--surface-interface-gray);
+      --text: var(--text-primary);
+      --muted: var(--text-secondary);
+      --accent: var(--action-primary-blue);
+      --ok: var(--alert-success-green);
+      --warn: var(--alert-warning-orange);
+      --err: var(--alert-critical-red);
+      --border: var(--surface-interface-gray);
     }
     * { box-sizing: border-box; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .skip-link {
+      position: absolute;
+      left: var(--space-md);
+      top: 0;
+      z-index: 100;
+      padding: var(--space-sm) var(--space-md);
+      background: var(--surface-command-gray);
+      color: var(--text-primary);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: var(--text-sm);
+      text-decoration: none;
+      transform: translateY(-120%);
+      transition: transform 0.15s ease;
+    }
+    .skip-link:focus {
+      outline: none;
+    }
+    .skip-link:focus-visible {
+      transform: translateY(var(--space-md));
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+    }
     body {
-      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: var(--text-base);
+      background: var(--bg-tactical-black);
+      color: var(--text-primary);
       margin: 0;
       line-height: 1.5;
+      letter-spacing: 0.02em;
       min-height: 100vh;
     }
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: 0.05em;
+      color: var(--text-primary);
+    }
+    h2 {
+      font-size: var(--text-xl);
+      margin: 0 0 var(--space-md);
+      color: var(--text-secondary);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h3 {
+      font-size: var(--text-lg);
+      margin: 0 0 var(--space-sm);
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.03em;
+    }
+    p.sub {
+      margin: var(--space-xs) 0 0;
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+    }
     header {
-      padding: 1rem 1.5rem 0.9rem;
-      border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, #16233b 0%, #121b2e 100%);
+      padding: var(--space-lg) var(--space-lg) var(--space-md);
+      border-bottom: 1px solid var(--surface-interface-gray);
+      background: var(--surface-command-gray);
       position: sticky;
       top: 0;
       z-index: 9;
-      backdrop-filter: blur(4px);
     }
-    h1 { font-size: 1.15rem; font-weight: 650; margin: 0; letter-spacing: 0.2px; }
-    p.sub { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }
     .topbar {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      gap: 1rem;
+      gap: var(--space-md);
     }
     .top-actions {
       display: flex;
-      gap: 0.5rem;
+      gap: var(--space-sm);
       flex-wrap: wrap;
     }
     main {
@@ -60,290 +147,523 @@
     .main-columns {
       display: grid;
       grid-template-columns: minmax(320px, 430px) 1fr;
-      gap: 1rem;
+      gap: var(--space-md);
       align-items: start;
       max-width: 1240px;
       margin: 0 auto;
-      padding: 1.25rem 1.5rem 1rem;
+      padding: var(--space-lg) var(--space-lg) var(--space-md);
       width: 100%;
       box-sizing: border-box;
     }
     .col {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: var(--space-md);
       min-width: 0;
     }
     section {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem 1.25rem;
-      box-shadow: var(--shadow);
+      background: var(--surface-command-gray);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      padding: var(--space-lg);
     }
-    h2 {
-      font-size: 0.95rem;
-      margin: 0 0 0.75rem;
-      color: var(--muted);
-      font-weight: 700;
-      letter-spacing: 0.3px;
-      text-transform: uppercase;
+    label {
+      display: block;
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-sm);
+      font-weight: 500;
     }
-    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
-    select, input[type="text"] {
+    select,
+    input[type="text"] {
       width: 100%;
       max-width: 100%;
-      padding: 0.5rem 0.65rem;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-size: 0.9rem;
+      min-height: 36px;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: 4px;
+      border: 1px solid var(--surface-interface-gray);
+      background: var(--bg-tactical-black);
+      color: var(--text-primary);
+      font-size: var(--text-sm);
     }
-    .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-top: 0.75rem; }
+    select:focus-visible,
+    input[type="text"]:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+      border-color: var(--action-primary-blue);
+    }
+    input::placeholder,
+    textarea::placeholder {
+      color: var(--text-secondary);
+      opacity: 1;
+    }
+    input[type="checkbox"]:focus-visible {
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-md);
+      align-items: flex-end;
+      margin-top: var(--space-md);
+    }
+    .row.align-center {
+      align-items: center;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 0.75rem 1rem;
+      gap: var(--space-md);
+    }
+    /* 8-point spacing utilities (replaces inline margins) */
+    .mt-md { margin-top: var(--space-md); }
+    .mt-lg { margin-top: var(--space-lg); }
+    .mb-0 { margin-bottom: 0; }
+    .mb-sm { margin-bottom: var(--space-sm); }
+    .hint-block { margin: 0 0 var(--space-sm); }
+    .hint-block-md { margin: var(--space-md) 0 var(--space-sm); }
+    .stack-md { margin-top: var(--space-md); }
+    .stack-sm { margin-top: var(--space-sm); }
+    .model-facts-toolbar {
+      margin-top: 0;
+      margin-bottom: var(--space-xs);
+    }
+    .infra-details {
+      margin-top: var(--space-md);
+      border: 1px dashed var(--surface-interface-gray);
+      border-radius: 4px;
+      padding: var(--space-sm) var(--space-md) var(--space-md);
+      background: rgba(10, 10, 10, 0.6);
+    }
+    .infra-details summary {
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      user-select: none;
     }
     .wizard-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 0.75rem;
+      gap: var(--space-md);
       flex-wrap: wrap;
-      margin-bottom: 0.6rem;
+      margin-bottom: var(--space-sm);
+    }
+    .wizard-label-inline {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      color: var(--text-primary);
+      font-size: var(--text-sm);
     }
     .wizard-steps {
       display: flex;
-      gap: 0.45rem;
+      gap: var(--space-sm);
       flex-wrap: wrap;
-      margin-bottom: 0.65rem;
+      margin-bottom: var(--space-sm);
     }
     .wstep {
-      font-size: 0.75rem;
-      padding: 0.16rem 0.52rem;
+      font-size: var(--text-xs);
+      padding: var(--space-xs) var(--space-sm);
       border-radius: 999px;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      background: var(--bg);
+      border: 1px solid var(--surface-interface-gray);
+      color: var(--text-secondary);
+      background: var(--bg-tactical-black);
     }
     .wstep.active {
-      border-color: var(--accent);
-      color: #dce8ff;
-      background: rgba(79, 143, 255, 0.22);
+      border-color: var(--action-primary-blue);
+      color: var(--text-primary);
+      background: rgba(0, 120, 212, 0.18);
     }
     .wstep.done {
-      border-color: var(--ok);
-      color: var(--ok);
+      border-color: var(--alert-success-green);
+      color: var(--alert-success-green);
     }
     .wizard-nav {
       display: flex;
-      gap: 0.55rem;
-      margin-top: 0.75rem;
+      gap: var(--space-sm);
+      margin-top: var(--space-md);
     }
     .hint {
-      font-size: 0.76rem;
-      color: var(--muted);
-      margin-top: 0.25rem;
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      margin-top: var(--space-xs);
     }
     .checkline {
       display: flex;
       align-items: center;
-      gap: 0.45rem;
-      margin-top: 0.45rem;
-      font-size: 0.84rem;
-      color: var(--text);
+      gap: var(--space-sm);
+      margin-top: var(--space-sm);
+      font-size: var(--text-sm);
+      color: var(--text-primary);
     }
     .wizard-pane[hidden] { display: none; }
     .review-box {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--panel-soft);
-      padding: 0.6rem 0.7rem;
-      font-size: 0.84rem;
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      background: var(--surface-interface-gray);
+      padding: var(--space-sm) var(--space-md);
+      font-size: var(--text-sm);
     }
     .model-card {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--panel-soft);
-      padding: 0.6rem 0.7rem;
-      margin-top: 0.75rem;
-      font-size: 0.84rem;
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      background: var(--surface-interface-gray);
+      padding: var(--space-sm) var(--space-md);
+      margin-top: var(--space-md);
+      font-size: var(--text-sm);
     }
     .model-card h3 {
-      margin: 0 0 0.45rem;
-      font-size: 0.8rem;
-      color: var(--muted);
+      margin: 0 0 var(--space-sm);
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.05em;
     }
     .sep {
       grid-column: 1/-1;
       height: 1px;
-      background: var(--border);
-      opacity: 0.7;
-      margin: 0.15rem 0;
+      background: var(--surface-interface-gray);
+      margin: var(--space-xs) 0;
     }
     details.adv {
-      margin-top: 0.9rem;
-      border: 1px dashed var(--border);
-      border-radius: 8px;
-      padding: 0.6rem 0.75rem 0.75rem;
-      background: rgba(23, 37, 61, 0.35);
+      margin-top: var(--space-md);
+      border: 1px dashed var(--surface-interface-gray);
+      border-radius: 4px;
+      padding: var(--space-sm) var(--space-md) var(--space-md);
+      background: rgba(10, 10, 10, 0.45);
     }
     details.adv > summary {
       cursor: pointer;
-      color: var(--muted);
-      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
       user-select: none;
-      margin-bottom: 0.5rem;
+      margin-bottom: var(--space-sm);
+    }
+    details.adv > summary:focus-visible {
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+      border-radius: 2px;
     }
     .metrics {
       display: grid;
       grid-template-columns: repeat(3, minmax(120px, 1fr));
-      gap: 0.65rem;
-      margin-top: 0.75rem;
+      gap: var(--space-md);
+      margin-top: var(--space-md);
     }
     .metric {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--panel-soft);
-      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      background: var(--surface-interface-gray);
+      padding: var(--space-sm) var(--space-md);
     }
     .metric .mk {
-      font-size: 0.72rem;
-      color: var(--muted);
-      margin-bottom: 0.15rem;
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.05em;
     }
     .metric .mv {
-      font-size: 0.95rem;
-      font-weight: 650;
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      font-size: var(--text-base);
+      font-weight: 600;
+    }
+    .mv {
+      font-family: "IBM Plex Mono", "Courier New", monospace;
     }
     button {
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
+      min-height: 36px;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: 4px;
       border: none;
-      font-size: 0.9rem;
+      font-family: inherit;
+      font-size: var(--text-sm);
       cursor: pointer;
-      font-weight: 500;
+      font-weight: 600;
+      transition: filter 0.12s ease;
     }
-    button.primary { background: var(--accent); color: #fff; }
-    button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
-    button.danger { background: var(--err); color: #fff; }
-    button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    button:focus-visible {
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+    }
+    button:hover:not(:disabled) {
+      filter: brightness(0.92);
+    }
+    button.primary {
+      background: var(--action-primary-blue);
+      color: var(--text-primary);
+    }
+    button.primary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    button.danger {
+      background: var(--alert-critical-red);
+      color: var(--text-primary);
+    }
+    button.ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--surface-interface-gray);
+    }
+    button.ghost:hover:not(:disabled) {
+      color: var(--text-primary);
+      border-color: var(--text-secondary);
+    }
+    a:focus-visible {
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+    }
     section.log-section {
       border-radius: 0;
       border-left: none;
       border-right: none;
       border-bottom: none;
       margin: 0;
-      border-top: 1px solid var(--border);
-      padding: 1rem 1.5rem 1.35rem;
+      border-top: 1px solid var(--surface-interface-gray);
+      padding: var(--space-lg) var(--space-lg) var(--space-xl);
       width: 100%;
       box-sizing: border-box;
       max-width: none;
     }
     section.log-section h2 {
-      margin-bottom: 0.5rem;
+      margin-bottom: var(--space-sm);
     }
     .log-toolbar {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.65rem;
+      gap: var(--space-md);
       align-items: center;
-      margin-bottom: 0.75rem;
+      margin-bottom: var(--space-md);
     }
     pre#log {
       margin: 0;
-      padding: 0.85rem 1rem;
-      background: var(--bg);
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      font-size: 0.76rem;
+      padding: var(--space-md);
+      background: var(--bg-tactical-black);
+      border-radius: 4px;
+      border: 1px solid var(--surface-interface-gray);
+      font-size: var(--text-sm);
       line-height: 1.45;
       white-space: pre-wrap;
       word-break: break-word;
       max-height: min(52vh, 680px);
       min-height: 220px;
       overflow-y: auto;
-      font-family: ui-monospace, Consolas, monospace;
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      color: var(--text-primary);
     }
-    .infra-card .infra-badges {
+    .infra-badges {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.45rem;
-      margin: 0.65rem 0 0.75rem;
+      gap: var(--space-sm);
+      margin: var(--space-md) 0;
     }
     .infra-badge {
-      font-size: 0.72rem;
-      padding: 0.2rem 0.55rem;
+      font-size: var(--text-xs);
+      padding: var(--space-xs) var(--space-sm);
       border-radius: 999px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--surface-interface-gray);
       font-weight: 600;
     }
-    .infra-badge.ok { border-color: var(--ok); color: var(--ok); background: rgba(63, 185, 80, 0.12); }
-    .infra-badge.bad { border-color: var(--err); color: var(--err); background: rgba(248, 81, 73, 0.1); }
-    .infra-badge.neutral { color: var(--muted); }
+    .infra-badge.ok {
+      border-color: var(--alert-success-green);
+      color: var(--alert-success-green);
+      background: rgba(16, 124, 16, 0.15);
+    }
+    .infra-badge.bad {
+      border-color: var(--alert-critical-red);
+      color: var(--alert-critical-red);
+      background: rgba(209, 52, 56, 0.15);
+    }
+    .infra-badge.neutral {
+      color: var(--text-secondary);
+      background: rgba(140, 140, 140, 0.1);
+    }
     .infra-toolbar {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: var(--space-sm);
       align-items: center;
-      margin-top: 0.65rem;
+      margin-top: var(--space-md);
     }
     pre.infra-remote-cmd {
-      margin: 0.5rem 0 0;
-      padding: 0.65rem 0.75rem;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.76rem;
+      margin: var(--space-sm) 0 0;
+      padding: var(--space-sm) var(--space-md);
+      background: var(--bg-tactical-black);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      font-size: var(--text-sm);
       white-space: pre-wrap;
       word-break: break-word;
       max-height: 12rem;
       overflow: auto;
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      color: var(--text-primary);
     }
-    .status { font-size: 0.85rem; }
-    .status.running { color: var(--ok); }
-    .status.done { color: var(--muted); }
-    .status.error { color: var(--err); }
+    .status {
+      font-size: var(--text-sm);
+    }
+    .status.running {
+      color: var(--alert-success-green);
+    }
+    .status.done {
+      color: var(--text-secondary);
+    }
+    .status.error {
+      color: var(--alert-critical-red);
+    }
     .badge {
       display: inline-block;
-      padding: 0.18rem 0.55rem;
+      padding: var(--space-xs) var(--space-sm);
       border-radius: 999px;
-      font-size: 0.75rem;
+      font-size: var(--text-xs);
       font-weight: 600;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--muted);
+      border: 1px solid var(--surface-interface-gray);
+      background: var(--bg-tactical-black);
+      color: var(--text-secondary);
       vertical-align: middle;
     }
-    .badge.ok { color: var(--ok); border-color: var(--ok); }
-    .badge.warn { color: #e3b341; border-color: #e3b341; }
-    .badge.err { color: var(--err); border-color: var(--err); }
-    .runs { list-style: none; padding: 0; margin: 0; }
+    .badge.ok {
+      color: var(--alert-success-green);
+      border-color: var(--alert-success-green);
+      background: rgba(16, 124, 16, 0.15);
+    }
+    .badge.warn {
+      color: var(--alert-warning-orange);
+      border-color: var(--alert-warning-orange);
+      background: rgba(255, 140, 0, 0.15);
+    }
+    .badge.err {
+      color: var(--alert-critical-red);
+      border-color: var(--alert-critical-red);
+      background: rgba(209, 52, 56, 0.15);
+    }
+    .runs {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
     .runs li {
-      padding: 0.5rem 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.85rem;
+      padding: var(--space-sm) 0;
+      border-bottom: 1px solid var(--surface-interface-gray);
+      font-size: var(--text-sm);
       display: flex;
       justify-content: space-between;
-      gap: 1rem;
+      gap: var(--space-md);
       flex-wrap: wrap;
     }
-    .runs li:last-child { border-bottom: none; }
-    code { font-size: 0.8em; background: var(--bg); padding: 0.1em 0.35em; border-radius: 4px; }
+    .runs li:last-child {
+      border-bottom: none;
+    }
+    code {
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      font-size: 0.9em;
+      background: var(--bg-tactical-black);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+      border: 1px solid var(--surface-interface-gray);
+    }
     .kv {
       display: grid;
       grid-template-columns: 220px 1fr;
-      gap: 0.45rem 0.8rem;
-      font-size: 0.85rem;
+      gap: var(--space-sm) var(--space-md);
+      font-size: var(--text-sm);
     }
-    .kv .k { color: var(--muted); }
-    .kv .v { word-break: break-word; }
+    .kv .k {
+      color: var(--text-secondary);
+    }
+    .kv .v {
+      word-break: break-word;
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      font-size: var(--text-sm);
+    }
+    .app-tabs {
+      display: flex;
+      gap: var(--space-xs);
+      padding: var(--space-md) var(--space-lg) 0;
+      max-width: 1240px;
+      margin: 0 auto;
+      border-bottom: 1px solid var(--surface-interface-gray);
+      background: var(--bg-tactical-black);
+    }
+    .app-tab {
+      min-height: 36px;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: 4px 4px 0 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .app-tab:hover {
+      color: var(--text-primary);
+    }
+    .app-tab:focus-visible {
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+    }
+    .app-tab.active {
+      color: var(--text-primary);
+      background: var(--surface-command-gray);
+      border-color: var(--surface-interface-gray);
+      border-bottom-color: var(--surface-command-gray);
+      margin-bottom: -1px;
+    }
+    .tab-panel[hidden] {
+      display: none !important;
+    }
+    .infrastructure-tab {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: var(--space-xs) var(--space-lg) var(--space-lg);
+    }
+    .infra-section {
+      padding: var(--space-md) 0 var(--space-lg);
+      border-bottom: 1px solid var(--surface-interface-gray);
+    }
+    .infra-section:last-of-type {
+      border-bottom: none;
+    }
+    .infra-section > h2 {
+      margin-top: 0;
+    }
+    textarea#tfvarsEditor {
+      width: 100%;
+      min-height: 300px;
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      font-size: var(--text-sm);
+      line-height: 1.45;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: 4px;
+      border: 1px solid var(--surface-interface-gray);
+      background: var(--bg-tactical-black);
+      color: var(--text-primary);
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    pre#tofuCmdOutput {
+      margin: var(--space-md) 0 0;
+      padding: var(--space-md);
+      background: var(--bg-tactical-black);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      font-size: var(--text-sm);
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 28rem;
+      overflow-y: auto;
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      color: var(--text-primary);
+    }
     @media (max-width: 980px) {
       .main-columns {
         grid-template-columns: 1fr;
@@ -352,9 +672,20 @@
         grid-template-columns: repeat(3, minmax(90px, 1fr));
       }
     }
+    @media (max-width: 768px) {
+      button,
+      .app-tab {
+        min-height: 44px;
+      }
+      select,
+      input[type="text"] {
+        min-height: 44px;
+      }
+    }
   </style>
 </head>
 <body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
   <header>
     <div class="topbar">
       <div>
@@ -367,26 +698,14 @@
       </div>
     </div>
   </header>
-  <main>
+  <nav class="app-tabs" role="tablist" aria-label="Main views">
+    <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Training</button>
+    <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false">Infrastructure</button>
+  </nav>
+  <main id="main-content">
+    <div id="panelTraining" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnTraining">
     <div class="main-columns">
     <div class="col">
-      <section class="infra-card">
-        <h2>Infrastructure</h2>
-        <p class="hint" style="margin:0">RunPod + OpenTofu for GPU pods; <code>python -m engine</code> on <strong>this</strong> host unless you SSH to the pod. Container defaults: <code>ACCELERATOR=cuda</code>, <code>NVIDIA_VISIBLE_DEVICES=all</code> (<code>infra/runpod/variables.tf</code>).</p>
-        <div class="infra-badges" id="infraBadges" aria-label="Infrastructure status"></div>
-        <div class="kv" id="infraKv" style="margin-top:0.35rem"></div>
-        <p class="status" id="infraMsg"></p>
-        <div class="infra-toolbar">
-          <button type="button" class="ghost" id="btnInfraRefresh">Refresh infrastructure</button>
-          <button type="button" class="ghost" id="btnCopyPodIP" disabled>Copy pod IP</button>
-          <button type="button" class="ghost" id="btnCopyRemoteCmd" disabled>Copy remote commands</button>
-        </div>
-        <details id="infraRemoteDetails" style="margin-top:0.75rem; border:1px dashed var(--border); border-radius:8px; padding:0.55rem 0.65rem 0.65rem; background:rgba(23,37,61,0.35)">
-          <summary style="cursor:pointer; color:var(--muted); font-size:0.84rem; user-select:none">Remote GPU (rsync / SSH)</summary>
-          <p class="hint" style="margin:0.5rem 0 0.35rem">When <code>public_ip</code> appears below, use these on your machine (adjust user/path for your Runpod template).</p>
-          <pre id="infraRemotePre" class="infra-remote-cmd" style="display:none"></pre>
-        </details>
-      </section>
       <section>
         <h2>Quick metrics</h2>
         <div class="metrics">
@@ -408,17 +727,17 @@
         <h2>Start from existing config</h2>
         <label for="cfg">Config (configs/training/*.toml)</label>
         <select id="cfg"></select>
-        <div class="grid" style="margin-top:0.7rem">
+        <div class="grid mt-md">
           <div>
             <label for="sRunTarget">Execution target</label>
             <select id="sRunTarget">
               <option value="local">Local (this machine)</option>
               <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
             </select>
-            <div class="hint">RunPod provisions <code>infra/runpod</code>; training process stays local unless you use SSH separately.</div>
+            <div class="hint">RunPod provisions <code>infra/runpod</code>; training process stays local unless you use SSH separately. Edit <strong>terraform.tfvars</strong> on the <strong>Infrastructure</strong> tab before apply.</div>
           </div>
           <div id="sRunpodDestroyWrap" style="display:none">
-            <label class="checkline" style="margin-top:1.5rem">
+            <label class="checkline mt-lg">
               <input id="sRunpodDestroy" type="checkbox" checked />
               Destroy pod when training stops (saves idle cost)
             </label>
@@ -443,14 +762,14 @@
         <div class="row">
           <button type="button" class="primary" id="btnStart">Start training</button>
         </div>
-        <p class="status" id="msg" style="margin-top:0.75rem"></p>
+        <p class="status stack-md" id="msg" aria-live="polite"></p>
       </section>
       <section>
         <h2>Preflight <span id="preflightBadge" class="badge">UNKNOWN</span></h2>
-        <p class="hint" style="margin:0 0 0.5rem">Uses the <strong>config file</strong> from the left dropdown for TOML-backed settings. <strong>Accelerator</strong> for device check follows the <strong>Build + Run</strong> form when set (overrides <code>[hardware].accelerator</code> in that file). Quantum env lines use the Build form fields.</p>
-        <p class="status" id="preflightMsg" style="margin-top:0.75rem"></p>
+        <p class="hint hint-block">Uses the <strong>config file</strong> from the left dropdown for TOML-backed settings. <strong>Accelerator</strong> for device check follows the <strong>Build + Run</strong> form when set (overrides <code>[hardware].accelerator</code> in that file). Quantum env lines use the Build form fields.</p>
+        <p class="status stack-md" id="preflightMsg" aria-live="polite"></p>
         <div class="kv" id="preflightKv"></div>
-        <p class="hint" style="margin-top:0.65rem"><strong>IBM pending jobs</strong> is that backend’s <em>queue length</em> (jobs waiting to run there). <strong>0</strong> is normal when nothing is queued—your training may use the simulator first, or you haven’t submitted IBM Runtime jobs yet.</p>
+        <p class="hint hint-block-md"><strong>IBM pending jobs</strong> is that backend’s <em>queue length</em> (jobs waiting to run there). <strong>0</strong> is normal when nothing is queued—your training may use the simulator first, or you haven’t submitted IBM Runtime jobs yet.</p>
       </section>
       <section>
         <h2>Active / recent runs</h2>
@@ -461,11 +780,12 @@
       <section>
         <h2>Build + run config</h2>
         <div class="wizard-head">
-          <label style="margin:0; display:flex; align-items:center; gap:0.45rem; color:var(--text)">
+          <label class="wizard-label-inline">
             <input id="bWizardMode" type="checkbox" checked />
             Wizard mode
           </label>
         </div>
+        <div role="group" aria-label="Build configuration wizard">
         <div class="wizard-steps" id="bWizardSteps" style="display:none">
           <span class="wstep" id="ws1">1 Basics</span>
           <span class="wstep" id="ws2">2 Data</span>
@@ -490,7 +810,7 @@
             </select>
           </div>
           <div id="bRunpodDestroyWrap" class="wizard-pane" data-step="1" style="display:none">
-            <label class="checkline" style="margin-top:0.5rem">
+            <label class="checkline stack-sm">
               <input id="bRunpodDestroy" type="checkbox" checked />
               Destroy RunPod when training stops
             </label>
@@ -561,7 +881,7 @@
               <input id="bLRTrialMode" type="checkbox" />
               Treat Build+Run as LR trial run
             </label>
-            <div id="bLRTrialWrap" style="display:none; margin-top:0.45rem">
+            <div id="bLRTrialWrap" class="stack-sm" style="display:none">
               <label for="bLRTrialEpochs">Trial epochs</label>
               <input id="bLRTrialEpochs" type="text" value="2" />
               <div class="hint">Runs short and adds per-epoch eval logging for LR comparison.</div>
@@ -573,7 +893,7 @@
         </div>
         <details class="adv wizard-pane" data-step="2">
           <summary>Advanced data options</summary>
-          <div class="grid" style="margin-top:0.25rem">
+          <div class="grid stack-sm">
             <div id="hfConfigWrap">
               <label for="bDatasetConfig">HF dataset config (optional)</label>
               <input id="bDatasetConfig" type="text" placeholder="python" />
@@ -593,24 +913,73 @@
           <button type="button" class="ghost" id="btnWPrev">Back</button>
           <button type="button" class="ghost" id="btnWNext">Next</button>
         </div>
+        </div>
         <div class="row wizard-pane" data-step="3">
           <button type="button" class="ghost" id="btnAutoLR">Auto-select learning rate</button>
-          <span class="status" id="autoLRMsg"></span>
+          <span class="status" id="autoLRMsg" aria-live="polite"></span>
         </div>
         <div class="row">
           <button type="button" class="primary" id="btnBuildRun">Build + Start training</button>
         </div>
         <div class="model-card">
           <h3>Model Facts</h3>
-          <div class="row" style="margin-top:0; margin-bottom:0.4rem">
+          <div class="row model-facts-toolbar">
             <button type="button" class="ghost" id="btnModelFacts">Refresh facts</button>
           </div>
           <div class="kv" id="modelFacts"></div>
         </div>
-        <p class="status" id="buildMsg" style="margin-top:0.75rem"></p>
+        <p class="status stack-md" id="buildMsg" aria-live="polite"></p>
       </section>
     </div>
     </div>
+    </div>
+
+    <div id="panelInfra" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnInfra" hidden>
+      <div class="infrastructure-tab">
+        <div class="infra-section">
+          <h2>terraform.tfvars</h2>
+          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. RunPod + OpenTofu use this file; <code>python -m engine</code> still runs on <strong>this</strong> host unless you SSH to the pod.</p>
+          <label for="tfvarsEditor" class="sr-only">terraform.tfvars contents</label>
+          <textarea id="tfvarsEditor" spellcheck="false" wrap="off" placeholder="# Load example or paste HCL variable assignments…"></textarea>
+          <div class="row stack-md align-center">
+            <button type="button" class="primary" id="btnTfvarsSave">Save terraform.tfvars</button>
+            <button type="button" class="ghost" id="btnTfvarsReload">Reload from disk</button>
+            <button type="button" class="ghost" id="btnTfvarsExample">Insert example template</button>
+          </div>
+          <p class="status stack-md" id="tfvarsMsg" aria-live="polite"></p>
+        </div>
+        <div class="infra-section">
+          <h2>Status</h2>
+          <p class="hint mb-sm"><code>RUNPOD_TOKEN</code> / OpenTofu binary / Terraform outputs after apply.</p>
+          <div class="infra-badges" id="infraBadges" aria-label="Infrastructure status"></div>
+          <div class="kv stack-sm" id="infraKv"></div>
+          <p class="status" id="infraMsg" aria-live="polite"></p>
+          <div class="infra-toolbar">
+            <button type="button" class="ghost" id="btnInfraRefresh">Refresh status</button>
+            <button type="button" class="ghost" id="btnCopyPodIP" disabled>Copy pod IP</button>
+            <button type="button" class="ghost" id="btnCopyRemoteCmd" disabled>Copy remote commands</button>
+          </div>
+          <details id="infraRemoteDetails" class="infra-details stack-md">
+            <summary>Remote GPU (rsync / SSH)</summary>
+            <p class="hint hint-block-md">When <code>public_ip</code> appears above, use these on your machine (adjust user/path for your Runpod template).</p>
+            <pre id="infraRemotePre" class="infra-remote-cmd" style="display:none"></pre>
+          </details>
+        </div>
+        <div class="infra-section">
+          <h2>OpenTofu CLI</h2>
+          <p class="hint mb-sm">Runs in <code>infra/runpod</code> with repo <code>.env</code> (token). Commands use <strong>terraform.tfvars</strong> from the editor above. Use <strong>Plan</strong> before <strong>Apply</strong>.</p>
+          <div class="row stack-sm align-center">
+            <button type="button" class="ghost" id="btnTofuInit">tofu init</button>
+            <button type="button" class="ghost" id="btnTofuPlan">tofu plan</button>
+            <button type="button" class="primary" id="btnTofuApply">tofu apply</button>
+            <button type="button" class="danger" id="btnTofuDestroy">tofu destroy</button>
+          </div>
+          <p class="status stack-md" id="tofuCmdMsg" aria-live="polite"></p>
+          <pre id="tofuCmdOutput" hidden></pre>
+        </div>
+      </div>
+    </div>
+
     <section class="log-section">
       <h2>Log <span id="logTitle"></span></h2>
       <div class="log-toolbar">
@@ -693,6 +1062,7 @@
         name: $("bName").value.trim(),
         run_target: $("bRunTarget").value,
         runpod_destroy_on_exit: $("bRunpodDestroy").checked,
+        runpod_var_file: "terraform.tfvars",
         accelerator: $("bAccel").value,
         data_source: $("bDataSource").value,
         data_path: $("bDataPath").value.trim(),
@@ -1159,6 +1529,7 @@
             ibm_backend_name: $("sIBMBackendName").value.trim(),
             run_target: $("sRunTarget").value,
             runpod_destroy_on_exit: $("sRunpodDestroy").checked,
+            runpod_var_file: "terraform.tfvars",
           }),
         });
         const data = await r.json();
@@ -1180,6 +1551,139 @@
       await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/stop", { method: "POST" });
       await loadRuns();
       pollLog();
+    };
+
+    const RUNPOD_TFVARS = "terraform.tfvars";
+
+    function showAppTab(which) {
+      const train = $("panelTraining");
+      const infra = $("panelInfra");
+      const bTrain = $("tabBtnTraining");
+      const bInfra = $("tabBtnInfra");
+      const showTrain = which === "training";
+      train.hidden = !showTrain;
+      infra.hidden = showTrain;
+      bTrain.classList.toggle("active", showTrain);
+      bInfra.classList.toggle("active", !showTrain);
+      bTrain.setAttribute("aria-selected", showTrain ? "true" : "false");
+      bInfra.setAttribute("aria-selected", showTrain ? "false" : "true");
+      if (!showTrain) {
+        loadTfvarsEditor();
+        loadRunpodStatus();
+      }
+    }
+    $("tabBtnTraining").onclick = () => showAppTab("training");
+    $("tabBtnInfra").onclick = () => showAppTab("infra");
+
+    async function loadTfvarsEditor() {
+      const msg = $("tfvarsMsg");
+      const ed = $("tfvarsEditor");
+      if (!ed) return;
+      msg.textContent = "Loading…";
+      msg.className = "status";
+      try {
+        const r = await fetch("/api/runpod/tfvars");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        ed.value = data.content != null ? String(data.content) : "";
+        msg.textContent = data.exists ? "Loaded " + (data.path || "terraform.tfvars") + " from disk." : "No file on disk yet — save to create it, or insert example.";
+        msg.className = "status done";
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    async function saveTfvarsEditor() {
+      const msg = $("tfvarsMsg");
+      const ed = $("tfvarsEditor");
+      msg.textContent = "Saving…";
+      msg.className = "status";
+      $("btnTfvarsSave").disabled = true;
+      try {
+        const r = await fetch("/api/runpod/tfvars", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: ed.value }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        msg.textContent = "Saved " + (data.path || "infra/runpod/terraform.tfvars");
+        msg.className = "status done";
+        await loadRunpodStatus();
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      } finally {
+        $("btnTfvarsSave").disabled = false;
+      }
+    }
+
+    async function insertTfvarsExample() {
+      const ed = $("tfvarsEditor");
+      const msg = $("tfvarsMsg");
+      if (ed.value.trim() && !confirm("Replace editor contents with the repository example template?")) return;
+      msg.textContent = "Loading example…";
+      msg.className = "status";
+      try {
+        const r = await fetch("/api/runpod/tfvars?source=example");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        ed.value = data.content != null ? String(data.content) : "";
+        msg.textContent = "Example loaded — edit uncommented lines, then Save.";
+        msg.className = "status done";
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    $("btnTfvarsSave").onclick = saveTfvarsEditor;
+    $("btnTfvarsReload").onclick = loadTfvarsEditor;
+    $("btnTfvarsExample").onclick = insertTfvarsExample;
+
+    async function runpodTofuAction(action) {
+      const vf = RUNPOD_TFVARS;
+      const msg = $("tofuCmdMsg");
+      const pre = $("tofuCmdOutput");
+      msg.textContent = "Running tofu " + action + "…";
+      msg.className = "status";
+      pre.hidden = false;
+      pre.textContent = "";
+      for (const id of ["btnTofuInit", "btnTofuPlan", "btnTofuApply", "btnTofuDestroy"]) {
+        $(id).disabled = true;
+      }
+      try {
+        const r = await fetch("/api/runpod/tofu", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: action, var_file: vf }),
+        });
+        const data = await r.json().catch(() => ({}));
+        pre.textContent = data.output != null ? String(data.output) : "";
+        if (!r.ok || data.ok === false) {
+          msg.textContent = data.error || r.statusText || "failed";
+          msg.className = "status error";
+        } else {
+          msg.textContent = "OK — tofu " + action + " finished";
+          msg.className = "status done";
+        }
+        await loadRunpodStatus();
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      } finally {
+        for (const id of ["btnTofuInit", "btnTofuPlan", "btnTofuApply", "btnTofuDestroy"]) {
+          $(id).disabled = false;
+        }
+      }
+    }
+    $("btnTofuInit").onclick = () => runpodTofuAction("init");
+    $("btnTofuPlan").onclick = () => runpodTofuAction("plan");
+    $("btnTofuApply").onclick = () => runpodTofuAction("apply");
+    $("btnTofuDestroy").onclick = () => {
+      if (!confirm("Destroy RunPod infrastructure in infra/runpod? This deletes the pod if state exists.")) return;
+      runpodTofuAction("destroy");
     };
 
     $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); loadRunpodStatus(); };

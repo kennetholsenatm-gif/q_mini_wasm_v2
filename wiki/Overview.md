@@ -33,7 +33,7 @@ The pillars below support the edge product described above. The repository is or
 ### 4. Application (Core Engine + WUI)
 - **Location:** `qminiwasm/` (Python package), `wui/` (FastAPI backend + React frontend), `charts/qminiwasm-wui/` (Helm chart).
 - **Purpose:** Quantum circuit simulation, WASM execution, Intel Quantum/ARC integration, and the Web UI for configuration and control.
-- **Deployment:** Docker (e.g. `wui/backend/Dockerfile`) or Kubernetes via Helm; chart is STIG/Kyverno-aware (non-root, securityContext, optional Trivy scan annotation).
+- **Deployment:** Docker (e.g. `docker/Dockerfile.backend`) or Kubernetes via Helm; chart is STIG/Kyverno-aware (non-root, securityContext, optional Trivy scan annotation).
 
 Optional Kubernetes/OpenTofu: `infra/opentofu/` (Teleport, Kyverno, Falco), `infra/teleport/`, `infra/kyverno/`, `infra/falco/`. See the [Greenfield Deployment Guide](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/Greenfield-Deployment.md) in the repository for full deployment order.
 

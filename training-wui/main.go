@@ -106,6 +106,8 @@ func main() {
 	mux.HandleFunc("/api/runs", handleRunsCollection)
 	mux.HandleFunc("/api/runs/build", handleRunBuild)
 	mux.HandleFunc("/api/runpod/status", handleRunpodStatus)
+	mux.HandleFunc("/api/runpod/tofu", handleRunpodTofu)
+	mux.HandleFunc("/api/runpod/tfvars", handleRunpodTfvars)
 	mux.HandleFunc("/api/runs/", handleRunsItem)
 
 	sub, err := fs.Sub(webFS, "web")
@@ -121,7 +123,7 @@ func main() {
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -186,6 +188,7 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			IBMBackendName        string `json:"ibm_backend_name"`
 			RunTarget             string `json:"run_target"`
 			RunpodDestroyOnExit   *bool  `json:"runpod_destroy_on_exit"`
+			RunpodVarFile         string `json:"runpod_var_file"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonErr(w, http.StatusBadRequest, "invalid JSON")
@@ -204,7 +207,7 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		extraEnv := buildQuantumEnvOverrides(body.QuantumBackend, body.QuantumPolicy, body.IBMBackendName)
-		opts := runStartOptsFromRequest(body.RunTarget, body.RunpodDestroyOnExit)
+		opts := runStartOptsFromRequest(body.RunTarget, body.RunpodDestroyOnExit, body.RunpodVarFile)
 		if err := validateRunTarget(opts); err != nil {
 			jsonErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -281,6 +284,7 @@ func PathJoinRepo(root, maybeRel string) string {
 type runStartOpts struct {
 	RunTarget             string `json:"run_target"`
 	RunpodDestroyOnExit   bool   `json:"runpod_destroy_on_exit"`
+	RunpodVarFile         string `json:"runpod_var_file"` // optional basename under infra/runpod, e.g. terraform.tfvars
 }
 
 func normalizeRunTarget(s string) string {
@@ -291,7 +295,7 @@ func normalizeRunTarget(s string) string {
 	return s
 }
 
-func runStartOptsFromRequest(runTarget string, destroyPtr *bool) runStartOpts {
+func runStartOptsFromRequest(runTarget string, destroyPtr *bool, runpodVarFile string) runStartOpts {
 	rt := normalizeRunTarget(runTarget)
 	destroy := true
 	if destroyPtr != nil {
@@ -300,7 +304,7 @@ func runStartOptsFromRequest(runTarget string, destroyPtr *bool) runStartOpts {
 	if rt != "runpod" {
 		destroy = false
 	}
-	return runStartOpts{RunTarget: rt, RunpodDestroyOnExit: destroy}
+	return runStartOpts{RunTarget: rt, RunpodDestroyOnExit: destroy, RunpodVarFile: strings.TrimSpace(runpodVarFile)}
 }
 
 func validateRunTarget(o runStartOpts) error {
@@ -331,6 +335,7 @@ type buildRunRequest struct {
 	ResumeLatest       bool    `json:"resume_latest"`
 	RunTarget          string  `json:"run_target"`
 	RunpodDestroyOnExit *bool  `json:"runpod_destroy_on_exit"`
+	RunpodVarFile      string  `json:"runpod_var_file"`
 }
 
 func handleRunBuild(w http.ResponseWriter, r *http.Request) {
@@ -434,7 +439,7 @@ func handleRunBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	extraEnv := buildQuantumEnvOverrides(body.QuantumBackend, body.QuantumPolicy, body.IBMBackendName)
-	opts := runStartOptsFromRequest(body.RunTarget, body.RunpodDestroyOnExit)
+	opts := runStartOptsFromRequest(body.RunTarget, body.RunpodDestroyOnExit, body.RunpodVarFile)
 	if err := validateRunTarget(opts); err != nil {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -1157,6 +1162,7 @@ type runRecord struct {
 	Error               bool      `json:"error"`
 	RunTarget           string    `json:"run_target,omitempty"`
 	RunpodDestroyOnExit bool      `json:"runpod_destroy_on_exit,omitempty"`
+	RunpodVarFile       string    `json:"runpod_var_file,omitempty"`
 	cmd                 *exec.Cmd
 	logMu               sync.Mutex
 	logBuf              bytes.Buffer
@@ -1200,9 +1206,9 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 		defer cancel()
 		var err error
-		applyLog, err = runpodApply(ctx)
+		applyLog, err = runpodApply(ctx, opts.RunpodVarFile)
 		if err != nil {
-			return nil, fmt.Errorf("runpod OpenTofu apply failed: %w", err)
+			return nil, fmt.Errorf("runpod OpenTofu apply failed: %v\n\n--- tofu output ---\n%s", err, applyLog)
 		}
 		applySucceeded = true
 	}
@@ -1214,7 +1220,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		if !registered && applySucceeded && opts.RunTarget == "runpod" && opts.RunpodDestroyOnExit {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 			defer cancel()
-			_, _ = runpodDestroy(ctx)
+			_, _ = runpodDestroy(ctx, opts.RunpodVarFile)
 		}
 	}()
 
@@ -1232,6 +1238,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		Running:             true,
 		RunTarget:           opts.RunTarget,
 		RunpodDestroyOnExit: opts.RunpodDestroyOnExit,
+		RunpodVarFile:       opts.RunpodVarFile,
 	}
 	if applyLog != "" {
 		rec.logBuf.WriteString("=== runpod: OpenTofu apply ===\n")
@@ -1304,6 +1311,7 @@ func (m *manager) wait(id string) {
 	cmd := rec.cmd
 	runTarget := rec.RunTarget
 	destroyPod := rec.RunpodDestroyOnExit
+	runpodVF := rec.RunpodVarFile
 	m.mu.Unlock()
 	if cmd == nil {
 		return
@@ -1327,7 +1335,7 @@ func (m *manager) wait(id string) {
 	if runTarget == "runpod" && destroyPod {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
-		out, derr := runpodDestroy(ctx)
+		out, derr := runpodDestroy(ctx, runpodVF)
 		m.appendLog(id, []byte("\n=== runpod: OpenTofu destroy ===\n"))
 		m.appendLog(id, []byte(out))
 		if derr != nil {
@@ -1383,6 +1391,7 @@ func (m *manager) list() []map[string]any {
 			"error":                   r.Error,
 			"run_target":              r.RunTarget,
 			"runpod_destroy_on_exit":  r.RunpodDestroyOnExit,
+			"runpod_var_file":         r.RunpodVarFile,
 		})
 	}
 	return out

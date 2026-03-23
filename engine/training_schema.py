@@ -50,7 +50,10 @@ class TrainingSection(BaseModel):
 class DataSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source: Optional[str] = Field(None, description="TRAINING_DATA_SOURCE: mesh, corpus, hf_tabular")
+    source: Optional[str] = Field(
+        None,
+        description="TRAINING_DATA_SOURCE: mesh, corpus, hf_tabular",
+    )
     path: Optional[str] = Field(None, description="DATA_PATH")
     mesh_algorithms: Optional[str] = None
 

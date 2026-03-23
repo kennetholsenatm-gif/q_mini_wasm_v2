@@ -6,24 +6,52 @@ The guest gets:
 - Optional **`/opt/wui/training-wui`** — pre-built binary from `setup-instance.sh` (faster restarts)
 - Python + this package under **`/opt/qmw`** (for `python -m engine …`)
 
-## Setup (once per host)
+## Setup (once per Incus host)
+
+### Option A — no path arguments (recommended)
+
+From **`training-wui/incus`** inside your clone, `run-setup.sh` finds the repo root automatically (`../..` from this directory):
 
 ```bash
-cd /path/to/qminiwasm-core/training-wui/incus
-chmod +x setup-instance.sh
-./setup-instance.sh /path/to/qminiwasm-core
+cd /mnt/c/GitHub/LLM_Pract/qminiwasm-core/training-wui/incus
+chmod +x run-setup.sh setup-instance.sh install-systemd-wui.sh install-opentofu.sh
+./run-setup.sh
 ```
 
-Use the real absolute path to the repo root (must contain `engine/` and `qminiwasm/`).
+If your clone lives elsewhere, only the `cd` line changes — still run `./run-setup.sh` from `training-wui/incus`.
+
+### Option B — pass repo root explicitly
+
+```bash
+cd /mnt/c/GitHub/LLM_Pract/qminiwasm-core/training-wui/incus
+chmod +x setup-instance.sh install-opentofu.sh
+./setup-instance.sh /mnt/c/GitHub/LLM_Pract/qminiwasm-core
+```
+
+The argument must be the **absolute** path to the repo root (directories **`engine/`** and **`qminiwasm/`** must exist there).
 
 Optional: `INSTANCE=other-name` or `IMAGE=images:almalinux/10/cloud` in the environment.
 
-## Autostart on container boot (recommended)
+## Autostart (two layers)
 
-`setup-instance.sh` installs a **systemd** unit `training-wui.service` so the WUI starts after reboot and restarts on failure.
+### 1) Incus host reboot → start the instance
+
+`setup-instance.sh` sets **`boot.autostart=true`** on `qminiwasm-training-wui` so the container is started when the machine running Incus boots.
+
+Check / fix on the **Incus host**:
+
+```bash
+incus config get qminiwasm-training-wui boot.autostart   # should print: true
+incus config set qminiwasm-training-wui boot.autostart true
+```
+
+### 2) Guest boot → start the WUI (systemd)
+
+The same script installs **`training-wui.service`** so the web UI listens on **8765** after the guest is up, with ordering for the **`/opt/qmw` bind mount** and a short wait if the mount is late.
 
 - Status: `incus exec qminiwasm-training-wui -- systemctl status training-wui`
 - Logs: `incus exec qminiwasm-training-wui -- journalctl -u training-wui -f`
+- Enabled: `incus exec qminiwasm-training-wui -- systemctl is-enabled training-wui` → `enabled`
 
 If you already ran setup before this existed, install once:
 
@@ -103,6 +131,16 @@ To accept connections from other interfaces on the Incus host (e.g. reach WSL’
 - **`go: go.mod requires go >= 1.22`**: install a newer Go in the guest.
 - **`missing go.mod` under `/opt/qmw/training-wui`**: fix the `qmw-repo` disk (`incus config device show qminiwasm-training-wui`).
 
+### If Python fails: `Failed to build 'file:///opt/qmw' when getting requirements to build editable`
+
+`setup-instance.sh` installs the repo with **`pip install -e . --no-deps --no-build-isolation`** so metadata uses the same environment as the already-installed torch/qiskit stack. If you still see errors, inside the guest run:
+
+```bash
+cd /opt/qmw
+python3 -m pip install --upgrade "pip>=24.2" "setuptools>=69" wheel
+python3 -m pip install -e . --no-deps --no-build-isolation -v
+```
+
 ## Environment / `.env`
 
 Secrets and defaults (IBM token, HF token, `ACCELERATOR`, etc.) should live in **`.env` at the repo root** on the host — the same file appears as **`/opt/qmw/.env`** in the guest via the bind mount.
@@ -114,3 +152,4 @@ The `training-wui` process **loads that file at startup** (after `-root` resolve
 - `incus` on the host, permission to run instances
 - Enough disk/RAM for CPU PyTorch in the guest
 - Guest **Go ≥ 1.22** for this module (`training-wui/go.mod`)
+- **OpenTofu** CLI as **`tofu`** on the guest `PATH` (default `/usr/local/bin`) — `setup-instance.sh` runs `install-opentofu.sh`; re-run manually: `incus exec qminiwasm-training-wui -- bash /opt/qmw/training-wui/incus/install-opentofu.sh`

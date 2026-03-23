@@ -347,12 +347,17 @@ function Run-TrivyImageScan {
         Log-Warning "Docker not found; skipping Trivy image scan"
         return 0
     }
-    $dockerfilePath = Join-Path $ProjectRoot "wui\backend\Dockerfile"
-    if (Test-Path $dockerfilePath) {
-        Log-Info "Building backend image for scan..."
+    $dockerRel = $null
+    if (Test-Path (Join-Path $ProjectRoot "docker\Dockerfile.backend")) {
+        $dockerRel = "docker/Dockerfile.backend"
+    } elseif (Test-Path (Join-Path $ProjectRoot "wui\backend\Dockerfile")) {
+        $dockerRel = "wui/backend/Dockerfile"
+    }
+    if ($null -ne $dockerRel) {
+        Log-Info "Building backend image for scan ($dockerRel)..."
         Push-Location $ProjectRoot
         try {
-            docker build -f wui/backend/Dockerfile -t $imageTag . 2>&1 | Out-Null
+            docker build -f $dockerRel -t $imageTag . 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 Log-Warning "Docker build failed; skipping image scan"
                 return 0

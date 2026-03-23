@@ -62,15 +62,11 @@ def test_ibm_isa_transpile_and_apply_layout_smoke():
         qc.h(i)
     qc.rzz(0.1, 0, 1)
 
-    backend = GenericBackendV2(
-        num_qubits=n, basis_gates=["cx", "rz", "sx", "x", "id"]
-    )
+    backend = GenericBackendV2(num_qubits=n, basis_gates=["cx", "rz", "sx", "x", "id"])
     pm = generate_preset_pass_manager(optimization_level=1, backend=backend)
     isa = pm.run(qc)
     obs = [
-        SparsePauliOp.from_list(
-            [("".join("Z" if j == k else "I" for j in range(n)), 1.0)]
-        )
+        SparsePauliOp.from_list([("".join("Z" if j == k else "I" for j in range(n)), 1.0)])
         for k in range(n)
     ]
     assert isa.layout is not None

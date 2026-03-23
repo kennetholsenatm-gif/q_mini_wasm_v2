@@ -4,9 +4,9 @@ from __future__ import annotations
 
 
 def load_dotenv_if_available() -> None:
-    """Call ``load_dotenv()`` so ``HUGGING_FACE_HUB_TOKEN``, ``ACCELERATOR``, etc. can live in ``.env``.
+    """Call ``load_dotenv()`` so tokens and ``ACCELERATOR`` can live in ``.env``.
 
-    Does nothing if ``python-dotenv`` is not installed. Existing OS environment variables win.
+    Does nothing if ``python-dotenv`` is not installed. Existing OS env wins.
     """
     try:
         from dotenv import load_dotenv

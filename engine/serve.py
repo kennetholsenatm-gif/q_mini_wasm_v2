@@ -26,8 +26,8 @@ import torch
 from ._dotenv import load_dotenv_if_available
 
 load_dotenv_if_available()
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 
 app = FastAPI(title="QMiniWASM Inference", version="0.1.0")
 
@@ -114,7 +114,9 @@ class InferResponse(BaseModel):
     output: List[List[float]]
     cascade_logits: Optional[List[List[float]]] = Field(
         default=None,
-        description="Per-row router logits when USE_CASCADE_ROUTER=1 and checkpoint contains weights.",
+        description=(
+            "Per-row router logits when USE_CASCADE_ROUTER=1 and checkpoint contains weights."
+        ),
     )
 
 

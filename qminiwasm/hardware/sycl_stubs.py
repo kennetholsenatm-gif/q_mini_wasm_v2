@@ -43,7 +43,11 @@ class SYCLHardware:
         if SYCL_AVAILABLE:
             backend = RealSYCLHardware()
             is_active = getattr(backend, "is_backend_active", None)
-            backend_active = bool(is_active()) if callable(is_active) else (getattr(backend, "device", None) is not None)
+            backend_active = (
+                bool(is_active())
+                if callable(is_active)
+                else (getattr(backend, "device", None) is not None)
+            )
             if backend_active:
                 self._backend = backend
                 self.logger.info("Initialized SYCLHardware with active backend")

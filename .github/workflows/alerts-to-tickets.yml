@@ -1,6 +1,7 @@
-# Monitor GitHub alerts and create tickets for critical issues
+# Monitor Dependabot alerts and open issues for HIGH/CRITICAL findings.
+# Uses github.rest.dependabot.listAlertsForRepo (Dependabot API).
+# New issues are picked up by add-to-project.yml when ADD_TO_PROJECT_TOKEN is set.
 # Project: https://github.com/users/kennetholsenatm-gif/projects/3
-# View:   https://github.com/users/kennetholsenatm-gif/projects/3/views/1
 name: GitHub Alerts to Tickets
 
 env:
@@ -8,116 +9,84 @@ env:
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Run every 6 hours
-  workflow_dispatch:       # Allow manual triggering
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
   security-events: read
   issues: write
-  repository-projects: write
 
 jobs:
   check-alerts-and-create-tickets:
     runs-on: ubuntu-latest
     steps:
-      - name: Get repository alerts
-        id: get-alerts
+      - name: List Dependabot alerts and create issues
         uses: actions/github-script@v8
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { data: alerts } = await github.rest.security.getAlerts({
-              owner: context.repo.owner,
-              repo: context.repo.repo
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const alerts = await github.paginate(github.rest.dependabot.listAlertsForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
             });
 
-            const criticalAlerts = alerts.filter(alert => 
-              alert.security_advisory.severity === 'CRITICAL' ||
-              alert.security_advisory.severity === 'HIGH'
-            );
+            const critical = alerts.filter((a) => {
+              const sev = (a.security_advisory?.severity || '').toLowerCase();
+              return sev === 'critical' || sev === 'high';
+            });
 
-            core.setOutput('alerts', JSON.stringify(criticalAlerts));
-            core.setOutput('has_critical', criticalAlerts.length > 0);
+            if (critical.length === 0) {
+              core.info('No HIGH/CRITICAL Dependabot alerts.');
+              return;
+            }
 
-      - name: Create tickets for critical alerts
-        if: steps.get-alerts.outputs.has_critical == 'true'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const alerts = JSON.parse(context.payload.alerts);
-            const repoOwner = context.repo.owner;
-            const repoName = context.repo.repo;
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: 'alert',
+              per_page: 100,
+            });
+            const existingTitles = new Set(existing.map((i) => i.title));
 
-            for (const alert of alerts) {
+            for (const alert of critical) {
+              const adv = alert.security_advisory;
+              const title = `Security: ${adv?.summary || adv?.ghsa_id || 'Dependabot'} (${alert.number})`;
+              if (existingTitles.has(title)) {
+                core.info(`Skip duplicate: ${title}`);
+                continue;
+              }
+
               const body = [
-                '## Critical Security Alert',
+                '## Dependabot security alert',
                 '',
-                `- **Severity:** ${alert.security_advisory.severity}`,
-                `- **Type:** ${alert.security_advisory.cve || alert.security_advisory.ghsa_id}`,
-                `- **Package:** ${alert.security_advisory.affected_package_name}`,
-                `- **Vulnerable Versions:** ${alert.security_advisory.affected_range}`,
-                `- **Patched Versions:** ${alert.security_advisory.patched_versions || 'N/A'}`,
+                `- **Severity:** ${adv?.severity || 'unknown'}`,
+                `- **Package:** ${alert.dependency?.package?.name || 'n/a'}`,
+                `- **Manifest:** ${alert.dependency?.manifest_path || 'n/a'}`,
+                `- **Vulnerable range:** ${alert.security_vulnerability?.vulnerable_version_range || 'n/a'}`,
                 '',
-                `**Description:** ${alert.security_advisory.overview}`,
+                adv?.description ? `**Advisory:** ${String(adv.description).slice(0, 2000)}` : '',
                 '',
-                `**Remediation:** Update to a patched version or apply the recommended fix.`,
-                '',
-                `**References:**`,
-                `- [Security Advisory](${alert.security_advisory.url})`,
-                `- [Alert Details](${alert.html_url})`,
-                '',
-                '---',
-                '### Next Steps:',
-                '1. Review the affected code and dependencies',
-                '2. Update to a secure version if available',
-                '3. Test the changes in a development environment',
-                '4. Deploy the fix to production',
-                '5. Verify the alert is resolved'
-              ].join('\n');
+                `**Alert URL:** ${alert.html_url}`,
+                adv?.identifiers?.length ? `**IDs:** ${adv.identifiers.map((i) => i.value).join(', ')}` : '',
+              ].filter(Boolean).join('\n');
 
               const { data: issue } = await github.rest.issues.create({
-                owner: repoOwner,
-                repo: repoName,
-                title: `🚨 Critical Alert: ${alert.security_advisory.severity} - ${alert.security_advisory.affected_package_name}`,
+                owner,
+                repo,
+                title,
                 body,
-                labels: ['security', 'critical', 'automated', 'needs-triage', 'alert']
+                labels: ['security', 'critical', 'automated', 'needs-triage', 'alert'],
               });
-
-              core.info(`Created issue #${issue.number} for alert: ${alert.security_advisory.severity}`);
-
-              // Add to project
-              if (process.env.ADD_TO_PROJECT_TOKEN) {
-                try {
-                  const result = await github.graphql(`
-                    query {
-                      user(login: "kennetholsenatm-gif") {
-                        projectV2(number: 3) { id }
-                      }
-                    }
-                  `);
-                  const projectId = result?.user?.projectV2?.id;
-
-                  if (projectId) {
-                    await github.graphql(`
-                      mutation($projectId: ID!, $contentId: ID!) {
-                        addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
-                          item { id }
-                        }
-                      }
-                    `, { projectId, contentId: issue.node_id });
-
-                    core.info(`Added issue #${issue.number} to project #3`);
-                  }
-                } catch (error) {
-                  core.error(`Failed to add issue to project: ${error.message}`);
-                }
-              }
+              existingTitles.add(title);
+              core.info(`Created issue #${issue.number} for Dependabot alert ${alert.number}`);
             }
 
       - name: Summary
-        run: |
-          if [ "${{ steps.get-alerts.outputs.has_critical }}" = "true" ]; then
-            echo "Created tickets for critical alerts. Check the repository issues and project board."
-          else
-            echo "No critical alerts found. No tickets created."
-          fi
+        run: echo "Finished Dependabot alert sweep."

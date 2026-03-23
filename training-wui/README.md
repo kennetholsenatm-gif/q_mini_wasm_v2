@@ -6,6 +6,7 @@ Small web UI to pick a `configs/training/*.toml` file and run `python -m engine 
 
 - [Go](https://go.dev/dl/) 1.22+
 - Python env with the package installed (`pip install -e ".[training]"`) and `python` on `PATH`
+- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Incus guests: `training-wui/incus/install-opentofu.sh` installs `tofu` to `/usr/local/bin`.
 
 ## Run
 
@@ -39,14 +40,14 @@ Only one training process at a time is allowed (start another after the current 
 The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python -m engine` and **`destroy`** when the job exits or you **Stop** (optional checkbox: skip destroy if you want to keep the pod).
 
 - Set **`RUNPOD_TOKEN`** (or `RUNPOD_API_KEY`) in the repo **`.env`**; the WUI loads it on startup (`loadDotenvFromRepo`).
-- Stack lives in **`infra/runpod`** (see that folder’s README). Install **OpenTofu** (`tofu`) or Terraform on `PATH`.
+- Stack lives in **`infra/runpod`** (see that folder’s README). **`tofu` or `terraform` must be on `PATH`** (OpenTofu releases: `tofu`; install script in **`training-wui/incus/install-opentofu.sh`** for Linux/Incus).
 - **Training still runs on the same host as the WUI** (subprocess). The RunPod pod is provisioned for GPU / remote work; use **`public_ip`** from status outputs and SSH into the pod if you want training on the GPU there.
 
 **Cloud GPU (CUDA):** Pods default to **`ACCELERATOR=cuda`** in container env (`infra/runpod/variables.tf`). See **`infra/runpod/CLOUD_ACCELERATOR.md`** and **`scripts/runpod_sync_and_train.example.sh`** for rsync + SSH + `python -m engine` on the pod.
 
-**Infrastructure card** (top of the UI): status badges (token / `infra/runpod` / OpenTofu), tofu outputs (`public_ip`, pod id, cost), **Copy pod IP** / **Copy remote commands**, and a **Remote GPU** foldout with rsync/SSH snippets. **Log** is at the **bottom**, full page width.
+**Infrastructure tab:** edit **`infra/runpod/terraform.tfvars`** in the browser (Save / Reload / Insert example from `terraform.tfvars.example`), then **Status** (token / `infra/runpod` / `tofu`, outputs, copy buttons, **Remote GPU** snippets) and **OpenTofu CLI** (`tofu init` / `plan` / `apply` / `destroy` — use **plan** to debug apply exit 1). **Training** tab stays focused on configs and runs; **log** stays at the bottom on both tabs.
 
-`GET /api/runpod/status` — token, binary, `tofu output` (when state exists). Start APIs accept `run_target`: `"local"` | `"runpod"` and `runpod_destroy_on_exit` (default true for RunPod).
+`GET /api/runpod/status` — token, binary, `tofu output` (when state exists). `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional). Start APIs accept `run_target`: `"local"` | `"runpod"`, `runpod_destroy_on_exit`, and optional **`runpod_var_file`** (basename under `infra/runpod`; UI defaults to `terraform.tfvars`).
 
 **Preflight FAQ**
 
@@ -56,7 +57,15 @@ The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python 
 
 ## Incus container (in this repo)
 
-On the machine where `incus` runs: **`training-wui/incus/setup-instance.sh`** and how to start the WUI — see [`incus/README.md`](incus/README.md). Repo root in the guest is **`/opt/qmw`** (`-root` for the WUI).
+On the machine where `incus` runs (e.g. WSL):
+
+```bash
+cd /mnt/c/GitHub/LLM_Pract/qminiwasm-core/training-wui/incus   # adjust to your clone
+chmod +x run-setup.sh setup-instance.sh install-opentofu.sh
+./run-setup.sh
+```
+
+Or **`./setup-instance.sh /absolute/path/to/qminiwasm-core`**. Full details, autostart, and troubleshooting: [`incus/README.md`](incus/README.md). In the guest, repo root is **`/opt/qmw`** (WUI `-root`).
 
 ## Security note
 

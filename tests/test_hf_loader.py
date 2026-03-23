@@ -75,7 +75,7 @@ def test_engine_config_hf_context_fields_toml(tmp_path, monkeypatch):
     f.write_text("", encoding="utf-8")
     assert EngineConfig.from_training_toml(f).hf_context_fields is None
 
-    f.write_text('[huggingface]\ncontext_fields = []\n', encoding="utf-8")
+    f.write_text("[huggingface]\ncontext_fields = []\n", encoding="utf-8")
     assert EngineConfig.from_training_toml(f).hf_context_fields == []
 
     f.write_text('[huggingface]\ncontext_fields = ["repo", "path"]\n', encoding="utf-8")

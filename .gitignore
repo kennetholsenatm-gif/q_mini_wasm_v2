@@ -67,6 +67,7 @@ Dockerfile*
 !containers/wui/Dockerfile
 !containers/wui/Dockerfile.almalinux
 !docker/Dockerfile.inference
+!docker/Dockerfile.backend
 docker-compose*.yml
 docker-compose*.yaml
 !docker-compose.yml

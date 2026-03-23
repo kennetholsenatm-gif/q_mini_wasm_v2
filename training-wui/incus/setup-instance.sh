@@ -38,6 +38,9 @@ else
   echo "Instance $INSTANCE already exists; skipping launch."
 fi
 
+# Always ensure the instance starts when the Incus host boots (fixes older instances created before this was set).
+incus config set "$INSTANCE" boot.autostart true
+
 if incus config device show "$INSTANCE" 2>/dev/null | grep -q '^qmw-repo:'; then
   echo "Device qmw-repo already present; remove it first if you need a different source path."
 else
@@ -49,14 +52,17 @@ echo "Installing OS packages inside $INSTANCE (dnf)..."
 incus exec "$INSTANCE" -- bash -s <<'EOS'
 set -euo pipefail
 if command -v dnf >/dev/null 2>&1; then
-  dnf install -y golang git python3-pip python3-devel gcc gcc-c++ make openssl-devel libffi-devel
+  dnf install -y curl unzip golang git python3-pip python3-devel gcc gcc-c++ make openssl-devel libffi-devel
 elif command -v yum >/dev/null 2>&1; then
-  yum install -y golang git python3-pip python3-devel gcc gcc-c++ make openssl-devel libffi-devel
+  yum install -y curl unzip golang git python3-pip python3-devel gcc gcc-c++ make openssl-devel libffi-devel
 else
   echo "Neither dnf nor yum found in guest." >&2
   exit 1
 fi
 EOS
+
+echo "Installing OpenTofu (tofu) to /usr/local/bin for RunPod / infra/runpod from the WUI..."
+incus exec "$INSTANCE" -- bash /opt/qmw/training-wui/incus/install-opentofu.sh
 
 echo "Allow TCP 8765 on guest (Alma cloud images often run firewalld) ..."
 incus exec "$INSTANCE" -- bash -s <<'EOS'
@@ -85,11 +91,19 @@ echo "Installing Python deps and package (CPU torch) — can take several minute
 incus exec "$INSTANCE" -- bash -s <<'EOS'
 set -euo pipefail
 cd /opt/qmw
-python3 -m pip install --upgrade pip setuptools wheel
+for f in README.md pyproject.toml setup.py; do
+  if [[ ! -f "$f" ]]; then
+    echo "error: /opt/qmw/$f missing — is the repo bind-mount complete?" >&2
+    exit 1
+  fi
+done
+python3 -m pip install --upgrade "pip>=24.2" "setuptools>=69" wheel
 python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python3 -m pip install -r requirements/docker.txt
 python3 -m pip install "pydantic>=2.5" "datasets>=2.14"
-python3 -m pip install -e . --no-deps
+# Editable metadata: use the same env as runtime deps (torch, qiskit, …). Isolated builds
+# often fail with "Failed to build file:///opt/qmw when getting requirements to build editable".
+python3 -m pip install -e . --no-deps --no-build-isolation
 EOS
 
 echo "Installing systemd unit so WUI starts on container boot..."
@@ -98,8 +112,8 @@ set -euo pipefail
 UNIT_SRC=/opt/qmw/training-wui/incus/training-wui.service
 UNIT_DST=/etc/systemd/system/training-wui.service
 if [[ ! -f "$UNIT_SRC" ]]; then
-  echo "warning: $UNIT_SRC missing — skip systemd autostart (pull latest repo or add training-wui/incus/training-wui.service)" >&2
-  exit 0
+  echo "error: $UNIT_SRC missing — pull latest repo or add training-wui/incus/training-wui.service" >&2
+  exit 1
 fi
 cp -f "$UNIT_SRC" "$UNIT_DST"
 systemctl daemon-reload

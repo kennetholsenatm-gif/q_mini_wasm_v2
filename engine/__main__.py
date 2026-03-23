@@ -12,7 +12,7 @@ from .train import main as train_main
 
 
 def _quiet_third_party_loggers() -> None:
-    """Keep Hugging Face / HTTP client traffic off INFO (less noise; stderr stays smaller on PowerShell)."""
+    """Keep Hugging Face / HTTP client traffic off INFO (quieter stderr on PowerShell)."""
     for name in (
         "httpx",
         "httpcore",
@@ -30,7 +30,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         metavar="PATH",
-        help="Training TOML (see configs/training/). When omitted, settings come from environment variables.",
+        help=(
+            "Training TOML (see configs/training/). When omitted, settings come from environment."
+        ),
     )
     return p.parse_args(argv)
 

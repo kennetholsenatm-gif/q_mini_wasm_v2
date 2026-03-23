@@ -29,6 +29,11 @@ python -m pip install --upgrade pip
 pip install -e .
 ```
 
+## GitHub Actions and branch protection
+
+- **Workflow index and drift notes:** see [`.github/README.md`](../.github/README.md) (CI vs security jobs, RunPod OpenTofu, failed-run automation).
+- **Branch rules** (required reviews, status checks) are configured in **GitHub → Settings → Rules** for the default branch. The workflow [`.github/workflows/branch-protection.yml`](../.github/workflows/branch-protection.yml) is **informational only** (it does not enforce protection via the API).
+
 ## Development Workflow Steps
 
 ### 1. Feature Branch Creation

@@ -43,7 +43,7 @@ def test_engine_config_from_toml_merges_hf_token_from_env(monkeypatch, tmp_path)
 
     f = tmp_path / "t.toml"
     f.write_text(
-        "[data]\nsource = \"mesh\"\n[training]\nepochs = 3\n",
+        '[data]\nsource = "mesh"\n[training]\nepochs = 3\n',
         encoding="utf-8",
     )
     from engine.config import EngineConfig
@@ -97,7 +97,7 @@ def test_load_serve_toml_default_section(tmp_path):
 
     f = tmp_path / "serve.toml"
     f.write_text(
-        "[serve]\ncheckpoint = \"ck.pt\"\nhybrid_adapter = true\n",
+        '[serve]\ncheckpoint = "ck.pt"\nhybrid_adapter = true\n',
         encoding="utf-8",
     )
     s = load_serve_toml(f)

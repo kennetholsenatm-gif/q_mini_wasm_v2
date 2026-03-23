@@ -1,0 +1,18 @@
+# https://editorconfig.org — align with .gitattributes (*.py eol=lf) and Black in CI.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{py,pyi}]
+end_of_line = lf
+indent_style = space
+indent_size = 4
+
+[*.{sh,yml,yaml}]
+end_of_line = lf
+
+[*.md]
+trim_trailing_whitespace = false
