@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QMiniWASM — training</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #131d31;
+      --panel-soft: #17253d;
+      --text: #e8edf5;
+      --muted: #92a3bf;
+      --accent: #4f8fff;
+      --ok: #3fb950;
+      --warn: #e3b341;
+      --err: #f85149;
+      --border: #2b3f62;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    header {
+      padding: 1rem 1.5rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #16233b 0%, #121b2e 100%);
+      position: sticky;
+      top: 0;
+      z-index: 9;
+      backdrop-filter: blur(4px);
+    }
+    h1 { font-size: 1.15rem; font-weight: 650; margin: 0; letter-spacing: 0.2px; }
+    p.sub { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+    }
+    .top-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    main {
+      padding: 1.25rem 1.5rem 1.5rem;
+      max-width: 1240px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(320px, 430px) 1fr;
+      gap: 1rem;
+      align-items: start;
+    }
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-width: 0;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    h2 {
+      font-size: 0.95rem;
+      margin: 0 0 0.75rem;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    select, input[type="text"] {
+      width: 100%;
+      max-width: 100%;
+      padding: 0.5rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-top: 0.75rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem 1rem;
+    }
+    .wizard-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.6rem;
+    }
+    .wizard-steps {
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.65rem;
+    }
+    .wstep {
+      font-size: 0.75rem;
+      padding: 0.16rem 0.52rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--bg);
+    }
+    .wstep.active {
+      border-color: var(--accent);
+      color: #dce8ff;
+      background: rgba(79, 143, 255, 0.22);
+    }
+    .wstep.done {
+      border-color: var(--ok);
+      color: var(--ok);
+    }
+    .wizard-nav {
+      display: flex;
+      gap: 0.55rem;
+      margin-top: 0.75rem;
+    }
+    .hint {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+    .checkline {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-top: 0.45rem;
+      font-size: 0.84rem;
+      color: var(--text);
+    }
+    .wizard-pane[hidden] { display: none; }
+    .review-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 0.6rem 0.7rem;
+      font-size: 0.84rem;
+    }
+    details.adv {
+      margin-top: 0.9rem;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem 0.75rem;
+      background: rgba(23, 37, 61, 0.35);
+    }
+    details.adv > summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.85rem;
+      user-select: none;
+      margin-bottom: 0.5rem;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 0.65rem;
+      margin-top: 0.75rem;
+    }
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 0.55rem 0.65rem;
+    }
+    .metric .mk {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 0.15rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .metric .mv {
+      font-size: 0.95rem;
+      font-weight: 650;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button.primary { background: var(--accent); color: #fff; }
+    button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.danger { background: var(--err); color: #fff; }
+    button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    pre#log {
+      margin: 0;
+      padding: 0.75rem;
+      background: var(--bg);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-size: 0.75rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 420px;
+      overflow-y: auto;
+      font-family: ui-monospace, Consolas, monospace;
+    }
+    .status { font-size: 0.85rem; }
+    .status.running { color: var(--ok); }
+    .status.done { color: var(--muted); }
+    .status.error { color: var(--err); }
+    .badge {
+      display: inline-block;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      vertical-align: middle;
+    }
+    .badge.ok { color: var(--ok); border-color: var(--ok); }
+    .badge.warn { color: #e3b341; border-color: #e3b341; }
+    .badge.err { color: var(--err); border-color: var(--err); }
+    .runs { list-style: none; padding: 0; margin: 0; }
+    .runs li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .runs li:last-child { border-bottom: none; }
+    code { font-size: 0.8em; background: var(--bg); padding: 0.1em 0.35em; border-radius: 4px; }
+    .kv {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 0.45rem 0.8rem;
+      font-size: 0.85rem;
+    }
+    .kv .k { color: var(--muted); }
+    .kv .v { word-break: break-word; }
+    @media (max-width: 980px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+      .metrics {
+        grid-template-columns: repeat(3, minmax(90px, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <h1>QMiniWASM training dashboard</h1>
+        <p class="sub">Runs <code>python -m engine --config …</code> from repo root with preflight checks and live logs.</p>
+      </div>
+      <div class="top-actions">
+        <button type="button" class="ghost" id="btnRefresh">Refresh configs</button>
+        <button type="button" class="ghost" id="btnPreflight">Refresh preflight</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <div class="col">
+      <section>
+        <h2>Quick metrics</h2>
+        <div class="metrics">
+          <div class="metric">
+            <div class="mk">Configs</div>
+            <div class="mv" id="mConfigs">-</div>
+          </div>
+          <div class="metric">
+            <div class="mk">Runs shown</div>
+            <div class="mv" id="mRuns">-</div>
+          </div>
+          <div class="metric">
+            <div class="mk">Active run</div>
+            <div class="mv" id="mActive">none</div>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2>Start from existing config</h2>
+        <label for="cfg">Config (configs/training/*.toml)</label>
+        <select id="cfg"></select>
+        <div class="row">
+          <button type="button" class="primary" id="btnStart">Start training</button>
+        </div>
+        <p class="status" id="msg" style="margin-top:0.75rem"></p>
+      </section>
+      <section>
+        <h2>Preflight <span id="preflightBadge" class="badge">UNKNOWN</span></h2>
+        <p class="status" id="preflightMsg" style="margin-top:0.75rem"></p>
+        <div class="kv" id="preflightKv"></div>
+      </section>
+      <section>
+        <h2>Active / recent runs</h2>
+        <ul class="runs" id="runs"></ul>
+      </section>
+    </div>
+    <div class="col">
+      <section>
+        <h2>Build + run config</h2>
+        <div class="wizard-head">
+          <label style="margin:0; display:flex; align-items:center; gap:0.45rem; color:var(--text)">
+            <input id="bWizardMode" type="checkbox" checked />
+            Wizard mode
+          </label>
+        </div>
+        <div class="wizard-steps" id="bWizardSteps" style="display:none">
+          <span class="wstep" id="ws1">1 Basics</span>
+          <span class="wstep" id="ws2">2 Data</span>
+          <span class="wstep" id="ws3">3 Training</span>
+          <span class="wstep" id="ws4">4 Review</span>
+        </div>
+        <div class="grid">
+          <div class="wizard-pane" data-step="1">
+            <label for="bName">Config name (optional)</label>
+            <input id="bName" type="text" placeholder="ui_my_experiment" />
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bAccel">Accelerator</label>
+            <select id="bAccel">
+              <option value="cpu">cpu</option>
+              <option value="sycl">sycl</option>
+              <option value="xpu">xpu</option>
+              <option value="cuda">cuda</option>
+            </select>
+          </div>
+          <div class="wizard-pane" data-step="2">
+            <label for="bDataSource">Data source</label>
+            <select id="bDataSource">
+              <option value="mesh">mesh</option>
+              <option value="hf_tabular">hf_tabular</option>
+              <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
+            </select>
+          </div>
+          <div id="hfPresetWrap" class="wizard-pane" data-step="2">
+            <label for="bDatasetPreset">HF dataset preset</label>
+            <select id="bDatasetPreset">
+              <option value="">(custom / keep current)</option>
+              <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
+              <option value="code-search-net/code_search_net|java">CodeSearchNet (java)</option>
+              <option value="code-search-net/code_search_net|javascript">CodeSearchNet (javascript)</option>
+              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
+              <option value="bigcode/the-stack-smol|python">The Stack Smol (python)</option>
+            </select>
+            <div class="hint">Choose a preset to auto-fill dataset id and config.</div>
+          </div>
+          <div id="hfPathWrap" class="wizard-pane" data-step="2">
+            <label for="bDataPath">HF dataset id (data.path)</label>
+            <input id="bDataPath" type="text" placeholder="code-search-net/code_search_net" />
+            <div class="hint">Required for <code>hf_tabular</code> and hybrid mode.</div>
+          </div>
+          <div class="wizard-pane" data-step="3">
+            <label for="bEpochs">Epochs</label>
+            <input id="bEpochs" type="text" value="25" />
+          </div>
+          <div class="wizard-pane" data-step="3">
+            <label for="bBatch">Batch size</label>
+            <input id="bBatch" type="text" value="32" />
+          </div>
+          <div class="wizard-pane" data-step="3">
+            <label for="bLR">Learning rate</label>
+            <input id="bLR" type="text" value="0.0001" />
+            <label class="checkline">
+              <input id="bLRTrialMode" type="checkbox" />
+              Treat Build+Run as LR trial run
+            </label>
+            <div id="bLRTrialWrap" style="display:none; margin-top:0.45rem">
+              <label for="bLRTrialEpochs">Trial epochs</label>
+              <input id="bLRTrialEpochs" type="text" value="2" />
+              <div class="hint">Runs short and adds per-epoch eval logging for LR comparison.</div>
+            </div>
+          </div>
+          <div class="wizard-pane" data-step="4" style="grid-column:1/-1">
+            <div class="review-box" id="bReview"></div>
+          </div>
+        </div>
+        <details class="adv wizard-pane" data-step="2">
+          <summary>Advanced data options</summary>
+          <div class="grid" style="margin-top:0.25rem">
+            <div id="hfConfigWrap">
+              <label for="bDatasetConfig">HF dataset config (optional)</label>
+              <input id="bDatasetConfig" type="text" placeholder="python" />
+            </div>
+            <div id="hfSplitWrap">
+              <label for="bSplit">HF split</label>
+              <input id="bSplit" type="text" value="train" />
+            </div>
+            <div id="hfBlendWrap">
+              <label for="bBlend">HF mesh blend fraction</label>
+              <input id="bBlend" type="text" value="0.20" />
+            </div>
+          </div>
+        </details>
+        <div class="wizard-nav" id="bWizardNav" style="display:none">
+          <button type="button" class="ghost" id="btnWPrev">Back</button>
+          <button type="button" class="ghost" id="btnWNext">Next</button>
+        </div>
+        <div class="row wizard-pane" data-step="3">
+          <button type="button" class="ghost" id="btnAutoLR">Auto-select learning rate</button>
+          <span class="status" id="autoLRMsg"></span>
+        </div>
+        <div class="row">
+          <button type="button" class="primary" id="btnBuildRun">Build + Start training</button>
+        </div>
+        <p class="status" id="buildMsg" style="margin-top:0.75rem"></p>
+      </section>
+      <section>
+        <h2>Log <span id="logTitle"></span></h2>
+        <div class="row" style="margin-bottom:0.75rem">
+          <button type="button" class="danger" id="btnStop" disabled>Stop run</button>
+          <button type="button" class="ghost" id="btnClearLog">Clear view</button>
+        </div>
+        <pre id="log"></pre>
+      </section>
+    </div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let pollTimer = null;
+    let logOffset = 0;
+    let activeRunId = null;
+    let bWizardStep = 1;
+
+    async function loadConfigs() {
+      const r = await fetch("/api/configs");
+      const data = await r.json();
+      const sel = $("cfg");
+      sel.innerHTML = "";
+      for (const c of data.configs || []) {
+        const o = document.createElement("option");
+        o.value = c.path;
+        o.textContent = c.name;
+        sel.appendChild(o);
+      }
+      if (!sel.options.length) {
+        const o = document.createElement("option");
+        o.value = "";
+        o.textContent = "(no .toml files in configs/training)";
+        sel.appendChild(o);
+      }
+      $("mConfigs").textContent = String(sel.options.length || 0);
+    }
+
+    async function loadRuns() {
+      const r = await fetch("/api/runs");
+      const data = await r.json();
+      const ul = $("runs");
+      ul.innerHTML = "";
+      const runs = (data.runs || []).slice(0, 12);
+      $("mRuns").textContent = String(runs.length);
+      const active = runs.find((r) => r.running);
+      $("mActive").textContent = active ? active.id.slice(0, 8) : "none";
+      for (const run of runs) {
+        const li = document.createElement("li");
+        const left = document.createElement("span");
+        left.innerHTML = `<code>${run.id.slice(0, 8)}</code> · ${escapeHtml(run.config)}`;
+        const right = document.createElement("span");
+        let st = run.running ? "running" : run.error ? "error" : "done";
+        right.className = "status " + st;
+        right.textContent = run.running ? "Running" : run.error ? ("Exit " + run.exit_code) : "Finished";
+        li.appendChild(left);
+        li.appendChild(right);
+        li.style.cursor = "pointer";
+        li.onclick = () => selectRun(run.id, run.config);
+        ul.appendChild(li);
+      }
+    }
+
+    function setPreflightKV(items) {
+      const box = $("preflightKv");
+      box.innerHTML = "";
+      for (const [k, v] of items) {
+        const key = document.createElement("div");
+        key.className = "k";
+        key.textContent = k;
+        const val = document.createElement("div");
+        val.className = "v";
+        val.textContent = String(v);
+        box.appendChild(key);
+        box.appendChild(val);
+      }
+    }
+
+    function buildPayload() {
+      return {
+        name: $("bName").value.trim(),
+        accelerator: $("bAccel").value,
+        data_source: $("bDataSource").value,
+        data_path: $("bDataPath").value.trim(),
+        hf_dataset_config: $("bDatasetConfig").value.trim(),
+        hf_split: $("bSplit").value.trim() || "train",
+        hf_mesh_blend_fraction: Number($("bBlend").value || "0"),
+        epochs: Number($("bEpochs").value || "25"),
+        batch_size: Number($("bBatch").value || "32"),
+        learning_rate: Number($("bLR").value || "0.0001"),
+        lr_trial_mode: !!$("bLRTrialMode").checked,
+        lr_trial_epochs: Number($("bLRTrialEpochs").value || "2"),
+      };
+    }
+
+    function refreshWizardReview() {
+      const p = buildPayload();
+      $("bReview").innerHTML =
+        `<strong>Config</strong>: ${escapeHtml(p.name || "(auto-generated)")}<br/>` +
+        `<strong>Accelerator</strong>: ${escapeHtml(p.accelerator)}<br/>` +
+        `<strong>Data source</strong>: ${escapeHtml(p.data_source)}<br/>` +
+        `<strong>Dataset</strong>: ${escapeHtml(p.data_path || "(n/a)")}<br/>` +
+        `<strong>HF config/split</strong>: ${escapeHtml(p.hf_dataset_config || "(none)")} / ${escapeHtml(p.hf_split)}<br/>` +
+        `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
+        `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
+        `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}`;
+    }
+
+    function renderWizard() {
+      const wiz = $("bWizardMode").checked;
+      $("bWizardSteps").style.display = wiz ? "flex" : "none";
+      $("bWizardNav").style.display = wiz ? "flex" : "none";
+      const panes = document.querySelectorAll(".wizard-pane");
+      for (const el of panes) {
+        const step = Number(el.getAttribute("data-step") || "0");
+        el.hidden = wiz ? (step !== bWizardStep) : false;
+      }
+      for (let i = 1; i <= 4; i++) {
+        const s = $("ws" + i);
+        s.className = "wstep" + (i === bWizardStep ? " active" : (i < bWizardStep ? " done" : ""));
+      }
+      $("btnWPrev").disabled = !wiz || bWizardStep <= 1;
+      $("btnWNext").style.display = wiz && bWizardStep < 4 ? "inline-block" : "none";
+      $("btnBuildRun").style.display = wiz && bWizardStep < 4 ? "none" : "inline-block";
+      if (wiz && bWizardStep === 4) refreshWizardReview();
+    }
+
+    function toggleLRTrial() {
+      $("bLRTrialWrap").style.display = $("bLRTrialMode").checked ? "block" : "none";
+      refreshWizardReview();
+    }
+
+    function toggleHFFields() {
+      const mode = $("bDataSource").value;
+      const isHF = mode === "hf_tabular" || mode === "hybrid_mesh_hf_tabular";
+      const isHybrid = mode === "hybrid_mesh_hf_tabular";
+      for (const id of ["hfPresetWrap", "hfPathWrap", "hfConfigWrap", "hfSplitWrap", "hfBlendWrap"]) {
+        $(id).style.display = isHF ? "block" : "none";
+      }
+      if (isHybrid && !$("bBlend").value.trim()) {
+        $("bBlend").value = "0.20";
+      }
+      if (isHybrid) {
+        $("bBlend").placeholder = "0.20 (required for hybrid)";
+      } else {
+        $("bBlend").placeholder = "0.20";
+      }
+    }
+
+    function applyDatasetPreset() {
+      const v = $("bDatasetPreset").value;
+      if (!v) return;
+      const parts = v.split("|");
+      const ds = parts[0] || "";
+      const cfg = parts[1] || "";
+      if (ds) $("bDataPath").value = ds;
+      if (cfg) {
+        $("bDatasetConfig").value = cfg;
+      } else if (!$("bDatasetConfig").value.trim()) {
+        $("bDatasetConfig").value = "";
+      }
+    }
+
+    function setPreflightBadge(kind, label) {
+      const b = $("preflightBadge");
+      b.className = "badge " + kind;
+      b.textContent = label;
+    }
+
+    function evaluatePreflightHealth(p) {
+      const resolved = String(p.resolved_torch_device || "").toLowerCase();
+      const syclActive = !!p.sycl_backend_active;
+      const dpctlCount = Number.isFinite(Number(p.dpctl_device_count))
+        ? Number(p.dpctl_device_count)
+        : null;
+      const dpctlErr = String(p.dpctl_error || "");
+      if (resolved.startsWith("xpu") || resolved.startsWith("cuda")) {
+        return { kind: "ok", label: "OK" };
+      }
+      if (syclActive || (dpctlCount !== null && dpctlCount > 0)) {
+        return { kind: "warn", label: "WARN" };
+      }
+      if (dpctlErr) {
+        return { kind: "err", label: "ERROR" };
+      }
+      return { kind: "warn", label: "CPU" };
+    }
+
+    async function loadPreflight() {
+      const cfg = $("cfg").value || "";
+      const msg = $("preflightMsg");
+      msg.textContent = "Checking runtime...";
+      msg.className = "status";
+      try {
+        const q = cfg ? ("?config=" + encodeURIComponent(cfg)) : "";
+        const r = await fetch("/api/preflight" + q);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const p = data.preflight || {};
+        const health = evaluatePreflightHealth(p);
+        setPreflightBadge(health.kind, health.label);
+        setPreflightKV([
+          ["Config", p.config || "(env/default)"],
+          ["Requested accelerator", p.requested_accelerator || "auto"],
+          ["Resolved torch device", p.resolved_torch_device || "unknown"],
+          ["SYCL backend active", p.sycl_backend_active ? "yes" : "no"],
+          ["dpctl device count", p.dpctl_device_count ?? "n/a"],
+          ["Python executable", p.python_exe || "unknown"],
+          ["dpctl error", p.dpctl_error || "(none)"],
+        ]);
+        msg.textContent = "Preflight OK";
+        msg.className = "status done";
+      } catch (e) {
+        setPreflightBadge("err", "ERROR");
+        setPreflightKV([]);
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function selectRun(id, configPath) {
+      activeRunId = id;
+      logOffset = 0;
+      $("log").textContent = "";
+      $("logTitle").textContent = id ? "· " + (configPath || id) : "";
+      $("btnStop").disabled = !id;
+      if (pollTimer) clearInterval(pollTimer);
+      if (!id) return;
+      pollTimer = setInterval(pollLog, 800);
+      pollLog();
+    }
+
+    async function pollLog() {
+      if (!activeRunId) return;
+      try {
+        const r = await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/log?offset=" + logOffset);
+        const data = await r.json();
+        if (data.text) {
+          $("log").textContent += data.text;
+          $("log").scrollTop = $("log").scrollHeight;
+        }
+        logOffset = data.next_offset || logOffset;
+        $("btnStop").disabled = !data.running;
+        await loadRuns();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    $("btnStart").onclick = async () => {
+      const path = $("cfg").value;
+      $("msg").textContent = "";
+      if (!path) return;
+      $("btnStart").disabled = true;
+      try {
+        const r = await fetch("/api/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config: path }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        $("msg").textContent = "Started " + data.id;
+        $("msg").className = "status running";
+        await loadRuns();
+        selectRun(data.id, data.config);
+      } catch (e) {
+        $("msg").textContent = String(e.message || e);
+        $("msg").className = "status error";
+      } finally {
+        $("btnStart").disabled = false;
+      }
+    };
+
+    $("btnStop").onclick = async () => {
+      if (!activeRunId) return;
+      await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/stop", { method: "POST" });
+      await loadRuns();
+      pollLog();
+    };
+
+    $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); };
+    $("btnPreflight").onclick = loadPreflight;
+    $("cfg").onchange = loadPreflight;
+    $("bDataSource").onchange = toggleHFFields;
+    $("bLRTrialMode").onchange = toggleLRTrial;
+    $("bDatasetPreset").onchange = applyDatasetPreset;
+    $("bWizardMode").onchange = () => { bWizardStep = 1; renderWizard(); };
+    $("btnWPrev").onclick = () => { bWizardStep = Math.max(1, bWizardStep - 1); renderWizard(); };
+    $("btnWNext").onclick = () => { bWizardStep = Math.min(4, bWizardStep + 1); renderWizard(); };
+    $("btnAutoLR").onclick = async () => {
+      const msg = $("autoLRMsg");
+      msg.textContent = "Running short LR sweep...";
+      msg.className = "status";
+      $("btnAutoLR").disabled = true;
+      try {
+        const r = await fetch("/api/lr/auto", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildPayload()),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (data.recommended_lr !== undefined && data.recommended_lr !== null) {
+          $("bLR").value = String(data.recommended_lr);
+        }
+        msg.textContent = `LR set to ${$("bLR").value} (${data.promoted ? "promoted" : "baseline retained"})`;
+        msg.className = "status done";
+        refreshWizardReview();
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      } finally {
+        $("btnAutoLR").disabled = false;
+      }
+    };
+    $("btnBuildRun").onclick = async () => {
+      const msg = $("buildMsg");
+      msg.textContent = "";
+      const payload = buildPayload();
+      $("btnBuildRun").disabled = true;
+      try {
+        const r = await fetch("/api/runs/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        msg.textContent = "Built and started " + data.id + " (" + data.config + ")";
+        msg.className = "status running";
+        await loadConfigs();
+        await loadRuns();
+        await loadPreflight();
+        selectRun(data.id, data.config);
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      } finally {
+        $("btnBuildRun").disabled = false;
+      }
+    };
+    $("btnClearLog").onclick = () => { $("log").textContent = ""; logOffset = 0; if (activeRunId) pollLog(); };
+
+    toggleHFFields();
+    toggleLRTrial();
+    renderWizard();
+    loadConfigs().then(loadPreflight);
+    loadRuns();
+    setInterval(loadRuns, 5000);
+  </script>
+</body>
+</html>

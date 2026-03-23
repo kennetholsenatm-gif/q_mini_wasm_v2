@@ -1,0 +1,84 @@
+# Reference: training TOML layout (all tables/keys optional unless noted).
+# Validated by engine.training_schema.TrainingConfig (Pydantic).
+# Do not put secrets here — use HUGGING_FACE_HUB_TOKEN / HF_TOKEN in the environment.
+
+[hardware]
+# accelerator = "cpu" | "cuda" | "xpu" | "sycl" | ...
+# Note: "sycl" currently maps to torch XPU selection with CPU fallback.
+# device_index = 0
+# quantum_backend = "penny_lane"
+# num_qubits = 8
+# qaoa_layers = 3
+# diff_method = "parameter-shift"
+
+[training]
+# epochs = 25
+# batch_size = 32
+# learning_rate = 1.0e-4
+# seed = 42
+# grad_clip_norm = 1.0
+# lr_plateau_patience = 2
+# lr_plateau_factor = 0.5
+# lr_plateau_min_lr = 1.0e-7
+# early_stop_patience = 0
+
+[data]
+# source = "mesh" | "corpus" | "hf_tabular"
+# path = "optional DATA_PATH"
+# mesh_algorithms = "hash,encrypt,network,routing,consensus"
+
+[huggingface]
+# dataset_config = "repo/dataset"
+# num_samples = 1000
+# split = "train"
+# text_fields = ["field_a"]
+# context_fields = ["field_b"]
+# wasi_slice_only = false
+# wasi_max_scan = 100
+# mesh_blend_fraction = 0.0
+
+[checkpoint]
+# load_path = "..."
+# save_path = "..."
+# best_path = "..."
+# latest_path = "..."
+
+[eval]
+# holdout_fraction = 0.0
+# every_epoch = false
+# target_mean_mse = 1.0e-4
+# stop_on_target_mse = false
+
+[adapter]
+# hybrid_adapter = false
+# hybrid_adapter_hidden = 1024
+# tequila_deadzone = 0.0
+# lota_rank = 0
+# use_tsign_ternary = false
+# tsign_learning_rate = 0.001
+# lota_merge_every_epoch = false
+
+[cascade]
+# enabled = true                    # CASCADE_RL
+# policy_lr = 1.0e-4
+# steps_per_epoch = 2
+# group_size = 4
+# state_dim = 8
+# num_actions = 4
+# mopd_lambda = 0.0
+# mopd_feat_loss = "mse"            # or "cosine"
+# seed_from_hidden = true
+# use_router = false
+# learned_projector = false
+# router_hidden = 32
+# couple_forward = true
+
+[serve]
+# Used when loading configs/serve/*.toml (inference). Optional in training files.
+# checkpoint = "path/to.ckpt"
+# hybrid_adapter = false
+# hybrid_adapter_hidden = 1024
+# use_cascade_router = false
+# cascade_state_dim = 8
+# cascade_num_actions = 4
+# cascade_router_hidden = 32

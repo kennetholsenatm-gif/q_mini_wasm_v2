@@ -1,0 +1,56 @@
+# Phase 2 (GPU): STEM continuation run from phase 1 checkpoint with Cascade RL + MOPD.
+
+[hardware]
+accelerator = "cuda"
+device_index = 0
+
+[training]
+epochs = 18
+batch_size = 24
+learning_rate = 0.00008
+grad_clip_norm = 1.0
+lr_plateau_patience = 2
+lr_plateau_factor = 0.5
+lr_plateau_min_lr = 1.0e-7
+seed = 42
+
+[data]
+source = "hf_tabular"
+path = "AI-MO/NuminaMath-CoT"
+mesh_algorithms = "hash,encrypt,network,routing,consensus"
+
+[huggingface]
+split = "train"
+num_samples = 18000
+wasi_slice_only = false
+wasi_max_scan = 200000
+mesh_blend_fraction = 0.10
+text_fields = ["problem", "solution"]
+context_fields = ["source", "category"]
+
+[checkpoint]
+load_path = "artifacts/stem_code_blend_phase1_cpu_latest.pt"
+save_path = "artifacts/stem_code_blend_phase2_gpu.pt"
+best_path = "artifacts/stem_code_blend_phase2_gpu_best.pt"
+latest_path = "artifacts/stem_code_blend_phase2_gpu_latest.pt"
+
+[eval]
+holdout_fraction = 0.05
+every_epoch = true
+target_mean_mse = 0.00008
+stop_on_target_mse = false
+
+[cascade]
+enabled = true
+policy_lr = 0.00006
+steps_per_epoch = 3
+group_size = 4
+state_dim = 8
+num_actions = 4
+mopd_lambda = 0.10
+mopd_feat_loss = "cosine"
+seed_from_hidden = true
+use_router = true
+learned_projector = true
+router_hidden = 32
+couple_forward = true

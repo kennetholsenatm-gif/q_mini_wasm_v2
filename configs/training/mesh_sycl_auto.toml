@@ -1,0 +1,28 @@
+# SYCL alias profile.
+# In this codebase, accelerator=sycl maps to XPU-first torch selection, then CPU fallback.
+
+[hardware]
+accelerator = "sycl"
+device_index = 0
+quantum_backend = "penny_lane"
+num_qubits = 8
+qaoa_layers = 3
+diff_method = "parameter-shift"
+
+[training]
+epochs = 25
+batch_size = 32
+learning_rate = 0.0001
+
+[data]
+source = "mesh"
+mesh_algorithms = "hash,encrypt,network,routing,consensus"
+
+[eval]
+holdout_fraction = 0.0
+every_epoch = false
+
+[cascade]
+enabled = true
+steps_per_epoch = 2
+group_size = 4

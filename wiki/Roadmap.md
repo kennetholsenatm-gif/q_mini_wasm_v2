@@ -55,8 +55,15 @@ Q-Mini-WASM's roadmap outlines the strategic vision for the future development o
 ### Performance Initiatives
 - **AI-powered Optimization**: Machine learning for performance optimization
 - **Automated Tuning**: Automated performance tuning
+- **Autonomous LR Discovery**: Add an agent-driven learning-rate discovery loop inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch), running short fixed-budget experiments to propose/validate `learning_rate` candidates before long runs.
 - **Advanced Analytics**: Advanced performance analytics
 - **Predictive Performance**: Predictive performance capabilities
+
+#### Autonomous LR Discovery Milestones
+- **M1 (Config + CLI Integration)**: Add a lightweight tuner command that sweeps LR ranges (log-scale) and writes best candidates back to generated training configs.
+- **M2 (WUI Integration)**: Expose “Auto-select learning rate” in Build + Run wizard, with visible trial budget and selected LR rationale.
+- **M3 (Safety + Reproducibility)**: Store trial metadata (seed, dataset, accelerator, wall-time budget, metric) for reproducible LR picks.
+- **M4 (Promotion Criteria)**: Promote a discovered LR only when it beats baseline on holdout metric with equal or lower runtime.
 
 ### Community Initiatives
 - **Community Growth**: Community growth and engagement initiatives
@@ -146,5 +153,5 @@ Ready to help shape the future of quantum computing? Follow the [Development Wor
 
 ---
 
-**Last Updated**: 2026-03-12
+**Last Updated**: 2026-03-23
 **Version**: 1.4.0
