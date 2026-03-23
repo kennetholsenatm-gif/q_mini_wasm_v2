@@ -4,7 +4,9 @@
 Loads repo-root ``.env`` first (if present and python-dotenv is installed), then sets
 Cascade/MOPD and checkpoint variables so they override ``.env`` for this process.
 
-See docs/CASCADE_AND_MOPD.md (Recommended continuation run) and .env.example.
+See docs/CASCADE_AND_MOPD.md (Recommended continuation run; § Long runs) and .env.example.
+
+For tmux / checkpoint continuation (load latest after a stop), see CASCADE_AND_MOPD.md.
 
 Usage::
 
