@@ -101,6 +101,8 @@ The training loop runs a short **cascade GRPO** phase (toy routing MDP) before e
 
 Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**.
 
+**Continuation run (baseline → Cascade + MOPD):** see **§ Recommended continuation run** in [CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md) and the matching block in [.env.example](../.env.example).
+
 ### Checkpoints and evaluation (making training useful)
 
 1. Train and save a final checkpoint:

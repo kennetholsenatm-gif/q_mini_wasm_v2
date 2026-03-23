@@ -70,6 +70,42 @@ This is **not** distillation from a separate trained model or dataset; it acts a
 
 Checkpoints can store **`cascade_policy`**; loading maps into `model.cascade_router` when `USE_CASCADE_ROUTER=1`. See [TRAINING_DATA.md](TRAINING_DATA.md) § Checkpoints and serving.
 
+## Recommended continuation run (Cascade RL + MOPD)
+
+Use this after a baseline supervised run (same data slice, seed, batch size, `HYBRID_ADAPTER`, and accelerator) so you can compare metrics fairly.
+
+### Phase A — Enable MOPD
+
+- Set **`CASCADE_MOPD_LAMBDA`** between **0.05** and **0.1** initially; increase toward **0.2** only if **train mean MSE** stays stable and cascade metrics look healthy.
+- Use **`CASCADE_MOPD_FEAT_LOSS=mse`** first; try **`cosine`** in a separate run if you want a different geometry on the state embedding.
+- Keep **`CASCADE_STEPS_PER_EPOCH=2`** and **`CASCADE_GROUP_SIZE=4`** unless you deliberately want more cascade compute (**`CASCADE_STEPS_PER_EPOCH`** 3–4); **`CASCADE_GROUP_SIZE`** must stay **≥ 2** when GRPO normalizes advantages.
+
+### Phase B — Optional: cascade on the model for serving
+
+- To expose **`cascade_logits`** on **`POST /infer`**, set **`USE_CASCADE_ROUTER=1`** during training and serving, with matching **`CASCADE_STATE_DIM`**, **`CASCADE_NUM_ACTIONS`**, **`CASCADE_ROUTER_HIDDEN`**.
+- Alternatively use **`CASCADE_LEARNED_PROJECTOR=1`** without **`USE_CASCADE_ROUTER`**: the cascade head still trains, but the main `QMiniWASM` module has no attached router for inference-time logits.
+
+### Phase C — Warm start
+
+- Set **`CHECKPOINT_LOAD_PATH`** to your **best** artifact from the prior run (e.g. the file written by **`CHECKPOINT_BEST_PATH`** when train MSE improved).
+- Point **`CHECKPOINT_SAVE_PATH`**, **`CHECKPOINT_BEST_PATH`**, and optionally **`CHECKPOINT_LATEST_PATH`** at **new** filenames so you do not overwrite the baseline.
+
+### Metrics to compare after each run
+
+From the dict returned by **`python -m engine`** (and logs):
+
+| Metric | Use |
+|--------|-----|
+| `epoch_cascade_loss`, `epoch_cascade_return` | Cascade phase health |
+| `cascade_mopd_lambda`, `cascade_mopd_feat_loss` | Confirm env applied |
+| `epoch_mean_mse` | Primary train quality |
+| `eval_mean_mse`, `epoch_eval_mean_mse` | If **`EVAL_HOLDOUT_FRACTION`** > 0 and **`EVAL_EVERY_EPOCH=1`** |
+| `cascade_policy_mode` | `tiny_mlp` vs `loop_router` vs `model_router` |
+
+If **train MSE regresses** while cascade loss spikes, **lower `CASCADE_MOPD_LAMBDA`** or **`CASCADE_POLICY_LR`** before increasing **`CASCADE_STEPS_PER_EPOCH`**.
+
+A copy-paste **`.env`** sketch lives in **[.env.example](../.env.example)** under “Next run: Cascade RL + MOPD”.
+
 ## Roadmap (not implemented)
 
 - **Real teacher:** Second network, EMA weights, or main-model hidden projectors as `teacher_hidden_fn`.
