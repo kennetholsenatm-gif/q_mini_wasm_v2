@@ -119,6 +119,16 @@ If **train MSE regresses** while cascade loss spikes, **lower `CASCADE_MOPD_LAMB
 
 A copy-paste **`.env`** sketch lives in **[.env.example](../.env.example)** under “Next run: Cascade RL + MOPD”.
 
+**Script (injects env then runs the engine):** from repo root,
+
+```bash
+python scripts/run_training_cascade_mopd.py
+python scripts/run_training_cascade_mopd.py --dry-run
+python scripts/run_training_cascade_mopd.py --checkpoint-load ./artifacts/qminiwasm_best.pt --use-cascade-router
+```
+
+See `python scripts/run_training_cascade_mopd.py --help`.
+
 ## Roadmap (not implemented)
 
 - **Real teacher:** Second network, EMA weights, or main-model hidden projectors as `teacher_hidden_fn`.
