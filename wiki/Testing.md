@@ -52,6 +52,10 @@ def test_error_handling():
 - **External Service Integration**: Third-party service integration
 - **Hardware Integration**: Quantum hardware and simulator integration
 
+#### IBM Quantum (training path)
+
+The **Qiskit QAOA** path includes **unit/smoke tests** (e.g. `tests/test_qiskit_qaoa_smoke.py`) for local **statevector** execution and helpers. **End-to-end use of real IBM hardware** is **environment-dependent** (token, backend, quota); the project has **validated** successful Runtime jobs on IBM devices during **AI training** when `qiskit_ibm` is enabled. CI typically does **not** require IBM credentials; see **[docs/QUANTUM_QISKIT.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/QUANTUM_QISKIT.md)**.
+
 ### Integration Test Implementation
 ```python
 # Example integration test

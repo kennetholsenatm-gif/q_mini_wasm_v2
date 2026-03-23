@@ -5,6 +5,7 @@
 - **Execution target** in the UI: `local` | `runpod`.
 - `runpod` runs **OpenTofu** `apply`/`destroy` under `infra/runpod` (token: `RUNPOD_API_KEY` / `RUNPOD_TOKEN`).
 - **`python -m engine` still runs on the host as a subprocess** of the WUI; the pod is provisioned for GPU / remote work; docs say to SSH to `public_ip` if you want training on the GPU.
+- **Cloud accelerator defaults:** `infra/runpod/variables.tf` sets container **`ACCELERATOR=cuda`** and **`NVIDIA_VISIBLE_DEVICES=all`**. See **`infra/runpod/CLOUD_ACCELERATOR.md`**, **`scripts/runpod_sync_and_train.example.sh`**, and the WUI RunPod panel (copy-paste when `public_ip` exists in tofu outputs).
 
 ## Gaps (what “full” RunPod integration could mean)
 
@@ -18,7 +19,7 @@
 
 | Phase | Scope |
 |-------|--------|
-| **P0** | Document current flow; optional “copy SSH command” from `tofu output` in the UI. |
+| **P0** | ~~Document current flow; optional “copy SSH command” from `tofu output` in the UI.~~ **Done:** `CLOUD_ACCELERATOR.md`, example script, WUI hints when `public_ip` is present; pod env defaults for CUDA. |
 | **P1** | Optional **remote command** field: run `ssh user@ip 'cd /opt/qmw && python -m engine ...'` (or `docker exec`) after apply, with SSH key from env. |
 | **P2** | **rsync** or small agent to sync repo + `configs/` + `artifacts/` bidirectionally. |
 | **P3** | RunPod **HTTP API** (if available) for pod exec/logs instead of raw SSH. |

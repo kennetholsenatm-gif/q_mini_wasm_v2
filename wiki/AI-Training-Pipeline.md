@@ -67,6 +67,16 @@ Optional **`CASCADE_MOPD_LAMBDA`** and **`CASCADE_MOPD_FEAT_LOSS`:** Adds a feat
 
 **Why `1e-4` shows up often for HF:** It is a demanding but concrete mean-MSE scale on 4096-d vectors; strict achievement on very diverse rows may need adapter + data + schedule. Defaults for `hf_tabular` when unset are documented in TRAINING_DATA.md.
 
+### IBM Quantum hardware (QAOA MoE path — validated)
+
+The **`HybridQuantumMoE`** can execute a **Qiskit** QAOA ansatz on **real IBM Quantum devices** via **IBM Quantum Runtime** (`EstimatorV2`), not only simulators. When `qaoa_execution_mode` is **`qiskit_ibm`** (for example **`QUANTUM_EXECUTION_POLICY=hardware_only`** maps default `pennylane` to `qiskit_ibm`), training calls that path inside **`hybrid_inference`** / the supervised loop.
+
+**Status (March 2026):** This stack has been **successfully exercised end-to-end** against IBM hardware: jobs complete through Runtime (ISA-transpiled circuits, device-backed Z expectations feeding the detached MoE signal). IBM **plan quota** and **usage limits** apply; the code can **fall back** to local **`qiskit_statevector`** when Runtime rejects jobs (e.g. quota exhausted). Gradients do **not** flow through the device; expectations are mixed in as a classical signal.
+
+Canonical technical reference: **[docs/QUANTUM_QISKIT.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/QUANTUM_QISKIT.md)**.
+
+**Note:** **Cascade RL** remains a **classical** toy MDP; only the MoE QAOA block targets IBM when configured.
+
 ## Checkpoints and serving
 
 - **`CHECKPOINT_SAVE_PATH` / `CHECKPOINT_BEST_PATH` / `CHECKPOINT_LOAD_PATH`:** Single `.pt` with `quantum_router`, `ternary_expert`, optional **`hybrid_adapter`**, optional **`cascade_policy`** (maps to `model.cascade_router` when **`USE_CASCADE_ROUTER=1`**).
@@ -77,9 +87,10 @@ See the **Serving** and **Checkpoints** sections in [docs/TRAINING_DATA.md](http
 ## Related wiki pages
 
 - **[Cascade RL and MOPD](Cascade-RL-and-MOPD.md)** — GRPO cascade phase and MOPD feature loss.
+- **[Quantum Optimization](Quantum-Optimization.md)** — QAOA context; IBM hardware validation note.
 - **[Development](Development.md)** — clone, tests, and ML quick start.
 - **[Architecture Overview](Architecture-Overview.md)** — infrastructure context.
 
 ---
 
-**Last Updated:** 2026-03-22
+**Last Updated:** 2026-03-23

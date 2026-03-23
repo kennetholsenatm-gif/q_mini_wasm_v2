@@ -4,6 +4,12 @@
 
 Q-Mini-WASM's roadmap outlines the strategic vision for the future development of this quantum computing framework. The roadmap is designed to deliver continuous innovation, enhanced capabilities, and improved user experiences while maintaining the commitment to security
 
+## Validated milestones (repository)
+
+These are **completed** integration points worth tracking alongside forward-looking phases:
+
+- **IBM Quantum hardware in AI training (March 2026)** — The **`qiskit_ibm`** QAOA MoE path runs through **IBM Quantum Runtime** (`EstimatorV2`) inside the **`python -m engine`** / **`hybrid_inference`** training loop. End-to-end jobs have **completed successfully** on real devices (ISA-transpiled circuits; expectations used as a detached signal). Documentation: **[AI Training Pipeline](AI-Training-Pipeline.md)**, **[Quantum Optimization](Quantum-Optimization.md)**, in-repo **[QUANTUM_QISKIT.md](../docs/QUANTUM_QISKIT.md)**. *Not* every workload uses hardware by default—configuration, tokens, and **plan quotas** apply.
+
 ## Strategic Vision
 
 ### Long-term Goals
@@ -75,7 +81,7 @@ Q-Mini-WASM's roadmap outlines the strategic vision for the future development o
 
 ### Quantum Computing
 - **Algorithm Development**: New quantum algorithms and protocols
-- **Hardware Integration**: Quantum hardware integration and support
+- **Hardware Integration**: Quantum hardware integration and support *(IBM Quantum Runtime path for QAOA MoE validated March 2026 — see [Validated milestones](#validated-milestones-repository))*
 - **Simulation Enhancement**: Enhanced quantum simulation capabilities
 - **Optimization Techniques**: Advanced quantum optimization techniques
 

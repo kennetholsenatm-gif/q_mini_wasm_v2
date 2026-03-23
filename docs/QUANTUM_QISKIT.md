@@ -23,6 +23,8 @@ IBM Runtime only accepts native ``rzz`` angles in **[0, π/2]**. The ``qiskit_ib
 
 Circuits must be **ISA-compliant** (transpiled to the backend’s native gates and layout). The IBM path uses ``generate_preset_pass_manager(..., backend=backend)`` and maps each ``SparsePauliOp`` with ``apply_layout`` before ``EstimatorV2.run``.
 
+**Quota / usage limit:** If IBM Runtime rejects the job (e.g. instance has met its usage limit), the code can **fall back** to local ``qiskit_statevector`` (exact ⟨Z_i⟩, no queue). This is **on by default**; set ``QMINIWASM_IBM_FALLBACK_STATEVECTOR=0`` to fail hard instead of falling back.
+
 ## Dependencies
 
 `qiskit` and `qiskit-ibm-runtime` are **core dependencies** of this package (`install_requires` / `pyproject.toml` `dependencies`). `requirements/quantum.txt` includes them for Docker/Incus installs (`-r requirements/docker.txt`).

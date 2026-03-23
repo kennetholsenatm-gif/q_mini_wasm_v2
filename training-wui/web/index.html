@@ -50,13 +50,23 @@
       flex-wrap: wrap;
     }
     main {
-      padding: 1.25rem 1.5rem 1.5rem;
-      max-width: 1240px;
-      margin: 0 auto;
+      padding: 0;
+      max-width: none;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .main-columns {
       display: grid;
       grid-template-columns: minmax(320px, 430px) 1fr;
       gap: 1rem;
       align-items: start;
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 1.25rem 1.5rem 1rem;
+      width: 100%;
+      box-sizing: border-box;
     }
     .col {
       display: flex;
@@ -224,19 +234,77 @@
     button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
     button.danger { background: var(--err); color: #fff; }
     button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    section.log-section {
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+      margin: 0;
+      border-top: 1px solid var(--border);
+      padding: 1rem 1.5rem 1.35rem;
+      width: 100%;
+      box-sizing: border-box;
+      max-width: none;
+    }
+    section.log-section h2 {
+      margin-bottom: 0.5rem;
+    }
+    .log-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
     pre#log {
       margin: 0;
-      padding: 0.75rem;
+      padding: 0.85rem 1rem;
       background: var(--bg);
       border-radius: 6px;
       border: 1px solid var(--border);
-      font-size: 0.75rem;
+      font-size: 0.76rem;
       line-height: 1.45;
       white-space: pre-wrap;
       word-break: break-word;
-      max-height: 420px;
+      max-height: min(52vh, 680px);
+      min-height: 220px;
       overflow-y: auto;
       font-family: ui-monospace, Consolas, monospace;
+    }
+    .infra-card .infra-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0.65rem 0 0.75rem;
+    }
+    .infra-badge {
+      font-size: 0.72rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .infra-badge.ok { border-color: var(--ok); color: var(--ok); background: rgba(63, 185, 80, 0.12); }
+    .infra-badge.bad { border-color: var(--err); color: var(--err); background: rgba(248, 81, 73, 0.1); }
+    .infra-badge.neutral { color: var(--muted); }
+    .infra-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.65rem;
+    }
+    pre.infra-remote-cmd {
+      margin: 0.5rem 0 0;
+      padding: 0.65rem 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.76rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 12rem;
+      overflow: auto;
     }
     .status { font-size: 0.85rem; }
     .status.running { color: var(--ok); }
@@ -277,7 +345,7 @@
     .kv .k { color: var(--muted); }
     .kv .v { word-break: break-word; }
     @media (max-width: 980px) {
-      main {
+      .main-columns {
         grid-template-columns: 1fr;
       }
       .metrics {
@@ -300,15 +368,24 @@
     </div>
   </header>
   <main>
+    <div class="main-columns">
     <div class="col">
-      <section>
-        <h2>RunPod + OpenTofu</h2>
-        <p class="hint">Optional GPU cloud: <code>tofu apply</code> before training and <code>destroy</code> when the job ends (uses <code>RUNPOD_TOKEN</code> / <code>infra/runpod</code>). Training still runs as <code>python -m engine</code> on <strong>this</strong> machine — SSH to the pod IP from outputs if you run training remotely.</p>
-        <div class="row" style="margin-top:0.5rem">
-          <button type="button" class="ghost" id="btnRunpodStatus">Refresh RunPod status</button>
+      <section class="infra-card">
+        <h2>Infrastructure</h2>
+        <p class="hint" style="margin:0">RunPod + OpenTofu for GPU pods; <code>python -m engine</code> on <strong>this</strong> host unless you SSH to the pod. Container defaults: <code>ACCELERATOR=cuda</code>, <code>NVIDIA_VISIBLE_DEVICES=all</code> (<code>infra/runpod/variables.tf</code>).</p>
+        <div class="infra-badges" id="infraBadges" aria-label="Infrastructure status"></div>
+        <div class="kv" id="infraKv" style="margin-top:0.35rem"></div>
+        <p class="status" id="infraMsg"></p>
+        <div class="infra-toolbar">
+          <button type="button" class="ghost" id="btnInfraRefresh">Refresh infrastructure</button>
+          <button type="button" class="ghost" id="btnCopyPodIP" disabled>Copy pod IP</button>
+          <button type="button" class="ghost" id="btnCopyRemoteCmd" disabled>Copy remote commands</button>
         </div>
-        <div class="kv" id="runpodKv" style="margin-top:0.65rem"></div>
-        <p class="status" id="runpodMsg"></p>
+        <details id="infraRemoteDetails" style="margin-top:0.75rem; border:1px dashed var(--border); border-radius:8px; padding:0.55rem 0.65rem 0.65rem; background:rgba(23,37,61,0.35)">
+          <summary style="cursor:pointer; color:var(--muted); font-size:0.84rem; user-select:none">Remote GPU (rsync / SSH)</summary>
+          <p class="hint" style="margin:0.5rem 0 0.35rem">When <code>public_ip</code> appears below, use these on your machine (adjust user/path for your Runpod template).</p>
+          <pre id="infraRemotePre" class="infra-remote-cmd" style="display:none"></pre>
+        </details>
       </section>
       <section>
         <h2>Quick metrics</h2>
@@ -532,15 +609,16 @@
         </div>
         <p class="status" id="buildMsg" style="margin-top:0.75rem"></p>
       </section>
-      <section>
-        <h2>Log <span id="logTitle"></span></h2>
-        <div class="row" style="margin-bottom:0.75rem">
-          <button type="button" class="danger" id="btnStop" disabled>Stop run</button>
-          <button type="button" class="ghost" id="btnClearLog">Clear view</button>
-        </div>
-        <pre id="log"></pre>
-      </section>
     </div>
+    </div>
+    <section class="log-section">
+      <h2>Log <span id="logTitle"></span></h2>
+      <div class="log-toolbar">
+        <button type="button" class="danger" id="btnStop" disabled>Stop run</button>
+        <button type="button" class="ghost" id="btnClearLog">Clear view</button>
+      </div>
+      <pre id="log"></pre>
+    </section>
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
@@ -857,22 +935,75 @@
       $("bRunpodDestroyWrap").style.display = bl ? "none" : "block";
     }
 
+    let lastInfraPodIp = "";
+    let lastInfraRemoteCmd = "";
+
+    function renderInfraBadges(rp) {
+      const wrap = $("infraBadges");
+      wrap.innerHTML = "";
+      function pill(label, ok) {
+        const s = document.createElement("span");
+        s.className = "infra-badge " + (ok ? "ok" : "bad");
+        s.textContent = label + ": " + (ok ? "OK" : "no");
+        wrap.appendChild(s);
+      }
+      pill("RUNPOD_TOKEN", !!rp.token_present);
+      pill("infra/runpod", !!rp.infra_dir_exists);
+      pill("OpenTofu / Terraform", !!rp.tofu_usable);
+    }
+
+    async function copyToClipboard(text, okMsg) {
+      try {
+        await navigator.clipboard.writeText(text);
+        if (okMsg) {
+          const m = $("infraMsg");
+          const prev = m.textContent;
+          m.textContent = okMsg;
+          m.className = "status done";
+          setTimeout(() => {
+            m.textContent = prev;
+            m.className = "status done";
+          }, 1600);
+        }
+      } catch (err) {
+        $("infraMsg").textContent = "Copy failed: " + (err && err.message ? err.message : err);
+        $("infraMsg").className = "status error";
+      }
+    }
+
     async function loadRunpodStatus() {
-      const msg = $("runpodMsg");
-      const box = $("runpodKv");
+      const msg = $("infraMsg");
+      const box = $("infraKv");
+      const btnIp = $("btnCopyPodIP");
+      const btnCmd = $("btnCopyRemoteCmd");
+      const pre = $("infraRemotePre");
+      lastInfraPodIp = "";
+      lastInfraRemoteCmd = "";
       msg.textContent = "Loading…";
       msg.className = "status";
+      btnIp.disabled = true;
+      btnCmd.disabled = true;
       try {
         const r = await fetch("/api/runpod/status");
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const rp = data.runpod || {};
+        renderInfraBadges(rp);
         const lines = [
-          ["Token present", rp.token_present ? "yes" : "no"],
-          ["infra/runpod", rp.infra_dir_exists ? "found" : "missing"],
-          ["OpenTofu / Terraform", rp.tofu_usable ? (rp.tofu_binary || "ok") : ("unavailable: " + (rp.tofu_error || ""))],
-          ["Outputs (state)", rp.outputs_error ? ("(no state) " + rp.outputs_error) : JSON.stringify(rp.outputs ?? {})],
+          ["Infra path", rp.infra_dir || "(unknown)"],
+          ["OpenTofu binary", rp.tofu_usable ? (rp.tofu_binary || "ok") : ("missing — " + (rp.tofu_error || ""))],
         ];
+        const outs = rp.outputs && typeof rp.outputs === "object" && !Array.isArray(rp.outputs) ? rp.outputs : null;
+        if (rp.outputs_error) {
+          lines.push(["Terraform state / outputs", "(none) " + rp.outputs_error]);
+        } else if (outs && Object.keys(outs).length) {
+          if (outs.pod_id != null && String(outs.pod_id).trim() !== "") lines.push(["Pod ID", String(outs.pod_id)]);
+          if (outs.public_ip != null && String(outs.public_ip).trim() !== "") lines.push(["Public IP", String(outs.public_ip)]);
+          if (outs.cost_per_hr != null && String(outs.cost_per_hr).trim() !== "") lines.push(["Cost / hr", String(outs.cost_per_hr)]);
+          if (outs.desired_status != null) lines.push(["Desired status", String(outs.desired_status)]);
+        } else if (rp.token_present && rp.infra_dir_exists) {
+          lines.push(["Terraform outputs", "(no state yet — run Build + Run with RunPod, or: cd infra/runpod && tofu apply)"]);
+        }
         box.innerHTML = "";
         for (const [k, v] of lines) {
           const dk = document.createElement("div");
@@ -885,13 +1016,39 @@
           box.appendChild(dv);
         }
         msg.textContent = rp.token_present && rp.infra_dir_exists && rp.tofu_usable
-          ? "Ready to provision (or check outputs)."
-          : "Fix token, repo path, or install tofu/terraform.";
+          ? "Ready to provision or use outputs below."
+          : "Fix token, repo path, or install OpenTofu/Terraform on PATH.";
         msg.className = "status done";
+        const pip = outs && outs.public_ip != null && String(outs.public_ip).trim() !== "";
+        if (pip) {
+          const ip = String(outs.public_ip).trim();
+          lastInfraPodIp = ip;
+          const block =
+            "# rsync repo to pod\n" +
+            "rsync -avz --exclude .git --exclude .venv ./ root@" + ip + ":/workspace/qminiwasm-core/\n\n" +
+            "# ssh and train with CUDA\n" +
+            "ssh root@" + ip + " 'cd /workspace/qminiwasm-core && source .venv/bin/activate 2>/dev/null; export ACCELERATOR=cuda && python -m engine --config configs/training/mesh_cuda.toml'\n\n" +
+            "# or: ./scripts/runpod_sync_and_train.example.sh configs/training/mesh_cuda.toml";
+          lastInfraRemoteCmd = block;
+          pre.style.display = "block";
+          pre.textContent = block;
+          btnIp.disabled = false;
+          btnCmd.disabled = false;
+        } else {
+          pre.style.display = "none";
+          pre.textContent = "";
+        }
       } catch (e) {
+        $("infraBadges").innerHTML = "";
         box.innerHTML = "";
         msg.textContent = String(e.message || e);
         msg.className = "status error";
+        if (pre) {
+          pre.style.display = "none";
+          pre.textContent = "";
+        }
+        if (btnIp) btnIp.disabled = true;
+        if (btnCmd) btnCmd.disabled = true;
       }
     }
 
@@ -1026,7 +1183,13 @@
     };
 
     $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); loadRunpodStatus(); };
-    $("btnRunpodStatus").onclick = loadRunpodStatus;
+    $("btnInfraRefresh").onclick = loadRunpodStatus;
+    $("btnCopyPodIP").onclick = () => {
+      if (lastInfraPodIp) copyToClipboard(lastInfraPodIp, "Pod IP copied.");
+    };
+    $("btnCopyRemoteCmd").onclick = () => {
+      if (lastInfraRemoteCmd) copyToClipboard(lastInfraRemoteCmd, "Remote commands copied.");
+    };
     $("sRunTarget").onchange = syncRunpodPanels;
     $("bRunTarget").onchange = syncRunpodPanels;
     $("btnPreflight").onclick = loadPreflight;

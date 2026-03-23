@@ -2,6 +2,10 @@
 
 Welcome to the Hierarchical Edge-Quantum AI Architecture documentation! This repository is organized into three tracks to accommodate different audiences and expertise levels.
 
+## Recent highlights
+
+- **IBM Quantum + training (March 2026):** The QAOA-style **MoE** path has been **run successfully on real IBM Quantum hardware** (IBM Quantum Runtime / `qiskit_ibm`) as part of the **`python -m engine`** training loop—not only simulators. Scope, env vars, and caveats: **[AI Training Pipeline](AI-Training-Pipeline.md)** and in-repo **[QUANTUM_QISKIT.md](../docs/QUANTUM_QISKIT.md)**. Cascade RL remains classical; quotas and account limits apply on IBM’s side.
+
 ## 🟢 Track 1: General Overview (For Leadership & Laypersons)
 
 Start here if you want to understand **what this technology does** and **why it matters** without technical complexity.
@@ -93,13 +97,15 @@ Start here if you want to understand **the deep technical and mathematical found
 
 ### For Researchers
 - **[Mathematical Formulation](Mathematical-Formulation.md)** - Core algorithms and proofs
-- **[Quantum Optimization](Quantum-Optimization.md)** - Quantum computing details
+- **[Quantum Optimization](Quantum-Optimization.md)** - Quantum computing details (includes IBM hardware validation note)
+- **[AI Training Pipeline](AI-Training-Pipeline.md)** - End-to-end training; IBM Quantum MoE section
 - **[Vec2Text Inversion](Vec2Text-Inversion.md)** - Advanced reconstruction algorithms
 
 ## Additional Resources
 
 ### External Documentation
 - **[Main README](../README.md)** - Project overview and quick start
+- **[QUANTUM_QISKIT.md](../docs/QUANTUM_QISKIT.md)** - Qiskit QAOA modes (`pennylane`, `qiskit_statevector`, `qiskit_ibm`) and IBM configuration
 - **[White Paper](../docs/hierarchical-inference-architecture.md)** - Comprehensive technical specification
 - **[API Documentation](https://docs.qminiwasm.com)** - Technical API references
 
@@ -139,5 +145,5 @@ Start here if you want to understand **the deep technical and mathematical found
 
 ---
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-23
 **Version:** 2.0

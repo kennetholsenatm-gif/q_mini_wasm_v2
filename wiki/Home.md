@@ -13,7 +13,7 @@ Welcome. This track summarizes what the **qminiwasm-core** / Q-Mini-WASM effort 
 ### What we combine
 
 1. **Edge-oriented execution** — WASM-backed runtimes and encodings so ML pipelines can align with **linear memory** and deployment shapes you actually ship.
-2. **Hybrid classical–quantum-style routing** — Quantum-inspired or backend-driven routing (for example **QAOA**-style layers in the stack) to explore structured search over internal state. This is not a claim that every workload runs on a fault-tolerant quantum computer today; behavior depends on backend and configuration.
+2. **Hybrid classical–quantum-style routing** — Quantum-inspired or backend-driven routing (for example **QAOA**-style layers in the stack) to explore structured search over internal state. With **`qiskit_ibm`** and IBM credentials, training has **successfully used real IBM Quantum hardware** for the MoE QAOA path (March 2026); otherwise behavior may use simulators or a no-op `pennylane` mode depending on configuration.
 3. **Modern ML training and inference** — Supervised training (`python -m engine`), optional cascade reinforcement-learning warm-up, checkpoints, and HTTP inference. For design rationale, see **[AI Training Pipeline](AI-Training-Pipeline.md)**.
 
 ### Why it matters
@@ -36,7 +36,7 @@ Welcome. This track summarizes what the **qminiwasm-core** / Q-Mini-WASM effort 
 
 ### Looking ahead
 
-The project evolves with hardware (CPU, CUDA, Intel **XPU**) and optional quantum backends. What you get depends on configuration, dataset licenses, and environment flags.
+The project evolves with hardware (CPU, CUDA, Intel **XPU**) and optional quantum backends—including **IBM Quantum** for the QAOA integration when configured. What you get depends on configuration, dataset licenses, environment flags, and cloud quotas.
 
 ---
 
@@ -44,7 +44,7 @@ The project evolves with hardware (CPU, CUDA, Intel **XPU**) and optional quantu
 
 ---
 
-**Last Updated:** 2026-03-22  
+**Last Updated:** 2026-03-23  
 **Version:** 2.1
 
 ## Related Resources

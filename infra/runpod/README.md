@@ -12,6 +12,10 @@ This repo standardizes on **`RUNPOD_TOKEN`** in `.env`. The provider expects **`
 - [OpenTofu](https://opentofu.org/docs/intro/install/) or Terraform ≥ 1.0
 - Runpod API key in [Runpod console → Settings](https://www.runpod.io/console/user/settings)
 
+## Cloud GPU (CUDA) on the pod
+
+Default **`env`** sets `ACCELERATOR=cuda` and `NVIDIA_VISIBLE_DEVICES=all` so training can use the GPU after you SSH in and install the package. See **[CLOUD_ACCELERATOR.md](CLOUD_ACCELERATOR.md)** and **`scripts/runpod_sync_and_train.example.sh`** for rsync + remote `python -m engine` flow.
+
 ## One-time setup
 
 ```bash

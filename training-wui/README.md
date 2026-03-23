@@ -42,6 +42,10 @@ The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python 
 - Stack lives in **`infra/runpod`** (see that folder’s README). Install **OpenTofu** (`tofu`) or Terraform on `PATH`.
 - **Training still runs on the same host as the WUI** (subprocess). The RunPod pod is provisioned for GPU / remote work; use **`public_ip`** from status outputs and SSH into the pod if you want training on the GPU there.
 
+**Cloud GPU (CUDA):** Pods default to **`ACCELERATOR=cuda`** in container env (`infra/runpod/variables.tf`). See **`infra/runpod/CLOUD_ACCELERATOR.md`** and **`scripts/runpod_sync_and_train.example.sh`** for rsync + SSH + `python -m engine` on the pod.
+
+**Infrastructure card** (top of the UI): status badges (token / `infra/runpod` / OpenTofu), tofu outputs (`public_ip`, pod id, cost), **Copy pod IP** / **Copy remote commands**, and a **Remote GPU** foldout with rsync/SSH snippets. **Log** is at the **bottom**, full page width.
+
 `GET /api/runpod/status` — token, binary, `tofu output` (when state exists). Start APIs accept `run_target`: `"local"` | `"runpod"` and `runpod_destroy_on_exit` (default true for RunPod).
 
 **Preflight FAQ**

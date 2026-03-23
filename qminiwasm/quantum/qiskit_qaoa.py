@@ -20,6 +20,34 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def _ibm_fallback_to_statevector_enabled() -> bool:
+    """When True (default), qiskit_ibm falls back to local statevector on quota/capacity errors."""
+    v = os.environ.get("QMINIWASM_IBM_FALLBACK_STATEVECTOR", "1").strip().lower()
+    return v not in ("0", "false", "no", "off", "disable", "disabled")
+
+
+def ibm_error_suggests_quota_or_capacity_fallback(exc: BaseException) -> bool:
+    """Heuristic: IBM Runtime / API error is likely quota, usage limit, or transient capacity."""
+    msg = f"{type(exc).__module__}.{type(exc).__name__} {exc}".lower()
+    hints = (
+        "usage limit",
+        "met its usage",
+        "workloads will not run",
+        "time is made available",
+        "quota",
+        "no time",
+        "insufficient credit",
+        "not enough credit",
+        "billing",
+        "429",
+        "503",
+        "service unavailable",
+        "temporarily unavailable",
+        "too many requests",
+    )
+    return any(h in msg for h in hints)
+
+
 def resolve_ibm_backend_name(
     explicit: Optional[str] = None,
     *,
@@ -188,27 +216,43 @@ def run_z_expectations_ibm(
     if service is None:
         service = QiskitRuntimeService(token=token)
 
-    backend = service.backend(name)
-    # IBM Runtime requires ISA circuits (native basis + routing) since March 2024; logical H/RX/RZZ
-    # must be transpiled to the backend target before EstimatorV2.
-    from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+    try:
+        backend = service.backend(name)
+        # IBM Runtime requires ISA circuits (native basis + routing) since March 2024; logical H/RX/RZZ
+        # must be transpiled to the backend target before EstimatorV2.
+        from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
-    pm = generate_preset_pass_manager(optimization_level=1, backend=backend)
-    isa_circuit = pm.run(qc)
-    if isa_circuit.layout is not None:
-        obs_isa = [
-            op.apply_layout(isa_circuit.layout, isa_circuit.num_qubits) for op in obs
-        ]
-    else:
-        obs_isa = obs
+        pm = generate_preset_pass_manager(optimization_level=1, backend=backend)
+        isa_circuit = pm.run(qc)
+        if isa_circuit.layout is not None:
+            obs_isa = [
+                op.apply_layout(isa_circuit.layout, isa_circuit.num_qubits) for op in obs
+            ]
+        else:
+            obs_isa = obs
 
-    estimator = EstimatorV2(mode=backend)
-    job = estimator.run([(isa_circuit, obs_isa)], precision=1.0 / max(1, int(shots)))
-    result = job.result()
-    evs = np.asarray(result[0].data.evs, dtype=np.float64).flatten()
-    if evs.size != num_qubits:
-        raise RuntimeError(f"IBM Estimator: expected {num_qubits} Z expectations, got {evs.size}")
-    return evs
+        estimator = EstimatorV2(mode=backend)
+        job = estimator.run([(isa_circuit, obs_isa)], precision=1.0 / max(1, int(shots)))
+        result = job.result()
+        evs = np.asarray(result[0].data.evs, dtype=np.float64).flatten()
+        if evs.size != num_qubits:
+            raise RuntimeError(f"IBM Estimator: expected {num_qubits} Z expectations, got {evs.size}")
+        return evs
+    except Exception as e:
+        if (
+            _ibm_fallback_to_statevector_enabled()
+            and ibm_error_suggests_quota_or_capacity_fallback(e)
+        ):
+            logger.warning(
+                "IBM Runtime failed (%s: %s); falling back to local qiskit_statevector "
+                "(exact ⟨Z_i⟩, no hardware). Set QMINIWASM_IBM_FALLBACK_STATEVECTOR=0 to disable.",
+                type(e).__name__,
+                e,
+            )
+            return run_z_expectations_statevector(
+                num_qubits, num_layers, weights, gamma, beta, bias, coupling
+            )
+        raise
 
 
 def run_z_expectations(

@@ -5,6 +5,19 @@ import math
 import numpy as np
 
 
+def test_ibm_error_suggests_quota_or_capacity_fallback_heuristic():
+    from qminiwasm.quantum.qiskit_qaoa import ibm_error_suggests_quota_or_capacity_fallback
+
+    assert ibm_error_suggests_quota_or_capacity_fallback(
+        RuntimeError(
+            "This instance has met its usage limit. Workloads will not run until time is made available."
+        )
+    )
+    assert not ibm_error_suggests_quota_or_capacity_fallback(
+        RuntimeError("Set IBM_BACKEND_NAME to a real device")
+    )
+
+
 def test_ibm_safe_rzz_angle_maps_negative_and_clips():
     from qminiwasm.quantum.qiskit_qaoa import _ibm_safe_rzz_angle
 

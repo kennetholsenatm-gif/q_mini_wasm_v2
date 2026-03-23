@@ -4,3 +4,11 @@
 # gpu_count    = 1
 # cloud_type   = "COMMUNITY"
 # ports        = ["8888/http", "22/tcp"]
+#
+# Default env (in variables.tf) sets ACCELERATOR=cuda for the container.
+# Override entirely if needed:
+# env = {
+#   ACCELERATOR            = "cuda"
+#   NVIDIA_VISIBLE_DEVICES = "all"
+#   MY_EXTRA               = "1"
+# }

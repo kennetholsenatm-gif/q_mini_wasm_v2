@@ -2,6 +2,10 @@
 
 This document details the quantum optimization algorithms and thermodynamic constraints in the Hierarchical Edge-Quantum AI Architecture.
 
+## Implementation status (IBM Quantum)
+
+The repository implements a **trainable QAOA-style** block that can run on **IBM Quantum** hardware through **Qiskit** and **IBM Quantum Runtime** (`qiskit_ibm` execution mode), integrated with the **`QMiniWASM`** training loop. **As of March 2026**, runs have **successfully completed** on real IBM devices as part of AI training workflows (MoE expectations from Runtime `EstimatorV2`, with ISA-compliant transpilation). See **[docs/QUANTUM_QISKIT.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/QUANTUM_QISKIT.md)** and **[AI Training Pipeline](AI-Training-Pipeline.md)** for configuration and scope (cascade RL remains classical).
+
 ## Quantum Hardware Architecture
 
 ### Cryo-CMOS Controllers
@@ -188,5 +192,5 @@ This provides exponential speedup for large-scale routing problems.
 
 ---
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-23
 **Version:** 2.0
