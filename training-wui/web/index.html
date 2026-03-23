@@ -153,6 +153,28 @@
       padding: 0.6rem 0.7rem;
       font-size: 0.84rem;
     }
+    .model-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 0.6rem 0.7rem;
+      margin-top: 0.75rem;
+      font-size: 0.84rem;
+    }
+    .model-card h3 {
+      margin: 0 0 0.45rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .sep {
+      grid-column: 1/-1;
+      height: 1px;
+      background: var(--border);
+      opacity: 0.7;
+      margin: 0.15rem 0;
+    }
     details.adv {
       margin-top: 0.9rem;
       border: 1px dashed var(--border);
@@ -280,6 +302,15 @@
   <main>
     <div class="col">
       <section>
+        <h2>RunPod + OpenTofu</h2>
+        <p class="hint">Optional GPU cloud: <code>tofu apply</code> before training and <code>destroy</code> when the job ends (uses <code>RUNPOD_TOKEN</code> / <code>infra/runpod</code>). Training still runs as <code>python -m engine</code> on <strong>this</strong> machine — SSH to the pod IP from outputs if you run training remotely.</p>
+        <div class="row" style="margin-top:0.5rem">
+          <button type="button" class="ghost" id="btnRunpodStatus">Refresh RunPod status</button>
+        </div>
+        <div class="kv" id="runpodKv" style="margin-top:0.65rem"></div>
+        <p class="status" id="runpodMsg"></p>
+      </section>
+      <section>
         <h2>Quick metrics</h2>
         <div class="metrics">
           <div class="metric">
@@ -300,6 +331,38 @@
         <h2>Start from existing config</h2>
         <label for="cfg">Config (configs/training/*.toml)</label>
         <select id="cfg"></select>
+        <div class="grid" style="margin-top:0.7rem">
+          <div>
+            <label for="sRunTarget">Execution target</label>
+            <select id="sRunTarget">
+              <option value="local">Local (this machine)</option>
+              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
+            </select>
+            <div class="hint">RunPod provisions <code>infra/runpod</code>; training process stays local unless you use SSH separately.</div>
+          </div>
+          <div id="sRunpodDestroyWrap" style="display:none">
+            <label class="checkline" style="margin-top:1.5rem">
+              <input id="sRunpodDestroy" type="checkbox" checked />
+              Destroy pod when training stops (saves idle cost)
+            </label>
+          </div>
+          <div>
+            <label for="sQuantumPolicy">Quantum execution mode</label>
+            <select id="sQuantumPolicy">
+              <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
+              <option value="hardware_only">Hardware only (fail if unavailable)</option>
+              <option value="simulator_only">Simulator only</option>
+            </select>
+          </div>
+          <div>
+            <label for="sQuantumBackend">Quantum backend id (optional)</label>
+            <input id="sQuantumBackend" type="text" placeholder="auto / ibm_kyoto / pennylane" />
+          </div>
+          <div>
+            <label for="sIBMBackendName">IBM backend override (optional)</label>
+            <input id="sIBMBackendName" type="text" placeholder="leave blank for IBM auto-select" />
+          </div>
+        </div>
         <div class="row">
           <button type="button" class="primary" id="btnStart">Start training</button>
         </div>
@@ -307,8 +370,10 @@
       </section>
       <section>
         <h2>Preflight <span id="preflightBadge" class="badge">UNKNOWN</span></h2>
+        <p class="hint" style="margin:0 0 0.5rem">Uses the <strong>config file</strong> from the left dropdown for TOML-backed settings. <strong>Accelerator</strong> for device check follows the <strong>Build + Run</strong> form when set (overrides <code>[hardware].accelerator</code> in that file). Quantum env lines use the Build form fields.</p>
         <p class="status" id="preflightMsg" style="margin-top:0.75rem"></p>
         <div class="kv" id="preflightKv"></div>
+        <p class="hint" style="margin-top:0.65rem"><strong>IBM pending jobs</strong> is that backend’s <em>queue length</em> (jobs waiting to run there). <strong>0</strong> is normal when nothing is queued—your training may use the simulator first, or you haven’t submitted IBM Runtime jobs yet.</p>
       </section>
       <section>
         <h2>Active / recent runs</h2>
@@ -332,8 +397,27 @@
         </div>
         <div class="grid">
           <div class="wizard-pane" data-step="1">
-            <label for="bName">Config name (optional)</label>
-            <input id="bName" type="text" placeholder="ui_my_experiment" />
+            <label for="bName">Model name</label>
+            <input id="bName" type="text" placeholder="qminiwasm-stem-coder-v1" />
+            <div class="hint">Used for model artifact filenames in <code>artifacts/</code>.</div>
+            <label class="checkline">
+              <input id="bResumeLatest" type="checkbox" />
+              Resume from this model's latest checkpoint if available
+            </label>
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bRunTarget">Execution target</label>
+            <select id="bRunTarget">
+              <option value="local">Local (this machine)</option>
+              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
+            </select>
+          </div>
+          <div id="bRunpodDestroyWrap" class="wizard-pane" data-step="1" style="display:none">
+            <label class="checkline" style="margin-top:0.5rem">
+              <input id="bRunpodDestroy" type="checkbox" checked />
+              Destroy RunPod when training stops
+            </label>
+            <div class="hint">Uncheck only if you will destroy manually (continues billing).</div>
           </div>
           <div class="wizard-pane" data-step="1">
             <label for="bAccel">Accelerator</label>
@@ -343,6 +427,22 @@
               <option value="xpu">xpu</option>
               <option value="cuda">cuda</option>
             </select>
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bQuantumPolicy">Quantum execution mode</label>
+            <select id="bQuantumPolicy">
+              <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
+              <option value="hardware_only">Hardware only (fail if unavailable)</option>
+              <option value="simulator_only">Simulator only</option>
+            </select>
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bQuantumBackend">Quantum backend id (optional)</label>
+            <input id="bQuantumBackend" type="text" placeholder="auto / ibm_kyoto / pennylane" />
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bIBMBackendName">IBM backend override (optional)</label>
+            <input id="bIBMBackendName" type="text" placeholder="leave blank for IBM auto-select" />
           </div>
           <div class="wizard-pane" data-step="2">
             <label for="bDataSource">Data source</label>
@@ -400,6 +500,7 @@
             <div id="hfConfigWrap">
               <label for="bDatasetConfig">HF dataset config (optional)</label>
               <input id="bDatasetConfig" type="text" placeholder="python" />
+              <div class="hint">Subset name for multi-config datasets (e.g. <code>python</code> on CodeSearchNet). Leave blank for <strong>default</strong> — shows as (none) in facts; many datasets (e.g. NuminaMath-CoT) use a single config.</div>
             </div>
             <div id="hfSplitWrap">
               <label for="bSplit">HF split</label>
@@ -421,6 +522,13 @@
         </div>
         <div class="row">
           <button type="button" class="primary" id="btnBuildRun">Build + Start training</button>
+        </div>
+        <div class="model-card">
+          <h3>Model Facts</h3>
+          <div class="row" style="margin-top:0; margin-bottom:0.4rem">
+            <button type="button" class="ghost" id="btnModelFacts">Refresh facts</button>
+          </div>
+          <div class="kv" id="modelFacts"></div>
         </div>
         <p class="status" id="buildMsg" style="margin-top:0.75rem"></p>
       </section>
@@ -473,7 +581,8 @@
       for (const run of runs) {
         const li = document.createElement("li");
         const left = document.createElement("span");
-        left.innerHTML = `<code>${run.id.slice(0, 8)}</code> · ${escapeHtml(run.config)}`;
+        const rt = run.run_target && run.run_target !== "local" ? ` <span class="badge">${escapeHtml(run.run_target)}</span>` : "";
+        left.innerHTML = `<code>${run.id.slice(0, 8)}</code>${rt} · ${escapeHtml(run.config)}`;
         const right = document.createElement("span");
         let st = run.running ? "running" : run.error ? "error" : "done";
         right.className = "status " + st;
@@ -504,6 +613,8 @@
     function buildPayload() {
       return {
         name: $("bName").value.trim(),
+        run_target: $("bRunTarget").value,
+        runpod_destroy_on_exit: $("bRunpodDestroy").checked,
         accelerator: $("bAccel").value,
         data_source: $("bDataSource").value,
         data_path: $("bDataPath").value.trim(),
@@ -513,21 +624,147 @@
         epochs: Number($("bEpochs").value || "25"),
         batch_size: Number($("bBatch").value || "32"),
         learning_rate: Number($("bLR").value || "0.0001"),
+        quantum_backend: $("bQuantumBackend").value.trim(),
+        quantum_policy: $("bQuantumPolicy").value,
+        ibm_backend_name: $("bIBMBackendName").value.trim(),
         lr_trial_mode: !!$("bLRTrialMode").checked,
         lr_trial_epochs: Number($("bLRTrialEpochs").value || "2"),
+        resume_latest: !!$("bResumeLatest").checked,
       };
+    }
+
+    function modelSlugFromName(name) {
+      const raw = (name || "").toLowerCase().trim();
+      if (!raw) return "model_" + Math.floor(Date.now() / 1000);
+      const slug = raw
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .replace(/--+/g, "-");
+      return slug || "model_" + Math.floor(Date.now() / 1000);
+    }
+
+    function renderModelFactsFallback() {
+      const p = buildPayload();
+      const slug = modelSlugFromName(p.name);
+      const lines = [
+        ["Model name", p.name || "(auto-generated from timestamp)"],
+        ["Artifact base", slug],
+        ["Accelerator", p.accelerator],
+        ["Data source", p.data_source],
+        ["Learning rate", String(p.learning_rate)],
+        ["Output checkpoint", `artifacts/${slug}.pt`],
+        ["Best checkpoint", `artifacts/${slug}_best.pt`],
+        ["Latest checkpoint", `artifacts/${slug}_latest.pt`],
+        ["Resume latest", p.resume_latest ? "on" : "off"],
+      ];
+      const box = $("modelFacts");
+      box.innerHTML = "";
+      for (const [k, v] of lines) {
+        const dk = document.createElement("div");
+        dk.className = "k";
+        dk.textContent = k;
+        const dv = document.createElement("div");
+        dv.className = "v";
+        dv.textContent = v;
+        box.appendChild(dk);
+        box.appendChild(dv);
+      }
+    }
+
+    function setModelFactsKV(lines) {
+      const box = $("modelFacts");
+      box.innerHTML = "";
+      for (const [k, v] of lines) {
+        if (k === "__sep__") {
+          const sep = document.createElement("div");
+          sep.className = "sep";
+          box.appendChild(sep);
+          continue;
+        }
+        const dk = document.createElement("div");
+        dk.className = "k";
+        dk.textContent = k;
+        const dv = document.createElement("div");
+        dv.className = "v";
+        dv.textContent = String(v);
+        box.appendChild(dk);
+        box.appendChild(dv);
+      }
+    }
+
+    async function refreshModelFacts() {
+      try {
+        const r = await fetch("/api/model/facts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildPayload()),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const f = data.facts || {};
+        const d = f.dataset || {};
+        const a = f.artifacts || {};
+        const sz = f.estimated_size_gb || {};
+        const resumeRequested = !!a.resume_requested;
+        const resumeAvailable = !!a.resume_available;
+        setModelFactsKV([
+          ["Model name", f.model_name || "(unknown)"],
+          ["Architecture", f.architecture || "QMiniWASM"],
+          ["Requested accelerator", f.requested_accelerator || "auto"],
+          ["Total parameters", Number(f.parameter_count_total || 0).toLocaleString()],
+          ["Trainable backbone params", Number(f.parameter_count_trainable_backbone || 0).toLocaleString()],
+          ["Est. size (FP32)", `${Number(sz.fp32 || 0).toFixed(3)} GB`],
+          ["Est. size (FP16)", `${Number(sz.fp16 || 0).toFixed(3)} GB`],
+          ["Est. size (INT8)", `${Number(sz.int8 || 0).toFixed(3)} GB`],
+          ["__sep__", ""],
+          ["Dataset source", d.source || "(none)"],
+          ["Dataset id / path", d.id_path || "(none)"],
+          ["Dataset config", d.hf_dataset_config || "(none)"],
+          ["Dataset split", d.hf_split || "(n/a)"],
+          ["Mesh blend fraction", String(d.hf_mesh_blend_fraction ?? 0)],
+          ["HF token present", d.hf_token_present ? "yes" : "no"],
+          ["__sep__", ""],
+          ["Output checkpoint", a.save_path || "(none)"],
+          ["Best checkpoint", a.best_path || "(none)"],
+          ["Latest checkpoint", a.latest_path || "(none)"],
+          ["Resume requested", resumeRequested ? "yes" : "no"],
+          ["Resume available", resumeAvailable ? "yes" : "no"],
+        ]);
+        if (resumeRequested && !resumeAvailable) {
+          $("btnBuildRun").disabled = true;
+          const msg = $("buildMsg");
+          msg.textContent = `Resume requested but checkpoint is missing: ${a.latest_path || "(unknown)"}`;
+          msg.className = "status error";
+        } else {
+          if (!$("btnBuildRun").disabled) {
+            // keep current state
+          } else {
+            $("btnBuildRun").disabled = false;
+            if (($("buildMsg").textContent || "").includes("Resume requested but checkpoint is missing")) {
+              $("buildMsg").textContent = "";
+              $("buildMsg").className = "status";
+            }
+          }
+        }
+      } catch (_) {
+        renderModelFactsFallback();
+      }
     }
 
     function refreshWizardReview() {
       const p = buildPayload();
       $("bReview").innerHTML =
-        `<strong>Config</strong>: ${escapeHtml(p.name || "(auto-generated)")}<br/>` +
+        `<strong>Model name</strong>: ${escapeHtml(p.name || "(auto-generated)")}<br/>` +
         `<strong>Accelerator</strong>: ${escapeHtml(p.accelerator)}<br/>` +
         `<strong>Data source</strong>: ${escapeHtml(p.data_source)}<br/>` +
+        `<strong>Quantum mode</strong>: ${escapeHtml(p.quantum_policy)}<br/>` +
+        `<strong>Quantum backend</strong>: ${escapeHtml(p.quantum_backend || "auto")}<br/>` +
+        `<strong>IBM backend override</strong>: ${escapeHtml(p.ibm_backend_name || "auto-select")}<br/>` +
         `<strong>Dataset</strong>: ${escapeHtml(p.data_path || "(n/a)")}<br/>` +
         `<strong>HF config/split</strong>: ${escapeHtml(p.hf_dataset_config || "(none)")} / ${escapeHtml(p.hf_split)}<br/>` +
         `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
         `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
+        `<strong>Execution target</strong>: ${escapeHtml(p.run_target || "local")}${p.run_target === "runpod" ? " (destroy after: " + (p.runpod_destroy_on_exit ? "yes" : "no") + ")" : ""}<br/>` +
         `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}`;
     }
 
@@ -548,11 +785,13 @@
       $("btnWNext").style.display = wiz && bWizardStep < 4 ? "inline-block" : "none";
       $("btnBuildRun").style.display = wiz && bWizardStep < 4 ? "none" : "inline-block";
       if (wiz && bWizardStep === 4) refreshWizardReview();
+      refreshModelFacts();
     }
 
     function toggleLRTrial() {
       $("bLRTrialWrap").style.display = $("bLRTrialMode").checked ? "block" : "none";
       refreshWizardReview();
+      refreshModelFacts();
     }
 
     function toggleHFFields() {
@@ -611,13 +850,68 @@
       return { kind: "warn", label: "CPU" };
     }
 
+    function syncRunpodPanels() {
+      const sl = $("sRunTarget").value === "local";
+      $("sRunpodDestroyWrap").style.display = sl ? "none" : "block";
+      const bl = $("bRunTarget").value === "local";
+      $("bRunpodDestroyWrap").style.display = bl ? "none" : "block";
+    }
+
+    async function loadRunpodStatus() {
+      const msg = $("runpodMsg");
+      const box = $("runpodKv");
+      msg.textContent = "Loading…";
+      msg.className = "status";
+      try {
+        const r = await fetch("/api/runpod/status");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const rp = data.runpod || {};
+        const lines = [
+          ["Token present", rp.token_present ? "yes" : "no"],
+          ["infra/runpod", rp.infra_dir_exists ? "found" : "missing"],
+          ["OpenTofu / Terraform", rp.tofu_usable ? (rp.tofu_binary || "ok") : ("unavailable: " + (rp.tofu_error || ""))],
+          ["Outputs (state)", rp.outputs_error ? ("(no state) " + rp.outputs_error) : JSON.stringify(rp.outputs ?? {})],
+        ];
+        box.innerHTML = "";
+        for (const [k, v] of lines) {
+          const dk = document.createElement("div");
+          dk.className = "k";
+          dk.textContent = k;
+          const dv = document.createElement("div");
+          dv.className = "v";
+          dv.textContent = String(v);
+          box.appendChild(dk);
+          box.appendChild(dv);
+        }
+        msg.textContent = rp.token_present && rp.infra_dir_exists && rp.tofu_usable
+          ? "Ready to provision (or check outputs)."
+          : "Fix token, repo path, or install tofu/terraform.";
+        msg.className = "status done";
+      } catch (e) {
+        box.innerHTML = "";
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
     async function loadPreflight() {
       const cfg = $("cfg").value || "";
+      const qb = $("bQuantumBackend") ? $("bQuantumBackend").value.trim() : "";
+      const qp = $("bQuantumPolicy") ? $("bQuantumPolicy").value : "";
+      const ibm = $("bIBMBackendName") ? $("bIBMBackendName").value.trim() : "";
       const msg = $("preflightMsg");
       msg.textContent = "Checking runtime...";
       msg.className = "status";
       try {
-        const q = cfg ? ("?config=" + encodeURIComponent(cfg)) : "";
+        const params = new URLSearchParams();
+        if (cfg) params.set("config", cfg);
+        const accel = $("bAccel") ? $("bAccel").value.trim() : "";
+        if (accel) params.set("accelerator", accel);
+        if (qb) params.set("quantum_backend", qb);
+        if (qp) params.set("quantum_policy", qp);
+        if (ibm) params.set("ibm_backend_name", ibm);
+        const q = params.toString() ? ("?" + params.toString()) : "";
         const r = await fetch("/api/preflight" + q);
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
@@ -626,12 +920,28 @@
         setPreflightBadge(health.kind, health.label);
         setPreflightKV([
           ["Config", p.config || "(env/default)"],
-          ["Requested accelerator", p.requested_accelerator || "auto"],
+          ["Accelerator in config file", p.accelerator_from_config_file !== undefined && p.accelerator_from_config_file !== "" ? p.accelerator_from_config_file : "(unset or default)"],
+          ["Preflight accelerator (Build form)", p.preflight_accelerator_override ? String(p.preflight_accelerator_override) : "(use config file)"],
+          ["Requested accelerator (device check)", p.requested_accelerator || "auto"],
           ["Resolved torch device", p.resolved_torch_device || "unknown"],
           ["SYCL backend active", p.sycl_backend_active ? "yes" : "no"],
           ["dpctl device count", p.dpctl_device_count ?? "n/a"],
           ["Python executable", p.python_exe || "unknown"],
           ["dpctl error", p.dpctl_error || "(none)"],
+          ["Quantum backend", p.quantum_backend || "penny_lane"],
+          ["Quantum backend (from config)", p.quantum_backend_from_config || "(none)"],
+          ["Quantum policy", p.quantum_policy || "prefer_hardware_fallback"],
+          ["IBM runtime available", p.ibm && p.ibm.runtime_available ? "yes" : "no"],
+          ["IBM token present", p.ibm && p.ibm.token_present ? "yes" : "no"],
+          ["IBM connected", p.ibm && p.ibm.connected ? "yes" : "no"],
+          ["IBM selected backend", p.ibm && p.ibm.selected_backend ? p.ibm.selected_backend : "(auto/unavailable)"],
+          ["IBM pending jobs", p.ibm && p.ibm.backend_pending_jobs != null ? p.ibm.backend_pending_jobs : "n/a"],
+          ["IBM backend operational", p.ibm && p.ibm.backend_operational != null ? (p.ibm.backend_operational ? "yes" : "no") : "n/a"],
+          ["IBM backend status", p.ibm && p.ibm.backend_status_msg ? p.ibm.backend_status_msg : "(none)"],
+          ["IBM usage seconds", p.ibm && p.ibm.usage_seconds != null ? p.ibm.usage_seconds : "n/a"],
+          ["IBM usage limit seconds", p.ibm && p.ibm.usage_limit_seconds != null ? p.ibm.usage_limit_seconds : "n/a"],
+          ["IBM estimated time left (s)", p.ibm && p.ibm.job_time_left_seconds != null ? p.ibm.job_time_left_seconds : "n/a"],
+          ["IBM connect error", p.ibm && p.ibm.connect_error ? p.ibm.connect_error : "(none)"],
         ]);
         msg.textContent = "Preflight OK";
         msg.className = "status done";
@@ -685,7 +995,14 @@
         const r = await fetch("/api/runs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ config: path }),
+          body: JSON.stringify({
+            config: path,
+            quantum_backend: $("sQuantumBackend").value.trim(),
+            quantum_policy: $("sQuantumPolicy").value,
+            ibm_backend_name: $("sIBMBackendName").value.trim(),
+            run_target: $("sRunTarget").value,
+            runpod_destroy_on_exit: $("sRunpodDestroy").checked,
+          }),
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
@@ -708,11 +1025,20 @@
       pollLog();
     };
 
-    $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); };
+    $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); loadRunpodStatus(); };
+    $("btnRunpodStatus").onclick = loadRunpodStatus;
+    $("sRunTarget").onchange = syncRunpodPanels;
+    $("bRunTarget").onchange = syncRunpodPanels;
     $("btnPreflight").onclick = loadPreflight;
     $("cfg").onchange = loadPreflight;
     $("bDataSource").onchange = toggleHFFields;
     $("bLRTrialMode").onchange = toggleLRTrial;
+    for (const id of ["bName", "bAccel", "bQuantumBackend", "bQuantumPolicy", "bIBMBackendName", "bDataPath", "bEpochs", "bBatch", "bLR", "bDatasetConfig", "bSplit", "bBlend", "bResumeLatest"]) {
+      $(id).addEventListener("input", refreshModelFacts);
+      $(id).addEventListener("change", refreshModelFacts);
+    }
+    $("bAccel").addEventListener("change", loadPreflight);
+    $("btnModelFacts").onclick = refreshModelFacts;
     $("bDatasetPreset").onchange = applyDatasetPreset;
     $("bWizardMode").onchange = () => { bWizardStep = 1; renderWizard(); };
     $("btnWPrev").onclick = () => { bWizardStep = Math.max(1, bWizardStep - 1); renderWizard(); };
@@ -774,7 +1100,9 @@
     toggleHFFields();
     toggleLRTrial();
     renderWizard();
-    loadConfigs().then(loadPreflight);
+    refreshModelFacts();
+    syncRunpodPanels();
+    loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
     loadRuns();
     setInterval(loadRuns, 5000);
   </script>
