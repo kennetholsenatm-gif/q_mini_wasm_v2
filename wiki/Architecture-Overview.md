@@ -50,6 +50,24 @@ The architecture follows a strict three-tier hierarchy that separates concerns w
 - Kubernetes for container orchestration
 - Cloud-native monitoring and logging
 
+## Horizontal scale and clustering (qminiwasm-core)
+
+The **training** stack in this repository (`qminiwasm-core`) has properties that often make **horizontal scaling and cluster operations easier to reason about** than for typical large autoregressive LLM agents:
+
+**Why it tends to cluster cleanly**
+
+- **Fixed tensor geometry** — Core supervision uses **fixed-width** vectors (e.g. 4096-d **hidden** / **target**). Batch shapes and per-step memory are **predictable** compared to variable-length token streams and very large **KV caches** in decoder-only models.
+- **Embarrassingly parallel data paths** — **Mesh** and **HF tabular** workloads shard naturally by **sample**; workers can encode, batch, and feed the trainer independently (subject to dataset partitioning and reproducibility choices).
+- **Detached quantum execution** — When the QAOA MoE uses **IBM Quantum Runtime**, device execution is **outside** the autograd graph; ⟨Z⟩ expectations are mixed in as a **classical signal** in the loop, avoiding “train the whole network through the QPU” coupling.
+
+**What still requires normal distributed ML discipline**
+
+- **PyTorch** multi-GPU / multi-node (**DDP**, etc.) has the same **engineering** surface as other models: process groups, checkpointing, stragglers, and failure recovery.
+- **WASM / mesh** encoding can be **CPU-heavy** per sample—scale often means **more data-loader workers**, **partitioned corpora**, or **pipelined** ingest, not only larger GPUs.
+- **IBM Quantum** is **queue- and quota-bound**; “parallelism” is mostly **fan-out of independent jobs**, not linear speedup on a single training step.
+
+For the concrete training loop and IBM path, see **[AI Training Pipeline](AI-Training-Pipeline.md)** and **[QUANTUM_QISKIT.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/QUANTUM_QISKIT.md)**.
+
 ## Infrastructure Components
 
 ### Container Architecture
@@ -245,5 +263,5 @@ The monitoring architecture provides complete visibility into system health and 
 
 ---
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-23
 **Version:** 2.0

@@ -5,6 +5,7 @@ Welcome to the Hierarchical Edge-Quantum AI Architecture documentation! This rep
 ## Recent highlights
 
 - **IBM Quantum + training (March 2026):** The QAOA-style **MoE** path has been **run successfully on real IBM Quantum hardware** (IBM Quantum Runtime / `qiskit_ibm`) as part of the **`python -m engine`** training loop—not only simulators. Scope, env vars, and caveats: **[AI Training Pipeline](AI-Training-Pipeline.md)** and in-repo **[QUANTUM_QISKIT.md](../docs/QUANTUM_QISKIT.md)**. Cascade RL remains classical; quotas and account limits apply on IBM’s side.
+- **Clustering / horizontal scale:** The training stack’s **fixed-width vectors** and **sample-parallel** data paths (plus **detached** quantum calls when used) are discussed under **[Architecture Overview — Horizontal scale and clustering](Architecture-Overview.md#horizontal-scale-and-clustering-qminiwasm-core)** and **[Business Value — Operational scale](Business-Value.md#operational-scale-clustering)**.
 
 ## 🟢 Track 1: General Overview (For Leadership & Laypersons)
 
