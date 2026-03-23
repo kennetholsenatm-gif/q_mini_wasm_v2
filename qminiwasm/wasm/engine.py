@@ -43,7 +43,13 @@ class WasmEngine:
         Args:
             use_mock: If True, use mock implementation instead of actual WASM compilation
         """
-        self.use_mock = use_mock
+        force_mock = os.environ.get("QMINIWASM_FORCE_MOCK_WASM", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        self.use_mock = bool(use_mock or force_mock)
         self.logger = logging.getLogger(__name__)
         self._module_cache: Dict[str, Optional[Any]] = {}
         # wasmtime.Module must be instantiated with the Store that created it.
@@ -52,7 +58,9 @@ class WasmEngine:
         self._compiled_store: Optional[Any] = None
         self._compiled_module: Optional[Any] = None
 
-        if not use_mock:
+        if force_mock:
+            self.logger.warning("QMINIWASM_FORCE_MOCK_WASM enabled; using mock WASM engine.")
+        if not self.use_mock:
             try:
                 # Test WASM compilation capability
                 self._test_wasm_compilation()
@@ -257,7 +265,16 @@ class WasmEngine:
             return output, hidden_state, target_state, pre_mem, post_mem
 
         except Exception as e:
-            self.logger.error("WASM execution error: %s", str(e))
+            msg = str(e)
+            if "mmap failed to reserve" in msg or "Cannot allocate memory" in msg:
+                # Common in memory-constrained containers with wasmtime virtual memory reservation.
+                self.logger.warning(
+                    "WASM runtime memory reservation failed (%s); switching to mock WASM mode.",
+                    msg,
+                )
+                self.use_mock = True
+                return self._execute_mock(func_name, args)
+            self.logger.error("WASM execution error: %s", msg)
             return 0, None, None, b"", b""
 
     def _execute_mock(

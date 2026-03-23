@@ -67,62 +67,77 @@ def test_row_to_encoded_blob_legacy_fallback():
     assert b"a" in blob or b"z" in blob
 
 
-def test_engine_config_hf_context_fields_env(monkeypatch):
+def test_engine_config_hf_context_fields_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("HF_CONTEXT_FIELDS", raising=False)
     from engine.config import EngineConfig
 
-    assert EngineConfig().hf_context_fields is None
+    f = tmp_path / "c.toml"
+    f.write_text("", encoding="utf-8")
+    assert EngineConfig.from_training_toml(f).hf_context_fields is None
 
-    monkeypatch.setenv("HF_CONTEXT_FIELDS", "0")
-    assert EngineConfig().hf_context_fields == []
+    f.write_text('[huggingface]\ncontext_fields = []\n', encoding="utf-8")
+    assert EngineConfig.from_training_toml(f).hf_context_fields == []
 
-    monkeypatch.setenv("HF_CONTEXT_FIELDS", "repo,path")
-    assert EngineConfig().hf_context_fields == ["repo", "path"]
+    f.write_text('[huggingface]\ncontext_fields = ["repo", "path"]\n', encoding="utf-8")
+    assert EngineConfig.from_training_toml(f).hf_context_fields == ["repo", "path"]
 
 
-def test_engine_config_hybrid_adapter_from_env(monkeypatch):
+def test_engine_config_hybrid_adapter_from_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("HYBRID_ADAPTER", raising=False)
     monkeypatch.delenv("HYBRID_ADAPTER_HIDDEN", raising=False)
     from engine.config import EngineConfig
 
-    c = EngineConfig()
+    f = tmp_path / "c.toml"
+    f.write_text("", encoding="utf-8")
+    c = EngineConfig.from_training_toml(f)
     assert c.hybrid_adapter is False
     assert c.hybrid_adapter_hidden == 1024
 
-    monkeypatch.setenv("HYBRID_ADAPTER", "1")
-    monkeypatch.setenv("HYBRID_ADAPTER_HIDDEN", "512")
-    c2 = EngineConfig()
+    f.write_text(
+        "[adapter]\nhybrid_adapter = true\nhybrid_adapter_hidden = 512\n",
+        encoding="utf-8",
+    )
+    c2 = EngineConfig.from_training_toml(f)
     assert c2.hybrid_adapter is True
     assert c2.hybrid_adapter_hidden == 512
 
 
-def test_engine_config_target_mean_mse_from_env(monkeypatch):
+def test_engine_config_target_mean_mse_from_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("TARGET_MEAN_MSE", raising=False)
     monkeypatch.delenv("STOP_ON_TARGET_MSE", raising=False)
     from engine.config import EngineConfig
 
-    assert EngineConfig().target_mean_mse is None
-    assert EngineConfig().stop_on_target_mse is False
+    f = tmp_path / "c.toml"
+    f.write_text("", encoding="utf-8")
+    assert EngineConfig.from_training_toml(f).target_mean_mse is None
+    assert EngineConfig.from_training_toml(f).stop_on_target_mse is False
 
-    monkeypatch.setenv("TARGET_MEAN_MSE", "1e-4")
-    monkeypatch.setenv("STOP_ON_TARGET_MSE", "1")
-    c = EngineConfig()
+    f.write_text(
+        "[eval]\ntarget_mean_mse = 0.0001\nstop_on_target_mse = true\n",
+        encoding="utf-8",
+    )
+    c = EngineConfig.from_training_toml(f)
     assert c.target_mean_mse == 1e-4
     assert c.stop_on_target_mse is True
 
 
-def test_engine_config_hf_wasi_from_env(monkeypatch):
+def test_engine_config_hf_wasi_from_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("HF_WASI_SLICE_ONLY", raising=False)
     monkeypatch.delenv("HF_WASI_MAX_SCAN", raising=False)
     from engine.config import EngineConfig
 
-    assert EngineConfig().hf_wasi_slice_only is False
-    assert EngineConfig().hf_wasi_max_scan is None
+    f = tmp_path / "c.toml"
+    f.write_text("", encoding="utf-8")
+    assert EngineConfig.from_training_toml(f).hf_wasi_slice_only is False
+    assert EngineConfig.from_training_toml(f).hf_wasi_max_scan is None
 
-    monkeypatch.setenv("HF_WASI_SLICE_ONLY", "1")
-    monkeypatch.setenv("HF_WASI_MAX_SCAN", "5000000")
-    assert EngineConfig().hf_wasi_slice_only is True
-    assert EngineConfig().hf_wasi_max_scan == 5_000_000
+    f.write_text(
+        "[huggingface]\nwasi_slice_only = true\nwasi_max_scan = 5000000\n",
+        encoding="utf-8",
+    )
+    c = EngineConfig.from_training_toml(f)
+    assert c.hf_wasi_slice_only is True
+    assert c.hf_wasi_max_scan == 5_000_000
 
 
 def test_engine_config_hf_token_from_env(monkeypatch):

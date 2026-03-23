@@ -23,6 +23,7 @@ import torch.nn as nn
 from .config import DEFAULT_HIERARCHICAL_CONFIG, HierarchicalConfig
 from .inference.edge import EdgeOutcome, default_certainty_heuristic, run_edge_cognitive_loop
 from .inference.escalation import prepare_escalation_payload
+from .quantum.qaoa_integration import QAOAConfig
 from .quantum.router import HybridQuantumMoE
 from .quantum.interconnect import StateMigrationInterconnect
 from .layers.ternary import TernaryWASMExpert
@@ -65,6 +66,11 @@ class QMiniWASM:
         cascade_state_dim: int = 8,
         cascade_num_actions: int = 4,
         cascade_router_hidden: int = 32,
+        qaoa_execution_mode: str = "pennylane",
+        num_qubits: int = 8,
+        qaoa_layers: int = 3,
+        ibm_qaoa_shots: int = 1024,
+        quantum_backend: str = "penny_lane",
     ):
         """Initialize the QMiniWASM model.
 
@@ -78,12 +84,40 @@ class QMiniWASM:
             use_cascade_router: If True, attach a :class:`CascadeRouter` (4096→latent→logits) for
                 cascade RL / escalation hints; trained via the loop's cascade optimizer, not main MSE Adam.
             cascade_state_dim / cascade_num_actions / cascade_router_hidden: Router shape.
+            qaoa_execution_mode: ``pennylane`` (identity MoE), ``qiskit_statevector`` (exact Qiskit),
+                or ``qiskit_ibm`` (IBM Quantum via Runtime Estimator; no grad through device).
+            num_qubits / qaoa_layers: QAOA shape when using Qiskit modes.
+            ibm_qaoa_shots: Shot budget hint for IBM Estimator (precision).
+            quantum_backend: Engine / TOML logical backend; for ``qiskit_ibm``, an ``ibm_*`` name
+                selects the IBM device when env vars are not set in the worker process.
         """
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         self.device = device if device is not None else get_device()
+        qaoa_cfg: Optional[QAOAConfig] = None
+        mode = (qaoa_execution_mode or "pennylane").strip().lower()
+        if mode in ("qiskit_statevector", "qiskit_ibm"):
+            qaoa_cfg = QAOAConfig(
+                num_layers=int(qaoa_layers),
+                quantum_backend="ibm" if mode == "qiskit_ibm" else "default.qubit",
+                use_neural_prediction=False,
+                execution_mode=mode,
+                ibm_shots=int(ibm_qaoa_shots),
+                engine_quantum_backend=str(quantum_backend).strip()
+                if mode == "qiskit_ibm"
+                else None,
+            )
+            self.logger.info(
+                "quantum_router: QAOA via Qiskit (%s, num_qubits=%s layers=%s)",
+                mode,
+                int(num_qubits),
+                int(qaoa_layers),
+            )
         # Initialize all components
-        self.quantum_router = HybridQuantumMoE().to(self.device)
+        self.quantum_router = HybridQuantumMoE(
+            qaoa_config=qaoa_cfg,
+            num_qubits=int(num_qubits),
+        ).to(self.device)
         self.ternary_expert = TernaryWASMExpert(
             4096,
             4096,

@@ -13,12 +13,14 @@ The implementation follows the mathematical formulations from the Q-Mini-WASM
 white paper, including problem Hamiltonian construction and angle prediction.
 """
 
+import logging
+import os
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from typing import Optional, Tuple, Dict, List, Callable
 from dataclasses import dataclass
-import logging
+from typing import Callable, Dict, List, Optional, Tuple
 
 try:
     import pennylane as qml
@@ -57,6 +59,12 @@ class QAOAConfig:
     use_neural_prediction: bool = True
     angle_prediction_hidden_dim: int = 64
     problem_type: str = "ternary_optimization"
+    #: ``pennylane`` | ``qiskit_statevector`` | ``qiskit_ibm`` (no autograd through IBM device).
+    execution_mode: str = "pennylane"
+    ibm_shots: int = 1024
+    ibm_backend_name: Optional[str] = None
+    #: Engine / TOML ``[hardware].quantum_backend`` (fallback for IBM device when env is unset).
+    engine_quantum_backend: Optional[str] = None
 
 
 class ProblemHamiltonian(nn.Module):
@@ -240,6 +248,10 @@ class NeuralQAOA(nn.Module):
         else:
             self.angle_predictor = None
 
+        # Quantum circuit parameters (must exist before _initialize_random_angles)
+        self.gamma = nn.Parameter(torch.randn(config.num_layers))
+        self.beta = nn.Parameter(torch.randn(config.num_layers))
+
         # Initialize angles
         if weights is not None:
             self.register_buffer("current_weights", weights)
@@ -247,10 +259,6 @@ class NeuralQAOA(nn.Module):
         else:
             self.register_buffer("current_weights", torch.zeros(num_qubits))
             self._initialize_random_angles()
-
-        # Quantum circuit parameters
-        self.gamma = nn.Parameter(torch.randn(config.num_layers))
-        self.beta = nn.Parameter(torch.randn(config.num_layers))
 
     def _initialize_angles_from_weights(self, weights: torch.Tensor):
         """Initialize angles based on current weights using neural prediction."""
@@ -276,6 +284,10 @@ class NeuralQAOA(nn.Module):
             gamma: Problem Hamiltonian angles
             beta: Mixer Hamiltonian angles
         """
+        mode = getattr(self.config, "execution_mode", "pennylane") or "pennylane"
+        if mode in ("qiskit_statevector", "qiskit_ibm"):
+            return self._quantum_circuit_qiskit(weights, gamma, beta)
+
         if PENNYLANE_AVAILABLE:
             # PennyLane implementation
             dev = qml.device(self.config.quantum_backend, wires=self.num_qubits)
@@ -300,6 +312,40 @@ class NeuralQAOA(nn.Module):
         else:
             # Fallback to classical simulation
             return self._classical_simulation(weights, gamma, beta)
+
+    def _quantum_circuit_qiskit(
+        self, weights: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor
+    ) -> torch.Tensor:
+        """Same QAOA ansatz as PennyLane, executed via Qiskit (statevector or IBM Runtime)."""
+        from qminiwasm.quantum.qiskit_qaoa import resolve_ibm_backend_name, run_z_expectations
+
+        w = weights.detach().cpu().numpy().reshape(-1)[: self.num_qubits]
+        if w.size < self.num_qubits:
+            w = np.pad(w, (0, self.num_qubits - w.size))
+        g = gamma.detach().cpu().numpy().reshape(-1)[: self.config.num_layers]
+        b = beta.detach().cpu().numpy().reshape(-1)[: self.config.num_layers]
+        bias = self.problem_hamiltonian.bias_terms.detach().cpu().numpy()
+        coup = self.problem_hamiltonian.weight_couplings.detach().cpu().numpy()
+        mode = getattr(self.config, "execution_mode", "qiskit_statevector")
+        ibm_name = resolve_ibm_backend_name(
+            getattr(self.config, "ibm_backend_name", None),
+            config_quantum_backend=getattr(self.config, "engine_quantum_backend", None),
+        )
+        shots = int(getattr(self.config, "ibm_shots", 1024))
+        out = run_z_expectations(
+            mode,
+            self.num_qubits,
+            int(self.config.num_layers),
+            w,
+            g,
+            b,
+            bias,
+            coup,
+            ibm_backend_name=(ibm_name or None),
+            ibm_shots=shots,
+        )
+        t = torch.from_numpy(out.astype(np.float32)).to(device=weights.device)
+        return t.to(dtype=weights.dtype)
 
     def _apply_problem_hamiltonian(self, weights: torch.Tensor, gamma: torch.Tensor):
         """Apply problem Hamiltonian evolution.

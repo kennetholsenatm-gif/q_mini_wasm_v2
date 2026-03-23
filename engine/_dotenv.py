@@ -13,3 +13,6 @@ def load_dotenv_if_available() -> None:
     except ImportError:
         return
     load_dotenv()
+    from .secret_sanitize import sanitize_secret_environ
+
+    sanitize_secret_environ()

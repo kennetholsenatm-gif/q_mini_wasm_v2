@@ -1,0 +1,10 @@
+# Inference defaults (override with env in containers: ACCELERATOR, QMINIWASM_CHECKPOINT, ...).
+
+[serve]
+# checkpoint = "checkpoints/latest.pt"
+hybrid_adapter = false
+hybrid_adapter_hidden = 1024
+use_cascade_router = false
+cascade_state_dim = 8
+cascade_num_actions = 4
+cascade_router_hidden = 32

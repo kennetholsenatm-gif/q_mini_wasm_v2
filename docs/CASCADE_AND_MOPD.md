@@ -1,6 +1,6 @@
 # Cascade reinforcement learning and MOPD
 
-This document describes **cascade GRPO** (group-relative policy optimization for the escalation / routing head) and **MOPD** (multi-domain on-policy distillation) as implemented in **qminiwasm-core**, how they fit into `run_training_loop`, and which environment variables control them. For data sources and the full env table, see **[TRAINING_DATA.md](TRAINING_DATA.md)**.
+This document describes **cascade GRPO** (group-relative policy optimization for the escalation / routing head) and **MOPD** (multi-domain on-policy distillation) as implemented in **qminiwasm-core**, how they fit into `run_training_loop`, and which environment variables control them. Base hyperparameters can live in TOML under **`configs/training/`** (see **[TRAINING_DATA.md](TRAINING_DATA.md)**); the helper script **`scripts/run_training_cascade_mopd.py`** defaults to **`--config configs/training/cascade_mopd.toml`** and still injects **`CASCADE_MOPD_*`** and checkpoint paths via env for quick overrides. For the full env table, see **[TRAINING_DATA.md](TRAINING_DATA.md)**.
 
 ## Where the code lives
 
@@ -13,6 +13,10 @@ This document describes **cascade GRPO** (group-relative policy optimization for
 | Epoch orchestration (cascade phase then AdamW MSE) | [`qminiwasm/training/loop.py`](../qminiwasm/training/loop.py) |
 
 ## Cascade RL (toy MDP + GRPO)
+
+**Not IBM Quantum:** The cascade phase is **PyTorch-only** (toy env + GRPO). It does **not** submit jobs to **IBM Quantum** or any Qiskit Runtime queue. Seeing `cascade_rl mean_loss=…` in logs does **not** imply a hardware quantum job ran.
+
+**Default `quantum_router` in training:** `HybridQuantumMoE` ([`router.py`](../qminiwasm/quantum/router.py)) currently implements `forward` as a **pass-through** (`return hidden_states`). So the main supervised phase also does **not** execute circuits on IBM hardware by default. Config fields like `quantum_backend` are reserved for future / alternate code paths; they are **not** wired into this cascade MDP or that default router.
 
 **Purpose:** Before each epoch’s supervised MSE updates, run a few **on-policy** steps on a small discrete-action MDP (`ToyRoutingEnv` in [`cascade_rl.py`](../qminiwasm/training/cascade_rl.py)). The policy can be:
 

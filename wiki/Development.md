@@ -51,6 +51,10 @@ All commits must pass the following pre-commit hooks:
 - **Bandit**: Python security linter
 - **Detect-secrets**: Secret detection with baseline comparison
 
+### Training web UI (optional)
+
+A small **Go** UI under [`training-wui/`](../training-wui) lists `configs/training/*.toml` and runs `python -m engine --config …` from the repo root. To provision an Incus guest with deps + mount + built WUI, use [`training-wui/incus/`](../training-wui/incus) (`setup-instance.sh`). See [`training-wui/README.md`](../training-wui/README.md).
+
 ### 4. Local Testing
 ```bash
 # Run complete test suite

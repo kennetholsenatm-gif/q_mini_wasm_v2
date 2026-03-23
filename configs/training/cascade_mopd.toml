@@ -1,0 +1,27 @@
+# Base for Cascade RL + MOPD continuation runs (see scripts/run_training_cascade_mopd.py).
+# The script still injects CASCADE_MOPD_*, CHECKPOINT_*, etc. via env for one-off overrides.
+# Omit mopd_lambda here so --mopd-lambda / injected env wins.
+
+[hardware]
+accelerator = "cpu"
+
+[training]
+epochs = 25
+batch_size = 32
+
+[data]
+source = "mesh"
+mesh_algorithms = "hash,encrypt,network,routing,consensus"
+
+[cascade]
+enabled = true
+steps_per_epoch = 2
+group_size = 4
+state_dim = 8
+num_actions = 4
+# mopd_lambda = 0.1   # set via script / env instead
+#
+# Optional holdout eval (same as passing --eval-holdout / --eval-every-epoch to the script):
+# [eval]
+# holdout_fraction = 0.05
+# every_epoch = true

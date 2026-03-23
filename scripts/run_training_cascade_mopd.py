@@ -11,6 +11,7 @@ For tmux / checkpoint continuation (load latest after a stop), see CASCADE_AND_M
 Usage::
 
     python scripts/run_training_cascade_mopd.py
+    python scripts/run_training_cascade_mopd.py --config configs/training/cascade_mopd.toml
     python scripts/run_training_cascade_mopd.py --mopd-lambda 0.05 --checkpoint-load ./artifacts/best.pt
     python scripts/run_training_cascade_mopd.py --dry-run
     python scripts/run_training_cascade_mopd.py --resume
@@ -193,6 +194,12 @@ def main() -> int:
         action="store_true",
         help="Print injected variables and exit without running the engine.",
     )
+    parser.add_argument(
+        "--config",
+        default=str(REPO_ROOT / "configs" / "training" / "cascade_mopd.toml"),
+        metavar="PATH",
+        help="Training TOML passed to python -m engine --config (default: configs/training/cascade_mopd.toml).",
+    )
     args = parser.parse_args()
 
     os.chdir(REPO_ROOT)
@@ -241,7 +248,14 @@ def main() -> int:
     env = os.environ.copy()
     env.update(injections)
 
+    cfg_path = Path(args.config).expanduser()
+    if not cfg_path.is_absolute():
+        cfg_path = (REPO_ROOT / cfg_path).resolve()
+    else:
+        cfg_path = cfg_path.resolve()
+
     print("run_training_cascade_mopd: repo root", REPO_ROOT)
+    print("Training config:", cfg_path)
     print("Injected / overridden for this run:")
     for k in sorted(injections):
         print(f"  {k}={injections[k]}")
@@ -250,7 +264,7 @@ def main() -> int:
         return 0
 
     return subprocess.run(
-        [sys.executable, "-m", "engine"],
+        [sys.executable, "-m", "engine", "--config", str(cfg_path)],
         cwd=str(REPO_ROOT),
         env=env,
         check=False,

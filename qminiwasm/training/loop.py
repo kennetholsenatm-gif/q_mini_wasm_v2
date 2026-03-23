@@ -221,6 +221,8 @@ def run_training_loop(
     cascade_router_hidden: int = 32,
     cascade_couple_forward: bool = True,
     hf_mesh_blend_fraction: float = 0.0,
+    qaoa_execution_mode: str = "pennylane",
+    ibm_qaoa_shots: int = 1024,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -230,9 +232,12 @@ def run_training_loop(
         learning_rate: AdamW learning rate.
         accelerator: "cuda", "xpu", or "cpu"; if None, use env PREFER_XPU / PREFER_CUDA.
         device_index: Device index for cuda/xpu.
-        quantum_backend: Quantum backend id (used when building router; default penny_lane).
-        num_qubits: Number of qubits for QAOA (for backend registry).
-        qaoa_layers: QAOA layers (for backend registry).
+        quantum_backend: Logical backend name (also used with IBM device selection).
+        num_qubits: QAOA width when ``qaoa_execution_mode`` is ``qiskit_*``.
+        qaoa_layers: QAOA depth when ``qaoa_execution_mode`` is ``qiskit_*``.
+        qaoa_execution_mode: ``pennylane`` (identity MoE), ``qiskit_statevector`` (local exact Qiskit),
+            ``qiskit_ibm`` (IBM Quantum Runtime Estimator; requires token and ``IBM_BACKEND_NAME``).
+        ibm_qaoa_shots: Estimator precision hint for IBM mode (mapped to ``precision``).
         data_path: Path to corpus manifest (when training_data_source is ``corpus``)
             or Hugging Face dataset id (when ``hf_tabular``).
         training_data_source: ``mesh`` (embedded C/WASM curriculum), ``corpus`` (manifest JSON),
@@ -318,6 +323,11 @@ def run_training_loop(
         cascade_state_dim=int(cascade_state_dim),
         cascade_num_actions=int(cascade_num_actions),
         cascade_router_hidden=int(cascade_router_hidden),
+        qaoa_execution_mode=str(qaoa_execution_mode or "pennylane"),
+        num_qubits=int(num_qubits),
+        qaoa_layers=int(qaoa_layers),
+        ibm_qaoa_shots=int(ibm_qaoa_shots),
+        quantum_backend=str(quantum_backend or "penny_lane"),
     )
     model.quantum_router.train()
     if hasattr(model, "ternary_expert"):

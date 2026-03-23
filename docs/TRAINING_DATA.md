@@ -2,6 +2,26 @@
 
 This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics** from `python -m engine`.
 
+## Structured config (TOML)
+
+Hyperparameters and non-secret options should live in **TOML** under [`configs/training/`](../configs/training/) so runs are diffable and reproducible. Example files:
+
+- [`configs/training/mesh_cpu.toml`](../configs/training/mesh_cpu.toml) — synthetic mesh on CPU
+- [`configs/training/hf_tabular_example.toml`](../configs/training/hf_tabular_example.toml) — Hugging Face tabular (set `HF_DATASET_CONFIG` / tokens in `.env` as needed)
+- [`configs/training/schema.toml`](../configs/training/schema.toml) — commented reference for all sections
+
+Run training:
+
+```bash
+python -m engine --config configs/training/mesh_cpu.toml
+```
+
+**Precedence:** values set in the TOML file override environment variables for those keys. **`ACCELERATOR`** is still applied from the environment when set (after loading the file), so containers can pin the device without editing the file. **`HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`** are always read from the environment when not passed explicitly — **never commit tokens in TOML**.
+
+If you omit `--config`, the engine falls back to environment variables only and logs a **deprecation warning**.
+
+Cascade + MOPD helper: [`scripts/run_training_cascade_mopd.py`](../scripts/run_training_cascade_mopd.py) defaults to `--config configs/training/cascade_mopd.toml` and still injects `CASCADE_MOPD_*` / checkpoint paths via env for one-off overrides.
+
 ## Data sources (`TRAINING_DATA_SOURCE`)
 
 | Source | Description | Aligns with WASM memory semantics? |
@@ -105,30 +125,26 @@ Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_M
 
 ### Checkpoints and evaluation (making training useful)
 
-1. Train and save a final checkpoint:
+1. Train and save a final checkpoint (paths can live in TOML `[checkpoint]` or in `.env`):
 
 ```bash
+export SEED=42   # optional; or set [training].seed in TOML
+python -m engine --config configs/training/mesh_cpu.toml
+# with checkpoints only in env:
 export CHECKPOINT_SAVE_PATH=./artifacts/qminiwasm_trainable.pt
-export SEED=42
-python -m engine
+python -m engine --config configs/training/mesh_cpu.toml
 ```
 
-2. Optional holdout metric (same forward as training, data not seen in the train split):
+2. Optional holdout metric (same forward as training, data not seen in the train split): set `[eval]` in your TOML (`holdout_fraction`, `every_epoch`) or use `EVAL_HOLDOUT_FRACTION` / `EVAL_EVERY_EPOCH` when those keys are omitted from the file.
 
-```bash
-export EVAL_HOLDOUT_FRACTION=0.05
-export EVAL_EVERY_EPOCH=1   # optional; else eval runs once at the end
-python -m engine
-```
-
-3. **Serving:** run the API with the same file: set `QMINIWASM_CHECKPOINT` (or `CHECKPOINT_LOAD_PATH`) so `POST /infer` uses trained weights. Optional **`USE_CASCADE_ROUTER=1`** and matching **`CASCADE_STATE_DIM` / `CASCADE_NUM_ACTIONS` / `CASCADE_ROUTER_HIDDEN`** align with training; responses may include **`cascade_logits`** per row. Set **`HYBRID_ADAPTER=1`** if the checkpoint contains `hybrid_adapter` weights (or rely on auto-attach on load).
+3. **Serving:** run the API with the same weights file. Set `QMINIWASM_CHECKPOINT` (or `CHECKPOINT_LOAD_PATH`), or point **`QMINIWASM_SERVE_CONFIG`** at a TOML file such as [`configs/serve/default.toml`](../configs/serve/default.toml) with a `[serve]` table (`checkpoint`, `hybrid_adapter`, cascade dims). Environment variables still fill any field omitted from that file. Optional **`USE_CASCADE_ROUTER=1`** and matching cascade dims align with training; responses may include **`cascade_logits`** per row. Set **`HYBRID_ADAPTER=1`** if the checkpoint contains `hybrid_adapter` weights (or rely on auto-attach on load).
 
 Checkpoint files include `format_version`, `d_model`, `quantum_router`, `ternary_expert`, optional **`hybrid_adapter`**, optional **`cascade_policy`** (same tensors as `model.cascade_router` when used), and optional `meta` (training tags). Loading uses `strict=False` and logs missing/unexpected keys.
 
 Run from repo root:
 
 ```bash
-python -m engine
+python -m engine --config configs/training/mesh_cpu.toml
 ```
 
 Logs go to **stdout** (friendlier for PowerShell). Third-party HTTP loggers are quieted to WARNING.

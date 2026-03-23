@@ -9,6 +9,8 @@
 # quantum_backend = "penny_lane"
 # num_qubits = 8
 # qaoa_layers = 3
+# qaoa_execution_mode = "pennylane" | "qiskit_statevector" | "qiskit_ibm"
+# ibm_qaoa_shots = 1024
 # diff_method = "parameter-shift"
 
 [training]
