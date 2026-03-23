@@ -50,6 +50,11 @@ This document explains the business and organizational value of the Hierarchical
 - Improves customer service response times
 - Increases operational efficiency by 40%
 
+### Operational scale (clustering)
+**Why it matters for ops and platform teams:** The core training design (**fixed-width vectors**, **sample-parallel** data, **detached** quantum device calls when used) can **lower scheduling complexity** and **variance in tail latency** compared to operating very large autoregressive models at scale—while **cloud economics** and **PyTorch distributed** work still follow industry norms.
+
+**Technical detail:** See **[Architecture Overview — Horizontal scale and clustering](Architecture-Overview.md#horizontal-scale-and-clustering-qminiwasm-core)** and **[AI Training Pipeline](AI-Training-Pipeline.md)**.
+
 ## Industry-Specific Value
 
 ### Healthcare
@@ -185,5 +190,5 @@ The technology addresses critical pain points that cost businesses billions annu
 
 ---
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-23
 **Version:** 2.0
