@@ -13,6 +13,8 @@ Usage::
     python scripts/run_training_cascade_mopd.py
     python scripts/run_training_cascade_mopd.py --mopd-lambda 0.05 --checkpoint-load ./artifacts/best.pt
     python scripts/run_training_cascade_mopd.py --dry-run
+    python scripts/run_training_cascade_mopd.py --resume
+    python scripts/resume_training_cascade_mopd.py
 """
 
 from __future__ import annotations
@@ -25,6 +27,32 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _resolve_latest_checkpoint_path(checkpoint_latest_cli: str) -> Path:
+    """Path to the latest .pt file for --resume (CLI path, then CHECKPOINT_LATEST_PATH from env)."""
+    p = Path(checkpoint_latest_cli).expanduser()
+    if not p.is_absolute():
+        p = (REPO_ROOT / p).resolve()
+    else:
+        p = p.resolve()
+    if p.is_file():
+        return p
+    ev = os.environ.get("CHECKPOINT_LATEST_PATH", "").strip()
+    tried2 = ""
+    if ev:
+        e = Path(ev).expanduser()
+        if not e.is_absolute():
+            e = (REPO_ROOT / e).resolve()
+        else:
+            e = e.resolve()
+        tried2 = f" and {e}"
+        if e.is_file():
+            return e
+    raise FileNotFoundError(
+        f"No checkpoint file for resume. Tried: {p!s}{tried2}. "
+        "Train once with CHECKPOINT_LATEST_PATH set, or pass --checkpoint-latest PATH."
+    )
 
 
 def _load_dotenv_repo() -> None:
@@ -95,7 +123,13 @@ def main() -> int:
         default="mse",
         help="CASCADE_MOPD_FEAT_LOSS (default: mse).",
     )
-    parser.add_argument(
+    resume_group = parser.add_mutually_exclusive_group()
+    resume_group.add_argument(
+        "--resume",
+        action="store_true",
+        help="Set CHECKPOINT_LOAD_PATH to the latest checkpoint (--checkpoint-latest or CHECKPOINT_LATEST_PATH in .env).",
+    )
+    resume_group.add_argument(
         "--checkpoint-load",
         default=None,
         help="CHECKPOINT_LOAD_PATH (best baseline .pt for warm start).",
@@ -164,6 +198,27 @@ def main() -> int:
     os.chdir(REPO_ROOT)
     _load_dotenv_repo()
 
+    load_path = args.checkpoint_load
+    if args.resume:
+        if args.dry_run:
+            try:
+                load_path = str(_resolve_latest_checkpoint_path(args.checkpoint_latest))
+            except FileNotFoundError:
+                p = Path(args.checkpoint_latest).expanduser()
+                p = (REPO_ROOT / p).resolve() if not p.is_absolute() else p.resolve()
+                load_path = str(p)
+                print(
+                    "resume dry-run: latest file not found; would set CHECKPOINT_LOAD_PATH=",
+                    load_path,
+                    file=sys.stderr,
+                )
+        else:
+            try:
+                load_path = str(_resolve_latest_checkpoint_path(args.checkpoint_latest))
+            except FileNotFoundError as e:
+                print(e, file=sys.stderr)
+                return 2
+
     save = None if args.no_checkpoint_outputs else args.checkpoint_save
     best = None if args.no_checkpoint_outputs else args.checkpoint_best
     latest = None if args.no_checkpoint_outputs else args.checkpoint_latest
@@ -171,7 +226,7 @@ def main() -> int:
     injections = _apply_injections(
         mopd_lambda=args.mopd_lambda,
         mopd_feat_loss=args.mopd_feat_loss,
-        checkpoint_load=args.checkpoint_load,
+        checkpoint_load=load_path,
         checkpoint_save=save,
         checkpoint_best=best,
         checkpoint_latest=latest,

@@ -123,6 +123,7 @@ A copy-paste **`.env`** sketch lives in **[.env.example](../.env.example)** unde
 
 ```bash
 python scripts/run_training_cascade_mopd.py
+python scripts/resume_training_cascade_mopd.py
 python scripts/run_training_cascade_mopd.py --dry-run
 python scripts/run_training_cascade_mopd.py --checkpoint-load ./artifacts/qminiwasm_best.pt --use-cascade-router
 ```
@@ -136,11 +137,17 @@ See `python scripts/run_training_cascade_mopd.py --help`.
 - **Linux / macOS:** `tmux new -s qtrain` (or `screen`), run your command inside the session, detach with `Ctrl+b` then `d` (tmux). Reattach later with `tmux attach -t qtrain`. Alternatively: `nohup python scripts/run_training_cascade_mopd.py >> training.log 2>&1 &` and use `tail -f training.log`.
 - **Windows:** Use **Windows Terminal** and leave the tab open, or run from **WSL** with `tmux` as above. Avoid closing the console that owns the training process unless you use a persistent session tool.
 
-**Stopping and later continuing training (weights only):** The loop does **not** restore optimizer state or “resume at epoch N” automatically. It **does** write **`CHECKPOINT_LATEST_PATH`** after **each full epoch** (weights + `meta` including `epoch`). To continue after you exit:
+**Stopping and later continuing training (weights only):** The loop does **not** restore optimizer state or “resume at epoch N” automatically. It **does** write **`CHECKPOINT_LATEST_PATH`** after **each full epoch** (weights + `meta` including `epoch`).
 
-1. Ensure **`CHECKPOINT_LATEST_PATH`** was set during the first run (the helper script sets it to `artifacts/qminiwasm_latest_cascade_mopd.pt` by default).
-2. Start a **new** run with **`CHECKPOINT_LOAD_PATH`** pointing at that latest file (or at `CHECKPOINT_BEST_PATH` if you prefer the best-so-far weights).
-3. Expect a **fresh** epoch counter (epoch 1 of the new run), **new** AdamW state, and **reset** `ReduceLROnPlateau` / early-stop counters — only the **weights** carry over. For long wall-clock training split across days, that is usually acceptable; for bit-identical resume, full checkpoint resume would need new code.
+**One command** to start again from that file (sets `CHECKPOINT_LOAD_PATH` for you):
+
+```bash
+python scripts/resume_training_cascade_mopd.py
+```
+
+Equivalent: `python scripts/run_training_cascade_mopd.py --resume`. Resolution order: path from **`--checkpoint-latest`** (default `artifacts/qminiwasm_latest_cascade_mopd.pt`), else **`CHECKPOINT_LATEST_PATH`** in `.env` if that file exists.
+
+Expect a **fresh** epoch counter (epoch 1 of the new run), **new** AdamW state, and **reset** `ReduceLROnPlateau` / early-stop counters — only the **weights** carry over.
 
 **Mid-epoch:** If you kill the process during an epoch, the **latest** file may be one epoch behind; prefer stopping after you see a “Wrote checkpoint” / epoch log line.
 
