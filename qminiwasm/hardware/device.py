@@ -2,7 +2,8 @@
 
 This module provides a unified device dispatcher for AI training and inference.
 It supports Intel **XPU** (discrete Arc or integrated **Iris Xe** when PyTorch XPU
-/IPEX is installed), NVIDIA CUDA, and CPU. When accelerator is not specified,
+/IPEX is installed), NVIDIA CUDA, and CPU. ``accelerator="sycl"`` is accepted as
+an alias for XPU-first selection with CPU fallback. When accelerator is not specified,
 behavior is driven by env ``PREFER_XPU`` and ``PREFER_CUDA``.
 """
 
@@ -25,7 +26,7 @@ try:
 except ImportError:
     pass
 
-AcceleratorType = Literal["cuda", "xpu", "cpu"]
+AcceleratorType = Literal["cuda", "xpu", "cpu", "sycl"]
 
 
 def _cuda_available() -> bool:
@@ -54,7 +55,7 @@ def get_device(
     are used; prefer_xpu (or legacy kwarg) overrides env for backward compatibility.
 
     Args:
-        accelerator: "cuda", "xpu", or "cpu". If None, use env / prefer_xpu.
+        accelerator: "cuda", "xpu", "cpu", or "sycl". If None, use env / prefer_xpu.
         device_index: Device index for cuda or xpu (e.g. 0). Ignored on CPU.
         prefer_xpu: Legacy: If True, use XPU; if False, prefer CPU (or CUDA if only that
             is set). If None, use env.
@@ -85,6 +86,17 @@ def get_device(
             )
             return torch.device("cpu")
         if accelerator == "cpu":
+            return torch.device("cpu")
+        if accelerator == "sycl":
+            if _xpu_available():
+                dev = torch.device(f"xpu:{idx}")
+                logger.info("Using SYCL accelerator via Intel XPU device: %s", dev)
+                return dev
+            logger.warning(
+                "ACCELERATOR=sycl requested but no PyTorch XPU device is available; using CPU. "
+                "This codebase currently maps SYCL to a single torch backend device (xpu) "
+                "and does not schedule one training step across CPU+GPU simultaneously."
+            )
             return torch.device("cpu")
         raise ValueError(f"Unknown accelerator: {accelerator}")
 

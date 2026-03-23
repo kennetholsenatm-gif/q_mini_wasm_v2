@@ -143,6 +143,10 @@ class SYCLHardware:
             self._tensor = None
             self.device = None
 
+    def is_backend_active(self) -> bool:
+        """Return True when a usable SYCL device + tensor runtime are available."""
+        return self.device is not None and self._sycl is not None and self._tensor is not None
+
     def execute_vector_engine(self, kernel: str, data: List[float]) -> List[float]:
         """Execute kernel on Vector Engine (XVE) using SYCL.
 

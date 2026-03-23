@@ -1,2 +1,4 @@
-# Local quantum simulators only (default.qubit via PennyLane). No IBM Quantum / cloud backends.
+# PennyLane (default.qubit) + Qiskit QAOA path (statevector / IBM Runtime) — see docs/QUANTUM_QISKIT.md
 pennylane>=0.28.0
+qiskit>=1.0
+qiskit-ibm-runtime>=0.20

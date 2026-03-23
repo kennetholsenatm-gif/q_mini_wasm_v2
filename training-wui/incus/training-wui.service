@@ -1,0 +1,17 @@
+[Unit]
+Description=QMiniWASM training web UI (training-wui)
+Documentation=file:/opt/qmw/training-wui/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/wui/training-wui -root /opt/qmw -addr 0.0.0.0:8765 -python python3
+WorkingDirectory=/opt/qmw
+Restart=on-failure
+RestartSec=5
+# Bind mount may appear slightly after boot; retry if binary missing briefly
+Environment=HOME=/root
+
+[Install]
+WantedBy=multi-user.target

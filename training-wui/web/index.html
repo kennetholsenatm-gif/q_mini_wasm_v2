@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QMiniWASM — training</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #131d31;
+      --panel-soft: #17253d;
+      --text: #e8edf5;
+      --muted: #92a3bf;
+      --accent: #4f8fff;
+      --ok: #3fb950;
+      --warn: #e3b341;
+      --err: #f85149;
+      --border: #2b3f62;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    header {
+      padding: 1rem 1.5rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #16233b 0%, #121b2e 100%);
+      position: sticky;
+      top: 0;
+      z-index: 9;
+      backdrop-filter: blur(4px);
+    }
+    h1 { font-size: 1.15rem; font-weight: 650; margin: 0; letter-spacing: 0.2px; }
+    p.sub { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+    }
+    .top-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    main {
+      padding: 0;
+      max-width: none;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .main-columns {
+      display: grid;
+      grid-template-columns: minmax(320px, 430px) 1fr;
+      gap: 1rem;
+      align-items: start;
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 1.25rem 1.5rem 1rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-width: 0;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    h2 {
+      font-size: 0.95rem;
+      margin: 0 0 0.75rem;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    select, input[type="text"] {
+      width: 100%;
+      max-width: 100%;
+      padding: 0.5rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-top: 0.75rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem 1rem;
+    }
+    .wizard-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.6rem;
+    }
+    .wizard-steps {
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.65rem;
+    }
+    .wstep {
+      font-size: 0.75rem;
+      padding: 0.16rem 0.52rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--bg);
+    }
+    .wstep.active {
+      border-color: var(--accent);
+      color: #dce8ff;
+      background: rgba(79, 143, 255, 0.22);
+    }
+    .wstep.done {
+      border-color: var(--ok);
+      color: var(--ok);
+    }
+    .wizard-nav {
+      display: flex;
+      gap: 0.55rem;
+      margin-top: 0.75rem;
+    }
+    .hint {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+    .checkline {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-top: 0.45rem;
+      font-size: 0.84rem;
+      color: var(--text);
+    }
+    .wizard-pane[hidden] { display: none; }
+    .review-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 0.6rem 0.7rem;
+      font-size: 0.84rem;
+    }
+    .model-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 0.6rem 0.7rem;
+      margin-top: 0.75rem;
+      font-size: 0.84rem;
+    }
+    .model-card h3 {
+      margin: 0 0 0.45rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .sep {
+      grid-column: 1/-1;
+      height: 1px;
+      background: var(--border);
+      opacity: 0.7;
+      margin: 0.15rem 0;
+    }
+    details.adv {
+      margin-top: 0.9rem;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem 0.75rem;
+      background: rgba(23, 37, 61, 0.35);
+    }
+    details.adv > summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.85rem;
+      user-select: none;
+      margin-bottom: 0.5rem;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 0.65rem;
+      margin-top: 0.75rem;
+    }
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 0.55rem 0.65rem;
+    }
+    .metric .mk {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 0.15rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .metric .mv {
+      font-size: 0.95rem;
+      font-weight: 650;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button.primary { background: var(--accent); color: #fff; }
+    button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.danger { background: var(--err); color: #fff; }
+    button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    section.log-section {
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+      margin: 0;
+      border-top: 1px solid var(--border);
+      padding: 1rem 1.5rem 1.35rem;
+      width: 100%;
+      box-sizing: border-box;
+      max-width: none;
+    }
+    section.log-section h2 {
+      margin-bottom: 0.5rem;
+    }
+    .log-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    pre#log {
+      margin: 0;
+      padding: 0.85rem 1rem;
+      background: var(--bg);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-size: 0.76rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: min(52vh, 680px);
+      min-height: 220px;
+      overflow-y: auto;
+      font-family: ui-monospace, Consolas, monospace;
+    }
+    .infra-card .infra-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0.65rem 0 0.75rem;
+    }
+    .infra-badge {
+      font-size: 0.72rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .infra-badge.ok { border-color: var(--ok); color: var(--ok); background: rgba(63, 185, 80, 0.12); }
+    .infra-badge.bad { border-color: var(--err); color: var(--err); background: rgba(248, 81, 73, 0.1); }
+    .infra-badge.neutral { color: var(--muted); }
+    .infra-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.65rem;
+    }
+    pre.infra-remote-cmd {
+      margin: 0.5rem 0 0;
+      padding: 0.65rem 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.76rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 12rem;
+      overflow: auto;
+    }
+    .status { font-size: 0.85rem; }
+    .status.running { color: var(--ok); }
+    .status.done { color: var(--muted); }
+    .status.error { color: var(--err); }
+    .badge {
+      display: inline-block;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      vertical-align: middle;
+    }
+    .badge.ok { color: var(--ok); border-color: var(--ok); }
+    .badge.warn { color: #e3b341; border-color: #e3b341; }
+    .badge.err { color: var(--err); border-color: var(--err); }
+    .runs { list-style: none; padding: 0; margin: 0; }
+    .runs li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .runs li:last-child { border-bottom: none; }
+    code { font-size: 0.8em; background: var(--bg); padding: 0.1em 0.35em; border-radius: 4px; }
+    .kv {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 0.45rem 0.8rem;
+      font-size: 0.85rem;
+    }
+    .kv .k { color: var(--muted); }
+    .kv .v { word-break: break-word; }
+    @media (max-width: 980px) {
+      .main-columns {
+        grid-template-columns: 1fr;
+      }
+      .metrics {
+        grid-template-columns: repeat(3, minmax(90px, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <h1>QMiniWASM training dashboard</h1>
+        <p class="sub">Runs <code>python -m engine --config …</code> from repo root with preflight checks and live logs.</p>
+      </div>
+      <div class="top-actions">
+        <button type="button" class="ghost" id="btnRefresh">Refresh configs</button>
+        <button type="button" class="ghost" id="btnPreflight">Refresh preflight</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <div class="main-columns">
+    <div class="col">
+      <section class="infra-card">
+        <h2>Infrastructure</h2>
+        <p class="hint" style="margin:0">RunPod + OpenTofu for GPU pods; <code>python -m engine</code> on <strong>this</strong> host unless you SSH to the pod. Container defaults: <code>ACCELERATOR=cuda</code>, <code>NVIDIA_VISIBLE_DEVICES=all</code> (<code>infra/runpod/variables.tf</code>).</p>
+        <div class="infra-badges" id="infraBadges" aria-label="Infrastructure status"></div>
+        <div class="kv" id="infraKv" style="margin-top:0.35rem"></div>
+        <p class="status" id="infraMsg"></p>
+        <div class="infra-toolbar">
+          <button type="button" class="ghost" id="btnInfraRefresh">Refresh infrastructure</button>
+          <button type="button" class="ghost" id="btnCopyPodIP" disabled>Copy pod IP</button>
+          <button type="button" class="ghost" id="btnCopyRemoteCmd" disabled>Copy remote commands</button>
+        </div>
+        <details id="infraRemoteDetails" style="margin-top:0.75rem; border:1px dashed var(--border); border-radius:8px; padding:0.55rem 0.65rem 0.65rem; background:rgba(23,37,61,0.35)">
+          <summary style="cursor:pointer; color:var(--muted); font-size:0.84rem; user-select:none">Remote GPU (rsync / SSH)</summary>
+          <p class="hint" style="margin:0.5rem 0 0.35rem">When <code>public_ip</code> appears below, use these on your machine (adjust user/path for your Runpod template).</p>
+          <pre id="infraRemotePre" class="infra-remote-cmd" style="display:none"></pre>
+        </details>
+      </section>
+      <section>
+        <h2>Quick metrics</h2>
+        <div class="metrics">
+          <div class="metric">
+            <div class="mk">Configs</div>
+            <div class="mv" id="mConfigs">-</div>
+          </div>
+          <div class="metric">
+            <div class="mk">Runs shown</div>
+            <div class="mv" id="mRuns">-</div>
+          </div>
+          <div class="metric">
+            <div class="mk">Active run</div>
+            <div class="mv" id="mActive">none</div>
+          </div>
+        </div>
+      </section>
+      <section>
+        <h2>Start from existing config</h2>
+        <label for="cfg">Config (configs/training/*.toml)</label>
+        <select id="cfg"></select>
+        <div class="grid" style="margin-top:0.7rem">
+          <div>
+            <label for="sRunTarget">Execution target</label>
+            <select id="sRunTarget">
+              <option value="local">Local (this machine)</option>
+              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
+            </select>
+            <div class="hint">RunPod provisions <code>infra/runpod</code>; training process stays local unless you use SSH separately.</div>
+          </div>
+          <div id="sRunpodDestroyWrap" style="display:none">
+            <label class="checkline" style="margin-top:1.5rem">
+              <input id="sRunpodDestroy" type="checkbox" checked />
+              Destroy pod when training stops (saves idle cost)
+            </label>
+          </div>
+          <div>
+            <label for="sQuantumPolicy">Quantum execution mode</label>
+            <select id="sQuantumPolicy">
+              <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
+              <option value="hardware_only">Hardware only (fail if unavailable)</option>
+              <option value="simulator_only">Simulator only</option>
+            </select>
+          </div>
+          <div>
+            <label for="sQuantumBackend">Quantum backend id (optional)</label>
+            <input id="sQuantumBackend" type="text" placeholder="auto / ibm_kyoto / pennylane" />
+          </div>
+          <div>
+            <label for="sIBMBackendName">IBM backend override (optional)</label>
+            <input id="sIBMBackendName" type="text" placeholder="leave blank for IBM auto-select" />
+          </div>
+        </div>
+        <div class="row">
+          <button type="button" class="primary" id="btnStart">Start training</button>
+        </div>
+        <p class="status" id="msg" style="margin-top:0.75rem"></p>
+      </section>
+      <section>
+        <h2>Preflight <span id="preflightBadge" class="badge">UNKNOWN</span></h2>
+        <p class="hint" style="margin:0 0 0.5rem">Uses the <strong>config file</strong> from the left dropdown for TOML-backed settings. <strong>Accelerator</strong> for device check follows the <strong>Build + Run</strong> form when set (overrides <code>[hardware].accelerator</code> in that file). Quantum env lines use the Build form fields.</p>
+        <p class="status" id="preflightMsg" style="margin-top:0.75rem"></p>
+        <div class="kv" id="preflightKv"></div>
+        <p class="hint" style="margin-top:0.65rem"><strong>IBM pending jobs</strong> is that backend’s <em>queue length</em> (jobs waiting to run there). <strong>0</strong> is normal when nothing is queued—your training may use the simulator first, or you haven’t submitted IBM Runtime jobs yet.</p>
+      </section>
+      <section>
+        <h2>Active / recent runs</h2>
+        <ul class="runs" id="runs"></ul>
+      </section>
+    </div>
+    <div class="col">
+      <section>
+        <h2>Build + run config</h2>
+        <div class="wizard-head">
+          <label style="margin:0; display:flex; align-items:center; gap:0.45rem; color:var(--text)">
+            <input id="bWizardMode" type="checkbox" checked />
+            Wizard mode
+          </label>
+        </div>
+        <div class="wizard-steps" id="bWizardSteps" style="display:none">
+          <span class="wstep" id="ws1">1 Basics</span>
+          <span class="wstep" id="ws2">2 Data</span>
+          <span class="wstep" id="ws3">3 Training</span>
+          <span class="wstep" id="ws4">4 Review</span>
+        </div>
+        <div class="grid">
+          <div class="wizard-pane" data-step="1">
+            <label for="bName">Model name</label>
+            <input id="bName" type="text" placeholder="qminiwasm-stem-coder-v1" />
+            <div class="hint">Used for model artifact filenames in <code>artifacts/</code>.</div>
+            <label class="checkline">
+              <input id="bResumeLatest" type="checkbox" />
+              Resume from this model's latest checkpoint if available
+            </label>
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bRunTarget">Execution target</label>
+            <select id="bRunTarget">
+              <option value="local">Local (this machine)</option>
+              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
+            </select>
+          </div>
+          <div id="bRunpodDestroyWrap" class="wizard-pane" data-step="1" style="display:none">
+            <label class="checkline" style="margin-top:0.5rem">
+              <input id="bRunpodDestroy" type="checkbox" checked />
+              Destroy RunPod when training stops
+            </label>
+            <div class="hint">Uncheck only if you will destroy manually (continues billing).</div>
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bAccel">Accelerator</label>
+            <select id="bAccel">
+              <option value="cpu">cpu</option>
+              <option value="sycl">sycl</option>
+              <option value="xpu">xpu</option>
+              <option value="cuda">cuda</option>
+            </select>
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bQuantumPolicy">Quantum execution mode</label>
+            <select id="bQuantumPolicy">
+              <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
+              <option value="hardware_only">Hardware only (fail if unavailable)</option>
+              <option value="simulator_only">Simulator only</option>
+            </select>
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bQuantumBackend">Quantum backend id (optional)</label>
+            <input id="bQuantumBackend" type="text" placeholder="auto / ibm_kyoto / pennylane" />
+          </div>
+          <div class="wizard-pane" data-step="1">
+            <label for="bIBMBackendName">IBM backend override (optional)</label>
+            <input id="bIBMBackendName" type="text" placeholder="leave blank for IBM auto-select" />
+          </div>
+          <div class="wizard-pane" data-step="2">
+            <label for="bDataSource">Data source</label>
+            <select id="bDataSource">
+              <option value="mesh">mesh</option>
+              <option value="hf_tabular">hf_tabular</option>
+              <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
+            </select>
+          </div>
+          <div id="hfPresetWrap" class="wizard-pane" data-step="2">
+            <label for="bDatasetPreset">HF dataset preset</label>
+            <select id="bDatasetPreset">
+              <option value="">(custom / keep current)</option>
+              <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
+              <option value="code-search-net/code_search_net|java">CodeSearchNet (java)</option>
+              <option value="code-search-net/code_search_net|javascript">CodeSearchNet (javascript)</option>
+              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
+              <option value="bigcode/the-stack-smol|python">The Stack Smol (python)</option>
+            </select>
+            <div class="hint">Choose a preset to auto-fill dataset id and config.</div>
+          </div>
+          <div id="hfPathWrap" class="wizard-pane" data-step="2">
+            <label for="bDataPath">HF dataset id (data.path)</label>
+            <input id="bDataPath" type="text" placeholder="code-search-net/code_search_net" />
+            <div class="hint">Required for <code>hf_tabular</code> and hybrid mode.</div>
+          </div>
+          <div class="wizard-pane" data-step="3">
+            <label for="bEpochs">Epochs</label>
+            <input id="bEpochs" type="text" value="25" />
+          </div>
+          <div class="wizard-pane" data-step="3">
+            <label for="bBatch">Batch size</label>
+            <input id="bBatch" type="text" value="32" />
+          </div>
+          <div class="wizard-pane" data-step="3">
+            <label for="bLR">Learning rate</label>
+            <input id="bLR" type="text" value="0.0001" />
+            <label class="checkline">
+              <input id="bLRTrialMode" type="checkbox" />
+              Treat Build+Run as LR trial run
+            </label>
+            <div id="bLRTrialWrap" style="display:none; margin-top:0.45rem">
+              <label for="bLRTrialEpochs">Trial epochs</label>
+              <input id="bLRTrialEpochs" type="text" value="2" />
+              <div class="hint">Runs short and adds per-epoch eval logging for LR comparison.</div>
+            </div>
+          </div>
+          <div class="wizard-pane" data-step="4" style="grid-column:1/-1">
+            <div class="review-box" id="bReview"></div>
+          </div>
+        </div>
+        <details class="adv wizard-pane" data-step="2">
+          <summary>Advanced data options</summary>
+          <div class="grid" style="margin-top:0.25rem">
+            <div id="hfConfigWrap">
+              <label for="bDatasetConfig">HF dataset config (optional)</label>
+              <input id="bDatasetConfig" type="text" placeholder="python" />
+              <div class="hint">Subset name for multi-config datasets (e.g. <code>python</code> on CodeSearchNet). Leave blank for <strong>default</strong> — shows as (none) in facts; many datasets (e.g. NuminaMath-CoT) use a single config.</div>
+            </div>
+            <div id="hfSplitWrap">
+              <label for="bSplit">HF split</label>
+              <input id="bSplit" type="text" value="train" />
+            </div>
+            <div id="hfBlendWrap">
+              <label for="bBlend">HF mesh blend fraction</label>
+              <input id="bBlend" type="text" value="0.20" />
+            </div>
+          </div>
+        </details>
+        <div class="wizard-nav" id="bWizardNav" style="display:none">
+          <button type="button" class="ghost" id="btnWPrev">Back</button>
+          <button type="button" class="ghost" id="btnWNext">Next</button>
+        </div>
+        <div class="row wizard-pane" data-step="3">
+          <button type="button" class="ghost" id="btnAutoLR">Auto-select learning rate</button>
+          <span class="status" id="autoLRMsg"></span>
+        </div>
+        <div class="row">
+          <button type="button" class="primary" id="btnBuildRun">Build + Start training</button>
+        </div>
+        <div class="model-card">
+          <h3>Model Facts</h3>
+          <div class="row" style="margin-top:0; margin-bottom:0.4rem">
+            <button type="button" class="ghost" id="btnModelFacts">Refresh facts</button>
+          </div>
+          <div class="kv" id="modelFacts"></div>
+        </div>
+        <p class="status" id="buildMsg" style="margin-top:0.75rem"></p>
+      </section>
+    </div>
+    </div>
+    <section class="log-section">
+      <h2>Log <span id="logTitle"></span></h2>
+      <div class="log-toolbar">
+        <button type="button" class="danger" id="btnStop" disabled>Stop run</button>
+        <button type="button" class="ghost" id="btnClearLog">Clear view</button>
+      </div>
+      <pre id="log"></pre>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let pollTimer = null;
+    let logOffset = 0;
+    let activeRunId = null;
+    let bWizardStep = 1;
+
+    async function loadConfigs() {
+      const r = await fetch("/api/configs");
+      const data = await r.json();
+      const sel = $("cfg");
+      sel.innerHTML = "";
+      for (const c of data.configs || []) {
+        const o = document.createElement("option");
+        o.value = c.path;
+        o.textContent = c.name;
+        sel.appendChild(o);
+      }
+      if (!sel.options.length) {
+        const o = document.createElement("option");
+        o.value = "";
+        o.textContent = "(no .toml files in configs/training)";
+        sel.appendChild(o);
+      }
+      $("mConfigs").textContent = String(sel.options.length || 0);
+    }
+
+    async function loadRuns() {
+      const r = await fetch("/api/runs");
+      const data = await r.json();
+      const ul = $("runs");
+      ul.innerHTML = "";
+      const runs = (data.runs || []).slice(0, 12);
+      $("mRuns").textContent = String(runs.length);
+      const active = runs.find((r) => r.running);
+      $("mActive").textContent = active ? active.id.slice(0, 8) : "none";
+      for (const run of runs) {
+        const li = document.createElement("li");
+        const left = document.createElement("span");
+        const rt = run.run_target && run.run_target !== "local" ? ` <span class="badge">${escapeHtml(run.run_target)}</span>` : "";
+        left.innerHTML = `<code>${run.id.slice(0, 8)}</code>${rt} · ${escapeHtml(run.config)}`;
+        const right = document.createElement("span");
+        let st = run.running ? "running" : run.error ? "error" : "done";
+        right.className = "status " + st;
+        right.textContent = run.running ? "Running" : run.error ? ("Exit " + run.exit_code) : "Finished";
+        li.appendChild(left);
+        li.appendChild(right);
+        li.style.cursor = "pointer";
+        li.onclick = () => selectRun(run.id, run.config);
+        ul.appendChild(li);
+      }
+    }
+
+    function setPreflightKV(items) {
+      const box = $("preflightKv");
+      box.innerHTML = "";
+      for (const [k, v] of items) {
+        const key = document.createElement("div");
+        key.className = "k";
+        key.textContent = k;
+        const val = document.createElement("div");
+        val.className = "v";
+        val.textContent = String(v);
+        box.appendChild(key);
+        box.appendChild(val);
+      }
+    }
+
+    function buildPayload() {
+      return {
+        name: $("bName").value.trim(),
+        run_target: $("bRunTarget").value,
+        runpod_destroy_on_exit: $("bRunpodDestroy").checked,
+        accelerator: $("bAccel").value,
+        data_source: $("bDataSource").value,
+        data_path: $("bDataPath").value.trim(),
+        hf_dataset_config: $("bDatasetConfig").value.trim(),
+        hf_split: $("bSplit").value.trim() || "train",
+        hf_mesh_blend_fraction: Number($("bBlend").value || "0"),
+        epochs: Number($("bEpochs").value || "25"),
+        batch_size: Number($("bBatch").value || "32"),
+        learning_rate: Number($("bLR").value || "0.0001"),
+        quantum_backend: $("bQuantumBackend").value.trim(),
+        quantum_policy: $("bQuantumPolicy").value,
+        ibm_backend_name: $("bIBMBackendName").value.trim(),
+        lr_trial_mode: !!$("bLRTrialMode").checked,
+        lr_trial_epochs: Number($("bLRTrialEpochs").value || "2"),
+        resume_latest: !!$("bResumeLatest").checked,
+      };
+    }
+
+    function modelSlugFromName(name) {
+      const raw = (name || "").toLowerCase().trim();
+      if (!raw) return "model_" + Math.floor(Date.now() / 1000);
+      const slug = raw
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .replace(/--+/g, "-");
+      return slug || "model_" + Math.floor(Date.now() / 1000);
+    }
+
+    function renderModelFactsFallback() {
+      const p = buildPayload();
+      const slug = modelSlugFromName(p.name);
+      const lines = [
+        ["Model name", p.name || "(auto-generated from timestamp)"],
+        ["Artifact base", slug],
+        ["Accelerator", p.accelerator],
+        ["Data source", p.data_source],
+        ["Learning rate", String(p.learning_rate)],
+        ["Output checkpoint", `artifacts/${slug}.pt`],
+        ["Best checkpoint", `artifacts/${slug}_best.pt`],
+        ["Latest checkpoint", `artifacts/${slug}_latest.pt`],
+        ["Resume latest", p.resume_latest ? "on" : "off"],
+      ];
+      const box = $("modelFacts");
+      box.innerHTML = "";
+      for (const [k, v] of lines) {
+        const dk = document.createElement("div");
+        dk.className = "k";
+        dk.textContent = k;
+        const dv = document.createElement("div");
+        dv.className = "v";
+        dv.textContent = v;
+        box.appendChild(dk);
+        box.appendChild(dv);
+      }
+    }
+
+    function setModelFactsKV(lines) {
+      const box = $("modelFacts");
+      box.innerHTML = "";
+      for (const [k, v] of lines) {
+        if (k === "__sep__") {
+          const sep = document.createElement("div");
+          sep.className = "sep";
+          box.appendChild(sep);
+          continue;
+        }
+        const dk = document.createElement("div");
+        dk.className = "k";
+        dk.textContent = k;
+        const dv = document.createElement("div");
+        dv.className = "v";
+        dv.textContent = String(v);
+        box.appendChild(dk);
+        box.appendChild(dv);
+      }
+    }
+
+    async function refreshModelFacts() {
+      try {
+        const r = await fetch("/api/model/facts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildPayload()),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const f = data.facts || {};
+        const d = f.dataset || {};
+        const a = f.artifacts || {};
+        const sz = f.estimated_size_gb || {};
+        const resumeRequested = !!a.resume_requested;
+        const resumeAvailable = !!a.resume_available;
+        setModelFactsKV([
+          ["Model name", f.model_name || "(unknown)"],
+          ["Architecture", f.architecture || "QMiniWASM"],
+          ["Requested accelerator", f.requested_accelerator || "auto"],
+          ["Total parameters", Number(f.parameter_count_total || 0).toLocaleString()],
+          ["Trainable backbone params", Number(f.parameter_count_trainable_backbone || 0).toLocaleString()],
+          ["Est. size (FP32)", `${Number(sz.fp32 || 0).toFixed(3)} GB`],
+          ["Est. size (FP16)", `${Number(sz.fp16 || 0).toFixed(3)} GB`],
+          ["Est. size (INT8)", `${Number(sz.int8 || 0).toFixed(3)} GB`],
+          ["__sep__", ""],
+          ["Dataset source", d.source || "(none)"],
+          ["Dataset id / path", d.id_path || "(none)"],
+          ["Dataset config", d.hf_dataset_config || "(none)"],
+          ["Dataset split", d.hf_split || "(n/a)"],
+          ["Mesh blend fraction", String(d.hf_mesh_blend_fraction ?? 0)],
+          ["HF token present", d.hf_token_present ? "yes" : "no"],
+          ["__sep__", ""],
+          ["Output checkpoint", a.save_path || "(none)"],
+          ["Best checkpoint", a.best_path || "(none)"],
+          ["Latest checkpoint", a.latest_path || "(none)"],
+          ["Resume requested", resumeRequested ? "yes" : "no"],
+          ["Resume available", resumeAvailable ? "yes" : "no"],
+        ]);
+        if (resumeRequested && !resumeAvailable) {
+          $("btnBuildRun").disabled = true;
+          const msg = $("buildMsg");
+          msg.textContent = `Resume requested but checkpoint is missing: ${a.latest_path || "(unknown)"}`;
+          msg.className = "status error";
+        } else {
+          if (!$("btnBuildRun").disabled) {
+            // keep current state
+          } else {
+            $("btnBuildRun").disabled = false;
+            if (($("buildMsg").textContent || "").includes("Resume requested but checkpoint is missing")) {
+              $("buildMsg").textContent = "";
+              $("buildMsg").className = "status";
+            }
+          }
+        }
+      } catch (_) {
+        renderModelFactsFallback();
+      }
+    }
+
+    function refreshWizardReview() {
+      const p = buildPayload();
+      $("bReview").innerHTML =
+        `<strong>Model name</strong>: ${escapeHtml(p.name || "(auto-generated)")}<br/>` +
+        `<strong>Accelerator</strong>: ${escapeHtml(p.accelerator)}<br/>` +
+        `<strong>Data source</strong>: ${escapeHtml(p.data_source)}<br/>` +
+        `<strong>Quantum mode</strong>: ${escapeHtml(p.quantum_policy)}<br/>` +
+        `<strong>Quantum backend</strong>: ${escapeHtml(p.quantum_backend || "auto")}<br/>` +
+        `<strong>IBM backend override</strong>: ${escapeHtml(p.ibm_backend_name || "auto-select")}<br/>` +
+        `<strong>Dataset</strong>: ${escapeHtml(p.data_path || "(n/a)")}<br/>` +
+        `<strong>HF config/split</strong>: ${escapeHtml(p.hf_dataset_config || "(none)")} / ${escapeHtml(p.hf_split)}<br/>` +
+        `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
+        `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
+        `<strong>Execution target</strong>: ${escapeHtml(p.run_target || "local")}${p.run_target === "runpod" ? " (destroy after: " + (p.runpod_destroy_on_exit ? "yes" : "no") + ")" : ""}<br/>` +
+        `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}`;
+    }
+
+    function renderWizard() {
+      const wiz = $("bWizardMode").checked;
+      $("bWizardSteps").style.display = wiz ? "flex" : "none";
+      $("bWizardNav").style.display = wiz ? "flex" : "none";
+      const panes = document.querySelectorAll(".wizard-pane");
+      for (const el of panes) {
+        const step = Number(el.getAttribute("data-step") || "0");
+        el.hidden = wiz ? (step !== bWizardStep) : false;
+      }
+      for (let i = 1; i <= 4; i++) {
+        const s = $("ws" + i);
+        s.className = "wstep" + (i === bWizardStep ? " active" : (i < bWizardStep ? " done" : ""));
+      }
+      $("btnWPrev").disabled = !wiz || bWizardStep <= 1;
+      $("btnWNext").style.display = wiz && bWizardStep < 4 ? "inline-block" : "none";
+      $("btnBuildRun").style.display = wiz && bWizardStep < 4 ? "none" : "inline-block";
+      if (wiz && bWizardStep === 4) refreshWizardReview();
+      refreshModelFacts();
+    }
+
+    function toggleLRTrial() {
+      $("bLRTrialWrap").style.display = $("bLRTrialMode").checked ? "block" : "none";
+      refreshWizardReview();
+      refreshModelFacts();
+    }
+
+    function toggleHFFields() {
+      const mode = $("bDataSource").value;
+      const isHF = mode === "hf_tabular" || mode === "hybrid_mesh_hf_tabular";
+      const isHybrid = mode === "hybrid_mesh_hf_tabular";
+      for (const id of ["hfPresetWrap", "hfPathWrap", "hfConfigWrap", "hfSplitWrap", "hfBlendWrap"]) {
+        $(id).style.display = isHF ? "block" : "none";
+      }
+      if (isHybrid && !$("bBlend").value.trim()) {
+        $("bBlend").value = "0.20";
+      }
+      if (isHybrid) {
+        $("bBlend").placeholder = "0.20 (required for hybrid)";
+      } else {
+        $("bBlend").placeholder = "0.20";
+      }
+    }
+
+    function applyDatasetPreset() {
+      const v = $("bDatasetPreset").value;
+      if (!v) return;
+      const parts = v.split("|");
+      const ds = parts[0] || "";
+      const cfg = parts[1] || "";
+      if (ds) $("bDataPath").value = ds;
+      if (cfg) {
+        $("bDatasetConfig").value = cfg;
+      } else if (!$("bDatasetConfig").value.trim()) {
+        $("bDatasetConfig").value = "";
+      }
+    }
+
+    function setPreflightBadge(kind, label) {
+      const b = $("preflightBadge");
+      b.className = "badge " + kind;
+      b.textContent = label;
+    }
+
+    function evaluatePreflightHealth(p) {
+      const resolved = String(p.resolved_torch_device || "").toLowerCase();
+      const syclActive = !!p.sycl_backend_active;
+      const dpctlCount = Number.isFinite(Number(p.dpctl_device_count))
+        ? Number(p.dpctl_device_count)
+        : null;
+      const dpctlErr = String(p.dpctl_error || "");
+      if (resolved.startsWith("xpu") || resolved.startsWith("cuda")) {
+        return { kind: "ok", label: "OK" };
+      }
+      if (syclActive || (dpctlCount !== null && dpctlCount > 0)) {
+        return { kind: "warn", label: "WARN" };
+      }
+      if (dpctlErr) {
+        return { kind: "err", label: "ERROR" };
+      }
+      return { kind: "warn", label: "CPU" };
+    }
+
+    function syncRunpodPanels() {
+      const sl = $("sRunTarget").value === "local";
+      $("sRunpodDestroyWrap").style.display = sl ? "none" : "block";
+      const bl = $("bRunTarget").value === "local";
+      $("bRunpodDestroyWrap").style.display = bl ? "none" : "block";
+    }
+
+    let lastInfraPodIp = "";
+    let lastInfraRemoteCmd = "";
+
+    function renderInfraBadges(rp) {
+      const wrap = $("infraBadges");
+      wrap.innerHTML = "";
+      function pill(label, ok) {
+        const s = document.createElement("span");
+        s.className = "infra-badge " + (ok ? "ok" : "bad");
+        s.textContent = label + ": " + (ok ? "OK" : "no");
+        wrap.appendChild(s);
+      }
+      pill("RUNPOD_TOKEN", !!rp.token_present);
+      pill("infra/runpod", !!rp.infra_dir_exists);
+      pill("OpenTofu / Terraform", !!rp.tofu_usable);
+    }
+
+    async function copyToClipboard(text, okMsg) {
+      try {
+        await navigator.clipboard.writeText(text);
+        if (okMsg) {
+          const m = $("infraMsg");
+          const prev = m.textContent;
+          m.textContent = okMsg;
+          m.className = "status done";
+          setTimeout(() => {
+            m.textContent = prev;
+            m.className = "status done";
+          }, 1600);
+        }
+      } catch (err) {
+        $("infraMsg").textContent = "Copy failed: " + (err && err.message ? err.message : err);
+        $("infraMsg").className = "status error";
+      }
+    }
+
+    async function loadRunpodStatus() {
+      const msg = $("infraMsg");
+      const box = $("infraKv");
+      const btnIp = $("btnCopyPodIP");
+      const btnCmd = $("btnCopyRemoteCmd");
+      const pre = $("infraRemotePre");
+      lastInfraPodIp = "";
+      lastInfraRemoteCmd = "";
+      msg.textContent = "Loading…";
+      msg.className = "status";
+      btnIp.disabled = true;
+      btnCmd.disabled = true;
+      try {
+        const r = await fetch("/api/runpod/status");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const rp = data.runpod || {};
+        renderInfraBadges(rp);
+        const lines = [
+          ["Infra path", rp.infra_dir || "(unknown)"],
+          ["OpenTofu binary", rp.tofu_usable ? (rp.tofu_binary || "ok") : ("missing — " + (rp.tofu_error || ""))],
+        ];
+        const outs = rp.outputs && typeof rp.outputs === "object" && !Array.isArray(rp.outputs) ? rp.outputs : null;
+        if (rp.outputs_error) {
+          lines.push(["Terraform state / outputs", "(none) " + rp.outputs_error]);
+        } else if (outs && Object.keys(outs).length) {
+          if (outs.pod_id != null && String(outs.pod_id).trim() !== "") lines.push(["Pod ID", String(outs.pod_id)]);
+          if (outs.public_ip != null && String(outs.public_ip).trim() !== "") lines.push(["Public IP", String(outs.public_ip)]);
+          if (outs.cost_per_hr != null && String(outs.cost_per_hr).trim() !== "") lines.push(["Cost / hr", String(outs.cost_per_hr)]);
+          if (outs.desired_status != null) lines.push(["Desired status", String(outs.desired_status)]);
+        } else if (rp.token_present && rp.infra_dir_exists) {
+          lines.push(["Terraform outputs", "(no state yet — run Build + Run with RunPod, or: cd infra/runpod && tofu apply)"]);
+        }
+        box.innerHTML = "";
+        for (const [k, v] of lines) {
+          const dk = document.createElement("div");
+          dk.className = "k";
+          dk.textContent = k;
+          const dv = document.createElement("div");
+          dv.className = "v";
+          dv.textContent = String(v);
+          box.appendChild(dk);
+          box.appendChild(dv);
+        }
+        msg.textContent = rp.token_present && rp.infra_dir_exists && rp.tofu_usable
+          ? "Ready to provision or use outputs below."
+          : "Fix token, repo path, or install OpenTofu/Terraform on PATH.";
+        msg.className = "status done";
+        const pip = outs && outs.public_ip != null && String(outs.public_ip).trim() !== "";
+        if (pip) {
+          const ip = String(outs.public_ip).trim();
+          lastInfraPodIp = ip;
+          const block =
+            "# rsync repo to pod\n" +
+            "rsync -avz --exclude .git --exclude .venv ./ root@" + ip + ":/workspace/qminiwasm-core/\n\n" +
+            "# ssh and train with CUDA\n" +
+            "ssh root@" + ip + " 'cd /workspace/qminiwasm-core && source .venv/bin/activate 2>/dev/null; export ACCELERATOR=cuda && python -m engine --config configs/training/mesh_cuda.toml'\n\n" +
+            "# or: ./scripts/runpod_sync_and_train.example.sh configs/training/mesh_cuda.toml";
+          lastInfraRemoteCmd = block;
+          pre.style.display = "block";
+          pre.textContent = block;
+          btnIp.disabled = false;
+          btnCmd.disabled = false;
+        } else {
+          pre.style.display = "none";
+          pre.textContent = "";
+        }
+      } catch (e) {
+        $("infraBadges").innerHTML = "";
+        box.innerHTML = "";
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+        if (pre) {
+          pre.style.display = "none";
+          pre.textContent = "";
+        }
+        if (btnIp) btnIp.disabled = true;
+        if (btnCmd) btnCmd.disabled = true;
+      }
+    }
+
+    async function loadPreflight() {
+      const cfg = $("cfg").value || "";
+      const qb = $("bQuantumBackend") ? $("bQuantumBackend").value.trim() : "";
+      const qp = $("bQuantumPolicy") ? $("bQuantumPolicy").value : "";
+      const ibm = $("bIBMBackendName") ? $("bIBMBackendName").value.trim() : "";
+      const msg = $("preflightMsg");
+      msg.textContent = "Checking runtime...";
+      msg.className = "status";
+      try {
+        const params = new URLSearchParams();
+        if (cfg) params.set("config", cfg);
+        const accel = $("bAccel") ? $("bAccel").value.trim() : "";
+        if (accel) params.set("accelerator", accel);
+        if (qb) params.set("quantum_backend", qb);
+        if (qp) params.set("quantum_policy", qp);
+        if (ibm) params.set("ibm_backend_name", ibm);
+        const q = params.toString() ? ("?" + params.toString()) : "";
+        const r = await fetch("/api/preflight" + q);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const p = data.preflight || {};
+        const health = evaluatePreflightHealth(p);
+        setPreflightBadge(health.kind, health.label);
+        setPreflightKV([
+          ["Config", p.config || "(env/default)"],
+          ["Accelerator in config file", p.accelerator_from_config_file !== undefined && p.accelerator_from_config_file !== "" ? p.accelerator_from_config_file : "(unset or default)"],
+          ["Preflight accelerator (Build form)", p.preflight_accelerator_override ? String(p.preflight_accelerator_override) : "(use config file)"],
+          ["Requested accelerator (device check)", p.requested_accelerator || "auto"],
+          ["Resolved torch device", p.resolved_torch_device || "unknown"],
+          ["SYCL backend active", p.sycl_backend_active ? "yes" : "no"],
+          ["dpctl device count", p.dpctl_device_count ?? "n/a"],
+          ["Python executable", p.python_exe || "unknown"],
+          ["dpctl error", p.dpctl_error || "(none)"],
+          ["Quantum backend", p.quantum_backend || "penny_lane"],
+          ["Quantum backend (from config)", p.quantum_backend_from_config || "(none)"],
+          ["Quantum policy", p.quantum_policy || "prefer_hardware_fallback"],
+          ["IBM runtime available", p.ibm && p.ibm.runtime_available ? "yes" : "no"],
+          ["IBM token present", p.ibm && p.ibm.token_present ? "yes" : "no"],
+          ["IBM connected", p.ibm && p.ibm.connected ? "yes" : "no"],
+          ["IBM selected backend", p.ibm && p.ibm.selected_backend ? p.ibm.selected_backend : "(auto/unavailable)"],
+          ["IBM pending jobs", p.ibm && p.ibm.backend_pending_jobs != null ? p.ibm.backend_pending_jobs : "n/a"],
+          ["IBM backend operational", p.ibm && p.ibm.backend_operational != null ? (p.ibm.backend_operational ? "yes" : "no") : "n/a"],
+          ["IBM backend status", p.ibm && p.ibm.backend_status_msg ? p.ibm.backend_status_msg : "(none)"],
+          ["IBM usage seconds", p.ibm && p.ibm.usage_seconds != null ? p.ibm.usage_seconds : "n/a"],
+          ["IBM usage limit seconds", p.ibm && p.ibm.usage_limit_seconds != null ? p.ibm.usage_limit_seconds : "n/a"],
+          ["IBM estimated time left (s)", p.ibm && p.ibm.job_time_left_seconds != null ? p.ibm.job_time_left_seconds : "n/a"],
+          ["IBM connect error", p.ibm && p.ibm.connect_error ? p.ibm.connect_error : "(none)"],
+        ]);
+        msg.textContent = "Preflight OK";
+        msg.className = "status done";
+      } catch (e) {
+        setPreflightBadge("err", "ERROR");
+        setPreflightKV([]);
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function selectRun(id, configPath) {
+      activeRunId = id;
+      logOffset = 0;
+      $("log").textContent = "";
+      $("logTitle").textContent = id ? "· " + (configPath || id) : "";
+      $("btnStop").disabled = !id;
+      if (pollTimer) clearInterval(pollTimer);
+      if (!id) return;
+      pollTimer = setInterval(pollLog, 800);
+      pollLog();
+    }
+
+    async function pollLog() {
+      if (!activeRunId) return;
+      try {
+        const r = await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/log?offset=" + logOffset);
+        const data = await r.json();
+        if (data.text) {
+          $("log").textContent += data.text;
+          $("log").scrollTop = $("log").scrollHeight;
+        }
+        logOffset = data.next_offset || logOffset;
+        $("btnStop").disabled = !data.running;
+        await loadRuns();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    $("btnStart").onclick = async () => {
+      const path = $("cfg").value;
+      $("msg").textContent = "";
+      if (!path) return;
+      $("btnStart").disabled = true;
+      try {
+        const r = await fetch("/api/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            config: path,
+            quantum_backend: $("sQuantumBackend").value.trim(),
+            quantum_policy: $("sQuantumPolicy").value,
+            ibm_backend_name: $("sIBMBackendName").value.trim(),
+            run_target: $("sRunTarget").value,
+            runpod_destroy_on_exit: $("sRunpodDestroy").checked,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        $("msg").textContent = "Started " + data.id;
+        $("msg").className = "status running";
+        await loadRuns();
+        selectRun(data.id, data.config);
+      } catch (e) {
+        $("msg").textContent = String(e.message || e);
+        $("msg").className = "status error";
+      } finally {
+        $("btnStart").disabled = false;
+      }
+    };
+
+    $("btnStop").onclick = async () => {
+      if (!activeRunId) return;
+      await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/stop", { method: "POST" });
+      await loadRuns();
+      pollLog();
+    };
+
+    $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); loadRunpodStatus(); };
+    $("btnInfraRefresh").onclick = loadRunpodStatus;
+    $("btnCopyPodIP").onclick = () => {
+      if (lastInfraPodIp) copyToClipboard(lastInfraPodIp, "Pod IP copied.");
+    };
+    $("btnCopyRemoteCmd").onclick = () => {
+      if (lastInfraRemoteCmd) copyToClipboard(lastInfraRemoteCmd, "Remote commands copied.");
+    };
+    $("sRunTarget").onchange = syncRunpodPanels;
+    $("bRunTarget").onchange = syncRunpodPanels;
+    $("btnPreflight").onclick = loadPreflight;
+    $("cfg").onchange = loadPreflight;
+    $("bDataSource").onchange = toggleHFFields;
+    $("bLRTrialMode").onchange = toggleLRTrial;
+    for (const id of ["bName", "bAccel", "bQuantumBackend", "bQuantumPolicy", "bIBMBackendName", "bDataPath", "bEpochs", "bBatch", "bLR", "bDatasetConfig", "bSplit", "bBlend", "bResumeLatest"]) {
+      $(id).addEventListener("input", refreshModelFacts);
+      $(id).addEventListener("change", refreshModelFacts);
+    }
+    $("bAccel").addEventListener("change", loadPreflight);
+    $("btnModelFacts").onclick = refreshModelFacts;
+    $("bDatasetPreset").onchange = applyDatasetPreset;
+    $("bWizardMode").onchange = () => { bWizardStep = 1; renderWizard(); };
+    $("btnWPrev").onclick = () => { bWizardStep = Math.max(1, bWizardStep - 1); renderWizard(); };
+    $("btnWNext").onclick = () => { bWizardStep = Math.min(4, bWizardStep + 1); renderWizard(); };
+    $("btnAutoLR").onclick = async () => {
+      const msg = $("autoLRMsg");
+      msg.textContent = "Running short LR sweep...";
+      msg.className = "status";
+      $("btnAutoLR").disabled = true;
+      try {
+        const r = await fetch("/api/lr/auto", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildPayload()),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (data.recommended_lr !== undefined && data.recommended_lr !== null) {
+          $("bLR").value = String(data.recommended_lr);
+        }
+        msg.textContent = `LR set to ${$("bLR").value} (${data.promoted ? "promoted" : "baseline retained"})`;
+        msg.className = "status done";
+        refreshWizardReview();
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      } finally {
+        $("btnAutoLR").disabled = false;
+      }
+    };
+    $("btnBuildRun").onclick = async () => {
+      const msg = $("buildMsg");
+      msg.textContent = "";
+      const payload = buildPayload();
+      $("btnBuildRun").disabled = true;
+      try {
+        const r = await fetch("/api/runs/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        msg.textContent = "Built and started " + data.id + " (" + data.config + ")";
+        msg.className = "status running";
+        await loadConfigs();
+        await loadRuns();
+        await loadPreflight();
+        selectRun(data.id, data.config);
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      } finally {
+        $("btnBuildRun").disabled = false;
+      }
+    };
+    $("btnClearLog").onclick = () => { $("log").textContent = ""; logOffset = 0; if (activeRunId) pollLog(); };
+
+    toggleHFFields();
+    toggleLRTrial();
+    renderWizard();
+    refreshModelFacts();
+    syncRunpodPanels();
+    loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
+    loadRuns();
+    setInterval(loadRuns, 5000);
+  </script>
+</body>
+</html>

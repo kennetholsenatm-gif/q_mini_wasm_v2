@@ -41,6 +41,8 @@ _setup_kw = dict(
     install_requires=[
         "torch>=2.0.0",
         "pennylane>=0.28",
+        "qiskit>=1.0",
+        "qiskit-ibm-runtime>=0.20",
         "wasmtime>=14.0.0",
         "pywasm>=2.0.0",
         "numpy>=1.24.0",
@@ -71,6 +73,8 @@ _setup_kw = dict(
         "training": [
             "datasets>=2.14.0",
             "python-dotenv>=1.0.0",
+            "pydantic>=2.5.0",
+            "tomli>=2.0.0; python_version<'3.11'",
         ],
         "gpu": [
             "dpctl>=0.15.0",

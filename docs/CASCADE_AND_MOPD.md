@@ -1,6 +1,6 @@
 # Cascade reinforcement learning and MOPD
 
-This document describes **cascade GRPO** (group-relative policy optimization for the escalation / routing head) and **MOPD** (multi-domain on-policy distillation) as implemented in **qminiwasm-core**, how they fit into `run_training_loop`, and which environment variables control them. For data sources and the full env table, see **[TRAINING_DATA.md](TRAINING_DATA.md)**.
+This document describes **cascade GRPO** (group-relative policy optimization for the escalation / routing head) and **MOPD** (multi-domain on-policy distillation) as implemented in **qminiwasm-core**, how they fit into `run_training_loop`, and which environment variables control them. Base hyperparameters can live in TOML under **`configs/training/`** (see **[TRAINING_DATA.md](TRAINING_DATA.md)**); the helper script **`scripts/run_training_cascade_mopd.py`** defaults to **`--config configs/training/cascade_mopd.toml`** and still injects **`CASCADE_MOPD_*`** and checkpoint paths via env for quick overrides. For the full env table, see **[TRAINING_DATA.md](TRAINING_DATA.md)**.
 
 ## Where the code lives
 
@@ -13,6 +13,10 @@ This document describes **cascade GRPO** (group-relative policy optimization for
 | Epoch orchestration (cascade phase then AdamW MSE) | [`qminiwasm/training/loop.py`](../qminiwasm/training/loop.py) |
 
 ## Cascade RL (toy MDP + GRPO)
+
+**Not IBM Quantum:** The cascade phase is **PyTorch-only** (toy env + GRPO). It does **not** submit jobs to **IBM Quantum** or any Qiskit Runtime queue. Seeing `cascade_rl mean_loss=…` in logs does **not** imply a hardware quantum job ran.
+
+**Default `quantum_router` in training:** `HybridQuantumMoE` ([`router.py`](../qminiwasm/quantum/router.py)) currently implements `forward` as a **pass-through** (`return hidden_states`). So the main supervised phase also does **not** execute circuits on IBM hardware by default. Config fields like `quantum_backend` are reserved for future / alternate code paths; they are **not** wired into this cascade MDP or that default router.
 
 **Purpose:** Before each epoch’s supervised MSE updates, run a few **on-policy** steps on a small discrete-action MDP (`ToyRoutingEnv` in [`cascade_rl.py`](../qminiwasm/training/cascade_rl.py)). The policy can be:
 
@@ -69,6 +73,87 @@ This is **not** distillation from a separate trained model or dataset; it acts a
 | `USE_CASCADE_ROUTER`, `CASCADE_LEARNED_PROJECTOR`, `CASCADE_ROUTER_HIDDEN` | Which policy module is trained. |
 
 Checkpoints can store **`cascade_policy`**; loading maps into `model.cascade_router` when `USE_CASCADE_ROUTER=1`. See [TRAINING_DATA.md](TRAINING_DATA.md) § Checkpoints and serving.
+
+## Recommended continuation run (Cascade RL + MOPD)
+
+Use this after a baseline supervised run (same data slice, seed, batch size, `HYBRID_ADAPTER`, and accelerator) so you can compare metrics fairly.
+
+### Phase A — Enable MOPD
+
+- Set **`CASCADE_MOPD_LAMBDA`** between **0.05** and **0.1** initially; increase toward **0.2** only if **train mean MSE** stays stable and cascade metrics look healthy.
+- Use **`CASCADE_MOPD_FEAT_LOSS=mse`** first; try **`cosine`** in a separate run if you want a different geometry on the state embedding.
+- Keep **`CASCADE_STEPS_PER_EPOCH=2`** and **`CASCADE_GROUP_SIZE=4`** unless you deliberately want more cascade compute (**`CASCADE_STEPS_PER_EPOCH`** 3–4); **`CASCADE_GROUP_SIZE`** must stay **≥ 2** when GRPO normalizes advantages.
+
+### Phase B — Optional: cascade on the model for serving
+
+- To expose **`cascade_logits`** on **`POST /infer`**, set **`USE_CASCADE_ROUTER=1`** during training and serving, with matching **`CASCADE_STATE_DIM`**, **`CASCADE_NUM_ACTIONS`**, **`CASCADE_ROUTER_HIDDEN`**.
+- Alternatively use **`CASCADE_LEARNED_PROJECTOR=1`** without **`USE_CASCADE_ROUTER`**: the cascade head still trains, but the main `QMiniWASM` module has no attached router for inference-time logits.
+
+### Phase C — Warm start
+
+- Set **`CHECKPOINT_LOAD_PATH`** to your **best** artifact from the prior run (e.g. the file written by **`CHECKPOINT_BEST_PATH`** when train MSE improved).
+- Point **`CHECKPOINT_SAVE_PATH`**, **`CHECKPOINT_BEST_PATH`**, and optionally **`CHECKPOINT_LATEST_PATH`** at **new** filenames so you do not overwrite the baseline.
+
+### Environment checklist (goals → variables)
+
+| Goal | Variables |
+|------|-----------|
+| MOPD on | `CASCADE_MOPD_LAMBDA` (e.g. `0.1`), optional `CASCADE_MOPD_FEAT_LOSS` |
+| Same hardware | `ACCELERATOR=xpu` (or `cpu` / `cuda` as in baseline) |
+| Repro / fair compare | `SEED`, same `HF_NUM_SAMPLES` / `DATA_PATH` / `HF_*` fields |
+| Continuation | `CHECKPOINT_LOAD_PATH` → best prior artifact |
+| New artifacts | Fresh `CHECKPOINT_SAVE_PATH`, `CHECKPOINT_BEST_PATH` |
+| Optional eval | `EVAL_HOLDOUT_FRACTION`, `EVAL_EVERY_EPOCH=1` for eval MSE |
+
+Also: [.env.example](../.env.example), [TRAINING_DATA.md](TRAINING_DATA.md) § Cascade RL and MOPD.
+
+### Metrics to compare after each run
+
+From the dict returned by **`python -m engine`** (and logs):
+
+| Metric | Use |
+|--------|-----|
+| `epoch_cascade_loss`, `epoch_cascade_return` | Cascade phase health |
+| `cascade_mopd_lambda`, `cascade_mopd_feat_loss` | Confirm env applied |
+| `epoch_mean_mse` | Primary train quality |
+| `eval_mean_mse`, `epoch_eval_mean_mse` | If **`EVAL_HOLDOUT_FRACTION`** > 0 and **`EVAL_EVERY_EPOCH=1`** |
+| `cascade_policy_mode` | `tiny_mlp` vs `loop_router` vs `model_router` |
+
+If **train MSE regresses** while cascade loss spikes, **lower `CASCADE_MOPD_LAMBDA`** or **`CASCADE_POLICY_LR`** before increasing **`CASCADE_STEPS_PER_EPOCH`**.
+
+A copy-paste **`.env`** sketch lives in **[.env.example](../.env.example)** under “Next run: Cascade RL + MOPD”.
+
+**Script (injects env then runs the engine):** from repo root,
+
+```bash
+python scripts/run_training_cascade_mopd.py
+python scripts/resume_training_cascade_mopd.py
+python scripts/run_training_cascade_mopd.py --dry-run
+python scripts/run_training_cascade_mopd.py --checkpoint-load ./artifacts/qminiwasm_best.pt --use-cascade-router
+```
+
+See `python scripts/run_training_cascade_mopd.py --help`.
+
+### Long runs, disconnecting, and “coming back”
+
+**Keep the process running** while you close the terminal or SSH session:
+
+- **Linux / macOS:** `tmux new -s qtrain` (or `screen`), run your command inside the session, detach with `Ctrl+b` then `d` (tmux). Reattach later with `tmux attach -t qtrain`. Alternatively: `nohup python scripts/run_training_cascade_mopd.py >> training.log 2>&1 &` and use `tail -f training.log`.
+- **Windows:** Use **Windows Terminal** and leave the tab open, or run from **WSL** with `tmux` as above. Avoid closing the console that owns the training process unless you use a persistent session tool.
+
+**Stopping and later continuing training (weights only):** The loop does **not** restore optimizer state or “resume at epoch N” automatically. It **does** write **`CHECKPOINT_LATEST_PATH`** after **each full epoch** (weights + `meta` including `epoch`).
+
+**One command** to start again from that file (sets `CHECKPOINT_LOAD_PATH` for you):
+
+```bash
+python scripts/resume_training_cascade_mopd.py
+```
+
+Equivalent: `python scripts/run_training_cascade_mopd.py --resume`. Resolution order: path from **`--checkpoint-latest`** (default `artifacts/qminiwasm_latest_cascade_mopd.pt`), else **`CHECKPOINT_LATEST_PATH`** in `.env` if that file exists.
+
+Expect a **fresh** epoch counter (epoch 1 of the new run), **new** AdamW state, and **reset** `ReduceLROnPlateau` / early-stop counters — only the **weights** carry over.
+
+**Mid-epoch:** If you kill the process during an epoch, the **latest** file may be one epoch behind; prefer stopping after you see a “Wrote checkpoint” / epoch log line.
 
 ## Roadmap (not implemented)
 

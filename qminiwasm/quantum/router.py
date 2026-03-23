@@ -803,16 +803,46 @@ class TernaryOptimizer:
 
 
 class EnhancedHybridQuantumMoE(nn.Module):
-    """Enhanced Torch-friendly wrapper around EnhancedQuantumRouter"""
+    """Torch MoE block; optional QAOA expectations via Qiskit (statevector or IBM), not PennyLane."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        *,
+        qaoa_config: Optional[Any] = None,
+        num_qubits: int = 8,
+    ):
         super().__init__()
         self.router = EnhancedQuantumRouter(api_key=api_key)
+        self._qaoa: Optional[Any] = None
+        self._proj_in: Optional[nn.Module] = None
+        self._proj_out: Optional[nn.Module] = None
+        self._mix_scale: Optional[nn.Parameter] = None
+        mode = getattr(qaoa_config, "execution_mode", None) if qaoa_config is not None else None
+        if mode in ("qiskit_statevector", "qiskit_ibm"):
+            from qminiwasm.quantum.qaoa_integration import NeuralQAOA
+
+            self._qaoa = NeuralQAOA(int(num_qubits), qaoa_config)
+            self._proj_in = nn.Linear(4096, int(num_qubits))
+            self._proj_out = nn.Linear(int(num_qubits), 4096)
+            self._mix_scale = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Route hidden states through enhanced quantum router"""
-        # Enhanced routing with ternary expert support
-        return hidden_states
+        """Project to qubits, run QAOA expectations (Qiskit path), add residual to hidden."""
+        if self._qaoa is None or self._proj_in is None or self._proj_out is None:
+            return hidden_states
+        w = self._proj_in(hidden_states).mean(dim=0)
+        gamma = self._qaoa.gamma
+        beta = self._qaoa.beta
+        if self._qaoa.angle_predictor is not None:
+            pred = self._qaoa.angle_predictor(w)
+            gamma = pred[: self._qaoa.config.num_layers]
+            beta = pred[self._qaoa.config.num_layers :]
+        q_out = self._qaoa.quantum_circuit(w, gamma, beta)
+        q_det = q_out.detach()
+        delta = self._proj_out(q_det.to(hidden_states.dtype))
+        scale = self._mix_scale * torch.ones((), device=hidden_states.device, dtype=delta.dtype)
+        return hidden_states + scale * delta.unsqueeze(0).expand_as(hidden_states)
 
 
 # Public alias for backward compatibility

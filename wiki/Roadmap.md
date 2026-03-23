@@ -4,6 +4,12 @@
 
 Q-Mini-WASM's roadmap outlines the strategic vision for the future development of this quantum computing framework. The roadmap is designed to deliver continuous innovation, enhanced capabilities, and improved user experiences while maintaining the commitment to security
 
+## Validated milestones (repository)
+
+These are **completed** integration points worth tracking alongside forward-looking phases:
+
+- **IBM Quantum hardware in AI training (March 2026)** — The **`qiskit_ibm`** QAOA MoE path runs through **IBM Quantum Runtime** (`EstimatorV2`) inside the **`python -m engine`** / **`hybrid_inference`** training loop. End-to-end jobs have **completed successfully** on real devices (ISA-transpiled circuits; expectations used as a detached signal). Documentation: **[AI Training Pipeline](AI-Training-Pipeline.md)**, **[Quantum Optimization](Quantum-Optimization.md)**, in-repo **[QUANTUM_QISKIT.md](../docs/QUANTUM_QISKIT.md)**. *Not* every workload uses hardware by default—configuration, tokens, and **plan quotas** apply.
+
 ## Strategic Vision
 
 ### Long-term Goals
@@ -55,8 +61,15 @@ Q-Mini-WASM's roadmap outlines the strategic vision for the future development o
 ### Performance Initiatives
 - **AI-powered Optimization**: Machine learning for performance optimization
 - **Automated Tuning**: Automated performance tuning
+- **Autonomous LR Discovery**: Add an agent-driven learning-rate discovery loop inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch), running short fixed-budget experiments to propose/validate `learning_rate` candidates before long runs.
 - **Advanced Analytics**: Advanced performance analytics
 - **Predictive Performance**: Predictive performance capabilities
+
+#### Autonomous LR Discovery Milestones
+- **M1 (Config + CLI Integration)**: Add a lightweight tuner command that sweeps LR ranges (log-scale) and writes best candidates back to generated training configs.
+- **M2 (WUI Integration)**: Expose “Auto-select learning rate” in Build + Run wizard, with visible trial budget and selected LR rationale.
+- **M3 (Safety + Reproducibility)**: Store trial metadata (seed, dataset, accelerator, wall-time budget, metric) for reproducible LR picks.
+- **M4 (Promotion Criteria)**: Promote a discovered LR only when it beats baseline on holdout metric with equal or lower runtime.
 
 ### Community Initiatives
 - **Community Growth**: Community growth and engagement initiatives
@@ -68,7 +81,7 @@ Q-Mini-WASM's roadmap outlines the strategic vision for the future development o
 
 ### Quantum Computing
 - **Algorithm Development**: New quantum algorithms and protocols
-- **Hardware Integration**: Quantum hardware integration and support
+- **Hardware Integration**: Quantum hardware integration and support *(IBM Quantum Runtime path for QAOA MoE validated March 2026 — see [Validated milestones](#validated-milestones-repository))*
 - **Simulation Enhancement**: Enhanced quantum simulation capabilities
 - **Optimization Techniques**: Advanced quantum optimization techniques
 
@@ -146,5 +159,5 @@ Ready to help shape the future of quantum computing? Follow the [Development Wor
 
 ---
 
-**Last Updated**: 2026-03-12
+**Last Updated**: 2026-03-23
 **Version**: 1.4.0

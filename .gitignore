@@ -7,15 +7,18 @@ ibm_api_key
 qiskit_token
 quantum_credentials
 
-# Terraform State Files
-.terraform.lock.hcl
+# Terraform / OpenTofu (commit .terraform.lock.hcl for reproducible provider versions)
+.terraform/
 terraform.tfstate
 terraform.tfstate.backup
+*.tfvars
+!*.tfvars.example
 
 # Encrypted Secrets
 secrets.enc.json
 
 # Build Artifacts
+artifacts/
 *.pyc
 __pycache__/
 *.log
@@ -217,6 +220,9 @@ wheels/
 # Installer
 *.command
 *.sh
+!infra/runpod/tofu.sh
+!scripts/runpod_sync_and_train.example.sh
+!training-wui/incus/*.sh
 
 # Unit test / coverage reports
 htmlcov/
