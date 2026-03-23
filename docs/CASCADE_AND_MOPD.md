@@ -90,6 +90,19 @@ Use this after a baseline supervised run (same data slice, seed, batch size, `HY
 - Set **`CHECKPOINT_LOAD_PATH`** to your **best** artifact from the prior run (e.g. the file written by **`CHECKPOINT_BEST_PATH`** when train MSE improved).
 - Point **`CHECKPOINT_SAVE_PATH`**, **`CHECKPOINT_BEST_PATH`**, and optionally **`CHECKPOINT_LATEST_PATH`** at **new** filenames so you do not overwrite the baseline.
 
+### Environment checklist (goals → variables)
+
+| Goal | Variables |
+|------|-----------|
+| MOPD on | `CASCADE_MOPD_LAMBDA` (e.g. `0.1`), optional `CASCADE_MOPD_FEAT_LOSS` |
+| Same hardware | `ACCELERATOR=xpu` (or `cpu` / `cuda` as in baseline) |
+| Repro / fair compare | `SEED`, same `HF_NUM_SAMPLES` / `DATA_PATH` / `HF_*` fields |
+| Continuation | `CHECKPOINT_LOAD_PATH` → best prior artifact |
+| New artifacts | Fresh `CHECKPOINT_SAVE_PATH`, `CHECKPOINT_BEST_PATH` |
+| Optional eval | `EVAL_HOLDOUT_FRACTION`, `EVAL_EVERY_EPOCH=1` for eval MSE |
+
+Also: [.env.example](../.env.example), [TRAINING_DATA.md](TRAINING_DATA.md) § Cascade RL and MOPD.
+
 ### Metrics to compare after each run
 
 From the dict returned by **`python -m engine`** (and logs):
