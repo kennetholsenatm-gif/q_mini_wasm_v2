@@ -6,7 +6,7 @@ Small web UI to pick a `configs/training/*.toml` file and run `python -m engine 
 
 - [Go](https://go.dev/dl/) 1.22+
 - Python env with the package installed (`pip install -e ".[training]"`) and `python` on `PATH`
-- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Incus/host automation now lives in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus`.
+- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Setup checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md). Incus/host automation now lives in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus`.
 
 ## Run
 
@@ -36,25 +36,29 @@ Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 ### Tabs (workflow)
 
 - **Training** — Single **LEGO-style wizard** (five steps on one tab): (1) dataset mix, (2) model & runtime, (3) data source, (4) training knobs + full **schema** form, (5) review/save, **Launch training** (only control that starts `python -m engine`), preflight, runs, artifacts. All saves target **`configs/training/wui_working.toml`** unless you pick another file in the dropdown.
-- **Mission Control**, **Node Health**, **Quantum Topology**, **Artifact Registry** — unchanged (Mission Control holds quick metrics, live telemetry, and the training log moved off the wizard for headroom).
+- **Mission Control**, **Infra & RunPod** (node health, `terraform.tfvars`, RunPod status, OpenTofu), **Quantum Topology**, **Artifact Registry** — Mission Control holds quick metrics, live telemetry, and the training log moved off the wizard for headroom.
 
-`POST /api/runs/build` and `POST /api/runs/custom` only write `wui_working.toml`; **`POST /api/runs`** starts training.
+`POST /api/runs/build` and `POST /api/runs/custom` only write `wui_working.toml`; **`POST /api/runs`** starts training. Optional JSON field **`allow_missing_checkpoint`**: when `true` and the config’s `checkpoint.load_path` file is missing, the server runs from a temp copy of the TOML with that line removed (fresh weights). The UI sets this only after you confirm in the resume-without-file dialog.
 
 Only one training process at a time is allowed (start another after the current run finishes or after **Stop**).
 
 ### RunPod (OpenTofu)
 
-The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python -m engine` and **`destroy`** when the job exits or you **Stop** (optional checkbox: skip destroy if you want to keep the pod).
+End-to-end setup: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md) (API key in `.env`, `scripts/runpod_bootstrap.sh`).
+
+The dashboard can target **RunPod** so OpenTofu runs **`apply`** before training and **`destroy`** when the job exits or you **Stop** (optional checkbox: skip destroy if you want to keep the pod).
 
 - Set **`RUNPOD_TOKEN`** (or `RUNPOD_API_KEY`) in the repo **`.env`**; the WUI loads it on startup (`loadDotenvFromRepo`).
-- Stack lives in **`infra/runpod`** (see that folder’s README). **`tofu` or `terraform` must be on `PATH`** (OpenTofu releases: `tofu`; install script now in **`C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus\install-opentofu.sh`** for Linux/Incus).
-- **Training still runs on the same host as the WUI** (subprocess). The RunPod pod is provisioned for GPU / remote work; use **`public_ip`** from status outputs and SSH into the pod if you want training on the GPU there.
+- Stack lives in **`infra/runpod`**. **`tofu` or `terraform` must be on `PATH`** on the **WUI host**.
+- **Train on the pod (default):** In step 2, choose **RunPod** and leave **Train on RunPod GPU** checked. **Launch training** will: `tofu apply` (unless you check **Skip OpenTofu apply**), wait for **`public_ip`**, **tar-sync** the repo to the pod over **SSH**, then run **`python -m engine`** on the pod (venv + `pip install -e ".[training]"` on each run). The WUI host must have **`ssh`**, **`tar`**, and **`scp`** (scp only needed when the server uses a generated temp config) on **`PATH`**. Optional **`RUNPOD_SSH_USER`**, **`RUNPOD_REMOTE_DIR`**, **`RUNPOD_SSH_KEY`** in `.env` (see [`.env.example`](../.env.example)). Your repo **`.env`** is included in the sync so Hub / IBM tokens work remotely.
+- **Train on the WUI host:** Uncheck **Train on RunPod GPU** — the pod is still provisioned, but **`python -m engine`** runs locally (legacy / CPU testing).
+- **Artifacts:** Checkpoints are written on the **pod** under the synced repo (e.g. `artifacts/models/...`). Copy them back with **scp**/**rsync** if you need them on your laptop. **Stop** terminates the local **ssh** process; the remote Python process may keep running until the pod is destroyed or you SSH in manually.
 
-**Cloud GPU (CUDA):** Pods default to **`ACCELERATOR=cuda`** in container env (`infra/runpod/variables.tf`). See **`infra/runpod/CLOUD_ACCELERATOR.md`** and **`scripts/runpod_sync_and_train.example.sh`** for rsync + SSH + `python -m engine` on the pod.
+**Cloud GPU (CUDA):** Pods default to **`ACCELERATOR=cuda`** in container env (`infra/runpod/variables.tf`). See **`infra/runpod/CLOUD_ACCELERATOR.md`**.
 
-**Infrastructure tab:** edit **`infra/runpod/terraform.tfvars`** in the browser (Save / Reload / Insert example from `terraform.tfvars.example`), then **Status** (token / `infra/runpod` / `tofu`, outputs, copy buttons, **Remote GPU** snippets) and **OpenTofu CLI** (`tofu init` / `plan` / `apply` / `destroy` — use **plan** to debug apply exit 1). **Training** tab stays focused on configs and runs; **log** stays at the bottom on both tabs.
+**Infra & RunPod tab:** edit **`infra/runpod/terraform.tfvars`**, **Status** (badges include **ssh** / **scp** / **tar**), and **OpenTofu CLI**. **`GET /api/meta`** includes **`runpod_remote`** defaults and tool detection.
 
-**Floating panels (optional):** On **Training** and **Infrastructure**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. The **Log** panel lives on **Mission Control** when using the default layout. Layout is stored in **`localStorage`**.
+**Floating panels (optional):** On **Training** and **Infra & RunPod**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. The **Log** panel lives on **Mission Control** when using the default layout. Layout is stored in **`localStorage`**.
 
 ### Agent / inference outputs (after Launch training)
 
@@ -70,7 +74,7 @@ Each training run writes checkpoints under **`artifacts/models/<model-slug>/`** 
 
 After training, point tools or agents at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn engine.serve:app`** (see repo **`engine/serve.py`**, **`pip install -e ".[serve]"`**). Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle JSON for the exact contract.
 
-`GET /api/runpod/status` — token, binary, `tofu output` (when state exists). `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional). Start APIs accept `run_target`: `"local"` | `"runpod"`, `runpod_destroy_on_exit`, and optional **`runpod_var_file`** (basename under `infra/runpod`; UI defaults to `terraform.tfvars`).
+`GET /api/runpod/status` — token, binary, `tofu output` (when state exists), plus **`remote_ssh`**, **`remote_scp`**, **`remote_tar`**, **`remote_ssh_user`**, **`remote_dir`**, **`remote_ssh_key_set`**. `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional). **`POST /api/runs`** accepts `run_target`: `"local"` | `"runpod"`, `runpod_destroy_on_exit`, optional **`runpod_var_file`**, **`runpod_train_on_pod`** (default **true** when `runpod` — SSH sync + remote engine), **`runpod_skip_apply`** (reuse existing terraform state / IP).
 
 **Preflight FAQ**
 

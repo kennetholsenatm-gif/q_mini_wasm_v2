@@ -12,7 +12,7 @@ datasets = [
 [edge_curriculum.tool_use]
 datasets = [
   { path = "ise-uiuc/Magicoder-Evol-Instruct-110K" },
-  { path = "HuggingFaceH4/toolbench" },
+  { path = "tuandunghcmut/toolbench-v1", dataset_config = "default" },
   { path = "migtissera/Synthia-v1.3" },
 ]
 

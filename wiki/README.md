@@ -107,7 +107,7 @@ Start here if you want to understand **the deep technical and mathematical found
 ### External Documentation
 - **[Main README](../README.md)** - Project overview and quick start
 - **[QUANTUM_QISKIT.md](../docs/QUANTUM_QISKIT.md)** - Qiskit QAOA modes (`pennylane`, `qiskit_statevector`, `qiskit_ibm`) and IBM configuration
-- **[White Paper](../docs/hierarchical-inference-architecture.md)** - Comprehensive technical specification
+- **[Project goals](../docs/Project-Goals.md)** - Objectives and technical scope for Q-Mini-WASM
 - **[API Documentation](https://docs.qminiwasm.com)** - Technical API references
 
 ### Community and Support

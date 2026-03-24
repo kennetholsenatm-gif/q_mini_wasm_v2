@@ -29,7 +29,7 @@ extra_specs = [
   { path = "meta-math/MetaMathQA" },
   { path = "Open-Orca/OpenOrca" },
   { path = "ise-uiuc/Magicoder-Evol-Instruct-110K" },
-  { path = "HuggingFaceH4/toolbench" },
+  { path = "tuandunghcmut/toolbench-v1", dataset_config = "default" },
   { path = "migtissera/Synthia-v1.3" },
   { path = "argilla/distilabel-capybara-dpo-7k" },
 ]

@@ -436,10 +436,31 @@ class EngineConfig:
 
     def wasm_runtime_kwargs(self) -> Dict[str, Any]:
         """Build kwargs for :class:`qminiwasm.wasm.engine.WasmRuntimeConfig`."""
-        from qminiwasm.wasm.engine import WasmRuntimeConfig
+        from qminiwasm.wasm.engine import (
+            DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES,
+            WasmRuntimeConfig,
+        )
 
         mb = self.wasm_store_memory_limit_mb
-        lim_b = int(mb) * 1024 * 1024 if mb is not None and mb > 0 else 256 * 1024 * 1024
+        lim_b = (
+            int(mb) * 1024 * 1024
+            if mb is not None and mb > 0
+            else DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES
+        )
+        # Override TOML/default without editing config (e.g. Docker image still on old wheel).
+        env_bytes = os.environ.get("QMW_WASM_STORE_MEMORY_LIMIT_BYTES", "").strip()
+        if env_bytes:
+            try:
+                lim_b = max(1, int(env_bytes, 10))
+            except ValueError:
+                pass
+        else:
+            env_mb = os.environ.get("QMW_WASM_STORE_MEMORY_LIMIT_MB", "").strip()
+            if env_mb:
+                try:
+                    lim_b = max(1, int(env_mb, 10)) * 1024 * 1024
+                except ValueError:
+                    pass
         fp = (self.wasm_fallback_policy or "mock").strip().lower()
         if fp in ("error", "fail", "strict"):
             fp = "error"

@@ -258,6 +258,12 @@ func handleRunpodStatus(w http.ResponseWriter, r *http.Request) {
 		"tofu_error":        errString(binErr),
 		"outputs":           nil,
 		"outputs_error":     "",
+		"remote_ssh":        runpodToolOK("ssh"),
+		"remote_scp":        runpodToolOK("scp"),
+		"remote_tar":        runpodToolOK("tar"),
+		"remote_ssh_user":   runpodSSHUser(),
+		"remote_dir":        runpodRemoteDir(),
+		"remote_ssh_key_set": runpodSSHKeyPath() != "",
 	}
 	if dirErr == nil && binErr == nil && runpodTokenPresent() {
 		if o, err := runpodOutputsJSON(ctx); err == nil {

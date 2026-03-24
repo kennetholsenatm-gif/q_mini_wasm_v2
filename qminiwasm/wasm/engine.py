@@ -19,8 +19,17 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 import wasmtime
 
-from .memory_encode import encode_linear_memory
+from .memory_encode import D_MODEL, encode_linear_memory
 from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
+
+# Wasmtime Store maximum linear memory (bytes). Sized for ~1e6 training rows × d_model
+# byte budget (same width as encode_linear_memory output); override via TOML [wasm] store_memory_limit_mb
+# or env QMW_WASM_STORE_MEMORY_LIMIT_BYTES / QMW_WASM_STORE_MEMORY_LIMIT_MB (see engine.config).
+DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES = 1_000_000 * D_MODEL
+# Wasmtime applies a ~10k default instance cap if only memory_size is set; mesh data gen can exceed it.
+# Override via [wasm] store_instance_limit / store_memories_limit in training TOML.
+DEFAULT_WASM_STORE_INSTANCE_LIMIT = 16_777_216
+DEFAULT_WASM_STORE_MEMORIES_LIMIT = 16_777_216
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +45,12 @@ MESH_EXPORT_NAMES: Dict[str, str] = {
 
 @dataclass(frozen=True)
 class WasmRuntimeConfig:
-    """Wasmtime store limits and fallback behavior (from training TOML / EngineConfig, not env)."""
+    """Wasmtime store limits and fallback behavior (from EngineConfig / training TOML).
 
-    store_memory_limit_bytes: int = 256 * 1024 * 1024
+    ``store_memory_limit_bytes`` may be raised via env in :meth:`EngineConfig.wasm_runtime_kwargs`.
+    """
+
+    store_memory_limit_bytes: int = DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES
     fallback_policy: str = "mock"
     force_mock: bool = False
     store_instance_limit: Optional[int] = None
@@ -76,6 +88,8 @@ class WasmEngine:
         # Keep store for last compile_wasm so Instance can use same engine (no cross-Engine)
         self._compiled_store: Optional[Any] = None
         self._compiled_module: Optional[Any] = None
+        # One wasmtime.Instance per (store id, module id); mesh execute_wasm reused same module many times.
+        self._instance_cache: Dict[Tuple[int, int], Any] = {}
 
         if cfg.force_mock:
             self.logger.warning("WASM runtime config force_mock enabled; using mock WASM engine.")
@@ -117,20 +131,41 @@ class WasmEngine:
     def _new_store(self) -> wasmtime.Store:
         store = wasmtime.Store(self._engine)
         try:
-            kwargs: Dict[str, int] = {"memory_size": int(self._store_memory_limit_bytes)}
-            if self._store_instance_limit is not None:
-                kwargs["instances"] = int(self._store_instance_limit)
-            if self._store_memories_limit is not None:
-                kwargs["memories"] = int(self._store_memories_limit)
-            store.set_limits(**kwargs)
+            inst_cap = (
+                int(self._store_instance_limit)
+                if self._store_instance_limit is not None
+                else DEFAULT_WASM_STORE_INSTANCE_LIMIT
+            )
+            mem_cap = (
+                int(self._store_memories_limit)
+                if self._store_memories_limit is not None
+                else DEFAULT_WASM_STORE_MEMORIES_LIMIT
+            )
+            store.set_limits(
+                memory_size=int(self._store_memory_limit_bytes),
+                instances=max(1, inst_cap),
+                memories=max(1, mem_cap),
+            )
         except Exception as e:
             self.logger.warning("Failed to apply wasmtime Store limits (%s). Continuing.", e)
         return store
 
     def _log_runtime_memory_settings(self) -> None:
+        inst_cap = (
+            int(self._store_instance_limit)
+            if self._store_instance_limit is not None
+            else DEFAULT_WASM_STORE_INSTANCE_LIMIT
+        )
+        mem_cap = (
+            int(self._store_memories_limit)
+            if self._store_memories_limit is not None
+            else DEFAULT_WASM_STORE_MEMORIES_LIMIT
+        )
         self.logger.info(
-            "WASM store memory limit=%s bytes fallback_policy=%s",
+            "WASM store limits memory=%s bytes instances=%s memories=%s fallback_policy=%s",
             int(self._store_memory_limit_bytes),
+            inst_cap,
+            mem_cap,
             self._fallback_policy,
         )
 
@@ -305,7 +340,11 @@ class WasmEngine:
             )
             return 0, None, None, b"", b""
         try:
-            instance = instantiate_wasmtime_module(store, module)
+            ic_key = (id(store), id(module))
+            instance = self._instance_cache.get(ic_key)
+            if instance is None:
+                instance = instantiate_wasmtime_module(store, module)
+                self._instance_cache[ic_key] = instance
             pre_mem = self._read_linear_memory(instance, store)
             first_arg = int(args[0]) if args else 0
             hidden_state = encode_linear_memory(pre_mem, result_i32=0, first_arg=first_arg)

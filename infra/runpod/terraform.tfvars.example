@@ -1,9 +1,14 @@
-# Copy to terraform.tfvars (gitignored) and tune.
-# pod_name     = "my-qminiwasm-pod"
-# image_name   = "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel"
-# gpu_count    = 1
-# cloud_type   = "COMMUNITY"
-# ports        = ["8888/http", "22/tcp"]
+# Copy to terraform.tfvars (gitignored) and tune, or run: ./scripts/runpod_bootstrap.sh
+#
+# gpu_type_ids: RunPod GPU type *ids* from the deploy UI / API (often snake_case), not only display names.
+# Default in variables.tf already prefers actual_coffee_meadowlark; override here if needed:
+# gpu_type_ids     = ["actual_coffee_meadowlark"]
+# data_center_ids  = ["US-CA-2", "US-TX-3"]
+# pod_name         = "my-qminiwasm-pod"
+# image_name       = "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel"
+# gpu_count        = 1
+# cloud_type       = "COMMUNITY"
+# ports            = ["8888/http", "22/tcp"]
 #
 # Default env (in variables.tf) sets ACCELERATOR=cuda for the container.
 # Override entirely if needed:

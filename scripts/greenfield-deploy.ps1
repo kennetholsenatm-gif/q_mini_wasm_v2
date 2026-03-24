@@ -67,7 +67,7 @@ if (-not $SkipWui) {
     Write-Host "WUI is not started by this script. To run the backend with Data Stack, set:"
     Write-Host "  POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB"
     Write-Host "  RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_DEFAULT_USER, RABBITMQ_DEFAULT_PASS"
-    Write-Host "See docs/Greenfield-Deployment.md and containers/wui/README.md for WUI <-> Data Stack env vars."
+    Write-Host "See repo README.md and training-wui/README.md for the current training WUI; optional stacks may use containers/wui/README.md when present."
 } else {
     Write-Host "--- Step 4: WUI (skipped) ---"
 }

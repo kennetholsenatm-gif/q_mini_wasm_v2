@@ -35,6 +35,21 @@ def test_normalize_hf_dataset_spec_mbpp_legacy():
     assert cfg2 == "sanitized"
 
 
+def test_normalize_hf_dataset_spec_toolbench_legacy():
+    nid, cfg = normalize_hf_dataset_spec("HuggingFaceH4/toolbench", None)
+    assert nid == "tuandunghcmut/toolbench-v1"
+    assert cfg == "default"
+    nid2, cfg2 = normalize_hf_dataset_spec("huggingfaceh4/toolbench", "benchmark")
+    assert nid2 == "tuandunghcmut/toolbench-v1"
+    assert cfg2 == "benchmark"
+
+
+def test_normalize_hf_dataset_spec_toolbench_v1_default_config():
+    nid, cfg = normalize_hf_dataset_spec("tuandunghcmut/toolbench-v1", None)
+    assert nid == "tuandunghcmut/toolbench-v1"
+    assert cfg == "default"
+
+
 def test_row_to_encoded_blob_code_fields_change_tensor():
     row_a = {"func_code_string": "def f():\n    return 1\n", "language": "python"}
     row_b = {"func_code_string": "def f():\n    return 2\n", "language": "python"}

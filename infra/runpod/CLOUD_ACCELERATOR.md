@@ -1,5 +1,9 @@
 # Cloud accelerators (Runpod): GPU-ready training
 
+Setup checklist: [docs/RUNPOD_QUICKSTART.md](../../docs/RUNPOD_QUICKSTART.md).
+
+The **training WUI** can perform this flow for you: **Infra & RunPod** for OpenTofu, then **Launch training** with **RunPod** + **Train on RunPod GPU** (default) to sync over SSH and run `python -m engine` on the pod.
+
 The Runpod pod uses a **CUDA PyTorch** image by default (`image_name` in `variables.tf`) and injects:
 
 | Variable | Typical value | Purpose |

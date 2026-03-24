@@ -325,6 +325,14 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 		"server_addr": serverAddr,
 		"repo_root":   repoRoot,
 		"python":      pythonExe,
+		"runpod_remote": map[string]any{
+			"ssh_user":    runpodSSHUser(),
+			"remote_dir":  runpodRemoteDir(),
+			"ssh_key_set": runpodSSHKeyPath() != "",
+			"ssh":         runpodToolOK("ssh"),
+			"scp":         runpodToolOK("scp"),
+			"tar":         runpodToolOK("tar"),
+		},
 	})
 }
 
@@ -430,13 +438,16 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"runs": runManager.list()})
 	case http.MethodPost:
 		var body struct {
-			Config              string `json:"config"`
-			QuantumBackend      string `json:"quantum_backend"`
-			QuantumPolicy       string `json:"quantum_policy"`
-			IBMBackendName      string `json:"ibm_backend_name"`
-			RunTarget           string `json:"run_target"`
-			RunpodDestroyOnExit *bool  `json:"runpod_destroy_on_exit"`
-			RunpodVarFile       string `json:"runpod_var_file"`
+			Config                 string `json:"config"`
+			QuantumBackend         string `json:"quantum_backend"`
+			QuantumPolicy          string `json:"quantum_policy"`
+			IBMBackendName         string `json:"ibm_backend_name"`
+			RunTarget              string `json:"run_target"`
+			RunpodDestroyOnExit    *bool  `json:"runpod_destroy_on_exit"`
+			RunpodVarFile          string `json:"runpod_var_file"`
+			RunpodSkipApply        *bool  `json:"runpod_skip_apply"`
+			RunpodTrainOnPod       *bool  `json:"runpod_train_on_pod"`
+			AllowMissingCheckpoint bool   `json:"allow_missing_checkpoint"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonErr(w, http.StatusBadRequest, "invalid JSON")
@@ -447,21 +458,46 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if missing, err := missingLoadCheckpointFromConfig(abs); err != nil {
+		missing, err := missingLoadCheckpointFromConfig(abs)
+		if err != nil {
 			jsonErr(w, http.StatusBadRequest, "invalid checkpoint config: "+err.Error())
 			return
-		} else if missing != "" {
-			jsonErr(w, http.StatusBadRequest, "checkpoint load_path not found: "+missing)
-			return
+		}
+		// Match engine behavior: missing load_path trains from scratch (strip line for this run).
+		// allow_missing_checkpoint is accepted for older clients but no longer required.
+		_ = body.AllowMissingCheckpoint
+		absForEngine := abs
+		var configCleanup string
+		if missing != "" {
+			log.Printf("training-wui: checkpoint load_path not found (%s); training from scratch (omit load_path for this run)", missing)
+			tmp, werr := writeConfigOmittingCheckpointLoadPath(abs)
+			if werr != nil {
+				jsonErr(w, http.StatusInternalServerError, "could not prepare config without load_path: "+werr.Error())
+				return
+			}
+			absForEngine = tmp
+			configCleanup = tmp
 		}
 		extraEnv := buildQuantumEnvOverrides(body.QuantumBackend, body.QuantumPolicy, body.IBMBackendName)
-		opts := runStartOptsFromRequest(body.RunTarget, body.RunpodDestroyOnExit, body.RunpodVarFile)
+		opts := runStartOptsFromRequest(
+			body.RunTarget,
+			body.RunpodDestroyOnExit,
+			body.RunpodVarFile,
+			body.RunpodSkipApply,
+			body.RunpodTrainOnPod,
+		)
 		if err := validateRunTarget(opts); err != nil {
+			if configCleanup != "" {
+				_ = os.Remove(configCleanup)
+			}
 			jsonErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		run, err := runManager.start(abs, body.Config, extraEnv, opts)
+		run, err := runManager.start(absForEngine, body.Config, extraEnv, opts, configCleanup)
 		if err != nil {
+			if configCleanup != "" {
+				_ = os.Remove(configCleanup)
+			}
 			jsonErr(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -590,7 +626,7 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "cascade.learned_projector", Section: "cascade", Key: "learned_projector", Type: "bool", Default: defaults["cascade.learned_projector"]},
 		{ID: "cascade.router_hidden", Section: "cascade", Key: "router_hidden", Type: "int", Default: defaults["cascade.router_hidden"]},
 		{ID: "cascade.couple_forward", Section: "cascade", Key: "couple_forward", Type: "bool", Default: defaults["cascade.couple_forward"]},
-		{ID: "wasm.store_memory_limit_mb", Section: "wasm", Key: "store_memory_limit_mb", Type: "int", Default: defaults["wasm.store_memory_limit_mb"], Description: "Wasmtime store linear memory cap (MiB); default engine uses 256 if unset."},
+		{ID: "wasm.store_memory_limit_mb", Section: "wasm", Key: "store_memory_limit_mb", Type: "int", Default: defaults["wasm.store_memory_limit_mb"], Description: "Wasmtime store linear memory cap (MiB). If unset, engine default is ~1e6 × d_model bytes (~4 GiB) for large HF/mesh runs."},
 		{ID: "wasm.fallback_policy", Section: "wasm", Key: "fallback_policy", Type: "enum", Options: []string{"mock", "error"}, Default: defaults["wasm.fallback_policy"], Description: "mock: use mock WASM on failure; error: fail fast."},
 		{ID: "wasm.force_mock", Section: "wasm", Key: "force_mock", Type: "bool", Default: defaults["wasm.force_mock"], Description: "If true, always use mock WASM (testing / constrained hosts)."},
 		{ID: "wasm.store_instance_limit", Section: "wasm", Key: "store_instance_limit", Type: "int", Default: defaults["wasm.store_instance_limit"]},
@@ -1052,6 +1088,52 @@ func missingLoadCheckpointFromConfig(configAbs string) (string, error) {
 	return "", nil
 }
 
+// writeConfigOmittingCheckpointLoadPath copies src TOML to a temp file with any
+// checkpoint.load_path line removed (used when the user confirms training
+// without an existing resume file).
+func writeConfigOmittingCheckpointLoadPath(srcAbs string) (tmpAbs string, err error) {
+	raw, err := os.ReadFile(srcAbs)
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(raw), "\n")
+	inCheckpoint := false
+	var out []string
+	for _, ln := range lines {
+		s := strings.TrimSpace(ln)
+		if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
+			inCheckpoint = strings.EqualFold(s, "[checkpoint]")
+			out = append(out, ln)
+			continue
+		}
+		if inCheckpoint {
+			keyPart := strings.TrimSpace(s)
+			if idx := strings.IndexByte(keyPart, '='); idx >= 0 {
+				keyPart = strings.TrimSpace(keyPart[:idx])
+			}
+			if strings.EqualFold(keyPart, "load_path") {
+				continue
+			}
+		}
+		out = append(out, ln)
+	}
+	f, err := os.CreateTemp("", "qmw-training-*.toml")
+	if err != nil {
+		return "", err
+	}
+	tmpAbs = f.Name()
+	if _, werr := f.WriteString(strings.Join(out, "\n")); werr != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpAbs)
+		return "", werr
+	}
+	if cerr := f.Close(); cerr != nil {
+		_ = os.Remove(tmpAbs)
+		return "", cerr
+	}
+	return tmpAbs, nil
+}
+
 func PathJoinRepo(root, maybeRel string) string {
 	p := filepath.Clean(maybeRel)
 	if filepath.IsAbs(p) {
@@ -1064,6 +1146,8 @@ type runStartOpts struct {
 	RunTarget           string `json:"run_target"`
 	RunpodDestroyOnExit bool   `json:"runpod_destroy_on_exit"`
 	RunpodVarFile       string `json:"runpod_var_file"` // optional basename under infra/runpod, e.g. terraform.tfvars
+	RunpodSkipApply     bool   `json:"runpod_skip_apply"`
+	RunpodTrainOnPod    bool   `json:"runpod_train_on_pod"` // ssh sync + engine on pod (default true for runpod)
 }
 
 func normalizeRunTarget(s string) string {
@@ -1074,7 +1158,12 @@ func normalizeRunTarget(s string) string {
 	return s
 }
 
-func runStartOptsFromRequest(runTarget string, destroyPtr *bool, runpodVarFile string) runStartOpts {
+func runStartOptsFromRequest(
+	runTarget string,
+	destroyPtr *bool,
+	runpodVarFile string,
+	skipApplyPtr, trainOnPodPtr *bool,
+) runStartOpts {
 	rt := normalizeRunTarget(runTarget)
 	destroy := true
 	if destroyPtr != nil {
@@ -1083,7 +1172,25 @@ func runStartOptsFromRequest(runTarget string, destroyPtr *bool, runpodVarFile s
 	if rt != "runpod" {
 		destroy = false
 	}
-	return runStartOpts{RunTarget: rt, RunpodDestroyOnExit: destroy, RunpodVarFile: strings.TrimSpace(runpodVarFile)}
+	o := runStartOpts{
+		RunTarget:           rt,
+		RunpodDestroyOnExit: destroy,
+		RunpodVarFile:       strings.TrimSpace(runpodVarFile),
+		RunpodSkipApply:     false,
+		RunpodTrainOnPod:    rt == "runpod",
+	}
+	if rt == "runpod" {
+		if skipApplyPtr != nil {
+			o.RunpodSkipApply = *skipApplyPtr
+		}
+		if trainOnPodPtr != nil {
+			o.RunpodTrainOnPod = *trainOnPodPtr
+		}
+	} else {
+		o.RunpodTrainOnPod = false
+		o.RunpodSkipApply = false
+	}
+	return o
 }
 
 func validateRunTarget(o runStartOpts) error {
@@ -2136,6 +2243,7 @@ type runRecord struct {
 	RunTarget           string    `json:"run_target,omitempty"`
 	RunpodDestroyOnExit bool      `json:"runpod_destroy_on_exit,omitempty"`
 	RunpodVarFile       string    `json:"runpod_var_file,omitempty"`
+	configCleanup       string    `json:"-"` // temp TOML path to remove after the process exits
 	cmd                 *exec.Cmd
 	logMu               sync.Mutex
 	logBuf              bytes.Buffer
@@ -2171,7 +2279,7 @@ func newRunID() string {
 	return hex.EncodeToString(b)
 }
 
-func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts runStartOpts) (*runRecord, error) {
+func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts runStartOpts, configCleanup string) (*runRecord, error) {
 	opts.RunTarget = normalizeRunTarget(opts.RunTarget)
 	if err := validateRunTarget(opts); err != nil {
 		return nil, err
@@ -2188,7 +2296,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 
 	var applyLog string
 	applySucceeded := false
-	if opts.RunTarget == "runpod" {
+	if opts.RunTarget == "runpod" && !opts.RunpodSkipApply {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 		defer cancel()
 		var err error
@@ -2225,16 +2333,63 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		RunTarget:           opts.RunTarget,
 		RunpodDestroyOnExit: opts.RunpodDestroyOnExit,
 		RunpodVarFile:       opts.RunpodVarFile,
+		configCleanup:       configCleanup,
 	}
 	if applyLog != "" {
 		rec.logBuf.WriteString("=== runpod: OpenTofu apply ===\n")
 		rec.logBuf.WriteString(applyLog)
-		rec.logBuf.WriteString("\n=== training: python -m engine ===\n")
+		rec.logBuf.WriteByte('\n')
+	} else if opts.RunTarget == "runpod" && opts.RunpodSkipApply {
+		rec.logBuf.WriteString("=== runpod: skipped OpenTofu apply (using existing terraform state) ===\n")
 	}
 
-	cmd := exec.Command(pythonExe, "-m", "engine", "--config", absConfig)
-	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), extraEnv...)
+	var cmd *exec.Cmd
+	if opts.RunTarget == "runpod" && opts.RunpodTrainOnPod {
+		ipCtx, cancelIP := context.WithTimeout(context.Background(), 12*time.Minute)
+		defer cancelIP()
+		ip, waitErr := waitRunpodPublicIP(ipCtx)
+		if waitErr != nil {
+			return nil, waitErr
+		}
+		user := runpodSSHUser()
+		rdir := runpodRemoteDir()
+		key := runpodSSHKeyPath()
+		if !runpodToolOK("ssh") || !runpodToolOK("tar") {
+			return nil, fmt.Errorf("RunPod remote training needs ssh and tar on PATH (install OpenSSH client; Windows: Optional Features → OpenSSH Client)")
+		}
+		syncCtx, cancelSync := context.WithTimeout(context.Background(), 45*time.Minute)
+		defer cancelSync()
+		rec.logBuf.WriteString(fmt.Sprintf("=== runpod: syncing repo to %s@%s:%s (tar over ssh) ===\n", user, ip, rdir))
+		if err := runpodSyncRepo(syncCtx, ip, user, key, rdir); err != nil {
+			return nil, fmt.Errorf("runpod sync: %w", err)
+		}
+		remoteConfigRel := relDisplay
+		if configCleanup != "" {
+			if !runpodToolOK("scp") {
+				return nil, fmt.Errorf("scp not on PATH: required to upload generated config for this run")
+			}
+			tag := newRunID()
+			remoteConfigRel = fmt.Sprintf("configs/training/.wui_%s.toml", tag[:12])
+			remotePath := rdir + "/" + remoteConfigRel
+			scpCtx, cancelScp := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancelScp()
+			rec.logBuf.WriteString(fmt.Sprintf("=== runpod: uploading config to %s ===\n", remotePath))
+			if err := runpodSCPLocalToRemote(scpCtx, ip, user, key, absConfig, remotePath); err != nil {
+				return nil, fmt.Errorf("runpod scp config: %w", err)
+			}
+		}
+		rTrainCmd, rCmdErr := runpodRemoteTrainCmd(ip, user, key, rdir, remoteConfigRel, extraEnv)
+		if rCmdErr != nil {
+			return nil, rCmdErr
+		}
+		cmd = rTrainCmd
+		rec.logBuf.WriteString(fmt.Sprintf("=== training: remote python -m engine (ssh %s@%s) ===\n", user, ip))
+	} else {
+		rec.logBuf.WriteString("=== training: python -m engine (local WUI host) ===\n")
+		cmd = exec.Command(pythonExe, "-m", "engine", "--config", absConfig)
+		cmd.Dir = repoRoot
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -2420,6 +2575,8 @@ func (m *manager) wait(id string) {
 	runTarget := rec.RunTarget
 	destroyPod := rec.RunpodDestroyOnExit
 	runpodVF := rec.RunpodVarFile
+	configCleanup := rec.configCleanup
+	rec.configCleanup = ""
 	m.mu.Unlock()
 	wsHub.broadcast(id, map[string]any{
 		"type":      "lifecycle",
@@ -2432,6 +2589,9 @@ func (m *manager) wait(id string) {
 		return
 	}
 	err := cmd.Wait()
+	if configCleanup != "" {
+		_ = os.Remove(configCleanup)
+	}
 	m.mu.Lock()
 	rec = m.byID[id]
 	if rec != nil {

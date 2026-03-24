@@ -10,7 +10,11 @@ import torch
 import wasmtime
 
 from qminiwasm.data.pipeline import DataPipeline
-from qminiwasm.wasm.engine import WasmEngine, WasmRuntimeConfig
+from qminiwasm.wasm.engine import (
+    DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES,
+    WasmEngine,
+    WasmRuntimeConfig,
+)
 from qminiwasm.wasm.memory_encode import D_MODEL, encode_linear_memory
 
 
@@ -100,6 +104,38 @@ def test_wasm_engine_store_memory_limit_from_config():
         runtime=WasmRuntimeConfig(store_memory_limit_bytes=128 * 1024 * 1024),
     )
     assert eng._store_memory_limit_bytes == 128 * 1024 * 1024
+
+
+def test_default_wasm_store_memory_limit_matches_million_rows_times_d_model():
+    assert DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES == 1_000_000 * D_MODEL
+    eng = WasmEngine(use_mock=True)
+    assert eng._store_memory_limit_bytes == DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES
+
+
+def test_execute_wasm_reuses_instance_no_10k_cap_per_sample():
+    """Mesh-style loops must not create a new wasmtime.Instance per call (Wasmtime default cap ~10k)."""
+    import wasmtime
+
+    pytest.importorskip("wasmtime")
+    wat = """
+    (module
+      (memory 1)
+      (func $run (param i32 i32) (result i32)
+        (return (i32.add (local.get 0) (local.get 1))))
+      (export "memory" (memory 0))
+      (export "run" (func $run))
+    )
+    """
+    eng = WasmEngine(use_mock=False, runtime=WasmRuntimeConfig(store_memory_limit_bytes=32 * 1024 * 1024))
+    if eng.use_mock:
+        pytest.skip("WASM runtime unavailable")
+    mod = eng.compile_wasm(wasmtime.wat2wasm(wat))
+    assert mod is not None
+    for i in range(12_000):
+        out, h, t, _pre, _post = eng.execute_wasm(mod, "run", [i, 1])
+        assert out == i + 1
+        assert h is not None and t is not None
+    assert len(eng._instance_cache) == 1
 
 
 def test_wasm_engine_memory_error_strict_policy_raises(monkeypatch):

@@ -6,4 +6,4 @@
 pennylane>=0.28
 # WASM: wasmtime only (pywasm>=2 requires Python 3.12; CI uses 3.11)
 wasmtime>=14.0.0
-# Omit: hardware.txt, k8s.txt, full quantum backends, pywasm
+# Omit: hardware.txt, full quantum backends, pywasm

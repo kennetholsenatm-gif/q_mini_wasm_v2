@@ -166,6 +166,8 @@ For Hub downloads, set **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** in your en
 
 Full tables, **CodeSearchNet / `whole_func_string`** guidance, **example loss behavior**, and **environment variables** are documented in **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
 
+**Cloud GPU (RunPod):** OpenTofu stack under `infra/runpod`, helper scripts under `scripts/runpod_*.sh` — see **[docs/RUNPOD_QUICKSTART.md](docs/RUNPOD_QUICKSTART.md)** and [training-wui/README.md](training-wui/README.md).
+
 ## Project Structure
 
 ```

@@ -226,6 +226,9 @@ wheels/
 *.sh
 !infra/runpod/tofu.sh
 !scripts/runpod_sync_and_train.example.sh
+!scripts/runpod_prereqs.sh
+!scripts/runpod_bootstrap.sh
+!scripts/runpod_destroy.sh
 
 # Unit test / coverage reports
 htmlcov/

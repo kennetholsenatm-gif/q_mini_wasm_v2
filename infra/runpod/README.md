@@ -1,5 +1,7 @@
 # Runpod + OpenTofu (on-demand GPU)
 
+**Quick checklist:** [docs/RUNPOD_QUICKSTART.md](../../docs/RUNPOD_QUICKSTART.md) — helper scripts: `scripts/runpod_prereqs.sh`, `scripts/runpod_bootstrap.sh`, `scripts/runpod_destroy.sh`.
+
 Use **OpenTofu** (or Terraform) with the official **[Runpod provider](https://registry.terraform.io/providers/decentralized-infrastructure/runpod/latest)** so you can:
 
 - **`tofu apply`** — create the pod (start paying)
@@ -24,7 +26,7 @@ cp terraform.tfvars.example terraform.tfvars   # optional: tune GPU / image / re
 ./tofu.sh init
 ```
 
-Edit **`terraform.tfvars`** (gitignored) for your GPU template, image, ports, etc. Defaults are a minimal **community** GPU pod — adjust `gpu_type_ids`, `data_center_ids`, and `image_name` to match what Runpod offers in your account.
+Edit **`terraform.tfvars`** (gitignored) for your GPU template, image, ports, etc. **`gpu_type_ids`** values are RunPod **GPU type ids** (often snake_case strings from the API/console, e.g. `actual_coffee_meadowlark`), not only display labels — adjust with `data_center_ids` and `image_name` to match what Runpod offers in your account.
 
 ## Day-to-day (pay only when up)
 

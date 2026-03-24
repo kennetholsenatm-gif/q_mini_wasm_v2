@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Example: sync repo to a Runpod pod and run the engine with ACCELERATOR=cuda.
+# Full flow: docs/RUNPOD_QUICKSTART.md
 # Prerequisites: tofu/OpenTofu applied in infra/runpod, SSH access to the pod, rsync.
 # Usage:
 #   chmod +x scripts/runpod_sync_and_train.example.sh

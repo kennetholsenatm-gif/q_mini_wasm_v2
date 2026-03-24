@@ -165,6 +165,6 @@ Some variables have different requirements in development vs production:
 
 ## Related Documentation
 
-- [Configuration Guide](Configuration.md)
-- [Development Guide](wiki/Development.md)
-- [Deployment Guide](wiki/Deployment-Guide.md)
+- [README](../README.md) — project overview and quick start
+- [Training data and env](TRAINING_DATA.md)
+- [Development Guide](../wiki/Development.md)

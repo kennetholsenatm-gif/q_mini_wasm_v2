@@ -826,6 +826,9 @@
     .status.error {
       color: var(--alert-critical-red);
     }
+    .status.warn {
+      color: var(--alert-warning-orange);
+    }
     .badge {
       display: inline-block;
       padding: var(--space-xs) var(--space-sm);
@@ -1186,7 +1189,7 @@
   <nav class="app-tabs" role="tablist" aria-label="Main views">
     <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Training</button>
     <button type="button" class="app-tab" id="tabBtnMission" role="tab" aria-selected="false">Mission Control</button>
-    <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false">Node Health</button>
+    <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false" title="Node health, terraform.tfvars, RunPod status, OpenTofu">Infra &amp; RunPod</button>
     <button type="button" class="app-tab" id="tabBtnQuantum" role="tab" aria-selected="false">Quantum Topology</button>
     <button type="button" class="app-tab" id="tabBtnRegistry" role="tab" aria-selected="false">Artifact Registry</button>
   </nav>
@@ -1253,19 +1256,25 @@
       <section class="dash-card" data-card-id="dataset-builder" data-col="1" data-lego-step="1">
         <h2>1 · Dataset mix</h2>
         <p class="hint hint-block" style="margin-top:0">
-          Pick Hugging Face datasets to combine (max <strong>9</strong>). <strong>Apply mix &amp; save</strong> updates the working TOML and syncs steps 2–3. You can skip this step if you use a single dataset in step 3.
+          Pick Hugging Face datasets to combine (max <strong>9</strong>). Step <strong>3 · Data source</strong> reads this mix when <code>data.path</code> is <code>qminiwasm/hf-multi</code>. <strong>Apply mix &amp; save</strong> writes the working TOML and jumps to step 2 — you can also use <strong>Next</strong> and save from step 5. Skip this step if you use a single dataset preset in step 3.
         </p>
         <div class="grid mt-md">
           <div>
-            <label for="datasetTargetSamples">Target HF row budget per epoch (split across datasets)</label>
+            <label for="datasetTargetSamples">Max Hub rows to load this run (split across mix)</label>
             <select id="datasetTargetSamples">
+              <option value="25000">25,000 (small diet)</option>
+              <option value="50000">50,000</option>
+              <option value="100000">100,000</option>
+              <option value="250000">250,000</option>
               <option value="500000">500,000</option>
               <option value="750000" selected>750,000</option>
               <option value="1000000">1,000,000</option>
             </select>
           </div>
         </div>
-        <p class="hint stack-sm">Large budgets stream from the Hub; ensure RAM/disk and HF token are appropriate for your environment.</p>
+        <p class="hint stack-sm">
+          The engine loads <strong>at most</strong> this many rows <strong>once</strong> per training run (divided across selected datasets), then trains for multiple <strong>epochs</strong> on that in-memory slice — it is <em>not</em> re-downloading the full Hub split every epoch. Use a lower number to put huge datasets on a diet (less RAM/time).
+        </p>
         <div id="datasetCatalogGrid" class="dataset-catalog-grid stack-md" role="group" aria-label="Curated Hub datasets"></div>
         <details class="stack-md mt-md">
           <summary>Add custom Hub dataset</summary>
@@ -1322,6 +1331,19 @@
             </label>
             <div class="hint">Uncheck only if you will destroy manually (continues billing).</div>
           </div>
+          <div id="bRunpodRemoteWrap" style="display:none" class="stack-sm">
+            <label class="checkline stack-sm">
+              <input id="bRunpodTrainOnPod" type="checkbox" checked />
+              Train on RunPod GPU (sync repo via SSH, run <code>python -m engine</code> on the pod)
+            </label>
+            <label class="checkline stack-sm">
+              <input id="bRunpodSkipApply" type="checkbox" />
+              Skip OpenTofu apply (pod already up — use <code>public_ip</code> from existing terraform state)
+            </label>
+            <div class="hint">
+              WUI host needs <code>ssh</code>, <code>tar</code>, and <code>scp</code> (scp only if the run uses a generated temp config) on <code>PATH</code>. Set <code>RUNPOD_SSH_USER</code>, <code>RUNPOD_REMOTE_DIR</code>, <code>RUNPOD_SSH_KEY</code> in repo <code>.env</code> if not using defaults. Your repo <code>.env</code> is synced with the tree so Hub / IBM tokens work on the pod.
+            </div>
+          </div>
           <div>
             <label for="bAccel">Accelerator</label>
             <select id="bAccel">
@@ -1352,7 +1374,9 @@
       </section>
       <section class="dash-card" data-card-id="lego-data" data-col="1" data-lego-step="3">
         <h2>3 · Data source</h2>
-        <p class="hint hint-block" style="margin-top:0">Mesh vs Hugging Face, presets, primary path, and optional multi-dataset extras.</p>
+        <p class="hint hint-block" style="margin-top:0">Mesh vs Hugging Face, presets, primary path, and optional multi-dataset extras. When step 1 has a mix, primary path and extras follow that mix.</p>
+        <div id="datasetMixSummaryStep3" class="review-box stack-sm" style="margin-bottom:var(--space-md)" hidden>
+        </div>
         <div class="grid">
           <div>
             <label for="bDataSource">Data source</label>
@@ -1366,7 +1390,7 @@
             <label for="bDatasetPreset">HF dataset preset</label>
             <select id="bDatasetPreset">
               <option value="">(custom / keep current)</option>
-              <option value="qminiwasm/hf-multi|">Multi-dataset (extras only — set primary to placeholder)</option>
+              <option value="qminiwasm/hf-multi|">Multi-dataset (from step 1 mix when checked there)</option>
               <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
               <option value="code-search-net/code_search_net|java">CodeSearchNet (java)</option>
               <option value="code-search-net/code_search_net|javascript">CodeSearchNet (javascript)</option>
@@ -1379,12 +1403,15 @@
               <option value="wikitext|wikitext-2-raw-v1">WikiText-2 raw (general text)</option>
               <option value="imdb|">IMDb reviews (general sentiment)</option>
             </select>
-            <div class="hint">Choose a preset to auto-fill dataset id and config.</div>
+            <div class="hint">Choose a preset to auto-fill dataset id and config. If step 1 has a dataset mix, prefer <strong>Multi-dataset</strong> or leave primary empty / <code>qminiwasm/hf-multi</code>.</div>
           </div>
           <div id="hfExtraWrap">
             <span class="label-like">Additional HF datasets (optional; max 8 with a normal primary, or 9 in extras-only mode)</span>
+            <p id="hfExtraMixHint" class="hint stack-sm" hidden>
+              Mix is defined in <strong>1 · Dataset mix</strong> — the checkboxes below are hidden so you do not configure two different lists. Clear step 1 or use a single-dataset primary to use these extras again.
+            </p>
             <div id="hfExtraChecks" class="stack-sm hf-extra-grid" role="group" aria-label="Additional Hugging Face datasets"></div>
-            <div class="hint">Check extras to mix with the primary id above. Use preset <strong>Multi-dataset</strong> or type <code>qminiwasm/hf-multi</code> as primary to load <em>only</em> checked extras (up to 9). The HF row budget is split evenly; hybrid mesh blend applies after merge.</div>
+            <div class="hint">When <strong>not</strong> using step 1 mix: check extras to combine with the primary id. With primary <code>qminiwasm/hf-multi</code>, extras come from <strong>step 1</strong> if you selected catalogs there, otherwise from these boxes. Row cap from step 1 applies to the merged list; hybrid mesh blend runs after merge.</div>
           </div>
           <div id="hfPathWrap">
             <label for="bDataPath">HF dataset id (data.path)</label>
@@ -1411,7 +1438,7 @@
             <div id="hfNumSamplesWrap">
               <label for="bHfNumSamples">HF max rows (num_samples)</label>
               <input id="bHfNumSamples" type="text" placeholder="auto (32k–300k)" />
-              <div class="hint">Cap on Hub rows loaded in total (split across merged datasets). Leave blank for automatic sizing. Set <strong>500000</strong> here, or use env <code>HF_NUM_SAMPLES=500000</code>, or add <code>num_samples = 500000</code> under <code>[huggingface]</code> in your TOML.</div>
+              <div class="hint">Hard cap on Hub rows loaded <strong>once per run</strong> (split across merged datasets / mix). Syncs from step 1 row budget when using a mix. Leave blank for automatic sizing. Env <code>HF_NUM_SAMPLES</code> or TOML <code>[huggingface] num_samples</code> also apply.</div>
             </div>
           </div>
         </details>
@@ -1419,7 +1446,10 @@
       </section>
       <section class="dash-card" data-card-id="lego-train" data-col="1" data-lego-step="4">
         <h2>4 · Training &amp; every TOML field</h2>
-        <p class="hint hint-block" style="margin-top:0">Quick knobs first; the schema form is the same file — use either <strong>Save working config</strong> button (wizard payload or full schema).</p>
+        <p class="hint hint-block" style="margin-top:0">
+          <strong>Epochs / batch / LR</strong> and <strong>data paths</strong> are set in steps 1–3 and the quick grid above — the schema list below skips those keys so you do not edit them twice.
+          Use <strong>Save working config</strong> (wizard or schema) to write the same file.
+        </p>
         <div class="grid">
           <div>
             <label for="bEpochs">Epochs</label>
@@ -1449,7 +1479,12 @@
         </div>
         <div class="model-card stack-md mt-md" data-card-id="schema-form" style="margin-top:var(--space-md)">
           <h3>Schema-driven fields</h3>
-          <p class="hint">From <code>/api/schema</code> (<code>configs/training/schema.toml</code>). Step 1 mix and step 3 presets stay in sync when you save from the wizard above or here.</p>
+          <p class="hint">From <code>/api/schema</code> (<code>configs/training/schema.toml</code>). Steps 1–3 already set data mix and paths; use the optional overrides below only if you are not using those steps.</p>
+          <details class="adv stack-md mt-md">
+            <summary>Optional schema overrides (data / quantum)</summary>
+            <p class="hint" style="margin-top:var(--space-sm)">
+              Prefer <strong>steps 1–3</strong> for dataset id, extras, and hybrid blend. Open this section for edge cases or schema-only workflows.
+            </p>
           <div class="grid mt-md">
             <div>
               <label for="schemaDataScheme">Data scheme</label>
@@ -1498,6 +1533,7 @@
               </label>
             </div>
           </div>
+          </details>
           <div class="row align-center stack-sm mt-md">
             <label for="schemaRunName" class="mb-0">Run name</label>
             <input id="schemaRunName" type="text" placeholder="custom-run" style="max-width:320px" />
@@ -1532,43 +1568,12 @@
       <section class="dash-card" data-card-id="start-config" data-col="1" data-lego-step="5">
         <h2>Launch training</h2>
         <p class="hint hint-block" style="margin-top:0">
-          <strong>Only this button starts the engine.</strong> Choose the config file (usually <code>wui_working.toml</code>), then <strong>Launch training</strong>.
+          <strong>Only this button starts the engine.</strong> Pick the TOML (usually <code>wui_working.toml</code>). Run target and quantum settings come from <strong>step 2</strong> — no second copy here.
         </p>
         <label for="cfg">Config file to run</label>
         <select id="cfg"></select>
-        <div class="grid mt-md">
-          <div>
-            <label for="sRunTarget">Execution target</label>
-            <select id="sRunTarget">
-              <option value="local">Local (this machine)</option>
-              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
-            </select>
-            <div class="hint">RunPod provisions <code>infra/runpod</code>; training process stays local unless you use SSH separately. Edit <strong>terraform.tfvars</strong> on the <strong>Infrastructure</strong> tab before apply.</div>
-          </div>
-          <div id="sRunpodDestroyWrap" style="display:none">
-            <label class="checkline mt-lg">
-              <input id="sRunpodDestroy" type="checkbox" checked />
-              Destroy pod when training stops (saves idle cost)
-            </label>
-          </div>
-          <div>
-            <label for="sQuantumPolicy">Quantum execution mode</label>
-            <select id="sQuantumPolicy">
-              <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
-              <option value="hardware_only">Hardware only (fail if unavailable)</option>
-              <option value="simulator_only">Simulator only</option>
-            </select>
-          </div>
-          <div>
-            <label for="sQuantumBackend">Quantum backend id (optional)</label>
-            <input id="sQuantumBackend" type="text" placeholder="auto / ibm_kyoto / pennylane" />
-          </div>
-          <div>
-            <label for="sIBMBackendName">IBM backend override (optional)</label>
-            <input id="sIBMBackendName" type="text" placeholder="leave blank for IBM auto-select" />
-          </div>
-        </div>
-        <div class="row">
+        <div id="launchExecSummary" class="hint hint-block stack-sm mt-md" style="margin-top:var(--space-md)"></div>
+        <div class="row mt-md">
           <button type="button" class="primary" id="btnStart">Launch training</button>
         </div>
         <p class="status stack-md" id="msg" aria-live="polite"></p>
@@ -1650,6 +1655,9 @@
 
     <div id="panelInfra" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnInfra" hidden>
       <div id="infraCanvas" class="infrastructure-tab">
+        <p class="hint hint-block" style="margin:0 0 var(--space-md)">
+          <strong>RunPod + OpenTofu</strong> — edit <code>terraform.tfvars</code> below, then <strong>Init</strong> / <strong>Plan</strong> / <strong>Apply</strong>. Requires <code>RUNPOD_TOKEN</code> in repo <code>.env</code> and <code>tofu</code> on <code>PATH</code> for the WUI process.
+        </p>
         <section class="infra-section">
           <h2>Compute Utilization</h2>
           <div class="kv" id="nodeHealthKv"></div>
@@ -1784,6 +1792,9 @@
     let stickyLastEpoch = 0;
     let infraFloatPendingSnap = false;
     let legoStep = 1;
+    let lastResumeAvailable = false;
+    let lastResumeRequested = false;
+    let lastLatestCheckpointPath = "";
     let logPlainAccum = "";
     const logTrendState = { last: Object.create(null) };
     let telemetryWS = null;
@@ -1793,6 +1804,20 @@
     let telemetryMetricCount = 0;
     let telemetryIdleTimer = null;
     const BASIC_SCHEMA_IDS = new Set([
+      "hardware.accelerator",
+      "training.epochs",
+      "training.batch_size",
+      "training.learning_rate",
+      "data.source",
+      "data.path",
+      "huggingface.dataset_config",
+      "huggingface.split",
+      "huggingface.num_samples",
+      "checkpoint.load_path",
+    ]);
+
+    /** Fields already controlled by wizard steps 1–4 (avoid duplicate inputs in schema panel). */
+    const WIZARD_DEDUPED_SCHEMA_IDS = new Set([
       "hardware.accelerator",
       "training.epochs",
       "training.batch_size",
@@ -1816,7 +1841,7 @@
       { value: "meta-math/MetaMathQA|", label: "MetaMathQA", hint: "Math reasoning, ~395K rows" },
       { value: "Open-Orca/OpenOrca|", label: "OpenOrca", hint: "General / CoT-style instruction data" },
       { value: "ise-uiuc/Magicoder-Evol-Instruct-110K|", label: "Magicoder Evol Instruct", hint: "Code-focused evolved instructions" },
-      { value: "HuggingFaceH4/toolbench|", label: "ToolBench", hint: "Tool / API calling patterns" },
+      { value: "tuandunghcmut/toolbench-v1|default", label: "ToolBench", hint: "Tool / API calling patterns (ToolLLM-style; Hub default config)" },
       { value: "migtissera/Synthia-v1.3|", label: "Synthia v1.3", hint: "Synthetic assistant / sysadmin-style" },
       { value: "code-search-net/code_search_net|python", label: "CodeSearchNet (python)", hint: "Code pairs, config python" },
       { value: "code-search-net/code_search_net|java", label: "CodeSearchNet (java)", hint: "Code pairs, config java" },
@@ -2100,10 +2125,12 @@
       const basicOnly = $("schemaBasicOnly") && $("schemaBasicOnly").checked;
       for (const field of schemaFields) {
         if (basicOnly && !BASIC_SCHEMA_IDS.has(field.id)) continue;
+        if (basicOnly && WIZARD_DEDUPED_SCHEMA_IDS.has(field.id)) continue;
         host.appendChild(buildSchemaFieldInput(field));
       }
       if (!host.children.length) {
-        host.innerHTML = '<div class="hint">No fields available for the selected view.</div>';
+        host.innerHTML =
+          '<div class="hint">No extra schema fields in this view — core training knobs are in steps 1–4 above. Uncheck <strong>Basic fields only</strong> for advanced keys, or edit the TOML directly.</div>';
       }
     }
 
@@ -2198,6 +2225,45 @@
         }
       }
       return out;
+    }
+
+    /**
+     * With "Basic fields only", deduped inputs are not rendered in the schema panel,
+     * so collectSchemaValues() omits them. Merge step 1–4 knobs so buildCustomRunToml
+     * still receives required keys (e.g. training.epochs).
+     */
+    function mergeWizardDedupedIntoSchemaValues(values) {
+      const p = buildPayload();
+      const nameForSlug = ($("schemaRunName")?.value || "").trim() || p.name;
+      const slug = modelSlugFromName(nameForSlug);
+      const fill = {
+        "hardware.accelerator": p.accelerator,
+        "training.epochs": String(p.epochs),
+        "training.batch_size": String(p.batch_size),
+        "training.learning_rate": String(p.learning_rate),
+        "data.source": p.data_source,
+        "data.path": p.data_path,
+        "huggingface.dataset_config": p.hf_dataset_config || "",
+        "huggingface.split": p.hf_split || "train",
+      };
+      if (p.hf_num_samples > 0) {
+        fill["huggingface.num_samples"] = String(p.hf_num_samples);
+      }
+      if (p.resume_latest && nameForSlug) {
+        fill["checkpoint.load_path"] = `artifacts/models/${slug}/latest.pt`;
+      }
+      for (const id of WIZARD_DEDUPED_SCHEMA_IDS) {
+        const cur = values[id];
+        const empty =
+          cur === undefined ||
+          cur === null ||
+          (typeof cur === "string" && !String(cur).trim());
+        if (!empty) continue;
+        const v = fill[id];
+        if (v !== undefined && v !== null && String(v).trim() !== "") {
+          values[id] = v;
+        }
+      }
     }
 
     async function loadSchemaArtifactOptions() {
@@ -2359,6 +2425,11 @@
       }
     }
 
+    function isHFMultiPrimaryPath(p) {
+      const s = String(p || "").trim().toLowerCase();
+      return s === "qminiwasm/hf-multi" || s === "qminiwasm/multi";
+    }
+
     function hfSpecFromParts(path, cfg) {
       const p = String(path || "").trim();
       if (!p) return null;
@@ -2404,6 +2475,87 @@
       return collectDatasetBuilderSpecs();
     }
 
+    function buildDatasetMixSummaryHtml(specs) {
+      const n = specs.length;
+      const budget = Number($("datasetTargetSamples") && $("datasetTargetSamples").value);
+      const per = n > 0 && Number.isFinite(budget) ? Math.floor(budget / n) : NaN;
+      const rows = specs
+        .map((s) => {
+          const c = s.dataset_config ? ` <span class="dc-meta">(${escapeHtml(s.dataset_config)})</span>` : "";
+          return `<li><code>${escapeHtml(s.path)}</code>${c}</li>`;
+        })
+        .join("");
+      const perLine =
+        Number.isFinite(per) && per > 0
+          ? ` Roughly <strong>${per.toLocaleString()}</strong> rows per source if split evenly.`
+          : "";
+      const cur = ($("bDataPath") && $("bDataPath").value.trim()) || "";
+      const conflict =
+        cur && !isHFMultiPrimaryPath(cur)
+          ? `<p class="status warn" style="margin-top:var(--space-sm)">Step 1 has a mix, but <strong>data.path</strong> is a single dataset. Set primary to <code>qminiwasm/hf-multi</code> (or clear step 1) so the mix is used.</p>`
+          : "";
+      return (
+        `<p style="margin:0 0 var(--space-xs)"><strong>Dataset mix (step 1)</strong> · ${n} Hub source(s)</p>` +
+        `<ul style="margin:0;padding-left:1.25rem">${rows}</ul>` +
+        `<p class="hint" style="margin:var(--space-sm) 0 0">` +
+        `Total row cap from step 1: <strong>${Number.isFinite(budget) ? budget.toLocaleString() : "?"}</strong> (loaded once per run, then reused each epoch).${perLine}` +
+        `</p>` +
+        conflict +
+        `<p style="margin:var(--space-sm) 0 0"><button type="button" class="ghost" id="btnEditDatasetMix">Edit mix in step 1</button></p>`
+      );
+    }
+
+    function syncStep3FromDatasetMix() {
+      const specs = resolveDatasetMixSpecsForSchema();
+      const box = $("datasetMixSummaryStep3");
+      const presetWrap = $("hfPresetWrap");
+      const extraChecks = $("hfExtraChecks");
+      const mixHint = $("hfExtraMixHint");
+      if (!box) return;
+
+      if (specs.length > 0) {
+        box.hidden = false;
+        box.innerHTML = buildDatasetMixSummaryHtml(specs);
+        const btn = $("btnEditDatasetMix");
+        if (btn) btn.onclick = () => setLegoStep(1);
+
+        const dp = $("bDataPath");
+        const cur = (dp && dp.value.trim()) || "";
+        if (!cur || isHFMultiPrimaryPath(cur)) {
+          if (dp) dp.value = "qminiwasm/hf-multi";
+          const dc = $("bDatasetConfig");
+          if (dc) dc.value = "";
+          const preset = $("bDatasetPreset");
+          if (preset) {
+            const opt = Array.from(preset.querySelectorAll("option")).find((o) =>
+              String(o.value || "").startsWith("qminiwasm/hf-multi")
+            );
+            if (opt) preset.value = opt.value;
+          }
+          const ds = $("bDataSource");
+          if (ds && ds.value === "mesh") {
+            ds.value = "hf_tabular";
+          }
+        }
+        const ts = $("datasetTargetSamples");
+        const num = $("bHfNumSamples");
+        if (ts && num) {
+          num.value = String(ts.value);
+        }
+        if (presetWrap) presetWrap.style.opacity = "0.65";
+        if (extraChecks) extraChecks.style.display = "none";
+        if (mixHint) mixHint.hidden = false;
+      } else {
+        box.hidden = true;
+        box.innerHTML = "";
+        if (presetWrap) presetWrap.style.opacity = "";
+        if (extraChecks) extraChecks.style.display = "";
+        if (mixHint) mixHint.hidden = true;
+      }
+      toggleHFFields();
+      refreshWizardReview();
+    }
+
     function updateDatasetMixStatus() {
       const el = $("datasetMixStatus");
       if (!el) return;
@@ -2416,6 +2568,7 @@
           ? `Mix override active (${ov} dataset(s)) — wizard uses this for hf_extra_specs until cleared.`
           : "No dataset mix selected.";
       el.className = "status " + (n > 0 || ov ? "done" : "");
+      syncStep3FromDatasetMix();
     }
 
     function renderDatasetBuilderCatalog() {
@@ -2616,6 +2769,12 @@
       }
       const primary = $("bDataPath").value.trim();
       const primaryCfg = ($("bDatasetConfig").value || "").trim();
+      if (isHFMultiPrimaryPath(primary)) {
+        const fromBuilder = collectDatasetBuilderSpecs();
+        if (fromBuilder.length > 0) {
+          return fromBuilder.slice(0, 9);
+        }
+      }
       const boxes = document.querySelectorAll('input[name="hfExtra"]:checked');
       const out = [];
       for (const cb of boxes) {
@@ -2973,24 +3132,30 @@
       }
     }
 
-    function syncLaunchPanelFromBuildWizard() {
-      const st = $("sRunTarget");
-      const bt = $("bRunTarget");
-      if (st && bt) st.value = bt.value;
-      const sd = $("sRunpodDestroy");
-      const bd = $("bRunpodDestroy");
-      if (sd && bd) sd.checked = bd.checked;
-      const sqp = $("sQuantumPolicy");
-      const bqp = $("bQuantumPolicy");
-      if (sqp && bqp) sqp.value = bqp.value;
-      const sqb = $("sQuantumBackend");
-      const bqb = $("bQuantumBackend");
-      if (sqb && bqb) sqb.value = bqb.value;
-      const sibm = $("sIBMBackendName");
-      const bibm = $("bIBMBackendName");
-      if (sibm && bibm) sibm.value = bibm.value;
-      const wrap = $("sRunpodDestroyWrap");
-      if (wrap && st) wrap.style.display = st.value === "runpod" ? "" : "none";
+    function updateLaunchExecSummary() {
+      const host = $("launchExecSummary");
+      if (!host) return;
+      const rtVal = $("bRunTarget").value;
+      const rtLabel = rtVal === "runpod" ? "RunPod" : "Local";
+      const trainRemote = rtVal === "runpod" && ($("bRunpodTrainOnPod") ? $("bRunpodTrainOnPod").checked : true);
+      const skipApply = rtVal === "runpod" && $("bRunpodSkipApply") && $("bRunpodSkipApply").checked;
+      const podNote =
+        rtVal === "runpod"
+          ? ($("bRunpodDestroy").checked ? "destroy pod when training stops" : "leave pod running") +
+            (trainRemote ? "; train on pod (SSH)" : "; train on WUI host (local Python)") +
+            (skipApply ? "; skip tofu apply" : "")
+          : "";
+      const qpol = $("bQuantumPolicy").selectedOptions[0]?.textContent || $("bQuantumPolicy").value;
+      const qb = ($("bQuantumBackend").value || "").trim() || "auto";
+      const ibm = ($("bIBMBackendName").value || "").trim() || "(none)";
+      host.innerHTML =
+        `<p style="margin:0 0 var(--space-xs)"><strong>From step 2</strong> — <strong>Target</strong>: ${escapeHtml(rtLabel)}` +
+        (podNote ? ` (${escapeHtml(podNote)})` : "") +
+        `. <strong>Quantum</strong>: ${escapeHtml(qpol)}. <strong>Backend id</strong>: ${escapeHtml(qb)}. <strong>IBM override</strong>: ${escapeHtml(ibm)}.</p>` +
+        `<p style="margin:0 0 var(--space-sm)">RunPod: prepare <code>infra/runpod/terraform.tfvars</code> on the <strong>Infra &amp; RunPod</strong> tab (OpenTofu buttons there).</p>` +
+        `<button type="button" class="ghost" id="btnEditExecStep">Edit execution in step 2</button>`;
+      const btn = $("btnEditExecStep");
+      if (btn) btn.onclick = () => setLegoStep(2);
     }
 
     async function saveWorkingConfigFromBuildWizard() {
@@ -3004,7 +3169,7 @@
       await loadConfigs();
       const sel = $("cfg");
       if (sel && data.config) sel.value = data.config;
-      syncLaunchPanelFromBuildWizard();
+      updateLaunchExecSummary();
       return data;
     }
 
@@ -3124,6 +3289,9 @@
         const sz = f.estimated_size_gb || {};
         const resumeRequested = !!a.resume_requested;
         const resumeAvailable = !!a.resume_available;
+        lastResumeRequested = resumeRequested;
+        lastResumeAvailable = resumeAvailable;
+        lastLatestCheckpointPath = String(a.latest_path || "");
         setModelFactsKV([
           ["Model name", f.model_name || "(unknown)"],
           ["Architecture", f.architecture || "QMiniWASM"],
@@ -3161,21 +3329,15 @@
           ["Resume requested", resumeRequested ? "yes" : "no"],
           ["Resume available", resumeAvailable ? "yes" : "no"],
         ]);
+        const msg = $("buildMsg");
         if (resumeRequested && !resumeAvailable) {
-          $("btnBuildRun").disabled = true;
-          const msg = $("buildMsg");
-          msg.textContent = `Resume requested but checkpoint is missing: ${a.latest_path || "(unknown)"}`;
-          msg.className = "status error";
-        } else {
-          if (!$("btnBuildRun").disabled) {
-            // keep current state
-          } else {
-            $("btnBuildRun").disabled = false;
-            if (($("buildMsg").textContent || "").includes("Resume requested but checkpoint is missing")) {
-              $("buildMsg").textContent = "";
-              $("buildMsg").className = "status";
-            }
-          }
+          msg.textContent = `Resume latest is on, but no file yet at ${lastLatestCheckpointPath || "(unknown)"}. Save is allowed; launch will ask to train from scratch.`;
+          msg.className = "status warn";
+        } else if (
+          (msg.textContent || "").includes("Resume latest is on, but no file yet")
+        ) {
+          msg.textContent = "";
+          msg.className = "status";
         }
       } catch (_) {
         renderModelFactsFallback();
@@ -3192,13 +3354,14 @@
         `<strong>Quantum backend</strong>: ${escapeHtml(p.quantum_backend || "auto")}<br/>` +
         `<strong>IBM backend override</strong>: ${escapeHtml(p.ibm_backend_name || "auto-select")}<br/>` +
         `<strong>Dataset</strong>: ${escapeHtml(p.data_path || "(n/a)")}<br/>` +
-        `<strong>HF extras</strong>: ${escapeHtml(String((p.hf_extra_specs && p.hf_extra_specs.length) || 0))} selected (max 8)<br/>` +
+        `<strong>HF extras / mix</strong>: ${escapeHtml(String((p.hf_extra_specs && p.hf_extra_specs.length) || 0))} source(s) (up to 9 with <code>hf-multi</code>)<br/>` +
         `<strong>HF config/split</strong>: ${escapeHtml(p.hf_dataset_config || "(none)")} / ${escapeHtml(p.hf_split)}<br/>` +
         `<strong>HF max rows</strong>: ${escapeHtml(p.hf_num_samples > 0 ? String(p.hf_num_samples) : "auto (≤300k)")}<br/>` +
         `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
         `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
         `<strong>Execution target</strong>: ${escapeHtml(p.run_target || "local")}${p.run_target === "runpod" ? " (destroy after: " + (p.runpod_destroy_on_exit ? "yes" : "no") + ")" : ""}<br/>` +
-        `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}`;
+        `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}<br/>` +
+        `<strong>Resume latest checkpoint</strong>: ${p.resume_latest ? "yes" : "no"}`;
     }
 
     function setLegoStep(n) {
@@ -3228,6 +3391,10 @@
       if (legoStep === 5) {
         refreshWizardReview();
         refreshModelFacts();
+        updateLaunchExecSummary();
+      }
+      if (legoStep === 3) {
+        syncStep3FromDatasetMix();
       }
       if (legoStep === 4) {
         loadSchemaForm().catch((e) => {
@@ -3304,10 +3471,10 @@
     }
 
     function syncRunpodPanels() {
-      const sl = $("sRunTarget").value === "local";
-      $("sRunpodDestroyWrap").style.display = sl ? "none" : "block";
       const bl = $("bRunTarget").value === "local";
       $("bRunpodDestroyWrap").style.display = bl ? "none" : "block";
+      const rw = $("bRunpodRemoteWrap");
+      if (rw) rw.style.display = bl ? "none" : "block";
     }
 
     let lastInfraPodIp = "";
@@ -3325,6 +3492,9 @@
       pill("RUNPOD_TOKEN", !!rp.token_present);
       pill("infra/runpod", !!rp.infra_dir_exists);
       pill("OpenTofu / Terraform", !!rp.tofu_usable);
+      pill("ssh", !!rp.remote_ssh);
+      pill("scp", !!rp.remote_scp);
+      pill("tar", !!rp.remote_tar);
     }
 
     async function copyToClipboard(text, okMsg) {
@@ -3367,6 +3537,9 @@
         const lines = [
           ["Infra path", rp.infra_dir || "(unknown)"],
           ["OpenTofu binary", rp.tofu_usable ? (rp.tofu_binary || "ok") : ("missing — " + (rp.tofu_error || ""))],
+          ["Remote SSH user", rp.remote_ssh_user || "root"],
+          ["Remote repo dir", rp.remote_dir || "/workspace/qminiwasm-core"],
+          ["RUNPOD_SSH_KEY set", rp.remote_ssh_key_set ? "yes" : "no (default ssh agent / keys)"],
         ];
         const outs = rp.outputs && typeof rp.outputs === "object" && !Array.isArray(rp.outputs) ? rp.outputs : null;
         if (rp.outputs_error) {
@@ -3390,8 +3563,11 @@
           box.appendChild(dk);
           box.appendChild(dv);
         }
+        const toolsOk = rp.remote_ssh && rp.remote_tar;
         msg.textContent = rp.token_present && rp.infra_dir_exists && rp.tofu_usable
-          ? "Ready to provision or use outputs below."
+          ? toolsOk
+            ? "Ready to provision; Launch with RunPod can sync + train on the pod."
+            : "Add ssh + tar to PATH for WUI-driven remote training on the pod."
           : "Fix token, repo path, or install OpenTofu/Terraform on PATH.";
         msg.className = "status done";
         const pip = outs && outs.public_ip != null && String(outs.public_ip).trim() !== "";
@@ -3532,17 +3708,36 @@
       if (!path) return;
       $("btnStart").disabled = true;
       try {
+        await refreshModelFacts();
+        let allowMissingCheckpoint = false;
+        if ($("bResumeLatest").checked && lastResumeRequested && !lastResumeAvailable) {
+          const at = lastLatestCheckpointPath || "artifacts/models/<model>/latest.pt";
+          const ok = window.confirm(
+            "Resume from latest checkpoint is enabled, but that file does not exist yet:\n" +
+              at +
+              "\n\nStart training from scratch (omit checkpoint load) anyway?",
+          );
+          if (!ok) {
+            $("msg").textContent = "Launch cancelled.";
+            $("msg").className = "status";
+            return;
+          }
+          allowMissingCheckpoint = true;
+        }
         const r = await fetch("/api/runs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             config: path,
-            quantum_backend: $("sQuantumBackend").value.trim(),
-            quantum_policy: $("sQuantumPolicy").value,
-            ibm_backend_name: $("sIBMBackendName").value.trim(),
-            run_target: $("sRunTarget").value,
-            runpod_destroy_on_exit: $("sRunpodDestroy").checked,
+            quantum_backend: $("bQuantumBackend").value.trim(),
+            quantum_policy: $("bQuantumPolicy").value,
+            ibm_backend_name: $("bIBMBackendName").value.trim(),
+            run_target: $("bRunTarget").value,
+            runpod_destroy_on_exit: $("bRunpodDestroy").checked,
             runpod_var_file: "terraform.tfvars",
+            runpod_train_on_pod: $("bRunpodTrainOnPod") ? $("bRunpodTrainOnPod").checked : true,
+            runpod_skip_apply: $("bRunpodSkipApply") ? $("bRunpodSkipApply").checked : false,
+            allow_missing_checkpoint: allowMissingCheckpoint,
           }),
         });
         const data = await r.json();
@@ -3583,6 +3778,7 @@
       $("btnStartCustomRun").disabled = true;
       try {
         let values = applySchemaGuidedOverrides(collectSchemaValues());
+        mergeWizardDedupedIntoSchemaValues(values);
         const dp = String(values["data.path"] || "")
           .trim()
           .toLowerCase();
@@ -3936,8 +4132,21 @@
     $("btnCopyRemoteCmd").onclick = () => {
       if (lastInfraRemoteCmd) copyToClipboard(lastInfraRemoteCmd, "Remote commands copied.");
     };
-    $("sRunTarget").onchange = syncRunpodPanels;
-    $("bRunTarget").onchange = syncRunpodPanels;
+    $("bRunTarget").onchange = () => {
+      syncRunpodPanels();
+      updateLaunchExecSummary();
+    };
+    for (const id of ["bQuantumPolicy", "bQuantumBackend", "bIBMBackendName"]) {
+      const el = $(id);
+      if (el) el.addEventListener("change", updateLaunchExecSummary);
+      if (el) el.addEventListener("input", updateLaunchExecSummary);
+    }
+    const bRunpodDestroyEl = $("bRunpodDestroy");
+    if (bRunpodDestroyEl) bRunpodDestroyEl.addEventListener("change", updateLaunchExecSummary);
+    for (const id of ["bRunpodTrainOnPod", "bRunpodSkipApply"]) {
+      const el = $(id);
+      if (el) el.addEventListener("change", updateLaunchExecSummary);
+    }
     $("btnPreflight").onclick = loadPreflight;
     $("cfg").onchange = loadPreflight;
     $("bDataSource").onchange = toggleHFFields;
@@ -4016,6 +4225,7 @@
     toggleHFFields();
     toggleLRTrial();
     syncRunpodPanels();
+    updateLaunchExecSummary();
     loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
     loadRuns();
     loadServerMeta();
@@ -4026,6 +4236,12 @@
     syncDatasetBuilderCheckboxesFromOverride();
     renderDatasetBuilderCustomList();
     updateDatasetMixStatus();
+    const dts = $("datasetTargetSamples");
+    if (dts) {
+      dts.addEventListener("change", () => {
+        syncStep3FromDatasetMix();
+      });
+    }
     let savedTab = localStorage.getItem(ACTIVE_TAB_KEY);
     if (savedTab === "config") {
       legoStep = 4;

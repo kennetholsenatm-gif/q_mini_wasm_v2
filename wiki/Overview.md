@@ -16,7 +16,7 @@ The pillars below support the edge product described above. The repository is or
 - **Location:** `infra/image-builder/`
 - **Purpose:** Build a hardened AlmaLinux 9 QCOW2 golden image for tactical edge.
 - **Contents:** Packer HCL (QEMU builder), Kickstart (ks.cfg), and a provision script that installs K3s, applies STIG-like hardening (SSH, chrony, firewalld), and creates an `admin` user.
-- **Output:** `output-almalinux9/almalinux9-golden.qcow2`. Aligns with [DockerOS Platform Standard](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/DockerOS-Platform-Standard.md) (AlmaLinux 9 as host OS).
+- **Output:** `output-almalinux9/almalinux9-golden.qcow2`. AlmaLinux 9 golden image (see `infra/image-builder/` when present in your checkout).
 
 ### 2. Data Stack (Event-Driven Architecture)
 - **Location:** `containers/data-stack/`
@@ -35,7 +35,7 @@ The pillars below support the edge product described above. The repository is or
 - **Purpose:** Quantum circuit simulation, WASM execution, Intel Quantum/ARC integration, and the Web UI for configuration and control.
 - **Deployment:** Docker (e.g. `docker/Dockerfile.backend`) or Kubernetes via Helm; chart is STIG/Kyverno-aware (non-root, securityContext, optional Trivy scan annotation).
 
-Optional Kubernetes/OpenTofu: `infra/opentofu/` (Teleport, Kyverno, Falco), `infra/teleport/`, `infra/kyverno/`, `infra/falco/`. See the [Greenfield Deployment Guide](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/Greenfield-Deployment.md) in the repository for full deployment order.
+Optional Kubernetes/OpenTofu may exist under `infra/` in some checkouts. For **RunPod GPU training** and OpenTofu used by the training WUI, see the repo [README.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/README.md) and [docs/RUNPOD_QUICKSTART.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/RUNPOD_QUICKSTART.md).
 
 ## Core Application Architecture
 

@@ -196,6 +196,8 @@ def normalize_hf_dataset_spec(
     """Remap legacy Hub ids that no longer load with modern ``datasets`` (script removal).
 
     ``Muennighoff/mbpp`` -> ``google-research-datasets/mbpp`` with config ``full`` when unset.
+    ``HuggingFaceH4/toolbench`` was removed from the Hub; map to ``tuandunghcmut/toolbench-v1``
+    (config ``default`` when unset).
     """
     pid = (dataset_id or "").strip()
     if pid.lower() == "muennighoff/mbpp":
@@ -203,6 +205,16 @@ def normalize_hf_dataset_spec(
         if cfg is None:
             cfg = "full"
         return "google-research-datasets/mbpp", cfg
+    if pid.lower() == "huggingfaceh4/toolbench":
+        cfg = (config_name or "").strip() or None
+        if cfg is None:
+            cfg = "default"
+        return "tuandunghcmut/toolbench-v1", cfg
+    if pid.lower() == "tuandunghcmut/toolbench-v1":
+        cfg = (config_name or "").strip() or None
+        if cfg is None:
+            cfg = "default"
+        return "tuandunghcmut/toolbench-v1", cfg
     return pid, config_name
 
 
@@ -256,6 +268,11 @@ def load_hf_tabular_samples(
         logger.info(
             "HF dataset remap: Muennighoff/mbpp -> google-research-datasets/mbpp (config=%s)",
             config_name or "full",
+        )
+    if _pre_id.lower() == "huggingfaceh4/toolbench":
+        logger.info(
+            "HF dataset remap: HuggingFaceH4/toolbench -> tuandunghcmut/toolbench-v1 (config=%s)",
+            config_name or "default",
         )
 
     load_kw: Dict[str, Any] = {}

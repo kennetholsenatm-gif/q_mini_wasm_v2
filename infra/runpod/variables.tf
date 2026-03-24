@@ -12,11 +12,11 @@ variable "image_name" {
 
 variable "gpu_type_ids" {
   type        = list(string)
-  description = "Preferred GPU types (Runpod tries first available)"
+  description = "RunPod GPU type ids (console/API slugs, e.g. actual_coffee_meadowlark) — tried in order"
   default = [
+    "actual_coffee_meadowlark",
     "NVIDIA GeForce RTX 4090",
     "NVIDIA GeForce RTX 3090",
-    "NVIDIA A40",
   ]
 }
 

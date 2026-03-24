@@ -44,7 +44,7 @@
 
 [checkpoint]
 # Convention: artifacts/models/<slug>/final.pt, best.pt, latest.pt (matches training WUI)
-# load_path = "artifacts/models/my-run/latest.pt"
+# Omit load_path for a fresh train; set only to resume from an existing .pt (e.g. latest.pt).
 # save_path = "artifacts/models/my-run/final.pt"
 # best_path = "artifacts/models/my-run/best.pt"
 # latest_path = "artifacts/models/my-run/latest.pt"
@@ -81,7 +81,8 @@
 
 [wasm]
 # Wasmtime curriculum WASM limits (see qminiwasm.wasm.engine.WasmRuntimeConfig).
-# store_memory_limit_mb = 256
+# Omit store_memory_limit_mb to use engine default (1e6 × d_model bytes, ~4 GiB cap).
+# store_instance_limit / store_memories_limit default high in code (mesh data gen); lower on tiny hosts if needed.
 # fallback_policy = "mock"
 # force_mock = false
 # store_instance_limit =
