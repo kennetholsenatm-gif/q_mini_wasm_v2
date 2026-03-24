@@ -29,10 +29,10 @@ text_fields = ["problem", "solution"]
 context_fields = ["source", "category"]
 
 [checkpoint]
-load_path = "artifacts/stem_code_blend_phase1_cpu_latest.pt"
-save_path = "artifacts/stem_code_blend_phase2_gpu.pt"
-best_path = "artifacts/stem_code_blend_phase2_gpu_best.pt"
-latest_path = "artifacts/stem_code_blend_phase2_gpu_latest.pt"
+load_path = "artifacts/models/stem_code_blend_phase1_cpu/latest.pt"
+save_path = "artifacts/models/stem_code_blend_phase2_gpu/final.pt"
+best_path = "artifacts/models/stem_code_blend_phase2_gpu/best.pt"
+latest_path = "artifacts/models/stem_code_blend_phase2_gpu/latest.pt"
 
 [eval]
 holdout_fraction = 0.05

@@ -30,6 +30,12 @@ def main(config: EngineConfig | None = None) -> dict:
         qaoa_layers=config.qaoa_layers,
         qaoa_execution_mode=str(getattr(config, "qaoa_execution_mode", "pennylane")),
         ibm_qaoa_shots=int(getattr(config, "ibm_qaoa_shots", 1024)),
+        qaoa_simulator_backend=str(getattr(config, "qaoa_simulator_backend", "auto") or "auto"),
+        qaoa_mps_max_bond_dim=getattr(config, "qaoa_mps_max_bond_dim", None),
+        qaoa_prune_enabled=bool(getattr(config, "qaoa_prune_enabled", False)),
+        qaoa_prune_threshold=float(getattr(config, "qaoa_prune_threshold", 0.0) or 0.0),
+        qaoa_prune_min_nodes=int(getattr(config, "qaoa_prune_min_nodes", 4) or 4),
+        qaoa_warm_start_cache_ttl=int(getattr(config, "qaoa_warm_start_cache_ttl", 128) or 128),
         data_path=config.data_path,
         training_data_source=getattr(config, "training_data_source", "mesh"),
         mesh_algorithms=mesh_algos,
@@ -88,4 +94,10 @@ def main(config: EngineConfig | None = None) -> dict:
         hf_mesh_blend_fraction=float(
             getattr(config, "hf_mesh_blend_fraction", 0.0) or 0.0
         ),
+        hf_extra_specs=getattr(config, "hf_extra_specs", None),
+        hf_streaming=bool(getattr(config, "hf_streaming", False)),
+        hf_max_scan_rows=getattr(config, "hf_max_scan_rows", None),
+        hf_max_buffered_rows=getattr(config, "hf_max_buffered_rows", None),
+        hf_text_truncate_bytes=getattr(config, "hf_text_truncate_bytes", None),
+        hf_deterministic_keep_every_n=getattr(config, "hf_deterministic_keep_every_n", None),
     )

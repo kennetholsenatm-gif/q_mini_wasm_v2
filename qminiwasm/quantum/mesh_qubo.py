@@ -5,9 +5,20 @@ For use with QAOA layers in :mod:`qminiwasm.quantum.qaoa_integration` or classic
 
 from __future__ import annotations
 
-from typing import Tuple
+from dataclasses import dataclass
+from typing import List, Tuple
 
 import torch
+
+
+@dataclass
+class PrunedTopology:
+    """Pruned edge topology with reversible index mappings."""
+
+    kept_edge_indices: List[int]
+    dropped_edge_indices: List[int]
+    old_to_new_edge: List[int]
+    new_to_old_edge: List[int]
 
 
 def mesh_edge_selection_qubo(
@@ -38,3 +49,40 @@ def mesh_edge_selection_qubo(
             q_quad[i, j] = 2.0 * lam
             q_quad[j, i] = 2.0 * lam
     return q_linear, q_quad
+
+
+def prune_topology_from_edge_scores(
+    edge_scores: torch.Tensor,
+    *,
+    threshold: float = 0.0,
+    min_edges: int = 2,
+) -> PrunedTopology:
+    """Prune low-confidence edges and produce reversible index mapping.
+
+    Args:
+        edge_scores: Per-edge confidence/utility scores.
+        threshold: Keep edges with score >= threshold.
+        min_edges: Keep at least this many highest-scoring edges.
+    """
+    scores = edge_scores.reshape(-1).to(dtype=torch.float64)
+    n = int(scores.numel())
+    if n <= 0:
+        raise ValueError("edge_scores must be non-empty")
+    keep_mask = (scores >= float(threshold)).tolist()
+    kept = [i for i, k in enumerate(keep_mask) if k]
+    if len(kept) < int(min_edges):
+        topk = min(n, max(1, int(min_edges)))
+        order = torch.argsort(scores, descending=True).tolist()
+        kept = sorted(order[:topk])
+    dropped = [i for i in range(n) if i not in set(kept)]
+
+    old_to_new = [-1] * n
+    for new_idx, old_idx in enumerate(kept):
+        old_to_new[old_idx] = new_idx
+
+    return PrunedTopology(
+        kept_edge_indices=kept,
+        dropped_edge_indices=dropped,
+        old_to_new_edge=old_to_new,
+        new_to_old_edge=list(kept),
+    )

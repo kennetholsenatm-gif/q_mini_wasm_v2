@@ -7,14 +7,14 @@ device_index = 0
 
 [training]
 epochs = 1
-batch_size = 2
+batch_size = 1
 learning_rate = 0.0001
 grad_clip_norm = 1.0
 
 [checkpoint]
-save_path = "artifacts/models/policy-fix-check/final.pt"
-best_path = "artifacts/models/policy-fix-check/best.pt"
-latest_path = "artifacts/models/policy-fix-check/latest.pt"
+save_path = "artifacts/models/smoke-build/final.pt"
+best_path = "artifacts/models/smoke-build/best.pt"
+latest_path = "artifacts/models/smoke-build/latest.pt"
 
 [data]
 source = "mesh"

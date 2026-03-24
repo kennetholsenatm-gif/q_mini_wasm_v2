@@ -3,23 +3,24 @@
 # Requested data_source=hybrid_mesh_hf_tabular -> source=hf_tabular + mesh_blend_fraction>0
 
 [hardware]
-accelerator = "cpu"
+accelerator = "xpu"
+quantum_backend = "penny_lane"
 device_index = 0
 
 [training]
-epochs = 2
+epochs = 100
 batch_size = 32
 learning_rate = 0.0001
 grad_clip_norm = 1.0
 
 [checkpoint]
-save_path = "artifacts/models/sycl-test/final.pt"
-best_path = "artifacts/models/sycl-test/best.pt"
-latest_path = "artifacts/models/sycl-test/latest.pt"
+save_path = "artifacts/qminiwasm-coder.pt"
+best_path = "artifacts/qminiwasm-coder_best.pt"
+latest_path = "artifacts/qminiwasm-coder_latest.pt"
 
 [data]
 source = "hf_tabular"
-path = "AI-MO/NuminaMath-CoT"
+path = "code-search-net/code_search_net"
 mesh_algorithms = "hash,encrypt,network,routing,consensus"
 
 [huggingface]

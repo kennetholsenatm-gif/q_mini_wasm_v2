@@ -40,6 +40,12 @@ pip install -e ".[training]"
 
 **Intel GPU training:** install PyTorch with **XPU** support first, then set `ACCELERATOR=xpu` — see **[INSTALL_TORCH_XPU.md](INSTALL_TORCH_XPU.md)**.
 
+## Multiple Hugging Face datasets (WUI / TOML)
+
+You can mix **up to nine** Hub dataset ids in one `hf_tabular` run: set `[data].path` and optional `[huggingface].dataset_config` for the **primary** dataset, then list up to **eight** more in `[huggingface].extra_specs` as TOML inline tables (`path`, optional `dataset_config`). The engine splits the HF row budget **evenly** across all selected datasets, concatenates the encoded samples, then applies **mesh blend** (`mesh_blend_fraction`) if set.
+
+Alternatively, set **`HF_EXTRA_SPECS`** to a JSON array of objects, e.g. `[{"path":"openai/gsm8k"},{"path":"wikitext","dataset_config":"wikitext-2-raw-v1"}]` (same limits; TOML overrides when both are present).
+
 ## Hugging Face coding data (recommended public corpus)
 
 Default example in docs and tests:
@@ -76,16 +82,22 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 |----------|------|
 | `TRAINING_DATA_SOURCE` | `mesh`, `corpus`, or `hf_tabular` |
 | `DATA_PATH` | Corpus manifest path, or HF dataset id |
+| `HF_EXTRA_SPECS` | JSON array of extra `{path, dataset_config?}` (optional; prefer TOML `extra_specs`) |
 | `EPOCHS` | Max epochs (default 25 in engine config) |
 | `BATCH_SIZE` | Batch size |
 | `LEARNING_RATE` | AdamW LR |
 | `HF_DATASET_CONFIG` | HF config name (e.g. `python`) |
 | `HF_SPLIT` | HF split |
-| `HF_NUM_SAMPLES` | Cap rows loaded; if unset for `hf_tabular`, auto slice uses floor **32k**, cap **300k**, scales with batch (×512) |
+| `HF_NUM_SAMPLES` | Cap rows loaded from Hub (total across merged datasets). If unset for `hf_tabular`, auto slice uses floor **32k**, cap **300k**, scales with batch (×512). For **500k** or more, set explicitly (env, `[huggingface] num_samples` in TOML, or training WUI **Advanced data options → HF max rows**) |
 | `HF_WASI_SLICE_ONLY` | If `1` / `true`, **stream** the split and keep only rows whose encoded blob matches WASI markers (e.g. `wasi_snapshot_preview`, `wasm32-wasip`); use with `HF_NUM_SAMPLES=100000` for large WASI-heavy slices |
 | `HF_WASI_MAX_SCAN` | Optional cap on how many **source** rows to scan before stopping (loader default **12_000_000** if unset when `HF_WASI_SLICE_ONLY` is on) |
 | `HF_DATASET_REVISION` | Git ref / commit for `datasets.load_dataset` (default **`main`** when unset) |
 | `HF_MESH_BLEND_FRACTION` | For `hf_tabular` only: append mesh curriculum samples equal to **fraction × len(HF rows)** (min 1); combined list is **shuffled** when `SEED` is set |
+| `HF_STREAMING` | If `1` / `true`, stream rows instead of materializing split |
+| `HF_MAX_SCAN_ROWS` | Optional cap on scanned source rows for general HF path |
+| `HF_MAX_BUFFERED_ROWS` | Optional memory cap for retained encoded rows in loader |
+| `HF_TEXT_TRUNCATE_BYTES` | Optional per-row UTF-8 truncation before encoding |
+| `HF_DETERMINISTIC_KEEP_EVERY_N` | Deterministic subsampling stride (`N`), keeps rows where `index % N == 0` |
 | `HF_TEXT_FIELDS` | Comma-separated row keys for text blob |
 | `HF_CONTEXT_FIELDS` | `0` / `off` / `false` disables `[context]` prefix; comma list selects metadata keys; unset uses defaults in auto mode only |
 | `SEED` | Reproducibility (Python / NumPy / torch) |
@@ -111,9 +123,33 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 | `CASCADE_LEARNED_PROJECTOR` | Loop-owned `CascadeRouter` when model has no router |
 | `CASCADE_ROUTER_HIDDEN` | Router MLP width |
 
+## Edge fast-iteration presets
+
+- `configs/training/edge_fast_iter.toml`: tiny sampled curriculum for quick local cycle time.
+- `configs/training/edge_full_curriculum_streaming.toml`: broader curated curriculum with bounded streaming.
+- `configs/training/edge_curriculum_mix.toml`: reference dataset mix groups (reasoning/tool-use/alignment).
+
+Run:
+
+```bash
+python -m engine --config configs/training/edge_fast_iter.toml
+python -m engine --config configs/training/edge_full_curriculum_streaming.toml
+python scripts/benchmark_edge_curriculum.py
+```
+| `QAOA_SIMULATOR_BACKEND` | `auto`, `statevector`, or `mps` for `qiskit_statevector` execution mode |
+| `QAOA_MPS_MAX_BOND_DIM` | Optional MPS bond-dimension cap (when using MPS backend) |
+| `QAOA_PRUNE_ENABLED`, `QAOA_PRUNE_THRESHOLD`, `QAOA_PRUNE_MIN_NODES` | Topology pruning controls before QUBO build |
+| `QAOA_WARM_START_CACHE_TTL` | Number of recent topology fingerprints retained for angle warm-start cache |
+
 **`hf_tabular` defaults (when env vars are unset):** `TARGET_MEAN_MSE=1e-4`, `GRAD_CLIP_NORM=1`, `CASCADE_POLICY_LR = 0.5 × learning_rate`, and `learning_rate=1.5e-4` when the engine constructor LR is the default **1e-4** and `LEARNING_RATE` is not set. Set env vars explicitly to override.
 
 **Tokens:** Put the value in a local `.env` or your shell profile. **Do not commit** secrets; `.env` is gitignored. Create a read token at [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
+
+**Gated datasets:** Some Hub datasets require accepting terms on the dataset page and setting **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** before `load_dataset` can load them. Presets and sample configs in this repo use **public** datasets (e.g. CodeSearchNet) so default runs work without a token; if you add a gated id to `extra_specs`, expect to authenticate first.
+
+**`datasets` 3.x+ / script-less Hub:** Datasets that only ship as legacy Python scripts may raise *Dataset scripts are no longer supported*. Prefer Parquet-backed repos (e.g. **`google-research-datasets/mbpp`** with **`dataset_config = "full"`** or **`"sanitized"`** instead of **`Muennighoff/mbpp`**).
+
+**Multi-dataset without a primary Hub id:** Set **`[data].path`** to the reserved placeholder **`qminiwasm/hf-multi`** (alias: **`qminiwasm/multi`**) and list every real dataset under **`[huggingface].extra_specs`**. The engine does not call `load_dataset` on the placeholder; sample budget is split across extras only (up to **nine** Hub datasets in this mode). Use your **model name / WUI “Build + Run” name** to pick a new **`artifacts/models/<slug>/`** output directory; the placeholder only affects how Hub rows are merged, not where checkpoints are written.
 
 ### Cascade RL and MOPD
 
@@ -125,13 +161,17 @@ Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_M
 
 ### Checkpoints and evaluation (making training useful)
 
+**Layout:** Prefer one directory per run or model under **`artifacts/models/<slug>/`** with stable names: **`final.pt`** (end-of-run / `save_path`), **`best.pt`**, **`latest.pt`**. This matches the **training WUI** (“Build + Run”) and the **`agent_bundle.json`** / **`serve.toml`** sidecars written next to those files.
+
 1. Train and save a final checkpoint (paths can live in TOML `[checkpoint]` or in `.env`):
 
 ```bash
 export SEED=42   # optional; or set [training].seed in TOML
 python -m engine --config configs/training/mesh_cpu.toml
 # with checkpoints only in env:
-export CHECKPOINT_SAVE_PATH=./artifacts/qminiwasm_trainable.pt
+export CHECKPOINT_SAVE_PATH=./artifacts/models/qminiwasm/final.pt
+export CHECKPOINT_BEST_PATH=./artifacts/models/qminiwasm/best.pt
+export CHECKPOINT_LATEST_PATH=./artifacts/models/qminiwasm/latest.pt
 python -m engine --config configs/training/mesh_cpu.toml
 ```
 

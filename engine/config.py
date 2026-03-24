@@ -2,15 +2,39 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .secret_sanitize import sanitize_api_key_like
 
 if TYPE_CHECKING:
     from .training_schema import TrainingConfig
+
+
+def _normalize_hf_extra_specs(items: Any) -> List[Dict[str, Any]]:
+    """List of {path, dataset_config?} for additional HF datasets (max 8)."""
+    if not items:
+        return []
+    out: List[Dict[str, Any]] = []
+    if not isinstance(items, list):
+        return []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        path = str(it.get("path") or "").strip()
+        if not path:
+            continue
+        dc = it.get("dataset_config")
+        if dc is not None and str(dc).strip():
+            out.append({"path": path, "dataset_config": str(dc).strip()})
+        else:
+            out.append({"path": path})
+        if len(out) >= 8:
+            break
+    return out
 
 
 class EngineConfig:
@@ -32,6 +56,12 @@ class EngineConfig:
         qaoa_layers: Optional[int] = None,
         qaoa_execution_mode: Optional[str] = None,
         ibm_qaoa_shots: Optional[int] = None,
+        qaoa_simulator_backend: Optional[str] = None,
+        qaoa_mps_max_bond_dim: Optional[int] = None,
+        qaoa_prune_enabled: Optional[bool] = None,
+        qaoa_prune_threshold: Optional[float] = None,
+        qaoa_prune_min_nodes: Optional[int] = None,
+        qaoa_warm_start_cache_ttl: Optional[int] = None,
         #: WUI / env QUANTUM_EXECUTION_POLICY:
         #: hardware_only | prefer_hardware_fallback | simulator_only
         quantum_execution_policy: Optional[str] = None,
@@ -85,6 +115,12 @@ class EngineConfig:
         cascade_router_hidden: Optional[int] = None,
         cascade_couple_forward: Optional[bool] = None,
         hf_mesh_blend_fraction: Optional[float] = None,
+        hf_extra_specs: Optional[List[Dict[str, Any]]] = None,
+        hf_streaming: Optional[bool] = None,
+        hf_max_scan_rows: Optional[int] = None,
+        hf_max_buffered_rows: Optional[int] = None,
+        hf_text_truncate_bytes: Optional[int] = None,
+        hf_deterministic_keep_every_n: Optional[int] = None,
     ):
         self.accelerator = (
             accelerator
@@ -123,6 +159,35 @@ class EngineConfig:
             if ibm_qaoa_shots is not None
             else int(os.environ.get("IBM_QAOA_SHOTS", "1024"))
         )
+        self.qaoa_simulator_backend = (
+            str(qaoa_simulator_backend).strip().lower()
+            if qaoa_simulator_backend is not None
+            else str(os.environ.get("QAOA_SIMULATOR_BACKEND", "auto")).strip().lower()
+        )
+        if qaoa_mps_max_bond_dim is not None:
+            self.qaoa_mps_max_bond_dim = int(qaoa_mps_max_bond_dim)
+        else:
+            _qmbd = os.environ.get("QAOA_MPS_MAX_BOND_DIM", "").strip()
+            self.qaoa_mps_max_bond_dim = int(_qmbd) if _qmbd.isdigit() else None
+        if qaoa_prune_enabled is not None:
+            self.qaoa_prune_enabled = bool(qaoa_prune_enabled)
+        else:
+            _qpe = os.environ.get("QAOA_PRUNE_ENABLED", "").strip().lower()
+            self.qaoa_prune_enabled = _qpe in ("1", "true", "yes", "on")
+        if qaoa_prune_threshold is not None:
+            self.qaoa_prune_threshold = float(qaoa_prune_threshold)
+        else:
+            self.qaoa_prune_threshold = float(os.environ.get("QAOA_PRUNE_THRESHOLD", "0.0"))
+        if qaoa_prune_min_nodes is not None:
+            self.qaoa_prune_min_nodes = max(1, int(qaoa_prune_min_nodes))
+        else:
+            _qpmn = os.environ.get("QAOA_PRUNE_MIN_NODES", "").strip()
+            self.qaoa_prune_min_nodes = max(1, int(_qpmn)) if _qpmn.isdigit() else 4
+        if qaoa_warm_start_cache_ttl is not None:
+            self.qaoa_warm_start_cache_ttl = max(1, int(qaoa_warm_start_cache_ttl))
+        else:
+            _qws = os.environ.get("QAOA_WARM_START_CACHE_TTL", "").strip()
+            self.qaoa_warm_start_cache_ttl = max(1, int(_qws)) if _qws.isdigit() else 128
         self.quantum_execution_policy = (
             (quantum_execution_policy or os.environ.get("QUANTUM_EXECUTION_POLICY", "") or "")
             .strip()
@@ -534,6 +599,46 @@ class EngineConfig:
             else:
                 self.hf_mesh_blend_fraction = 0.0
 
+        if hf_extra_specs is not None:
+            self.hf_extra_specs = _normalize_hf_extra_specs(hf_extra_specs)
+        else:
+            _raw = os.environ.get("HF_EXTRA_SPECS", "").strip()
+            if _raw:
+                try:
+                    parsed = json.loads(_raw)
+                    self.hf_extra_specs = _normalize_hf_extra_specs(parsed)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    _log = logging.getLogger(__name__)
+                    _log.warning("HF_EXTRA_SPECS is not valid JSON; ignoring.")
+                    self.hf_extra_specs = []
+            else:
+                self.hf_extra_specs = []
+        if hf_streaming is not None:
+            self.hf_streaming = bool(hf_streaming)
+        else:
+            _hs = os.environ.get("HF_STREAMING", "").strip().lower()
+            self.hf_streaming = _hs in ("1", "true", "yes", "on")
+        if hf_max_scan_rows is not None:
+            self.hf_max_scan_rows = int(hf_max_scan_rows)
+        else:
+            _hmsr = os.environ.get("HF_MAX_SCAN_ROWS", "").strip()
+            self.hf_max_scan_rows = int(_hmsr) if _hmsr.isdigit() else None
+        if hf_max_buffered_rows is not None:
+            self.hf_max_buffered_rows = int(hf_max_buffered_rows)
+        else:
+            _hmbr = os.environ.get("HF_MAX_BUFFERED_ROWS", "").strip()
+            self.hf_max_buffered_rows = int(_hmbr) if _hmbr.isdigit() else None
+        if hf_text_truncate_bytes is not None:
+            self.hf_text_truncate_bytes = int(hf_text_truncate_bytes)
+        else:
+            _httb = os.environ.get("HF_TEXT_TRUNCATE_BYTES", "").strip()
+            self.hf_text_truncate_bytes = int(_httb) if _httb.isdigit() else None
+        if hf_deterministic_keep_every_n is not None:
+            self.hf_deterministic_keep_every_n = int(hf_deterministic_keep_every_n)
+        else:
+            _hdk = os.environ.get("HF_DETERMINISTIC_KEEP_EVERY_N", "").strip()
+            self.hf_deterministic_keep_every_n = int(_hdk) if _hdk.isdigit() else None
+
     @classmethod
     def from_training_toml(cls, path: str | Path) -> EngineConfig:
         """Load non-secret options from a TOML file; HF token still comes from env if unset."""
@@ -541,7 +646,28 @@ class EngineConfig:
 
         file_cfg = load_training_toml(path)
         kwargs = file_cfg.to_engine_kwargs()
-        return cls(**kwargs)
+        inst = cls(**kwargs)
+        _raise_if_hf_multi_without_specs(inst, path)
+        return inst
+
+
+def _raise_if_hf_multi_without_specs(cfg: EngineConfig, path: str | Path) -> None:
+    """Fail fast after TOML + env merge when extras-only HF mode has no datasets."""
+    tds = (cfg.training_data_source or "mesh").strip().lower()
+    if tds != "hf_tabular":
+        return
+    dp = (cfg.data_path or "").strip().lower()
+    if dp not in ("qminiwasm/hf-multi", "qminiwasm/multi"):
+        return
+    if cfg.hf_extra_specs:
+        return
+    p = Path(path).resolve()
+    raise ValueError(
+        f"{p}: [data].path is qminiwasm/hf-multi (extras-only Hub mode) but no datasets were "
+        "configured. Add [huggingface].extra_specs in this TOML, or set HF_EXTRA_SPECS in "
+        'the environment to a JSON array, e.g. '
+        '[{"path":"code-search-net/code_search_net","dataset_config":"python"}].'
+    )
 
 
 def load_training_config(path: str | Path) -> TrainingConfig:

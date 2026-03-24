@@ -7,11 +7,14 @@ The default MoE block (`HybridQuantumMoE`) is a no-op. You can run the **same QA
 | `pennylane` | (default) | Identity router; no quantum execution in the MoE. |
 | `qiskit_statevector` | `qiskit.primitives.StatevectorEstimator` | Local, exact ⟨Z_i⟩; requires `pip install qiskit`. |
 | `qiskit_ibm` | `qiskit_ibm_runtime.EstimatorV2` | Real IBM device; requires `IBM_QUANTUM_API_TOKEN`, `IBM_BACKEND_NAME`, and `pip install qiskit-ibm-runtime`. |
+| `cpp_cluster_first` | Native clustered classical path | Partitioned D-QAOA orchestration with native/surrogate small-N cluster solves; Python stitches global solution. |
 
 ## Configuration
 
 - **TOML** (`[hardware]`): `qaoa_execution_mode`, optional `ibm_qaoa_shots`, optional `quantum_execution_policy`.
 - **Environment**: `QMINIWASM_QAOA_EXECUTION`, `IBM_QAOA_SHOTS`, `NUM_QUBITS`, `QAOA_LAYERS`, `IBM_BACKEND_NAME` (or `QUANTUM_BACKEND` when it is an `ibm_*` device name — training-wui sets this), `IBM_QUANTUM_API_TOKEN`, `QUANTUM_EXECUTION_POLICY`.
+- **Simulator tuning** (`qiskit_statevector` mode): `QAOA_SIMULATOR_BACKEND=auto|statevector|mps`, optional `QAOA_MPS_MAX_BOND_DIM`.
+- **Topology/warm-start tuning**: `QAOA_PRUNE_ENABLED`, `QAOA_PRUNE_THRESHOLD`, `QAOA_PRUNE_MIN_NODES`, `QAOA_WARM_START_CACHE_TTL`.
 
 When **`QUANTUM_EXECUTION_POLICY=hardware_only`** (e.g. training-wui “Hardware only”) and `QMINIWASM_QAOA_EXECUTION` is still the default **`pennylane`**, the engine **automatically sets** `qaoa_execution_mode` to **`qiskit_ibm`** so the MoE is not left as an identity block. Explicit `QMINIWASM_QAOA_EXECUTION` (or TOML `qaoa_execution_mode`) still wins if you set something other than `pennylane`.
 

@@ -15,6 +15,7 @@ class ClusterQAOAJob:
     node_indices: List[int]
     q_linear: torch.Tensor
     q_quad: torch.Tensor
+    overlap_nodes: List[int]
 
 
 def adjacency_from_edge_list(
@@ -73,8 +74,56 @@ def build_cluster_mesh_jobs(
         if len(nodes) < 2:
             continue
         q_lin, q_quad = edge_costs_builder(nodes)
-        jobs.append(ClusterQAOAJob(cluster_id=c, node_indices=nodes, q_linear=q_lin, q_quad=q_quad))
+        jobs.append(
+            ClusterQAOAJob(
+                cluster_id=c,
+                node_indices=nodes,
+                q_linear=q_lin,
+                q_quad=q_quad,
+                overlap_nodes=[],
+            )
+        )
     return jobs
+
+
+def build_overlapping_cluster_mesh_jobs(
+    adjacency: np.ndarray,
+    labels: np.ndarray,
+    edge_costs_builder: Callable[[List[int]], Tuple[torch.Tensor, torch.Tensor]],
+    overlap_hops: int = 1,
+) -> List[ClusterQAOAJob]:
+    """Build cluster jobs with lightweight overlap neighborhoods on boundaries."""
+    base_jobs = build_cluster_mesh_jobs(adjacency, labels, edge_costs_builder)
+    if overlap_hops <= 0:
+        return base_jobs
+    n = int(adjacency.shape[0])
+    out: List[ClusterQAOAJob] = []
+    for job in base_jobs:
+        in_cluster = set(job.node_indices)
+        overlap: set[int] = set()
+        frontier = set(job.node_indices)
+        for _ in range(int(overlap_hops)):
+            nxt: set[int] = set()
+            for u in frontier:
+                for v in range(n):
+                    if adjacency[u, v] > 0 and v not in in_cluster:
+                        overlap.add(v)
+                        nxt.add(v)
+            frontier = nxt
+            if not frontier:
+                break
+        merged_nodes = sorted(in_cluster | overlap)
+        q_lin, q_quad = edge_costs_builder(merged_nodes)
+        out.append(
+            ClusterQAOAJob(
+                cluster_id=job.cluster_id,
+                node_indices=merged_nodes,
+                q_linear=q_lin,
+                q_quad=q_quad,
+                overlap_nodes=sorted(overlap),
+            )
+        )
+    return out
 
 
 def merge_cluster_bitstrings(

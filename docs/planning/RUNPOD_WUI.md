@@ -11,7 +11,7 @@
 
 1. **Remote training** – SSH or RunPod API to run `python -m engine` (and optionally the WUI) on the pod, with `CHECKPOINT_*` / paths aligned to pod filesystem.
 2. **Env sync** – Push `.env` / secrets to the pod (or use RunPod env vars / secrets store) so `IBM_QUANTUM_*`, `HF_*`, and TOML paths match.
-3. **Artifacts** – Stream or copy `artifacts/*.pt` back to the operator machine after the run (or write to S3 / volume).
+3. **Artifacts** – Stream or copy **`artifacts/models/<slug>/`** (checkpoints, `serve.toml`, `agent_bundle.json`) back to the operator machine after the run (or write to S3 / volume).
 4. **Observability** – Surface pod `public_ip`, SSH command, `tofu output` (already partially via `/api/runpod/status`), and RunPod job/pod IDs in the run log.
 5. **Health** – Before `apply`, verify token, `tofu`/`tofu` binary, and `infra/runpod` layout; optional “dry run” `tofu plan`.
 

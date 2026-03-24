@@ -15,7 +15,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PHASE1_CONFIG = REPO_ROOT / "configs" / "training" / "stem_code_blend_phase1_cpu.toml"
 DEFAULT_PHASE2_CONFIG = REPO_ROOT / "configs" / "training" / "stem_code_blend_phase2_gpu_resume.toml"
-DEFAULT_PHASE1_LATEST = REPO_ROOT / "artifacts" / "stem_code_blend_phase1_cpu_latest.pt"
+DEFAULT_PHASE1_LATEST = (
+    REPO_ROOT / "artifacts" / "models" / "stem_code_blend_phase1_cpu" / "latest.pt"
+)
 
 
 def _run_engine(config_path: Path, *, dry_run: bool) -> int:

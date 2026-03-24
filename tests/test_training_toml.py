@@ -103,3 +103,94 @@ def test_load_serve_toml_default_section(tmp_path):
     s = load_serve_toml(f)
     assert s.checkpoint == "ck.pt"
     assert s.hybrid_adapter is True
+
+
+def test_hf_extra_specs_toml_and_engine_config(tmp_path):
+    f = tmp_path / "multi_hf.toml"
+    f.write_text(
+        '[data]\nsource = "hf_tabular"\npath = "openai/gsm8k"\n\n'
+        "[huggingface]\n"
+        'extra_specs = [\n'
+        '  { path = "imdb" },\n'
+        '  { path = "wikitext", dataset_config = "wikitext-2-raw-v1" },\n'
+        "]\n",
+        encoding="utf-8",
+    )
+    from engine.config import EngineConfig
+    from engine.training_schema import load_training_toml
+
+    cfg = load_training_toml(f)
+    assert cfg.data.path == "openai/gsm8k"
+    assert cfg.huggingface.extra_specs is not None
+    assert len(cfg.huggingface.extra_specs) == 2
+    assert cfg.huggingface.extra_specs[1].dataset_config == "wikitext-2-raw-v1"
+
+    c = EngineConfig.from_training_toml(f)
+    assert len(c.hf_extra_specs) == 2
+    assert c.hf_extra_specs[1].get("dataset_config") == "wikitext-2-raw-v1"
+
+
+def test_loop_hf_merge_and_budget_helpers():
+    from qminiwasm.training.loop import _merge_hf_dataset_specs, _split_int_budget
+
+    assert _split_int_budget(100, 3) == [34, 33, 33]
+    assert sum(_split_int_budget(100, 3)) == 100
+
+    m = _merge_hf_dataset_specs(
+        "openai/gsm8k",
+        None,
+        [
+            {"path": "imdb"},
+            {"path": "openai/gsm8k", "dataset_config": None},
+        ],
+    )
+    assert m[0][0] == "openai/gsm8k"
+    assert len(m) == 2
+
+    extras_only = _merge_hf_dataset_specs(
+        "qminiwasm/hf-multi",
+        "python",
+        [
+            {"path": "openai/gsm8k"},
+            {"path": "imdb"},
+        ],
+    )
+    assert extras_only[0][0] == "openai/gsm8k"
+    assert extras_only[1][0] == "imdb"
+    assert len(extras_only) == 2
+
+
+def test_hf_multi_without_extra_specs_raises(tmp_path):
+    f = tmp_path / "bad_multi.toml"
+    f.write_text(
+        '[data]\nsource = "hf_tabular"\npath = "qminiwasm/hf-multi"\n\n'
+        "[huggingface]\n"
+        'split = "train"\n',
+        encoding="utf-8",
+    )
+    from engine.config import EngineConfig
+
+    with pytest.raises(ValueError, match="extra_specs|HF_EXTRA_SPECS"):
+        EngineConfig.from_training_toml(f)
+
+
+def test_edge_hf_streaming_knobs_from_toml(tmp_path):
+    f = tmp_path / "edge.toml"
+    f.write_text(
+        '[data]\nsource = "hf_tabular"\npath = "openai/gsm8k"\n\n'
+        "[huggingface]\n"
+        "streaming = true\n"
+        "max_scan_rows = 1000\n"
+        "max_buffered_rows = 512\n"
+        "text_truncate_bytes = 2048\n"
+        "deterministic_keep_every_n = 3\n",
+        encoding="utf-8",
+    )
+    from engine.config import EngineConfig
+
+    c = EngineConfig.from_training_toml(f)
+    assert c.hf_streaming is True
+    assert c.hf_max_scan_rows == 1000
+    assert c.hf_max_buffered_rows == 512
+    assert c.hf_text_truncate_bytes == 2048
+    assert c.hf_deterministic_keep_every_n == 3

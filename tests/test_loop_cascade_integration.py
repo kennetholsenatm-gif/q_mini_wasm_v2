@@ -114,3 +114,18 @@ def test_run_training_loop_cascade_mopd_invalid_feat_loss_defaults_to_mse() -> N
         cascade_mopd_feat_loss="not_a_mode",
     )
     assert out["metrics"].get("cascade_mopd_feat_loss") == "mse"
+
+
+def test_run_training_loop_reuses_model_pipeline(monkeypatch) -> None:
+    def _should_not_construct_pipeline():
+        raise AssertionError("loop.DataPipeline should not be constructed when model has data_pipeline")
+
+    monkeypatch.setattr("qminiwasm.training.loop.DataPipeline", _should_not_construct_pipeline)
+    out = run_training_loop(
+        epochs=0,
+        batch_size=2,
+        learning_rate=1e-3,
+        accelerator="cpu",
+        use_cascade_rl=False,
+    )
+    assert out["epochs_run"] == 0

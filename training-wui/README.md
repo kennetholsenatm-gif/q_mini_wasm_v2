@@ -47,6 +47,22 @@ The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python 
 
 **Infrastructure tab:** edit **`infra/runpod/terraform.tfvars`** in the browser (Save / Reload / Insert example from `terraform.tfvars.example`), then **Status** (token / `infra/runpod` / `tofu`, outputs, copy buttons, **Remote GPU** snippets) and **OpenTofu CLI** (`tofu init` / `plan` / `apply` / `destroy` — use **plan** to debug apply exit 1). **Training** tab stays focused on configs and runs; **log** stays at the bottom on both tabs.
 
+**Floating panels (optional):** On **Training** and **Infrastructure**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. On the **Training** tab this includes the **Log** panel (live output). Layout (positions + sizes + float on/off) is stored in **`localStorage`** for this origin. **Reset layout** clears saved positions and re-snaps from the default grid. The log is only on the **Training** tab (switch to **Infrastructure** to work on RunPod; return to **Training** to see the log).
+
+### Agent / inference outputs (Build + Run)
+
+Each **Build + Run** writes training checkpoints under **`artifacts/models/<model-slug>/`** (repo root, gitignored):
+
+| File | Role |
+|------|------|
+| `final.pt` | End-of-run weights (`CHECKPOINT_SAVE_PATH`) |
+| `best.pt` | Best training MSE so far (`CHECKPOINT_BEST_PATH`) — **default for serving** |
+| `latest.pt` | Last epoch (`CHECKPOINT_LATEST_PATH`) — used for **resume** |
+| `serve.toml` | Minimal `[serve]` table; load with **`QMINIWASM_SERVE_CONFIG=artifacts/models/<slug>/serve.toml`** |
+| `agent_bundle.json` | Machine-readable paths + **`uvicorn engine.serve:app`** hint + HTTP API summary |
+
+After training, point tools or agents at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn engine.serve:app`** (see repo **`engine/serve.py`**, **`pip install -e ".[serve]"`**). Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle JSON for the exact contract.
+
 `GET /api/runpod/status` — token, binary, `tofu output` (when state exists). `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional). Start APIs accept `run_target`: `"local"` | `"runpod"`, `runpod_destroy_on_exit`, and optional **`runpod_var_file`** (basename under `infra/runpod`; UI defaults to `terraform.tfvars`).
 
 **Preflight FAQ**

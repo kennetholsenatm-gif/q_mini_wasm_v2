@@ -164,6 +164,40 @@ def run_z_expectations_statevector(
     return evs
 
 
+def run_z_expectations_mps(
+    num_qubits: int,
+    num_layers: int,
+    weights: np.ndarray,
+    gamma: np.ndarray,
+    beta: np.ndarray,
+    bias: np.ndarray,
+    coupling: np.ndarray,
+    *,
+    max_bond_dimension: Optional[int] = None,
+) -> np.ndarray:
+    """Approximate ⟨Z_i⟩ via Aer MPS backend; fallback to statevector when unavailable."""
+    try:
+        from qiskit_aer import AerSimulator
+        from qiskit.primitives import BackendEstimatorV2
+    except Exception:
+        logger.debug("Qiskit Aer MPS unavailable; falling back to statevector.")
+        return run_z_expectations_statevector(
+            num_qubits, num_layers, weights, gamma, beta, bias, coupling
+        )
+
+    qc = build_qaoa_circuit_qiskit(num_qubits, num_layers, weights, gamma, beta, bias, coupling)
+    obs = _pauli_z_observables(num_qubits)
+    sim = AerSimulator(method="matrix_product_state")
+    if max_bond_dimension is not None and int(max_bond_dimension) > 0:
+        sim.set_options(matrix_product_state_max_bond_dimension=int(max_bond_dimension))
+    est = BackendEstimatorV2(backend=sim)
+    res = est.run([(qc, obs)]).result()
+    evs = np.asarray(res[0].data.evs, dtype=np.float64).flatten()
+    if evs.size != num_qubits:
+        raise RuntimeError(f"Expected {num_qubits} expectations, got {evs.size}")
+    return evs
+
+
 def run_z_expectations_ibm(
     num_qubits: int,
     num_layers: int,
@@ -265,8 +299,23 @@ def run_z_expectations(
     *,
     ibm_backend_name: Optional[str] = None,
     ibm_shots: int = 1024,
+    simulator_backend: str = "auto",
+    mps_max_bond_dim: Optional[int] = None,
 ) -> np.ndarray:
     if mode == "qiskit_statevector":
+        sb = (simulator_backend or "auto").strip().lower()
+        if sb in ("mps", "auto"):
+            with suppress(Exception):
+                return run_z_expectations_mps(
+                    num_qubits,
+                    num_layers,
+                    weights,
+                    gamma,
+                    beta,
+                    bias,
+                    coupling,
+                    max_bond_dimension=mps_max_bond_dim,
+                )
         return run_z_expectations_statevector(
             num_qubits, num_layers, weights, gamma, beta, bias, coupling
         )

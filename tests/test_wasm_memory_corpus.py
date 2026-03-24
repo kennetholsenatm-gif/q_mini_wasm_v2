@@ -92,3 +92,61 @@ def test_generate_training_data_from_corpus(tmp_path: Path):
         assert s["hidden"].numel() == 4096
         assert s["target"].numel() == 4096
         assert isinstance(s["wasm_memory"], (bytes, bytearray))
+
+
+def test_wasm_engine_store_memory_limit_from_env(monkeypatch):
+    monkeypatch.setenv("QMINIWASM_WASM_STORE_MEMORY_LIMIT_MB", "128")
+    eng = WasmEngine(use_mock=True)
+    assert eng._store_memory_limit_bytes == 128 * 1024 * 1024
+
+
+def test_wasm_engine_memory_error_strict_policy_raises(monkeypatch):
+    wat = r"""
+    (module
+      (memory 1)
+      (func $run (param i32 i32) (result i32)
+        (return (i32.add (local.get 0) (local.get 1)))
+      )
+      (export "run" (func $run))
+    )
+    """
+    monkeypatch.setenv("QMINIWASM_WASM_FALLBACK_POLICY", "error")
+    eng = WasmEngine(use_mock=False)
+    if eng.use_mock:
+        pytest.skip("WASM runtime unavailable in this environment")
+    mod = eng.compile_wasm(wasmtime.wat2wasm(wat))
+    assert mod is not None
+
+    def _boom(_store, _module):
+        raise RuntimeError("mmap failed to reserve 0x104000000 bytes")
+
+    monkeypatch.setattr("qminiwasm.wasm.engine.instantiate_wasmtime_module", _boom)
+    with pytest.raises(RuntimeError, match="reservation failed"):
+        eng.execute_wasm(mod, "run", [1, 2])
+
+
+def test_wasm_engine_memory_error_mock_policy_falls_back(monkeypatch):
+    wat = r"""
+    (module
+      (memory 1)
+      (func $run (param i32 i32) (result i32)
+        (return (i32.add (local.get 0) (local.get 1)))
+      )
+      (export "run" (func $run))
+    )
+    """
+    monkeypatch.setenv("QMINIWASM_WASM_FALLBACK_POLICY", "mock")
+    eng = WasmEngine(use_mock=False)
+    if eng.use_mock:
+        pytest.skip("WASM runtime unavailable in this environment")
+    mod = eng.compile_wasm(wasmtime.wat2wasm(wat))
+    assert mod is not None
+
+    def _boom(_store, _module):
+        raise RuntimeError("Cannot allocate memory (os error 12)")
+
+    monkeypatch.setattr("qminiwasm.wasm.engine.instantiate_wasmtime_module", _boom)
+    out, hidden, target, _pre, _post = eng.execute_wasm(mod, "hash", [7, 11])
+    assert eng.use_mock is True
+    assert isinstance(out, int)
+    assert hidden is not None and target is not None

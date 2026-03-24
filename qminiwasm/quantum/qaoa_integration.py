@@ -15,12 +15,15 @@ white paper, including problem Hamiltonian construction and angle prediction.
 
 import logging
 import os
+import hashlib
 
 import numpy as np
 import torch
 import torch.nn as nn
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from .mesh_qubo import prune_topology_from_edge_scores
 
 try:
     import pennylane as qml
@@ -65,6 +68,14 @@ class QAOAConfig:
     ibm_backend_name: Optional[str] = None
     #: Engine / TOML ``[hardware].quantum_backend`` (fallback for IBM device when env is unset).
     engine_quantum_backend: Optional[str] = None
+    #: qiskit simulator backend choice: auto | statevector | mps
+    simulator_backend: str = "auto"
+    qaoa_mps_max_bond_dim: Optional[int] = None
+    qaoa_prune_enabled: bool = False
+    qaoa_prune_threshold: float = 0.0
+    qaoa_prune_min_nodes: int = 4
+    qaoa_warm_start_cache_ttl: int = 128
+    qaoa_warm_start_max_hamming: float = 0.20
 
 
 class ProblemHamiltonian(nn.Module):
@@ -233,6 +244,7 @@ class NeuralQAOA(nn.Module):
         super(NeuralQAOA, self).__init__()
         self.num_qubits = num_qubits
         self.config = config
+        self._angle_cache: Dict[str, Tuple[torch.Tensor, torch.Tensor]] = {}
 
         # Initialize problem Hamiltonian
         self.problem_hamiltonian = ProblemHamiltonian(num_qubits, config.problem_type)
@@ -270,6 +282,44 @@ class NeuralQAOA(nn.Module):
         else:
             self._initialize_random_angles()
 
+    @staticmethod
+    def _topology_fingerprint(weights: torch.Tensor) -> str:
+        w = weights.detach().to(dtype=torch.float32).reshape(-1).cpu().numpy()
+        sign = np.sign(w).astype(np.int8).tobytes()
+        return hashlib.sha1(sign).hexdigest()
+
+    def _maybe_prune_weights(self, weights: torch.Tensor) -> torch.Tensor:
+        if not bool(getattr(self.config, "qaoa_prune_enabled", False)):
+            return weights
+        flat = weights.reshape(-1)
+        topo = prune_topology_from_edge_scores(
+            flat.abs(),
+            threshold=float(getattr(self.config, "qaoa_prune_threshold", 0.0)),
+            min_edges=max(1, int(getattr(self.config, "qaoa_prune_min_nodes", 4))),
+        )
+        kept = topo.kept_edge_indices
+        if not kept:
+            return flat[:1]
+        return flat[torch.tensor(kept, device=flat.device)]
+
+    def _warm_start_angles_if_available(self, weights: torch.Tensor) -> None:
+        fp = self._topology_fingerprint(weights)
+        hit = self._angle_cache.get(fp)
+        if hit is not None:
+            g, b = hit
+            with torch.no_grad():
+                if g.shape == self.gamma.shape and b.shape == self.beta.shape:
+                    self.gamma.copy_(g.to(device=self.gamma.device, dtype=self.gamma.dtype))
+                    self.beta.copy_(b.to(device=self.beta.device, dtype=self.beta.dtype))
+
+    def _update_angle_cache(self, weights: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor) -> None:
+        fp = self._topology_fingerprint(weights)
+        self._angle_cache[fp] = (gamma.detach().clone(), beta.detach().clone())
+        ttl = max(1, int(getattr(self.config, "qaoa_warm_start_cache_ttl", 128)))
+        if len(self._angle_cache) > ttl:
+            first_key = next(iter(self._angle_cache))
+            self._angle_cache.pop(first_key, None)
+
     def _initialize_random_angles(self):
         """Initialize angles with random values."""
         with torch.no_grad():
@@ -285,7 +335,7 @@ class NeuralQAOA(nn.Module):
             beta: Mixer Hamiltonian angles
         """
         mode = getattr(self.config, "execution_mode", "pennylane") or "pennylane"
-        if mode in ("qiskit_statevector", "qiskit_ibm"):
+        if mode in ("qiskit_statevector", "qiskit_ibm", "cpp_cluster_first"):
             return self._quantum_circuit_qiskit(weights, gamma, beta)
 
         if PENNYLANE_AVAILABLE:
@@ -318,6 +368,7 @@ class NeuralQAOA(nn.Module):
     ) -> torch.Tensor:
         """Same QAOA ansatz as PennyLane, executed via Qiskit (statevector or IBM Runtime)."""
         from qminiwasm.quantum.qiskit_qaoa import resolve_ibm_backend_name, run_z_expectations
+        from qminiwasm.quantum.performance_optimizer import solve_qubo_cpp_cluster_first
 
         w = weights.detach().cpu().numpy().reshape(-1)[: self.num_qubits]
         if w.size < self.num_qubits:
@@ -327,6 +378,18 @@ class NeuralQAOA(nn.Module):
         bias = self.problem_hamiltonian.bias_terms.detach().cpu().numpy()
         coup = self.problem_hamiltonian.weight_couplings.detach().cpu().numpy()
         mode = getattr(self.config, "execution_mode", "qiskit_statevector")
+        sim_backend = str(getattr(self.config, "simulator_backend", "auto") or "auto").lower()
+        if mode == "cpp_cluster_first":
+            sol = solve_qubo_cpp_cluster_first(
+                weights=w,
+                gamma=g,
+                beta=b,
+                bias=bias,
+                coupling=coup,
+                num_qubits=self.num_qubits,
+                num_layers=int(self.config.num_layers),
+            )
+            return torch.from_numpy(sol.astype(np.float32)).to(device=weights.device, dtype=weights.dtype)
         ibm_name = resolve_ibm_backend_name(
             getattr(self.config, "ibm_backend_name", None),
             config_quantum_backend=getattr(self.config, "engine_quantum_backend", None),
@@ -343,6 +406,8 @@ class NeuralQAOA(nn.Module):
             coup,
             ibm_backend_name=(ibm_name or None),
             ibm_shots=shots,
+            simulator_backend=sim_backend,
+            mps_max_bond_dim=getattr(self.config, "qaoa_mps_max_bond_dim", None),
         )
         t = torch.from_numpy(out.astype(np.float32)).to(device=weights.device)
         return t.to(dtype=weights.dtype)
@@ -414,6 +479,8 @@ class NeuralQAOA(nn.Module):
         """
         # Update current weights
         self.current_weights.copy_(weights)
+        self._warm_start_angles_if_available(weights)
+        _ = self._maybe_prune_weights(weights)
 
         # Predict angles if using neural prediction
         if self.angle_predictor is not None:
@@ -425,7 +492,9 @@ class NeuralQAOA(nn.Module):
             beta = self.beta
 
         # Execute quantum circuit
-        return self.quantum_circuit(weights, gamma, beta)
+        out = self.quantum_circuit(weights, gamma, beta)
+        self._update_angle_cache(weights, gamma, beta)
+        return out
 
     def optimize_angles(
         self, weights: torch.Tensor, target_function: Callable

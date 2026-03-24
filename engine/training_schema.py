@@ -28,6 +28,12 @@ class HardwareSection(BaseModel):
     #: pennylane | qiskit_statevector | qiskit_ibm
     qaoa_execution_mode: Optional[str] = None
     ibm_qaoa_shots: Optional[int] = None
+    qaoa_simulator_backend: Optional[str] = None
+    qaoa_mps_max_bond_dim: Optional[int] = None
+    qaoa_prune_enabled: Optional[bool] = None
+    qaoa_prune_threshold: Optional[float] = None
+    qaoa_prune_min_nodes: Optional[int] = None
+    qaoa_warm_start_cache_ttl: Optional[int] = None
     #: hardware_only | prefer_hardware_fallback | simulator_only (also QUANTUM_EXECUTION_POLICY)
     quantum_execution_policy: Optional[str] = None
     diff_method: Optional[str] = None
@@ -58,6 +64,15 @@ class DataSection(BaseModel):
     mesh_algorithms: Optional[str] = None
 
 
+class HFExtraSpec(BaseModel):
+    """Additional Hugging Face dataset id (+ optional config) mixed with ``data.path`` / ``dataset_config``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(..., description="HF dataset id (same format as [data].path)")
+    dataset_config: Optional[str] = None
+
+
 class HuggingFaceSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -69,6 +84,13 @@ class HuggingFaceSection(BaseModel):
     wasi_slice_only: Optional[bool] = None
     wasi_max_scan: Optional[int] = None
     mesh_blend_fraction: Optional[float] = None
+    #: Up to 8 extras; combined with primary ``[data].path`` must be ≤ 9 Hub datasets per run.
+    extra_specs: Optional[List[HFExtraSpec]] = None
+    streaming: Optional[bool] = None
+    max_scan_rows: Optional[int] = None
+    max_buffered_rows: Optional[int] = None
+    text_truncate_bytes: Optional[int] = None
+    deterministic_keep_every_n: Optional[int] = None
 
 
 class CheckpointSection(BaseModel):
@@ -166,6 +188,18 @@ class TrainingConfig(BaseModel):
             out["qaoa_execution_mode"] = h["qaoa_execution_mode"]
         if "ibm_qaoa_shots" in h:
             out["ibm_qaoa_shots"] = h["ibm_qaoa_shots"]
+        if "qaoa_simulator_backend" in h:
+            out["qaoa_simulator_backend"] = h["qaoa_simulator_backend"]
+        if "qaoa_mps_max_bond_dim" in h:
+            out["qaoa_mps_max_bond_dim"] = h["qaoa_mps_max_bond_dim"]
+        if "qaoa_prune_enabled" in h:
+            out["qaoa_prune_enabled"] = h["qaoa_prune_enabled"]
+        if "qaoa_prune_threshold" in h:
+            out["qaoa_prune_threshold"] = h["qaoa_prune_threshold"]
+        if "qaoa_prune_min_nodes" in h:
+            out["qaoa_prune_min_nodes"] = h["qaoa_prune_min_nodes"]
+        if "qaoa_warm_start_cache_ttl" in h:
+            out["qaoa_warm_start_cache_ttl"] = h["qaoa_warm_start_cache_ttl"]
         if "quantum_execution_policy" in h:
             out["quantum_execution_policy"] = h["quantum_execution_policy"]
         if "diff_method" in h:
@@ -193,6 +227,12 @@ class TrainingConfig(BaseModel):
             "wasi_slice_only": "hf_wasi_slice_only",
             "wasi_max_scan": "hf_wasi_max_scan",
             "mesh_blend_fraction": "hf_mesh_blend_fraction",
+            "extra_specs": "hf_extra_specs",
+            "streaming": "hf_streaming",
+            "max_scan_rows": "hf_max_scan_rows",
+            "max_buffered_rows": "hf_max_buffered_rows",
+            "text_truncate_bytes": "hf_text_truncate_bytes",
+            "deterministic_keep_every_n": "hf_deterministic_keep_every_n",
         }
         for k, v in hf.items():
             if k in key_map:

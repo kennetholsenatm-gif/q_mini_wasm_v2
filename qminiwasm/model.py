@@ -71,6 +71,12 @@ class QMiniWASM:
         qaoa_layers: int = 3,
         ibm_qaoa_shots: int = 1024,
         quantum_backend: str = "penny_lane",
+        qaoa_simulator_backend: str = "auto",
+        qaoa_mps_max_bond_dim: Optional[int] = None,
+        qaoa_prune_enabled: bool = False,
+        qaoa_prune_threshold: float = 0.0,
+        qaoa_prune_min_nodes: int = 4,
+        qaoa_warm_start_cache_ttl: int = 128,
     ):
         """Initialize the QMiniWASM model.
 
@@ -106,6 +112,14 @@ class QMiniWASM:
                 engine_quantum_backend=(
                     str(quantum_backend).strip() if mode == "qiskit_ibm" else None
                 ),
+                simulator_backend=str(qaoa_simulator_backend or "auto"),
+                qaoa_mps_max_bond_dim=(
+                    int(qaoa_mps_max_bond_dim) if qaoa_mps_max_bond_dim is not None else None
+                ),
+                qaoa_prune_enabled=bool(qaoa_prune_enabled),
+                qaoa_prune_threshold=float(qaoa_prune_threshold),
+                qaoa_prune_min_nodes=max(1, int(qaoa_prune_min_nodes)),
+                qaoa_warm_start_cache_ttl=max(1, int(qaoa_warm_start_cache_ttl)),
             )
             self.logger.info(
                 "quantum_router: QAOA via Qiskit (%s, num_qubits=%s layers=%s)",

@@ -160,9 +160,9 @@ With **`hf_tabular`**, unset **`HF_NUM_SAMPLES`** pulls a deeper default slice (
 
 For Hub downloads, set **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** in your environment or in a repo-root **`.env`** (loaded automatically when you `pip install -e ".[training]"` and run `python -m engine` or `uvicorn engine.serve:app`). See [`.env.example`](.env.example); do not commit secrets.
 
-**Checkpoints:** set **`CHECKPOINT_SAVE_PATH`** (and optionally **`CHECKPOINT_BEST_PATH`**, **`CHECKPOINT_LOAD_PATH`**, **`EVAL_HOLDOUT_FRACTION`**, **`EVAL_EVERY_EPOCH`**) so weights persist and holdout MSE is reported. See **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
+**Checkpoints:** set **`CHECKPOINT_SAVE_PATH`** (and optionally **`CHECKPOINT_BEST_PATH`**, **`CHECKPOINT_LOAD_PATH`**, **`EVAL_HOLDOUT_FRACTION`**, **`EVAL_EVERY_EPOCH`**) so weights persist and holdout MSE is reported. Prefer **`artifacts/models/<slug>/final.pt`** (and **`best.pt`** / **`latest.pt`**) so paths align with the **training WUI** and **`agent_bundle.json`**. See **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
 
-**Inference container:** after `pip install -e ".[serve]"`, run `uvicorn engine.serve:app --host 0.0.0.0 --port 8001` and set **`QMINIWASM_CHECKPOINT`** (or **`CHECKPOINT_LOAD_PATH`**) to the saved `.pt` file. Device follows **`ACCELERATOR`** / `get_device()`.
+**Inference container:** after `pip install -e ".[serve]"`, run `uvicorn engine.serve:app --host 0.0.0.0 --port 8001` and set **`QMINIWASM_CHECKPOINT`** (or **`CHECKPOINT_LOAD_PATH`**) to the saved **`best.pt`** or **`final.pt`**. Device follows **`ACCELERATOR`** / `get_device()`.
 
 Full tables, **CodeSearchNet / `whole_func_string`** guidance, **example loss behavior**, and **environment variables** are documented in **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
 

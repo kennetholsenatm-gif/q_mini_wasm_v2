@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Literal
+from typing import Literal, Tuple
 
 import torch
 
@@ -20,10 +20,11 @@ logger = logging.getLogger(__name__)
 # Optional: Intel Extension for PyTorch (IPEX) for older PyTorch or extra XPU features
 _IPEX_AVAILABLE = False
 try:
-    import intel_extension_for_pytorch  # noqa: F401
+    import intel_extension_for_pytorch as ipex  # noqa: F401
 
     _IPEX_AVAILABLE = True
 except ImportError:
+    ipex = None
     pass
 
 AcceleratorType = Literal["cuda", "xpu", "cpu", "sycl"]
@@ -40,6 +41,23 @@ def _xpu_available() -> bool:
     if xpu is None:
         return False
     return getattr(xpu, "is_available", lambda: False)()
+
+
+def _xpu_runtime_status() -> Tuple[bool, str]:
+    """Return `(available, reason)` for XPU runtime availability diagnostics."""
+    if getattr(torch, "xpu", None) is None:
+        return (
+            False,
+            "this PyTorch build has no torch.xpu runtime; install an Intel XPU-enabled torch build",
+        )
+    if _xpu_available():
+        return True, "torch.xpu.is_available() is true"
+    if not _IPEX_AVAILABLE:
+        return (
+            False,
+            "torch.xpu exists but reports unavailable and intel-extension-for-pytorch (IPEX) is not importable",
+        )
+    return False, "torch.xpu exists and IPEX imported, but torch.xpu.is_available() is false"
 
 
 def get_device(
@@ -74,15 +92,18 @@ def get_device(
             logger.info("CUDA requested but not available; using CPU")
             return torch.device("cpu")
         if accelerator == "xpu":
-            if _xpu_available():
+            ok, why = _xpu_runtime_status()
+            if ok:
                 dev = torch.device(f"xpu:{idx}")
                 logger.info("Using Intel XPU device for training/inference: %s", dev)
                 return dev
             logger.warning(
-                "ACCELERATOR=xpu but PyTorch XPU is not available (torch.xpu.is_available() is false); "
-                "using CPU. Stock PyTorch does not drive Intel integrated/discrete GPUs: install "
-                "Intel Extension for PyTorch (IPEX) with XPU support for your OS/Python. "
+                "ACCELERATOR=xpu requested but XPU runtime is unavailable (%s); using CPU. "
+                "Install an Intel XPU-enabled PyTorch build and intel-extension-for-pytorch (IPEX). "
                 "SYCL/dpctl seeing Iris Xe only affects SYCLHardware helpers, not torch.nn training."
+                " (IPEX importable=%s)",
+                why,
+                _IPEX_AVAILABLE,
             )
             return torch.device("cpu")
         if accelerator == "cpu":

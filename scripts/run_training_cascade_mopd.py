@@ -12,7 +12,7 @@ Usage::
 
     python scripts/run_training_cascade_mopd.py
     python scripts/run_training_cascade_mopd.py --config configs/training/cascade_mopd.toml
-    python scripts/run_training_cascade_mopd.py --mopd-lambda 0.05 --checkpoint-load ./artifacts/best.pt
+    python scripts/run_training_cascade_mopd.py --mopd-lambda 0.05 --checkpoint-load ./artifacts/models/cascade_mopd/best.pt
     python scripts/run_training_cascade_mopd.py --dry-run
     python scripts/run_training_cascade_mopd.py --resume
     python scripts/resume_training_cascade_mopd.py
@@ -28,6 +28,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_DEFAULT_CKPT_DIR = REPO_ROOT / "artifacts" / "models" / "cascade_mopd"
 
 
 def _resolve_latest_checkpoint_path(checkpoint_latest_cli: str) -> Path:
@@ -137,18 +138,18 @@ def main() -> int:
     )
     parser.add_argument(
         "--checkpoint-save",
-        default=str(REPO_ROOT / "artifacts" / "qminiwasm_trainable_cascade_mopd.pt"),
-        help="CHECKPOINT_SAVE_PATH (default: artifacts/qminiwasm_trainable_cascade_mopd.pt).",
+        default=str(_DEFAULT_CKPT_DIR / "final.pt"),
+        help="CHECKPOINT_SAVE_PATH (default: artifacts/models/cascade_mopd/final.pt).",
     )
     parser.add_argument(
         "--checkpoint-best",
-        default=str(REPO_ROOT / "artifacts" / "qminiwasm_best_cascade_mopd.pt"),
-        help="CHECKPOINT_BEST_PATH (default: artifacts/qminiwasm_best_cascade_mopd.pt).",
+        default=str(_DEFAULT_CKPT_DIR / "best.pt"),
+        help="CHECKPOINT_BEST_PATH (default: artifacts/models/cascade_mopd/best.pt).",
     )
     parser.add_argument(
         "--checkpoint-latest",
-        default=str(REPO_ROOT / "artifacts" / "qminiwasm_latest_cascade_mopd.pt"),
-        help="CHECKPOINT_LATEST_PATH (default: artifacts/qminiwasm_latest_cascade_mopd.pt).",
+        default=str(_DEFAULT_CKPT_DIR / "latest.pt"),
+        help="CHECKPOINT_LATEST_PATH (default: artifacts/models/cascade_mopd/latest.pt).",
     )
     parser.add_argument(
         "--no-checkpoint-outputs",

@@ -169,6 +169,23 @@ def encoded_blob_references_wasi(blob: bytes) -> bool:
     return any(m in lower for m in _WASI_MARKERS_LOWER)
 
 
+def normalize_hf_dataset_spec(
+    dataset_id: str,
+    config_name: Optional[str],
+) -> tuple[str, Optional[str]]:
+    """Remap legacy Hub ids that no longer load with modern ``datasets`` (script removal).
+
+    ``Muennighoff/mbpp`` -> ``google-research-datasets/mbpp`` with config ``full`` when unset.
+    """
+    pid = (dataset_id or "").strip()
+    if pid.lower() == "muennighoff/mbpp":
+        cfg = (config_name or "").strip() or None
+        if cfg is None:
+            cfg = "full"
+        return "google-research-datasets/mbpp", cfg
+    return pid, config_name
+
+
 def load_hf_tabular_samples(
     dataset_id: str,
     num_samples: int,
@@ -180,6 +197,11 @@ def load_hf_tabular_samples(
     token: Optional[str] = None,
     wasi_slice_only: bool = False,
     max_scan_rows: Optional[int] = None,
+    streaming: bool = False,
+    max_scan_rows_general: Optional[int] = None,
+    max_buffered_rows: Optional[int] = None,
+    text_truncate_bytes: Optional[int] = None,
+    deterministic_keep_every_n: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Load up to ``num_samples`` rows from Hugging Face ``datasets`` and encode for training.
 
@@ -206,29 +228,55 @@ def load_hf_tabular_samples(
             "Install with: pip install datasets"
         ) from e
 
+    _pre_id = (dataset_id or "").strip()
+    dataset_id, config_name = normalize_hf_dataset_spec(dataset_id, config_name)
+    if _pre_id.lower() == "muennighoff/mbpp":
+        logger.info(
+            "HF dataset remap: Muennighoff/mbpp -> google-research-datasets/mbpp (config=%s)",
+            config_name or "full",
+        )
+
     load_kw: Dict[str, Any] = {}
     if token:
         load_kw["token"] = token
     hub_revision = os.environ.get("HF_DATASET_REVISION", "main").strip() or "main"
 
-    use_streaming = bool(wasi_slice_only)
-    if config_name:
-        ds = load_dataset(
-            dataset_id,
-            config_name,
-            split=split,
-            streaming=use_streaming,
-            revision=hub_revision,
-            **load_kw,
-        )
-    else:
-        ds = load_dataset(
-            dataset_id,
-            split=split,
-            streaming=use_streaming,
-            revision=hub_revision,
-            **load_kw,
-        )
+    use_streaming = bool(wasi_slice_only or streaming)
+    try:
+        if config_name:
+            ds = load_dataset(
+                dataset_id,
+                config_name,
+                split=split,
+                streaming=use_streaming,
+                revision=hub_revision,
+                **load_kw,
+            )
+        else:
+            ds = load_dataset(
+                dataset_id,
+                split=split,
+                streaming=use_streaming,
+                revision=hub_revision,
+                **load_kw,
+            )
+    except Exception as e:
+        err = str(e)
+        cfg = f" (config={config_name!r})" if config_name else ""
+        if "gated" in err.lower():
+            raise RuntimeError(
+                f"Could not load Hugging Face dataset {dataset_id!r}{cfg}: {err} "
+                "Accept the dataset terms on the Hub, then set HUGGING_FACE_HUB_TOKEN or "
+                "HF_TOKEN in your environment (see .env.example)."
+            ) from e
+        if "dataset scripts are no longer supported" in err.lower():
+            raise RuntimeError(
+                f"Could not load Hugging Face dataset {dataset_id!r}{cfg}: {err} "
+                "Modern `datasets` no longer runs legacy Hub Python scripts; use a "
+                "Parquet-backed dataset (e.g. google-research-datasets/mbpp with "
+                'dataset_config "full"). See docs/TRAINING_DATA.md.'
+            ) from e
+        raise
 
     samples: List[Dict[str, Any]] = []
     if wasi_slice_only:
@@ -293,31 +341,45 @@ def load_hf_tabular_samples(
             )
         return samples
 
+    cap_general = max_scan_rows_general if max_scan_rows_general is not None else None
+    accepted = 0
     for i, row in enumerate(ds):
-        if i >= num_samples:
+        if accepted >= num_samples:
             break
+        if cap_general is not None and i >= cap_general:
+            break
+        if deterministic_keep_every_n is not None and deterministic_keep_every_n > 1:
+            if (i % int(deterministic_keep_every_n)) != 0:
+                continue
         row_dict = dict(row)
         blob = row_to_encoded_blob(
             row_dict,
             text_fields=text_fields,
             context_fields=context_fields,
         )
-        hidden = encode_linear_memory(blob[:BODY_SLOTS], result_i32=i, first_arg=0)
+        if text_truncate_bytes is not None and text_truncate_bytes > 0:
+            blob = blob[: int(text_truncate_bytes)]
+        hidden = encode_linear_memory(blob[:BODY_SLOTS], result_i32=accepted, first_arg=0)
         target = hidden.clone()
         samples.append(
             {
                 "algorithm": "hf_tabular",
-                "inputs": [i],
-                "output": i,
+                "inputs": [accepted],
+                "output": accepted,
                 "hidden": hidden,
                 "target": target,
                 "wasm_memory": b"",
                 "stack_snapshot": [],
                 "execution_state": {
                     "dataset_id": dataset_id,
-                    "row_index": i,
+                    "row_index": accepted,
+                    "source_index": i,
                     "split": split,
                 },
             }
         )
+        accepted += 1
+        if max_buffered_rows is not None and len(samples) >= int(max_buffered_rows):
+            # Keep bounded memory while still returning deterministic latest slice.
+            samples = samples[-int(max_buffered_rows) :]
     return samples

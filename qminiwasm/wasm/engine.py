@@ -13,9 +13,10 @@ import os
 import struct
 import subprocess
 import tempfile
-import wasmtime
 from typing import Any, Dict, List, Optional, Tuple
+
 import torch
+import wasmtime
 
 from .memory_encode import encode_linear_memory
 from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
@@ -51,6 +52,15 @@ class WasmEngine:
         )
         self.use_mock = bool(use_mock or force_mock)
         self.logger = logging.getLogger(__name__)
+        self._fallback_policy = self._read_fallback_policy()
+        self._store_memory_limit_bytes = self._read_store_memory_limit_bytes()
+        self._store_instance_limit = self._read_optional_positive_int_env(
+            "QMINIWASM_WASM_STORE_INSTANCE_LIMIT"
+        )
+        self._store_memories_limit = self._read_optional_positive_int_env(
+            "QMINIWASM_WASM_STORE_MEMORIES_LIMIT"
+        )
+        self._engine = self._build_wasmtime_engine()
         self._module_cache: Dict[str, Optional[Any]] = {}
         # wasmtime.Module must be instantiated with the Store that created it.
         self._module_exec_cache: Dict[int, Tuple[Any, Any]] = {}
@@ -60,6 +70,8 @@ class WasmEngine:
 
         if force_mock:
             self.logger.warning("QMINIWASM_FORCE_MOCK_WASM enabled; using mock WASM engine.")
+        if not force_mock:
+            self._log_runtime_memory_settings()
         if not self.use_mock:
             try:
                 # Test WASM compilation capability
@@ -73,10 +85,100 @@ class WasmEngine:
                         WasmEngine._successful_init_log_count,
                     )
             except Exception as e:
+                if self._fallback_policy == "error":
+                    self.logger.error(
+                        "WASM runtime initialization failed and fallback policy is 'error': %s",
+                        str(e),
+                    )
+                    raise
                 self.logger.warning(
                     "WASM compilation not available: %s. Using mock implementation.", str(e)
                 )
                 self.use_mock = True
+
+    @staticmethod
+    def _read_fallback_policy() -> str:
+        raw = os.environ.get("QMINIWASM_WASM_FALLBACK_POLICY", "mock").strip().lower()
+        if raw in ("error", "fail", "strict"):
+            return "error"
+        return "mock"
+
+    @staticmethod
+    def _read_optional_positive_int_env(name: str) -> Optional[int]:
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            return None
+        try:
+            val = int(raw, 10)
+        except ValueError:
+            logger.warning("Ignoring %s=%r (not an integer).", name, raw)
+            return None
+        if val <= 0:
+            logger.warning("Ignoring %s=%r (must be > 0).", name, raw)
+            return None
+        return val
+
+    def _read_store_memory_limit_bytes(self) -> int:
+        raw_b = os.environ.get("QMINIWASM_WASM_STORE_MEMORY_LIMIT_BYTES", "").strip()
+        if raw_b:
+            try:
+                val_b = int(raw_b, 10)
+                if val_b > 0:
+                    return val_b
+                self.logger.warning(
+                    "Ignoring QMINIWASM_WASM_STORE_MEMORY_LIMIT_BYTES=%r (must be > 0).",
+                    raw_b,
+                )
+            except ValueError:
+                self.logger.warning(
+                    "Ignoring QMINIWASM_WASM_STORE_MEMORY_LIMIT_BYTES=%r (not an integer).",
+                    raw_b,
+                )
+        raw_mb = os.environ.get("QMINIWASM_WASM_STORE_MEMORY_LIMIT_MB", "").strip()
+        if raw_mb:
+            try:
+                val_mb = int(raw_mb, 10)
+                if val_mb > 0:
+                    return val_mb * 1024 * 1024
+                self.logger.warning(
+                    "Ignoring QMINIWASM_WASM_STORE_MEMORY_LIMIT_MB=%r (must be > 0).",
+                    raw_mb,
+                )
+            except ValueError:
+                self.logger.warning(
+                    "Ignoring QMINIWASM_WASM_STORE_MEMORY_LIMIT_MB=%r (not an integer).",
+                    raw_mb,
+                )
+        return 256 * 1024 * 1024
+
+    def _build_wasmtime_engine(self) -> wasmtime.Engine:
+        cfg = wasmtime.Config()
+        # Keep explicit defaults in one place for future per-runtime tuning.
+        try:
+            cfg.debug_info = False
+        except Exception:
+            pass
+        return wasmtime.Engine(cfg)
+
+    def _new_store(self) -> wasmtime.Store:
+        store = wasmtime.Store(self._engine)
+        try:
+            kwargs: Dict[str, int] = {"memory_size": int(self._store_memory_limit_bytes)}
+            if self._store_instance_limit is not None:
+                kwargs["instances"] = int(self._store_instance_limit)
+            if self._store_memories_limit is not None:
+                kwargs["memories"] = int(self._store_memories_limit)
+            store.set_limits(**kwargs)
+        except Exception as e:
+            self.logger.warning("Failed to apply wasmtime Store limits (%s). Continuing.", e)
+        return store
+
+    def _log_runtime_memory_settings(self) -> None:
+        self.logger.info(
+            "WASM store memory limit=%s bytes fallback_policy=%s",
+            int(self._store_memory_limit_bytes),
+            self._fallback_policy,
+        )
 
     def _test_wasm_compilation(self):
         """Verify wasmtime can load and instantiate a tiny module (no clang required)."""
@@ -90,7 +192,7 @@ class WasmEngine:
         """
         try:
             wasm_bytes = wasmtime.wat2wasm(wat)
-            store = wasmtime.Store()
+            store = self._new_store()
             module = wasmtime.Module(store.engine, wasm_bytes)  # type: ignore[attr-defined]
             instance = wasmtime.Instance(store, module, [])
             add_fn = instance.exports(store)["add"]  # type: ignore[index]
@@ -133,7 +235,7 @@ class WasmEngine:
                 try:
                     with open(wasm_file, "rb") as f:
                         wasm_bytes = f.read()
-                    store = wasmtime.Store()
+                    store = self._new_store()
                     module = wasmtime.Module(store.engine, wasm_bytes)  # type: ignore[attr-defined]
                     self._module_exec_cache[id(module)] = (store, module)
                     return module
@@ -165,7 +267,7 @@ class WasmEngine:
         if self.use_mock:
             return None
         try:
-            store = wasmtime.Store()
+            store = self._new_store()
             module = wasmtime.Module(store.engine, wasm_code)  # type: ignore[attr-defined]
             self._module_exec_cache[id(module)] = (store, module)
             self._compiled_store = store
@@ -267,11 +369,14 @@ class WasmEngine:
         except Exception as e:
             msg = str(e)
             if "mmap failed to reserve" in msg or "Cannot allocate memory" in msg:
-                # Common in memory-constrained containers with wasmtime virtual memory reservation.
-                self.logger.warning(
-                    "WASM runtime memory reservation failed (%s); switching to mock WASM mode.",
-                    msg,
+                detail = (
+                    "WASM runtime memory reservation failed "
+                    f"(store_memory_limit_bytes={int(self._store_memory_limit_bytes)}): {msg}"
                 )
+                if self._fallback_policy == "error":
+                    raise RuntimeError(detail) from e
+                # Common in memory-constrained containers with wasmtime virtual memory reservation.
+                self.logger.warning("%s; switching to mock WASM mode.", detail)
                 self.use_mock = True
                 return self._execute_mock(func_name, args)
             self.logger.error("WASM execution error: %s", msg)

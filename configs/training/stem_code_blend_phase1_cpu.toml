@@ -28,9 +28,9 @@ wasi_max_scan = 150000
 mesh_blend_fraction = 0.20
 
 [checkpoint]
-save_path = "artifacts/stem_code_blend_phase1_cpu.pt"
-best_path = "artifacts/stem_code_blend_phase1_cpu_best.pt"
-latest_path = "artifacts/stem_code_blend_phase1_cpu_latest.pt"
+save_path = "artifacts/models/stem_code_blend_phase1_cpu/final.pt"
+best_path = "artifacts/models/stem_code_blend_phase1_cpu/best.pt"
+latest_path = "artifacts/models/stem_code_blend_phase1_cpu/latest.pt"
 
 [eval]
 holdout_fraction = 0.03

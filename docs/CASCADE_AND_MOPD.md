@@ -129,7 +129,7 @@ A copy-paste **`.env`** sketch lives in **[.env.example](../.env.example)** unde
 python scripts/run_training_cascade_mopd.py
 python scripts/resume_training_cascade_mopd.py
 python scripts/run_training_cascade_mopd.py --dry-run
-python scripts/run_training_cascade_mopd.py --checkpoint-load ./artifacts/qminiwasm_best.pt --use-cascade-router
+python scripts/run_training_cascade_mopd.py --checkpoint-load ./artifacts/models/qminiwasm/best.pt --use-cascade-router
 ```
 
 See `python scripts/run_training_cascade_mopd.py --help`.
@@ -149,7 +149,7 @@ See `python scripts/run_training_cascade_mopd.py --help`.
 python scripts/resume_training_cascade_mopd.py
 ```
 
-Equivalent: `python scripts/run_training_cascade_mopd.py --resume`. Resolution order: path from **`--checkpoint-latest`** (default `artifacts/qminiwasm_latest_cascade_mopd.pt`), else **`CHECKPOINT_LATEST_PATH`** in `.env` if that file exists.
+Equivalent: `python scripts/run_training_cascade_mopd.py --resume`. Resolution order: path from **`--checkpoint-latest`** (default `artifacts/models/cascade_mopd/latest.pt`), else **`CHECKPOINT_LATEST_PATH`** in `.env` if that file exists.
 
 Expect a **fresh** epoch counter (epoch 1 of the new run), **new** AdamW state, and **reset** `ReduceLROnPlateau` / early-stop counters — only the **weights** carry over.
 

@@ -9,9 +9,20 @@ import torch
 
 from qminiwasm.training.hf_loader import (
     encoded_blob_references_wasi,
+    normalize_hf_dataset_spec,
     row_to_encoded_blob,
+    load_hf_tabular_samples,
 )
 from qminiwasm.wasm.memory_encode import BODY_SLOTS, encode_linear_memory
+
+
+def test_normalize_hf_dataset_spec_mbpp_legacy():
+    nid, cfg = normalize_hf_dataset_spec("Muennighoff/mbpp", None)
+    assert nid == "google-research-datasets/mbpp"
+    assert cfg == "full"
+    nid2, cfg2 = normalize_hf_dataset_spec("muennighoff/mbpp", "sanitized")
+    assert nid2 == "google-research-datasets/mbpp"
+    assert cfg2 == "sanitized"
 
 
 def test_row_to_encoded_blob_code_fields_change_tensor():
@@ -215,6 +226,25 @@ def test_whole_func_string_wins_over_func_code_string():
     assert b"doc" in blob
     assert b"return 99" in blob
     assert b"return 0" not in blob
+
+
+@patch("datasets.load_dataset", autospec=True)
+def test_load_hf_streaming_general_caps_and_deterministic_keep(mock_load):
+    pytest.importorskip("datasets")
+    rows = [{"whole_func_string": f"row {i}"} for i in range(20)]
+    mock_load.return_value = iter(rows)
+    out = load_hf_tabular_samples(
+        "org/dataset",
+        8,
+        split="train",
+        streaming=True,
+        max_scan_rows_general=12,
+        deterministic_keep_every_n=2,
+        text_truncate_bytes=64,
+    )
+    # i in [0..11], keep even => 6 rows max.
+    assert len(out) == 6
+    assert mock_load.call_args.kwargs.get("streaming") is True
 
 
 @pytest.mark.integration

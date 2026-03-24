@@ -92,7 +92,83 @@ _HF_AUTO_SAMPLES_FLOOR = 32_768
 _HF_AUTO_SAMPLES_CEIL = 300_000
 _HF_AUTO_SAMPLES_BATCH_MULT = 512
 
+_HF_MAX_DATASETS_PER_RUN = 9
+
+# Reserved ``data.path`` / ``DATA_PATH`` values: do not call ``load_dataset`` on these; merge only
+# ``[huggingface].extra_specs`` (multi-dataset / extras-only mode). Case-insensitive.
+_HF_MULTI_PRIMARY_PLACEHOLDERS = frozenset(
+    {
+        "qminiwasm/hf-multi",
+        "qminiwasm/multi",
+    }
+)
+
 TrainingDataSource = Literal["mesh", "corpus", "hf_tabular"]
+
+
+def _is_hf_multi_primary_placeholder(primary_id: str) -> bool:
+    """True when ``data.path`` is a reserved id that skips the primary Hub load (extras only)."""
+    return (primary_id or "").strip().lower() in _HF_MULTI_PRIMARY_PLACEHOLDERS
+
+
+def _split_int_budget(total: int, parts: int) -> List[int]:
+    """Split ``total`` into ``parts`` non-negative integers that sum to ``total`` (at least ``parts`` when total allows)."""
+    if parts <= 0:
+        return []
+    total = max(int(total), 0)
+    if total < parts:
+        total = parts
+    base, rem = divmod(total, parts)
+    return [base + (1 if i < rem else 0) for i in range(parts)]
+
+
+def _merge_hf_dataset_specs(
+    primary_id: str,
+    primary_config: Optional[str],
+    extras: Optional[List[Dict[str, Any]]],
+) -> List[Tuple[str, Optional[str]]]:
+    """Primary first, then extras; dedupe by (id, config); cap at :data:`_HF_MAX_DATASETS_PER_RUN`.
+
+    If ``primary_id`` is a :data:`_HF_MULTI_PRIMARY_PLACEHOLDERS` entry, the primary slot does not
+    load from the Hub; only ``extras`` are used (multi-dataset runs without a "main" dataset id).
+    """
+    primary_id = (primary_id or "").strip()
+    if not primary_id:
+        return []
+    pc = (primary_config or "").strip() or None
+    seen: set[Tuple[str, str]] = set()
+    out: List[Tuple[str, Optional[str]]] = []
+
+    def add(ds_id: str, cfg: Optional[str]) -> None:
+        ds_id = (ds_id or "").strip()
+        if not ds_id:
+            return
+        key = (ds_id, cfg or "")
+        if key in seen:
+            return
+        seen.add(key)
+        out.append((ds_id, cfg))
+
+    if not _is_hf_multi_primary_placeholder(primary_id):
+        add(primary_id, pc)
+    for row in extras or []:
+        if not isinstance(row, dict):
+            continue
+        eid = str(row.get("path") or "").strip()
+        if not eid:
+            continue
+        raw = row.get("dataset_config")
+        ecfg = (str(raw).strip() or None) if raw is not None else None
+        add(eid, ecfg)
+        if len(out) >= _HF_MAX_DATASETS_PER_RUN:
+            break
+    if len(out) > _HF_MAX_DATASETS_PER_RUN:
+        logger.warning(
+            "HF multi: truncating to %s datasets (had more in config)",
+            _HF_MAX_DATASETS_PER_RUN,
+        )
+        return out[:_HF_MAX_DATASETS_PER_RUN]
+    return out
 
 
 def split_train_eval_data(
@@ -221,8 +297,20 @@ def run_training_loop(
     cascade_router_hidden: int = 32,
     cascade_couple_forward: bool = True,
     hf_mesh_blend_fraction: float = 0.0,
+    hf_extra_specs: Optional[List[Dict[str, Any]]] = None,
+    hf_streaming: bool = False,
+    hf_max_scan_rows: int | None = None,
+    hf_max_buffered_rows: int | None = None,
+    hf_text_truncate_bytes: int | None = None,
+    hf_deterministic_keep_every_n: int | None = None,
     qaoa_execution_mode: str = "pennylane",
     ibm_qaoa_shots: int = 1024,
+    qaoa_simulator_backend: str = "auto",
+    qaoa_mps_max_bond_dim: int | None = None,
+    qaoa_prune_enabled: bool = False,
+    qaoa_prune_threshold: float = 0.0,
+    qaoa_prune_min_nodes: int = 4,
+    qaoa_warm_start_cache_ttl: int = 128,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -251,6 +339,8 @@ def run_training_loop(
         hf_context_fields: Optional labeled metadata keys prepended before code (see hf_loader). None
             uses defaults in auto mode; ``[]`` disables; non-empty list selects keys (e.g. CodeSearchNet).
         hf_token: Optional Hugging Face Hub token for ``load_dataset`` (rate limits / gated data).
+        hf_extra_specs: Optional list of ``{"path": "org/ds", "dataset_config": "..."}`` entries merged
+            with ``data_path`` / ``hf_dataset_config`` (max 9 Hub datasets total including primary).
         hf_wasi_slice_only: If True (env ``HF_WASI_SLICE_ONLY``), stream HF split and keep only rows
             whose encoded text references WASI (see ``hf_loader.encoded_blob_references_wasi``).
         hf_wasi_max_scan: Optional max source rows to scan when ``hf_wasi_slice_only`` (env
@@ -328,6 +418,14 @@ def run_training_loop(
         qaoa_layers=int(qaoa_layers),
         ibm_qaoa_shots=int(ibm_qaoa_shots),
         quantum_backend=str(quantum_backend or "penny_lane"),
+        qaoa_simulator_backend=str(qaoa_simulator_backend or "auto"),
+        qaoa_mps_max_bond_dim=(
+            int(qaoa_mps_max_bond_dim) if qaoa_mps_max_bond_dim is not None else None
+        ),
+        qaoa_prune_enabled=bool(qaoa_prune_enabled),
+        qaoa_prune_threshold=float(qaoa_prune_threshold),
+        qaoa_prune_min_nodes=max(1, int(qaoa_prune_min_nodes)),
+        qaoa_warm_start_cache_ttl=max(1, int(qaoa_warm_start_cache_ttl)),
     )
     model.quantum_router.train()
     if hasattr(model, "ternary_expert"):
@@ -366,7 +464,7 @@ def run_training_loop(
             min_lr=lr_plateau_min_lr,
         )
 
-    pipeline = DataPipeline()
+    pipeline = model.data_pipeline if getattr(model, "data_pipeline", None) is not None else DataPipeline()
     source = (training_data_source or "mesh").strip().lower()
     num_samples = max(1, batch_size * 4)
 
@@ -381,7 +479,8 @@ def run_training_loop(
             data_path, num_samples=num_samples, seed=corpus_seed
         )
     elif source == "hf_tabular":
-        if not data_path:
+        dp_hf = str(data_path or "").strip()
+        if not dp_hf:
             raise ValueError(
                 "data_path must be a Hugging Face dataset id when training_data_source=hf_tabular"
             )
@@ -397,17 +496,44 @@ def run_training_loop(
                     batch_size * _HF_AUTO_SAMPLES_BATCH_MULT,
                 ),
             )
-        processed_data = load_hf_tabular_samples(
-            data_path,
-            hf_n,
-            split=hf_split,
-            config_name=hf_dataset_config,
-            text_fields=hf_text_fields,
-            context_fields=hf_context_fields,
-            token=hf_token,
-            wasi_slice_only=hf_wasi_slice_only,
-            max_scan_rows=hf_wasi_max_scan,
+        specs = _merge_hf_dataset_specs(
+            dp_hf,
+            hf_dataset_config,
+            hf_extra_specs,
         )
+        if not specs:
+            if _is_hf_multi_primary_placeholder(dp_hf):
+                raise ValueError(
+                    "data.path is qminiwasm/hf-multi (or qminiwasm/multi) but no Hub datasets were "
+                    "merged: add [huggingface].extra_specs in the training TOML, or set HF_EXTRA_SPECS "
+                    'to a JSON array, e.g. [{"path":"username/dataset"}].'
+                )
+            raise ValueError(
+                "data_path must be a Hugging Face dataset id when training_data_source=hf_tabular, "
+                "or use qminiwasm/hf-multi with at least one [huggingface].extra_specs entry "
+                "(extras-only multi-dataset mode)."
+            )
+        budgets = _split_int_budget(hf_n, len(specs))
+        merged: List[Dict[str, Any]] = []
+        for (ds_id, cfg_name), budget in zip(specs, budgets):
+            chunk = load_hf_tabular_samples(
+                ds_id,
+                budget,
+                split=hf_split,
+                config_name=cfg_name,
+                text_fields=hf_text_fields,
+                context_fields=hf_context_fields,
+                token=hf_token,
+                wasi_slice_only=hf_wasi_slice_only,
+                max_scan_rows=hf_wasi_max_scan,
+                streaming=hf_streaming,
+                max_scan_rows_general=hf_max_scan_rows,
+                max_buffered_rows=hf_max_buffered_rows,
+                text_truncate_bytes=hf_text_truncate_bytes,
+                deterministic_keep_every_n=hf_deterministic_keep_every_n,
+            )
+            merged.extend(chunk)
+        processed_data = merged
         frac = float(hf_mesh_blend_fraction)
         if frac > 0.0 and len(processed_data) > 0:
             n_extra = max(1, int(len(processed_data) * frac))

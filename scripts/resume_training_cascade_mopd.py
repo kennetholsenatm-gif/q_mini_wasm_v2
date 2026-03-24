@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-command resume: same as ``run_training_cascade_mopd.py --resume`` (load latest .pt, run engine).
 
-Uses ``artifacts/qminiwasm_latest_cascade_mopd.pt`` or ``CHECKPOINT_LATEST_PATH`` from ``.env``.
+Uses ``artifacts/models/cascade_mopd/latest.pt`` or ``CHECKPOINT_LATEST_PATH`` from ``.env``.
 Pass through extra args, e.g. ``python scripts/resume_training_cascade_mopd.py --dry-run``.
 """
 

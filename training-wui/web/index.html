@@ -144,22 +144,192 @@
       flex-direction: column;
       align-items: stretch;
     }
-    .main-columns {
-      display: grid;
-      grid-template-columns: minmax(320px, 430px) 1fr;
-      gap: var(--space-md);
-      align-items: start;
+    .training-canvas {
       max-width: 1240px;
       margin: 0 auto;
       padding: var(--space-lg) var(--space-lg) var(--space-md);
       width: 100%;
       box-sizing: border-box;
     }
-    .col {
+    .dashboard-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      background: var(--surface-interface-gray);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+    }
+    .dashboard-toolbar label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-sm);
+      margin: 0;
+      cursor: pointer;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .training-body {
       display: flex;
       flex-direction: column;
       gap: var(--space-md);
-      min-width: 0;
+    }
+    #trainingCanvas.floating .training-body {
+      display: contents;
+    }
+    .training-grid-wrap {
+      display: grid;
+      grid-template-columns: minmax(320px, 430px) 1fr;
+      gap: var(--space-md);
+      align-items: start;
+    }
+    .training-grid-wrap > [data-col="1"] {
+      grid-column: 1;
+    }
+    .training-grid-wrap > [data-col="2"] {
+      grid-column: 2;
+      grid-row: 1 / span 4;
+      align-self: start;
+    }
+    #trainingCanvas.floating {
+      position: relative;
+      min-height: 100vh;
+      padding-bottom: var(--space-xl);
+    }
+    #trainingCanvas.floating .training-grid-wrap {
+      display: contents;
+    }
+    #trainingCanvas.floating .dash-card {
+      position: absolute;
+      margin: 0;
+      z-index: 1;
+      min-width: 260px;
+      min-height: 120px;
+      max-width: calc(100vw - 24px);
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
+    }
+    #trainingCanvas.floating .dash-card.dash-active {
+      z-index: 20;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      outline: 1px solid var(--action-primary-blue);
+    }
+    #trainingCanvas.floating .dash-card h2 {
+      cursor: grab;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    #trainingCanvas.floating .dash-card h2:active {
+      cursor: grabbing;
+    }
+    #trainingCanvas .log-section {
+      border-radius: 4px;
+      border: 1px solid var(--surface-interface-gray);
+      margin: 0;
+      padding: var(--space-lg);
+      width: 100%;
+      box-sizing: border-box;
+      max-width: none;
+    }
+    #trainingCanvas.floating .log-section.dash-card {
+      min-height: 200px;
+    }
+    #trainingCanvas.floating .log-section .log-toolbar,
+    #trainingCanvas.floating .log-section .log-legend {
+      flex-shrink: 0;
+    }
+    #trainingCanvas.floating .log-section #log.log-terminal {
+      flex: 1;
+      min-height: 200px;
+      max-height: none;
+    }
+    .dash-resize-handle {
+      display: none;
+      position: absolute;
+      right: 2px;
+      bottom: 2px;
+      width: 18px;
+      height: 18px;
+      cursor: nwse-resize;
+      z-index: 2;
+      background: linear-gradient(
+        135deg,
+        transparent 50%,
+        var(--text-secondary) 50%,
+        var(--text-secondary) 55%,
+        transparent 55%,
+        transparent 65%,
+        var(--text-secondary) 65%,
+        var(--text-secondary) 70%,
+        transparent 70%
+      );
+      opacity: 0.65;
+      border-radius: 2px;
+    }
+    .dash-resize-handle:hover {
+      opacity: 1;
+    }
+    #infraCanvas.floating {
+      position: relative;
+      min-height: 80vh;
+      padding-bottom: var(--space-xl);
+    }
+    #infraCanvas.floating .infra-dash-wrap {
+      display: contents;
+    }
+    #trainingCanvas.floating .dash-resize-handle,
+    #infraCanvas.floating .dash-resize-handle {
+      display: block;
+    }
+    #infraCanvas.floating .dash-card {
+      position: absolute;
+      margin: 0;
+      z-index: 1;
+      min-width: 280px;
+      min-height: 160px;
+      max-width: calc(100vw - 24px);
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
+      background: var(--surface-command-gray);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      padding: var(--space-lg);
+    }
+    #infraCanvas.floating .dash-card.dash-active {
+      z-index: 20;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      outline: 1px solid var(--action-primary-blue);
+    }
+    #infraCanvas.floating .dash-card h2 {
+      cursor: grab;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    #infraCanvas.floating .dash-card h2:active {
+      cursor: grabbing;
+    }
+    .infra-dash-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .infra-dash-wrap > .dash-card {
+      border-bottom: 1px solid var(--surface-interface-gray);
+      border-radius: 0;
+      padding: var(--space-md) 0 var(--space-lg);
+    }
+    .infra-dash-wrap > .dash-card:first-child {
+      padding-top: 0;
+    }
+    .infra-dash-wrap > .dash-card:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
     }
     section {
       background: var(--surface-command-gray);
@@ -300,6 +470,27 @@
       font-size: var(--text-sm);
       color: var(--text-primary);
     }
+    .label-like {
+      display: block;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+    .hf-extra-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-xs);
+      max-height: 14rem;
+      overflow-y: auto;
+      padding: var(--space-sm);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      background: var(--bg-tactical-black);
+    }
+    @media (min-width: 640px) {
+      .hf-extra-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     .wizard-pane[hidden] { display: none; }
     .review-box {
       border: 1px solid var(--surface-interface-gray);
@@ -418,19 +609,7 @@
       outline: 2px solid var(--action-primary-blue);
       outline-offset: 2px;
     }
-    section.log-section {
-      border-radius: 0;
-      border-left: none;
-      border-right: none;
-      border-bottom: none;
-      margin: 0;
-      border-top: 1px solid var(--surface-interface-gray);
-      padding: var(--space-lg) var(--space-lg) var(--space-xl);
-      width: 100%;
-      box-sizing: border-box;
-      max-width: none;
-    }
-    section.log-section h2 {
+    #trainingCanvas .log-section h2 {
       margin-bottom: var(--space-sm);
     }
     .log-toolbar {
@@ -440,7 +619,7 @@
       align-items: center;
       margin-bottom: var(--space-md);
     }
-    pre#log {
+    div#log.log-terminal {
       margin: 0;
       padding: var(--space-md);
       background: var(--bg-tactical-black);
@@ -455,6 +634,48 @@
       overflow-y: auto;
       font-family: "IBM Plex Mono", "Courier New", monospace;
       color: var(--text-primary);
+    }
+    .log-legend {
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-sm);
+      line-height: 1.4;
+    }
+    .log-legend .lg {
+      font-weight: 600;
+      margin-right: var(--space-md);
+    }
+    .log-legend .lg-better {
+      color: var(--alert-success-green);
+    }
+    .log-legend .lg-same {
+      color: var(--alert-warning-orange);
+    }
+    .log-legend .lg-worse {
+      color: var(--alert-critical-red);
+    }
+    .log-legend .lg-info {
+      color: var(--action-primary-blue);
+    }
+    .log-terminal .log-num-better {
+      color: var(--alert-success-green);
+      font-weight: 600;
+    }
+    .log-terminal .log-num-worse {
+      color: var(--alert-critical-red);
+      font-weight: 600;
+    }
+    .log-terminal .log-num-same {
+      color: var(--alert-warning-orange);
+      font-weight: 500;
+    }
+    .log-terminal .log-num-new {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .log-terminal .log-num-info {
+      color: var(--action-primary-blue);
+      font-weight: 500;
     }
     .infra-badges {
       display: flex;
@@ -628,12 +849,16 @@
     .infra-section {
       padding: var(--space-md) 0 var(--space-lg);
       border-bottom: 1px solid var(--surface-interface-gray);
+      position: relative;
     }
     .infra-section:last-of-type {
       border-bottom: none;
     }
     .infra-section > h2 {
       margin-top: 0;
+    }
+    #infraCanvas.floating .infra-section {
+      overflow: auto;
     }
     textarea#tfvarsEditor {
       width: 100%;
@@ -665,8 +890,12 @@
       color: var(--text-primary);
     }
     @media (max-width: 980px) {
-      .main-columns {
+      .training-grid-wrap {
         grid-template-columns: 1fr;
+      }
+      .training-grid-wrap > [data-col="2"] {
+        grid-column: 1;
+        grid-row: auto;
       }
       .metrics {
         grid-template-columns: repeat(3, minmax(90px, 1fr));
@@ -683,6 +912,7 @@
       }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -691,6 +921,8 @@
       <div>
         <h1>QMiniWASM training dashboard</h1>
         <p class="sub">Runs <code>python -m engine --config …</code> from repo root with preflight checks and live logs.</p>
+        <p class="sub" id="serverBindBanner" style="cursor:pointer;text-decoration:underline dotted;" title="Click to copy bind address">Server bind: detecting...</p>
+        <p class="sub" id="serverBindCopyStatus"></p>
       </div>
       <div class="top-actions">
         <button type="button" class="ghost" id="btnRefresh">Refresh configs</button>
@@ -704,9 +936,18 @@
   </nav>
   <main id="main-content">
     <div id="panelTraining" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnTraining">
-    <div class="main-columns">
-    <div class="col">
-      <section>
+    <div id="trainingCanvas" class="training-canvas">
+      <div class="dashboard-toolbar">
+        <label for="floatLayoutToggle">
+          <input type="checkbox" id="floatLayoutToggle" />
+          Floating panels
+        </label>
+        <button type="button" class="ghost" id="btnResetLayout">Reset layout</button>
+        <span class="hint" style="margin:0">Drag any panel by its title (including <strong>Log</strong>); resize from the corner grip. Layout is saved in this browser.</span>
+      </div>
+      <div class="training-body">
+      <div class="training-grid-wrap">
+      <section class="dash-card" data-card-id="quick-metrics" data-col="1">
         <h2>Quick metrics</h2>
         <div class="metrics">
           <div class="metric">
@@ -722,8 +963,20 @@
             <div class="mv" id="mActive">none</div>
           </div>
         </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section>
+      <section class="dash-card" data-card-id="live-telemetry" data-col="1">
+        <h2>Live telemetry</h2>
+        <p id="telemetryWarning" class="status error" style="display:none;font-weight:700;">
+          WARNING: Hardware Accelerator Offline or WASM OOM - Falling back to degraded mode.
+        </p>
+        <div class="hint">Streaming over WebSocket from training stdout/stderr metrics and alerts.</div>
+        <div id="telemetryStatus" class="status">No run selected.</div>
+        <canvas id="chartReturn" height="120" class="stack-sm"></canvas>
+        <canvas id="chartMSE" height="120" class="stack-sm"></canvas>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="start-config" data-col="1">
         <h2>Start from existing config</h2>
         <label for="cfg">Config (configs/training/*.toml)</label>
         <select id="cfg"></select>
@@ -763,21 +1016,22 @@
           <button type="button" class="primary" id="btnStart">Start training</button>
         </div>
         <p class="status stack-md" id="msg" aria-live="polite"></p>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section>
+      <section class="dash-card" data-card-id="preflight" data-col="1">
         <h2>Preflight <span id="preflightBadge" class="badge">UNKNOWN</span></h2>
         <p class="hint hint-block">Uses the <strong>config file</strong> from the left dropdown for TOML-backed settings. <strong>Accelerator</strong> for device check follows the <strong>Build + Run</strong> form when set (overrides <code>[hardware].accelerator</code> in that file). Quantum env lines use the Build form fields.</p>
         <p class="status stack-md" id="preflightMsg" aria-live="polite"></p>
         <div class="kv" id="preflightKv"></div>
         <p class="hint hint-block-md"><strong>IBM pending jobs</strong> is that backend’s <em>queue length</em> (jobs waiting to run there). <strong>0</strong> is normal when nothing is queued—your training may use the simulator first, or you haven’t submitted IBM Runtime jobs yet.</p>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section>
+      <section class="dash-card" data-card-id="runs" data-col="1">
         <h2>Active / recent runs</h2>
         <ul class="runs" id="runs"></ul>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-    </div>
-    <div class="col">
-      <section>
+      <section class="dash-card" data-card-id="build-run" data-col="2">
         <h2>Build + run config</h2>
         <div class="wizard-head">
           <label class="wizard-label-inline">
@@ -796,7 +1050,7 @@
           <div class="wizard-pane" data-step="1">
             <label for="bName">Model name</label>
             <input id="bName" type="text" placeholder="qminiwasm-stem-coder-v1" />
-            <div class="hint">Used for model artifact filenames in <code>artifacts/</code>.</div>
+            <div class="hint">Checkpoints and agent files go under <code>artifacts/models/&lt;slug&gt;/</code> (final, best, latest <code>.pt</code>, plus <code>serve.toml</code> and <code>agent_bundle.json</code>).</div>
             <label class="checkline">
               <input id="bResumeLatest" type="checkbox" />
               Resume from this model's latest checkpoint if available
@@ -853,18 +1107,30 @@
             <label for="bDatasetPreset">HF dataset preset</label>
             <select id="bDatasetPreset">
               <option value="">(custom / keep current)</option>
+              <option value="qminiwasm/hf-multi|">Multi-dataset (extras only — set primary to placeholder)</option>
               <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
               <option value="code-search-net/code_search_net|java">CodeSearchNet (java)</option>
               <option value="code-search-net/code_search_net|javascript">CodeSearchNet (javascript)</option>
-              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
-              <option value="bigcode/the-stack-smol|python">The Stack Smol (python)</option>
+              <option value="code-search-net/code_search_net|ruby">CodeSearchNet (ruby)</option>
+              <option value="google-research-datasets/mbpp|full">MBPP (code problems)</option>
+              <option value="neulab/docprompting-conala|">CoNaLa (code + NL)</option>
+              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT (math)</option>
+              <option value="openai/gsm8k|">GSM8K (grade-school math)</option>
+              <option value="hendrycks/competition_math|">Competition Math (MATH)</option>
+              <option value="wikitext|wikitext-2-raw-v1">WikiText-2 raw (general text)</option>
+              <option value="imdb|">IMDb reviews (general sentiment)</option>
             </select>
             <div class="hint">Choose a preset to auto-fill dataset id and config.</div>
           </div>
+          <div id="hfExtraWrap" class="wizard-pane" data-step="2">
+            <span class="label-like">Additional HF datasets (optional; max 8 with a normal primary, or 9 in extras-only mode)</span>
+            <div id="hfExtraChecks" class="stack-sm hf-extra-grid" role="group" aria-label="Additional Hugging Face datasets"></div>
+            <div class="hint">Check extras to mix with the primary id above. Use preset <strong>Multi-dataset</strong> or type <code>qminiwasm/hf-multi</code> as primary to load <em>only</em> checked extras (up to 9). The HF row budget is split evenly; hybrid mesh blend applies after merge.</div>
+          </div>
           <div id="hfPathWrap" class="wizard-pane" data-step="2">
             <label for="bDataPath">HF dataset id (data.path)</label>
-            <input id="bDataPath" type="text" placeholder="code-search-net/code_search_net" />
-            <div class="hint">Required for <code>hf_tabular</code> and hybrid mode.</div>
+            <input id="bDataPath" type="text" placeholder="code-search-net/code_search_net or qminiwasm/hf-multi" />
+            <div class="hint">Required for <code>hf_tabular</code> and hybrid mode. Reserved <code>qminiwasm/hf-multi</code> skips a primary Hub load; select at least one extra below.</div>
           </div>
           <div class="wizard-pane" data-step="3">
             <label for="bEpochs">Epochs</label>
@@ -907,6 +1173,11 @@
               <label for="bBlend">HF mesh blend fraction</label>
               <input id="bBlend" type="text" value="0.20" />
             </div>
+            <div id="hfNumSamplesWrap">
+              <label for="bHfNumSamples">HF max rows (num_samples)</label>
+              <input id="bHfNumSamples" type="text" placeholder="auto (32k–300k)" />
+              <div class="hint">Cap on Hub rows loaded in total (split across merged datasets). Leave blank for automatic sizing. Set <strong>500000</strong> here, or use env <code>HF_NUM_SAMPLES=500000</code>, or add <code>num_samples = 500000</code> under <code>[huggingface]</code> in your TOML.</div>
+            </div>
           </div>
         </details>
         <div class="wizard-nav" id="bWizardNav" style="display:none">
@@ -929,14 +1200,78 @@
           <div class="kv" id="modelFacts"></div>
         </div>
         <p class="status stack-md" id="buildMsg" aria-live="polite"></p>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-    </div>
+      <section class="dash-card" data-card-id="schema-form" data-col="2">
+        <h2>Schema-driven custom run</h2>
+        <p class="hint">Fields are generated from `/api/schema` and saved to a generated custom TOML.</p>
+        <div class="row align-center">
+          <label for="schemaRunName" class="mb-0">Run name</label>
+          <input id="schemaRunName" type="text" placeholder="custom-run" style="max-width:320px" />
+          <label for="schemaBasicOnly" class="mb-0"><input id="schemaBasicOnly" type="checkbox" checked /> Basic fields only</label>
+          <button type="button" class="ghost" id="btnReloadSchema">Reload schema</button>
+        </div>
+        <div id="schemaFormHost" class="grid mt-md"></div>
+        <div class="row">
+          <button type="button" class="primary" id="btnStartCustomRun">Start Training (Custom Form)</button>
+          <span id="schemaRunMsg" class="status"></span>
+        </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="artifacts" data-col="2">
+        <h2>Artifacts</h2>
+        <div class="row">
+          <button type="button" class="ghost" id="btnRefreshArtifacts">Refresh artifacts</button>
+        </div>
+        <div id="artifactsMsg" class="status"></div>
+        <div style="overflow:auto;max-height:280px;">
+          <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+            <thead>
+              <tr>
+                <th style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">File</th>
+                <th style="text-align:right;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">Size</th>
+                <th style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">Modified</th>
+                <th style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">Download</th>
+              </tr>
+            </thead>
+            <tbody id="artifactsBody"></tbody>
+          </table>
+        </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      </div>
+      <section class="log-section dash-card" data-card-id="training-log">
+        <h2>Log <span id="logTitle"></span></h2>
+        <div class="log-toolbar">
+          <button type="button" class="danger" id="btnStop" disabled>Kill Run / Abort</button>
+          <button type="button" class="ghost" id="btnClearLog">Clear view</button>
+        </div>
+        <p class="log-legend" id="logLegend" aria-hidden="true">
+          <span class="lg lg-better">■ improved</span>
+          <span class="lg lg-same">■ flat</span>
+          <span class="lg lg-worse">■ worse</span>
+          <span class="lg lg-info">■ ref (epoch / lr)</span>
+          <span style="font-weight:400;color:var(--text-secondary)">— vs previous value for same metric in this run</span>
+        </p>
+        <div id="log" class="log-terminal" role="log" aria-live="off" aria-relevant="additions"></div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      </div>
     </div>
     </div>
 
     <div id="panelInfra" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnInfra" hidden>
-      <div class="infrastructure-tab">
-        <div class="infra-section">
+      <div id="infraCanvas" class="infrastructure-tab">
+        <div class="dashboard-toolbar">
+          <label for="floatInfraToggle">
+            <input type="checkbox" id="floatInfraToggle" />
+            Floating panels
+          </label>
+          <button type="button" class="ghost" id="btnResetInfraLayout">Reset layout</button>
+          <span class="hint" style="margin:0">Drag by section title; resize from the corner grip.</span>
+        </div>
+        <div class="infra-dash-wrap">
+        <div class="infra-section dash-card" data-card-id="infra-tfvars">
           <h2>terraform.tfvars</h2>
           <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. RunPod + OpenTofu use this file; <code>python -m engine</code> still runs on <strong>this</strong> host unless you SSH to the pod.</p>
           <label for="tfvarsEditor" class="sr-only">terraform.tfvars contents</label>
@@ -947,8 +1282,9 @@
             <button type="button" class="ghost" id="btnTfvarsExample">Insert example template</button>
           </div>
           <p class="status stack-md" id="tfvarsMsg" aria-live="polite"></p>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </div>
-        <div class="infra-section">
+        <div class="infra-section dash-card" data-card-id="infra-status">
           <h2>Status</h2>
           <p class="hint mb-sm"><code>RUNPOD_TOKEN</code> / OpenTofu binary / Terraform outputs after apply.</p>
           <div class="infra-badges" id="infraBadges" aria-label="Infrastructure status"></div>
@@ -964,8 +1300,9 @@
             <p class="hint hint-block-md">When <code>public_ip</code> appears above, use these on your machine (adjust user/path for your Runpod template).</p>
             <pre id="infraRemotePre" class="infra-remote-cmd" style="display:none"></pre>
           </details>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </div>
-        <div class="infra-section">
+        <div class="infra-section dash-card" data-card-id="infra-tofu">
           <h2>OpenTofu CLI</h2>
           <p class="hint mb-sm">Runs in <code>infra/runpod</code> with repo <code>.env</code> (token). Commands use <strong>terraform.tfvars</strong> from the editor above. Use <strong>Plan</strong> before <strong>Apply</strong>.</p>
           <div class="row stack-sm align-center">
@@ -976,25 +1313,371 @@
           </div>
           <p class="status stack-md" id="tofuCmdMsg" aria-live="polite"></p>
           <pre id="tofuCmdOutput" hidden></pre>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+        </div>
         </div>
       </div>
     </div>
-
-    <section class="log-section">
-      <h2>Log <span id="logTitle"></span></h2>
-      <div class="log-toolbar">
-        <button type="button" class="danger" id="btnStop" disabled>Stop run</button>
-        <button type="button" class="ghost" id="btnClearLog">Clear view</button>
-      </div>
-      <pre id="log"></pre>
-    </section>
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
     let pollTimer = null;
     let logOffset = 0;
     let activeRunId = null;
+    let infraFloatPendingSnap = false;
     let bWizardStep = 1;
+    let logPlainAccum = "";
+    const logTrendState = { last: Object.create(null) };
+    let telemetryWS = null;
+    let chartReturn = null;
+    let chartMSE = null;
+    let schemaFields = [];
+    let telemetryMetricCount = 0;
+    let telemetryIdleTimer = null;
+    const BASIC_SCHEMA_IDS = new Set([
+      "hardware.accelerator",
+      "training.epochs",
+      "training.batch_size",
+      "training.learning_rate",
+      "data.source",
+      "data.path",
+      "huggingface.dataset_config",
+      "huggingface.split",
+      "huggingface.num_samples",
+      "checkpoint.load_path",
+    ]);
+
+    const LOG_FLOAT_RE = "[-+]?(?:\\d+\\.?\\d*|\\d*\\.\\d+)(?:[eE][-+]?\\d+)?";
+    const LOG_METRIC_REGEX = new RegExp(
+      "\\b(accuracy|train(?:ing)?_loss|val(?:idation)?_loss|eval_loss|train_acc|val_acc|perplexity|precision|recall|learning_rate|learning\\s+rate|f1_score|\\bf1\\b|\\bauc\\b|\\bleu\\b|\\bmse\\b|\\brmse\\b|\\bmae\\b|\\bnll\\b|\\bppl\\b|\\bloss\\b|\\bacc\\b|\\blr\\b|\\bepoch\\b)\\s*[:=]?\\s*(" +
+        LOG_FLOAT_RE +
+        ")",
+      "gi"
+    );
+    const LOG_LOWER_BETTER = new Set([
+      "loss",
+      "train_loss",
+      "training_loss",
+      "val_loss",
+      "validation_loss",
+      "eval_loss",
+      "mse",
+      "rmse",
+      "mae",
+      "nll",
+      "perplexity",
+      "ppl",
+    ]);
+    const LOG_HIGHER_BETTER = new Set([
+      "accuracy",
+      "acc",
+      "train_acc",
+      "val_acc",
+      "f1",
+      "f1_score",
+      "precision",
+      "recall",
+      "bleu",
+      "auc",
+    ]);
+    const LOG_NO_TREND = new Set(["lr", "learning_rate", "epoch"]);
+    const LOG_EPS = 1e-9;
+
+    function resetLogTrendState() {
+      logTrendState.last = Object.create(null);
+    }
+
+    function canonicalLogMetricKey(raw) {
+      const k = raw.toLowerCase().replace(/\s+/g, "_");
+      if (k === "training_loss") return "train_loss";
+      if (k === "validation_loss") return "val_loss";
+      if (k === "learning_rate") return "lr";
+      return k;
+    }
+
+    function logMetricSpanClass(canonical, value) {
+      if (LOG_NO_TREND.has(canonical)) {
+        return { cls: "log-num-info", title: "Reference metric (no good/bad direction here)" };
+      }
+      const prev = logTrendState.last[canonical];
+      logTrendState.last[canonical] = value;
+      if (prev === undefined || prev === null || Number.isNaN(prev)) {
+        return { cls: "log-num-new", title: "First value for this metric in this run" };
+      }
+      const d = value - prev;
+      if (Math.abs(d) < LOG_EPS) {
+        return { cls: "log-num-same", title: "Unchanged vs previous log line for " + canonical };
+      }
+      if (LOG_LOWER_BETTER.has(canonical)) {
+        return d < 0
+          ? { cls: "log-num-better", title: "Improved: lower " + canonical + " than before" }
+          : { cls: "log-num-worse", title: "Worse: higher " + canonical + " than before" };
+      }
+      if (LOG_HIGHER_BETTER.has(canonical)) {
+        return d > 0
+          ? { cls: "log-num-better", title: "Improved: higher " + canonical + " than before" }
+          : { cls: "log-num-worse", title: "Worse: lower " + canonical + " than before" };
+      }
+      logTrendState.last[canonical] = prev;
+      return { cls: "log-num-new", title: "" };
+    }
+
+    function colorizeLogLine(line) {
+      if (!line) return "";
+      const matches = [];
+      let m;
+      LOG_METRIC_REGEX.lastIndex = 0;
+      while ((m = LOG_METRIC_REGEX.exec(line)) !== null) {
+        const rawKey = m[1];
+        const numStr = m[2];
+        const full = m[0];
+        const numStart = m.index + full.lastIndexOf(numStr);
+        const numEnd = numStart + numStr.length;
+        const value = parseFloat(numStr);
+        if (Number.isNaN(value)) continue;
+        const canonical = canonicalLogMetricKey(rawKey);
+        const { cls, title } = logMetricSpanClass(canonical, value);
+        matches.push({ start: numStart, end: numEnd, cls, title });
+      }
+      if (!matches.length) return escapeHtml(line);
+      matches.sort((a, b) => a.start - b.start);
+      const merged = [];
+      for (const x of matches) {
+        if (!merged.length || x.start >= merged[merged.length - 1].end) merged.push(x);
+      }
+      let out = "";
+      let i = 0;
+      for (const x of merged) {
+        out += escapeHtml(line.slice(i, x.start));
+        const frag = line.slice(x.start, x.end);
+        out +=
+          '<span class="' +
+          x.cls +
+          '"' +
+          (x.title ? ' title="' + escapeHtml(x.title) + '"' : "") +
+          ">" +
+          escapeHtml(frag) +
+          "</span>";
+        i = x.end;
+      }
+      out += escapeHtml(line.slice(i));
+      return out;
+    }
+
+    function renderTrainingLogFromPlain(plain) {
+      if (!plain) return "";
+      const lines = plain.split("\n");
+      resetLogTrendState();
+      return lines.map((ln) => colorizeLogLine(ln)).join("<br>\n");
+    }
+
+    function initTelemetryCharts() {
+      const ret = $("chartReturn");
+      const mse = $("chartMSE");
+      if (!ret || !mse || typeof Chart === "undefined") return;
+      chartReturn = new Chart(ret.getContext("2d"), {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "mean_return", data: [], borderColor: "#107c10", tension: 0.2 }] },
+        options: { animation: false, responsive: true, plugins: { legend: { labels: { color: "#fff" } } }, scales: { x: { ticks: { color: "#8c8c8c" } }, y: { ticks: { color: "#8c8c8c" } } } },
+      });
+      chartMSE = new Chart(mse.getContext("2d"), {
+        type: "line",
+        data: { labels: [], datasets: [{ label: "mean_mse", data: [], borderColor: "#0078d4", tension: 0.2 }] },
+        options: { animation: false, responsive: true, plugins: { legend: { labels: { color: "#fff" } } }, scales: { x: { ticks: { color: "#8c8c8c" } }, y: { ticks: { color: "#8c8c8c" } } } },
+      });
+    }
+
+    function resetTelemetryCharts() {
+      for (const c of [chartReturn, chartMSE]) {
+        if (!c) continue;
+        c.data.labels = [];
+        c.data.datasets[0].data = [];
+        c.update("none");
+      }
+      $("telemetryWarning").style.display = "none";
+      telemetryMetricCount = 0;
+      $("telemetryStatus").textContent = "Waiting for metrics...";
+      $("telemetryStatus").className = "status";
+    }
+
+    function pushTelemetryPoint(metric) {
+      telemetryMetricCount += 1;
+      $("telemetryStatus").textContent = `Receiving telemetry (${telemetryMetricCount} points)`;
+      $("telemetryStatus").className = "status done";
+      const label = String(metric.epoch ?? "");
+      if (chartReturn) {
+        chartReturn.data.labels.push(label);
+        chartReturn.data.datasets[0].data.push(Number(metric.mean_return || 0));
+        if (chartReturn.data.labels.length > 200) {
+          chartReturn.data.labels.shift();
+          chartReturn.data.datasets[0].data.shift();
+        }
+        chartReturn.update("none");
+      }
+      if (chartMSE) {
+        chartMSE.data.labels.push(label);
+        chartMSE.data.datasets[0].data.push(Number(metric.mean_mse || 0));
+        if (chartMSE.data.labels.length > 200) {
+          chartMSE.data.labels.shift();
+          chartMSE.data.datasets[0].data.shift();
+        }
+        chartMSE.update("none");
+      }
+    }
+
+    function connectRunTelemetryWS(runId) {
+      if (telemetryWS) {
+        telemetryWS.close();
+        telemetryWS = null;
+      }
+      if (!runId) return;
+      $("telemetryStatus").textContent = "Connecting telemetry WebSocket...";
+      $("telemetryStatus").className = "status";
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const url = `${proto}://${location.host}/api/runs/${encodeURIComponent(runId)}/ws`;
+      telemetryWS = new WebSocket(url);
+      telemetryWS.onmessage = (ev) => {
+        let msg = null;
+        try {
+          msg = JSON.parse(ev.data);
+        } catch (_) {
+          return;
+        }
+        if (!msg || msg.run_id !== runId) return;
+        if (msg.type === "metric") {
+          pushTelemetryPoint(msg);
+        } else if (msg.type === "alert" && msg.severity === "critical") {
+          $("telemetryWarning").style.display = "block";
+        }
+      };
+      telemetryWS.onopen = () => {
+        $("telemetryStatus").textContent = "Connected. Waiting for metric lines matching: epoch=... mean_loss=... mean_return=... mean_mse=...";
+        $("telemetryStatus").className = "status";
+        if (telemetryIdleTimer) clearTimeout(telemetryIdleTimer);
+        telemetryIdleTimer = setTimeout(() => {
+          if (telemetryMetricCount === 0 && telemetryWS) {
+            $("telemetryStatus").textContent = "No telemetry parsed yet. Check training logs for exact metric format.";
+            $("telemetryStatus").className = "status error";
+          }
+        }, 10000);
+      };
+      telemetryWS.onclose = () => {
+        telemetryWS = null;
+        if (telemetryMetricCount === 0) {
+          $("telemetryStatus").textContent = "Telemetry disconnected before first metric.";
+          $("telemetryStatus").className = "status error";
+        }
+      };
+    }
+
+    function guessInputType(f) {
+      if (f.type === "bool") return "checkbox";
+      if (f.type === "int" || f.type === "float") return "number";
+      return "text";
+    }
+
+    function buildSchemaFieldInput(field) {
+      const wrap = document.createElement("div");
+      const label = document.createElement("label");
+      label.textContent = `${field.section}.${field.key}`;
+      label.htmlFor = `sf_${field.id.replace(/[^\w]+/g, "_")}`;
+      wrap.appendChild(label);
+      let input;
+      if (Array.isArray(field.options) && field.options.length > 0) {
+        input = document.createElement("select");
+        const blank = document.createElement("option");
+        blank.value = "";
+        blank.textContent = "(unset)";
+        input.appendChild(blank);
+        for (const opt of field.options) {
+          const o = document.createElement("option");
+          o.value = opt;
+          o.textContent = opt;
+          input.appendChild(o);
+        }
+      } else {
+        input = document.createElement("input");
+        input.type = guessInputType(field);
+        if (field.type === "float") input.step = "any";
+      }
+      input.id = label.htmlFor;
+      input.dataset.schemaId = field.id;
+      if (field.type === "bool") {
+        input.checked = String(field.default).trim().toLowerCase() === "true";
+      } else if (field.default) {
+        input.value = String(field.default).replace(/^"(.*)"$/, "$1");
+      }
+      wrap.appendChild(input);
+      return wrap;
+    }
+
+    function renderSchemaForm() {
+      const host = $("schemaFormHost");
+      host.innerHTML = "";
+      const basicOnly = $("schemaBasicOnly") && $("schemaBasicOnly").checked;
+      for (const field of schemaFields) {
+        if (basicOnly && !BASIC_SCHEMA_IDS.has(field.id)) continue;
+        host.appendChild(buildSchemaFieldInput(field));
+      }
+      if (!host.children.length) {
+        host.innerHTML = '<div class="hint">No fields available for the selected view.</div>';
+      }
+    }
+
+    function collectSchemaValues() {
+      const values = {};
+      const nodes = document.querySelectorAll("#schemaFormHost [data-schema-id]");
+      for (const n of nodes) {
+        const id = n.dataset.schemaId;
+        const fd = schemaFields.find((x) => x.id === id);
+        if (!fd) continue;
+        if (fd.type === "bool") {
+          values[id] = !!n.checked;
+          continue;
+        }
+        const raw = String(n.value || "").trim();
+        if (!raw) continue;
+        values[id] = raw;
+      }
+      return values;
+    }
+
+    async function loadSchemaForm() {
+      const r = await fetch("/api/schema");
+      const data = await r.json();
+      schemaFields = Array.isArray(data.fields) ? data.fields : [];
+      renderSchemaForm();
+    }
+
+    function fmtBytes(n) {
+      const x = Number(n || 0);
+      if (x < 1024) return `${x} B`;
+      if (x < 1024 * 1024) return `${(x / 1024).toFixed(1)} KB`;
+      if (x < 1024 * 1024 * 1024) return `${(x / (1024 * 1024)).toFixed(1)} MB`;
+      return `${(x / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+
+    async function loadArtifacts() {
+      const msg = $("artifactsMsg");
+      const body = $("artifactsBody");
+      msg.textContent = "Loading artifacts...";
+      msg.className = "status";
+      const r = await fetch("/api/artifacts");
+      const data = await r.json();
+      body.innerHTML = "";
+      const rows = Array.isArray(data.artifacts) ? data.artifacts : [];
+      for (const a of rows) {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><code>${escapeHtml(a.path || a.name || "")}</code></td>` +
+          `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray);text-align:right">${fmtBytes(a.size_bytes)}</td>` +
+          `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)">${escapeHtml(a.modified || "")}</td>` +
+          `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><a href="/api/artifacts/download?path=${encodeURIComponent(a.path)}">Download</a></td>`;
+        body.appendChild(tr);
+      }
+      msg.textContent = `${rows.length} checkpoint artifact(s) found`;
+      msg.className = "status done";
+    }
 
     async function loadConfigs() {
       const r = await fetch("/api/configs");
@@ -1014,6 +1697,20 @@
         sel.appendChild(o);
       }
       $("mConfigs").textContent = String(sel.options.length || 0);
+    }
+
+    async function loadServerMeta() {
+      try {
+        const r = await fetch("/api/meta");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const addr = data.server_addr || "(unknown)";
+        $("serverBindBanner").textContent = `Server bind: ${addr}`;
+        $("serverBindBanner").dataset.addr = addr;
+      } catch (_) {
+        $("serverBindBanner").textContent = "Server bind: unavailable";
+        $("serverBindBanner").dataset.addr = "";
+      }
     }
 
     async function loadRuns() {
@@ -1057,6 +1754,362 @@
       }
     }
 
+    function getHfExtraSpecs() {
+      const primary = $("bDataPath").value.trim();
+      const primaryCfg = ($("bDatasetConfig").value || "").trim();
+      const boxes = document.querySelectorAll('input[name="hfExtra"]:checked');
+      const out = [];
+      for (const cb of boxes) {
+        const parts = String(cb.value || "").split("|");
+        const ds = (parts[0] || "").trim();
+        const cfg = (parts[1] || "").trim();
+        if (!ds) continue;
+        if (ds === primary && cfg === primaryCfg) continue;
+        const row = { path: ds };
+        if (cfg) row.dataset_config = cfg;
+        out.push(row);
+        if (out.length >= 8) break;
+      }
+      return out;
+    }
+
+    function syncHfExtraLimit() {
+      const boxes = Array.from(document.querySelectorAll('input[name="hfExtra"]:checked'));
+      if (boxes.length <= 8) return;
+      boxes[boxes.length - 1].checked = false;
+    }
+
+    const LAYOUT_TRAIN = "qmw_training_layout_v1";
+    const LAYOUT_INFRA = "qmw_infra_layout_v1";
+
+    function parseLayout(json) {
+      try {
+        return JSON.parse(json);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function getDashCards(canvas) {
+      return Array.from(canvas.querySelectorAll("[data-card-id]"));
+    }
+
+    function clearCardStyles(card) {
+      card.style.left = "";
+      card.style.top = "";
+      card.style.width = "";
+      card.style.height = "";
+      card.style.zIndex = "";
+      card.classList.remove("dash-active");
+    }
+
+    function layoutMaxZ(canvas) {
+      let m = 0;
+      getDashCards(canvas).forEach((c) => {
+        const z = parseInt(c.style.zIndex, 10);
+        if (!Number.isNaN(z) && z > m) m = z;
+      });
+      return m + 1;
+    }
+
+    function bumpCanvasHeight(canvas) {
+      let maxB = 0;
+      getDashCards(canvas).forEach((el) => {
+        const top = parseFloat(el.style.top);
+        const t = Number.isFinite(top) ? top : 0;
+        const h = parseFloat(el.style.height);
+        const ht = Number.isFinite(h) ? h : el.offsetHeight;
+        maxB = Math.max(maxB, t + ht);
+      });
+      canvas.style.minHeight = Math.max(400, maxB + 48) + "px";
+    }
+
+    function snapMeasurementsFromGrid(canvas) {
+      const cr = canvas.getBoundingClientRect();
+      getDashCards(canvas).forEach((el) => {
+        const r = el.getBoundingClientRect();
+        el.style.left = Math.round(r.left - cr.left + canvas.scrollLeft) + "px";
+        el.style.top = Math.round(r.top - cr.top + canvas.scrollTop) + "px";
+        el.style.width = Math.round(r.width) + "px";
+        el.style.height = Math.round(r.height) + "px";
+        el.style.zIndex = "1";
+      });
+      canvas.classList.add("floating");
+      bumpCanvasHeight(canvas);
+    }
+
+    function applySavedLayout(canvas, data) {
+      if (!data || !data.cards) return false;
+      const cards = getDashCards(canvas);
+      for (let i = 0; i < cards.length; i++) {
+        const id = cards[i].dataset.cardId;
+        if (!data.cards[id]) return false;
+      }
+      cards.forEach((el) => {
+        const c = data.cards[el.dataset.cardId];
+        el.style.left = c.left;
+        el.style.top = c.top;
+        el.style.width = c.width;
+        el.style.height = c.height;
+        el.style.zIndex = c.z != null ? String(c.z) : "1";
+      });
+      canvas.classList.add("floating");
+      bumpCanvasHeight(canvas);
+      return true;
+    }
+
+    function saveLayout(canvas, key) {
+      if (!canvas.classList.contains("floating")) return;
+      const payload = { floating: true, cards: {} };
+      getDashCards(canvas).forEach((el) => {
+        const id = el.dataset.cardId;
+        payload.cards[id] = {
+          left: el.style.left,
+          top: el.style.top,
+          width: el.style.width,
+          height: el.style.height,
+          z: el.style.zIndex || "1",
+        };
+      });
+      try {
+        localStorage.setItem(key, JSON.stringify(payload));
+      } catch (_) {}
+    }
+
+    function bindDashboardInteractions(canvas, storageKey) {
+      let drag = null;
+      let resize = null;
+
+      function onMove(e) {
+        if (drag) {
+          const dx = e.clientX - drag.x0;
+          const dy = e.clientY - drag.y0;
+          let left = drag.left0 + dx;
+          let top = drag.top0 + dy;
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          left = Math.max(0, Math.min(left, vw - 48));
+          top = Math.max(0, Math.min(top, vh - 48));
+          drag.el.style.left = left + "px";
+          drag.el.style.top = top + "px";
+          bumpCanvasHeight(canvas);
+        }
+        if (resize) {
+          const dx = e.clientX - resize.x0;
+          const dy = e.clientY - resize.y0;
+          let nw = Math.max(260, resize.w0 + dx);
+          const minH = resize.el.dataset.cardId === "training-log" ? 200 : 120;
+          let nh = Math.max(minH, resize.h0 + dy);
+          const cr = canvas.getBoundingClientRect();
+          const maxW = Math.max(260, cr.width - 16);
+          nw = Math.min(nw, maxW);
+          resize.el.style.width = nw + "px";
+          resize.el.style.height = nh + "px";
+          bumpCanvasHeight(canvas);
+        }
+      }
+
+      function onUp() {
+        if (drag || resize) {
+          saveLayout(canvas, storageKey);
+        }
+        drag = null;
+        resize = null;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+
+      canvas.addEventListener("mousedown", (e) => {
+        if (!canvas.classList.contains("floating")) return;
+        const card = e.target.closest("[data-card-id]");
+        if (!card || !canvas.contains(card)) return;
+        if (e.button !== 0) return;
+        if (e.target.closest("button, a, input, select, textarea, label")) return;
+
+        const handle = e.target.closest(".dash-resize-handle");
+        if (handle && card.contains(handle)) {
+          e.preventDefault();
+          const w = parseFloat(card.style.width);
+          const h = parseFloat(card.style.height);
+          resize = {
+            el: card,
+            x0: e.clientX,
+            y0: e.clientY,
+            w0: Number.isFinite(w) ? w : card.offsetWidth,
+            h0: Number.isFinite(h) ? h : card.offsetHeight,
+          };
+          card.style.zIndex = String(layoutMaxZ(canvas));
+          getDashCards(canvas).forEach((c) => c.classList.remove("dash-active"));
+          card.classList.add("dash-active");
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+          return;
+        }
+
+        const h2 = e.target.closest("h2");
+        if (h2 && card.contains(h2)) {
+          e.preventDefault();
+          const left = parseFloat(card.style.left);
+          const top = parseFloat(card.style.top);
+          drag = {
+            el: card,
+            x0: e.clientX,
+            y0: e.clientY,
+            left0: Number.isFinite(left) ? left : 0,
+            top0: Number.isFinite(top) ? top : 0,
+          };
+          card.style.zIndex = String(layoutMaxZ(canvas));
+          getDashCards(canvas).forEach((c) => c.classList.remove("dash-active"));
+          card.classList.add("dash-active");
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        }
+      });
+    }
+
+    function setFloating(canvas, storageKey, on) {
+      if (on) {
+        const raw = localStorage.getItem(storageKey);
+        const saved = parseLayout(raw);
+        if (saved && saved.cards && applySavedLayout(canvas, saved)) {
+          /* restored */
+        } else {
+          snapMeasurementsFromGrid(canvas);
+          saveLayout(canvas, storageKey);
+        }
+      } else {
+        const payload = { floating: false, cards: {} };
+        if (canvas.classList.contains("floating")) {
+          getDashCards(canvas).forEach((el) => {
+            const id = el.dataset.cardId;
+            payload.cards[id] = {
+              left: el.style.left,
+              top: el.style.top,
+              width: el.style.width,
+              height: el.style.height,
+              z: el.style.zIndex || "1",
+            };
+          });
+        } else {
+          const prev = parseLayout(localStorage.getItem(storageKey));
+          if (prev && prev.cards) payload.cards = prev.cards;
+        }
+        canvas.classList.remove("floating");
+        getDashCards(canvas).forEach(clearCardStyles);
+        canvas.style.minHeight = "";
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(payload));
+        } catch (_) {}
+      }
+    }
+
+    function initDashboardLayouts() {
+      const trainCanvas = $("trainingCanvas");
+      const trainToggle = $("floatLayoutToggle");
+      const trainReset = $("btnResetLayout");
+      const infraCanvas = $("infraCanvas");
+      const infraToggle = $("floatInfraToggle");
+      const infraReset = $("btnResetInfraLayout");
+
+      if (trainCanvas && trainToggle) {
+        bindDashboardInteractions(trainCanvas, LAYOUT_TRAIN);
+        const raw = localStorage.getItem(LAYOUT_TRAIN);
+        const s = parseLayout(raw);
+        if (s && s.floating) {
+          trainToggle.checked = true;
+          requestAnimationFrame(() => setFloating(trainCanvas, LAYOUT_TRAIN, true));
+        }
+        trainToggle.addEventListener("change", () => {
+          setFloating(trainCanvas, LAYOUT_TRAIN, trainToggle.checked);
+        });
+        if (trainReset) {
+          trainReset.addEventListener("click", () => {
+            try {
+              localStorage.removeItem(LAYOUT_TRAIN);
+            } catch (_) {}
+            if (trainToggle.checked) {
+              trainCanvas.classList.remove("floating");
+              getDashCards(trainCanvas).forEach(clearCardStyles);
+              trainCanvas.style.minHeight = "";
+              requestAnimationFrame(() => {
+                snapMeasurementsFromGrid(trainCanvas);
+                saveLayout(trainCanvas, LAYOUT_TRAIN);
+              });
+            }
+          });
+        }
+      }
+
+      if (infraCanvas && infraToggle) {
+        bindDashboardInteractions(infraCanvas, LAYOUT_INFRA);
+        const raw2 = localStorage.getItem(LAYOUT_INFRA);
+        const s2 = parseLayout(raw2);
+        if (s2 && s2.floating) {
+          infraToggle.checked = true;
+          requestAnimationFrame(() => {
+            const saved2 = parseLayout(localStorage.getItem(LAYOUT_INFRA));
+            if (saved2 && saved2.cards && applySavedLayout(infraCanvas, saved2)) {
+              infraFloatPendingSnap = false;
+            } else {
+              infraFloatPendingSnap = true;
+            }
+          });
+        }
+        infraToggle.addEventListener("change", () => {
+          infraFloatPendingSnap = false;
+          setFloating(infraCanvas, LAYOUT_INFRA, infraToggle.checked);
+        });
+        if (infraReset) {
+          infraReset.addEventListener("click", () => {
+            infraFloatPendingSnap = false;
+            try {
+              localStorage.removeItem(LAYOUT_INFRA);
+            } catch (_) {}
+            if (infraToggle.checked) {
+              infraCanvas.classList.remove("floating");
+              getDashCards(infraCanvas).forEach(clearCardStyles);
+              infraCanvas.style.minHeight = "";
+              requestAnimationFrame(() => {
+                snapMeasurementsFromGrid(infraCanvas);
+                saveLayout(infraCanvas, LAYOUT_INFRA);
+              });
+            }
+          });
+        }
+      }
+    }
+
+    function initHfExtraCheckboxes() {
+      const wrap = $("hfExtraChecks");
+      const sel = $("bDatasetPreset");
+      if (!wrap || !sel) return;
+      wrap.innerHTML = "";
+      for (const opt of sel.querySelectorAll("option")) {
+        if (!opt.value) continue;
+        if (String(opt.value).startsWith("qminiwasm/hf-multi|")) continue;
+        const id =
+          "hfX_" +
+          String(opt.value)
+            .replace(/[^a-zA-Z0-9]+/g, "_")
+            .slice(0, 48);
+        const lab = document.createElement("label");
+        lab.className = "checkline";
+        const inp = document.createElement("input");
+        inp.type = "checkbox";
+        inp.name = "hfExtra";
+        inp.id = id;
+        inp.value = opt.value;
+        inp.addEventListener("change", () => {
+          syncHfExtraLimit();
+          refreshModelFacts();
+          refreshWizardReview();
+        });
+        lab.appendChild(inp);
+        lab.appendChild(document.createTextNode(" " + opt.textContent));
+        wrap.appendChild(lab);
+      }
+    }
+
     function buildPayload() {
       return {
         name: $("bName").value.trim(),
@@ -1069,6 +2122,13 @@
         hf_dataset_config: $("bDatasetConfig").value.trim(),
         hf_split: $("bSplit").value.trim() || "train",
         hf_mesh_blend_fraction: Number($("bBlend").value || "0"),
+        hf_num_samples: (() => {
+          const raw = $("bHfNumSamples") && String($("bHfNumSamples").value || "").trim();
+          if (!raw) return 0;
+          const n = parseInt(raw, 10);
+          return Number.isFinite(n) && n > 0 ? n : 0;
+        })(),
+        hf_extra_specs: getHfExtraSpecs(),
         epochs: Number($("bEpochs").value || "25"),
         batch_size: Number($("bBatch").value || "32"),
         learning_rate: Number($("bLR").value || "0.0001"),
@@ -1100,11 +2160,22 @@
         ["Accelerator", p.accelerator],
         ["Data source", p.data_source],
         ["Learning rate", String(p.learning_rate)],
-        ["Output checkpoint", `artifacts/${slug}.pt`],
-        ["Best checkpoint", `artifacts/${slug}_best.pt`],
-        ["Latest checkpoint", `artifacts/${slug}_latest.pt`],
+        ["Output checkpoint", `artifacts/models/${slug}/final.pt`],
+        ["Best checkpoint", `artifacts/models/${slug}/best.pt`],
+        ["Latest checkpoint", `artifacts/models/${slug}/latest.pt`],
+        ["Serve config (agents)", `artifacts/models/${slug}/serve.toml`],
+        ["Agent bundle (JSON)", `artifacts/models/${slug}/agent_bundle.json`],
         ["Resume latest", p.resume_latest ? "on" : "off"],
       ];
+      if (p.data_source === "hf_tabular" || p.data_source === "hybrid_mesh_hf_tabular") {
+        const lrIdx = lines.findIndex((row) => row[0] === "Learning rate");
+        if (lrIdx >= 0) {
+          lines.splice(lrIdx + 1, 0, [
+            "HF max rows",
+            p.hf_num_samples > 0 ? String(p.hf_num_samples) : "auto (floor 32k, cap 300k)",
+          ]);
+        }
+      }
       const box = $("modelFacts");
       box.innerHTML = "";
       for (const [k, v] of lines) {
@@ -1170,11 +2241,25 @@
           ["Dataset config", d.hf_dataset_config || "(none)"],
           ["Dataset split", d.hf_split || "(n/a)"],
           ["Mesh blend fraction", String(d.hf_mesh_blend_fraction ?? 0)],
+          [
+            "HF max rows",
+            d.hf_num_samples != null && d.hf_num_samples !== ""
+              ? String(d.hf_num_samples)
+              : "auto (≤300k cap)",
+          ],
+          [
+            "HF extra datasets",
+            Array.isArray(d.hf_extra_specs) && d.hf_extra_specs.length
+              ? String(d.hf_extra_specs.length) + " configured"
+              : "0",
+          ],
           ["HF token present", d.hf_token_present ? "yes" : "no"],
           ["__sep__", ""],
           ["Output checkpoint", a.save_path || "(none)"],
           ["Best checkpoint", a.best_path || "(none)"],
           ["Latest checkpoint", a.latest_path || "(none)"],
+          ["Serve config (inference)", a.serve_config || "(none)"],
+          ["Agent bundle", a.agent_bundle || "(none)"],
           ["Resume requested", resumeRequested ? "yes" : "no"],
           ["Resume available", resumeAvailable ? "yes" : "no"],
         ]);
@@ -1209,7 +2294,9 @@
         `<strong>Quantum backend</strong>: ${escapeHtml(p.quantum_backend || "auto")}<br/>` +
         `<strong>IBM backend override</strong>: ${escapeHtml(p.ibm_backend_name || "auto-select")}<br/>` +
         `<strong>Dataset</strong>: ${escapeHtml(p.data_path || "(n/a)")}<br/>` +
+        `<strong>HF extras</strong>: ${escapeHtml(String((p.hf_extra_specs && p.hf_extra_specs.length) || 0))} selected (max 8)<br/>` +
         `<strong>HF config/split</strong>: ${escapeHtml(p.hf_dataset_config || "(none)")} / ${escapeHtml(p.hf_split)}<br/>` +
+        `<strong>HF max rows</strong>: ${escapeHtml(p.hf_num_samples > 0 ? String(p.hf_num_samples) : "auto (≤300k)")}<br/>` +
         `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
         `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
         `<strong>Execution target</strong>: ${escapeHtml(p.run_target || "local")}${p.run_target === "runpod" ? " (destroy after: " + (p.runpod_destroy_on_exit ? "yes" : "no") + ")" : ""}<br/>` +
@@ -1246,7 +2333,7 @@
       const mode = $("bDataSource").value;
       const isHF = mode === "hf_tabular" || mode === "hybrid_mesh_hf_tabular";
       const isHybrid = mode === "hybrid_mesh_hf_tabular";
-      for (const id of ["hfPresetWrap", "hfPathWrap", "hfConfigWrap", "hfSplitWrap", "hfBlendWrap"]) {
+      for (const id of ["hfPresetWrap", "hfExtraWrap", "hfPathWrap", "hfConfigWrap", "hfSplitWrap", "hfBlendWrap"]) {
         $(id).style.display = isHF ? "block" : "none";
       }
       if (isHybrid && !$("bBlend").value.trim()) {
@@ -1487,7 +2574,11 @@
     function selectRun(id, configPath) {
       activeRunId = id;
       logOffset = 0;
-      $("log").textContent = "";
+      logPlainAccum = "";
+      resetLogTrendState();
+      resetTelemetryCharts();
+      connectRunTelemetryWS(id);
+      $("log").innerHTML = "";
       $("logTitle").textContent = id ? "· " + (configPath || id) : "";
       $("btnStop").disabled = !id;
       if (pollTimer) clearInterval(pollTimer);
@@ -1502,7 +2593,8 @@
         const r = await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/log?offset=" + logOffset);
         const data = await r.json();
         if (data.text) {
-          $("log").textContent += data.text;
+          logPlainAccum += data.text;
+          $("log").innerHTML = renderTrainingLogFromPlain(logPlainAccum);
           $("log").scrollTop = $("log").scrollHeight;
         }
         logOffset = data.next_offset || logOffset;
@@ -1553,6 +2645,54 @@
       pollLog();
     };
 
+    $("btnReloadSchema").onclick = async () => {
+      try {
+        await loadSchemaForm();
+      } catch (e) {
+        $("schemaRunMsg").textContent = String(e.message || e);
+        $("schemaRunMsg").className = "status error";
+      }
+    };
+
+    $("btnStartCustomRun").onclick = async () => {
+      const msg = $("schemaRunMsg");
+      msg.textContent = "Starting custom run...";
+      msg.className = "status";
+      $("btnStartCustomRun").disabled = true;
+      try {
+        const r = await fetch("/api/runs/custom", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: $("schemaRunName").value.trim(),
+            values: collectSchemaValues(),
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        msg.textContent = "Started " + data.id + " (" + data.config + ")";
+        msg.className = "status running";
+        await loadConfigs();
+        await loadRuns();
+        selectRun(data.id, data.config);
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      } finally {
+        $("btnStartCustomRun").disabled = false;
+      }
+    };
+    $("schemaBasicOnly").onchange = renderSchemaForm;
+
+    $("btnRefreshArtifacts").onclick = async () => {
+      try {
+        await loadArtifacts();
+      } catch (e) {
+        $("artifactsMsg").textContent = String(e.message || e);
+        $("artifactsMsg").className = "status error";
+      }
+    };
+
     const RUNPOD_TFVARS = "terraform.tfvars";
 
     function showAppTab(which) {
@@ -1570,6 +2710,17 @@
       if (!showTrain) {
         loadTfvarsEditor();
         loadRunpodStatus();
+        if (infraFloatPendingSnap) {
+          const ic = $("infraCanvas");
+          const it = $("floatInfraToggle");
+          infraFloatPendingSnap = false;
+          if (ic && it && it.checked) {
+            requestAnimationFrame(() => {
+              snapMeasurementsFromGrid(ic);
+              saveLayout(ic, LAYOUT_INFRA);
+            });
+          }
+        }
       }
     }
     $("tabBtnTraining").onclick = () => showAppTab("training");
@@ -1700,7 +2851,7 @@
     $("cfg").onchange = loadPreflight;
     $("bDataSource").onchange = toggleHFFields;
     $("bLRTrialMode").onchange = toggleLRTrial;
-    for (const id of ["bName", "bAccel", "bQuantumBackend", "bQuantumPolicy", "bIBMBackendName", "bDataPath", "bEpochs", "bBatch", "bLR", "bDatasetConfig", "bSplit", "bBlend", "bResumeLatest"]) {
+    for (const id of ["bName", "bAccel", "bQuantumBackend", "bQuantumPolicy", "bIBMBackendName", "bDataPath", "bEpochs", "bBatch", "bLR", "bDatasetConfig", "bSplit", "bBlend", "bHfNumSamples", "bResumeLatest"]) {
       $(id).addEventListener("input", refreshModelFacts);
       $(id).addEventListener("change", refreshModelFacts);
     }
@@ -1738,7 +2889,8 @@
     };
     $("btnBuildRun").onclick = async () => {
       const msg = $("buildMsg");
-      msg.textContent = "";
+      msg.textContent = "Starting run... this can take a bit on first invocation.";
+      msg.className = "status";
       const payload = buildPayload();
       $("btnBuildRun").disabled = true;
       try {
@@ -1749,7 +2901,12 @@
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
-        msg.textContent = "Built and started " + data.id + " (" + data.config + ")";
+        const ag = data.agent || {};
+        const agHint =
+          ag.agent_bundle != null && String(ag.agent_bundle).trim() !== ""
+            ? " — agent: " + String(ag.agent_bundle)
+            : "";
+        msg.textContent = "Built and started " + data.id + " (" + data.config + ")" + agHint;
         msg.className = "status running";
         await loadConfigs();
         await loadRuns();
@@ -1762,8 +2919,17 @@
         $("btnBuildRun").disabled = false;
       }
     };
-    $("btnClearLog").onclick = () => { $("log").textContent = ""; logOffset = 0; if (activeRunId) pollLog(); };
+    $("btnClearLog").onclick = () => {
+      logPlainAccum = "";
+      resetLogTrendState();
+      $("log").innerHTML = "";
+      logOffset = 0;
+      if (activeRunId) pollLog();
+    };
 
+    initDashboardLayouts();
+    initTelemetryCharts();
+    initHfExtraCheckboxes();
     toggleHFFields();
     toggleLRTrial();
     renderWizard();
@@ -1771,7 +2937,28 @@
     syncRunpodPanels();
     loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
     loadRuns();
+    loadServerMeta();
+    loadSchemaForm().catch(() => {});
+    loadArtifacts().catch(() => {});
     setInterval(loadRuns, 5000);
+
+    $("serverBindBanner").onclick = async () => {
+      const addr = $("serverBindBanner").dataset.addr || "";
+      const status = $("serverBindCopyStatus");
+      if (!addr) {
+        status.textContent = "Nothing to copy.";
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(addr);
+        status.textContent = `Copied: ${addr}`;
+      } catch (_) {
+        status.textContent = "Clipboard copy failed.";
+      }
+      setTimeout(() => {
+        status.textContent = "";
+      }, 1800);
+    };
   </script>
 </body>
 </html>

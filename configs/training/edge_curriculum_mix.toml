@@ -1,0 +1,22 @@
+[edge_curriculum]
+name = "edge_agent_mesh_curriculum"
+description = "Curated high-signal datasets for fast local iteration on integrated GPUs."
+
+[edge_curriculum.reasoning]
+datasets = [
+  { path = "teknium/OpenHermes-2.5" },
+  { path = "meta-math/MetaMathQA" },
+  { path = "Open-Orca/OpenOrca" },
+]
+
+[edge_curriculum.tool_use]
+datasets = [
+  { path = "ise-uiuc/Magicoder-Evol-Instruct-110K" },
+  { path = "HuggingFaceH4/toolbench" },
+  { path = "migtissera/Synthia-v1.3" },
+]
+
+[edge_curriculum.alignment]
+datasets = [
+  { path = "argilla/distilabel-capybara-dpo-7k" },
+]
