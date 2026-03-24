@@ -615,9 +615,9 @@
     .log-toolbar {
       display: flex;
       flex-wrap: wrap;
-      gap: var(--space-md);
+      gap: var(--space-sm);
       align-items: center;
-      margin-bottom: var(--space-md);
+      margin-bottom: var(--space-sm);
     }
     div#log.log-terminal {
       margin: 0;
@@ -638,7 +638,7 @@
     .log-legend {
       font-size: var(--text-xs);
       color: var(--text-secondary);
-      margin-bottom: var(--space-sm);
+      margin-bottom: var(--space-xs);
       line-height: 1.4;
     }
     .log-legend .lg {
@@ -846,6 +846,115 @@
       margin: 0 auto;
       padding: var(--space-xs) var(--space-lg) var(--space-lg);
     }
+    #panelMission .training-canvas {
+      max-width: 1360px;
+    }
+    #panelMission #missionGrid {
+      grid-template-columns: minmax(340px, 420px) 1fr;
+      gap: var(--space-lg);
+      align-items: start;
+    }
+    #panelMission h2 {
+      letter-spacing: 0.06em;
+    }
+    #panelMission .hint,
+    #panelMission .status {
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    #panelMission [data-card-id="quick-metrics"] {
+      grid-column: 1;
+    }
+    #panelMission [data-card-id="runs"] {
+      grid-column: 1;
+    }
+    #panelMission [data-card-id="live-telemetry"] {
+      grid-column: 2;
+      min-height: 520px;
+    }
+    #panelMission #missionLogHost [data-card-id="training-log"] {
+      min-height: 420px;
+    }
+    #panelMission #missionLogHost #log.log-terminal {
+      min-height: 300px;
+      max-height: min(58vh, 760px);
+    }
+    #panelMission #telemetryWarning {
+      display: none;
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      padding: 10px 12px;
+      border: 2px solid var(--alert-critical-red);
+      background: rgba(209, 52, 56, 0.24);
+      border-radius: 4px;
+      margin-bottom: var(--space-sm);
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    #panelMission .metrics {
+      gap: 10px;
+      margin-top: 10px;
+    }
+    #panelMission .metric {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border-color: #3a3a3a;
+    }
+    #panelMission .metric .mk {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: #a9a9a9;
+    }
+    #panelMission .metric .mv {
+      font-size: 15px;
+      font-weight: 700;
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      letter-spacing: 0.01em;
+    }
+    #panelMission #telemetryStatus {
+      font-family: "IBM Plex Mono", "Courier New", monospace;
+      font-size: 12px;
+      margin-top: 4px;
+      margin-bottom: 6px;
+    }
+    #panelMission #runs li {
+      padding: 6px 0;
+      gap: 8px;
+      align-items: center;
+    }
+    #panelMission #runs li code {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    #panelMission #runs .status {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    #panelMission #chartReturn,
+    #panelMission #chartMSE {
+      height: 220px !important;
+      max-height: 220px;
+    }
+    #panelMission [data-card-id="training-log"] .log-toolbar button {
+      min-height: 32px;
+      padding: 6px 10px;
+      font-size: var(--text-xs);
+    }
+    #panelMission [data-card-id="training-log"] .log-legend {
+      font-size: 11px;
+      line-height: 1.3;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    #panelMission [data-card-id="training-log"] .log-legend span:last-child {
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 400;
+    }
     .infra-section {
       padding: var(--space-md) 0 var(--space-lg);
       border-bottom: 1px solid var(--surface-interface-gray);
@@ -900,6 +1009,13 @@
       .metrics {
         grid-template-columns: repeat(3, minmax(90px, 1fr));
       }
+      #panelMission #missionGrid {
+        grid-template-columns: 1fr;
+      }
+      #panelMission [data-card-id="live-telemetry"] {
+        grid-column: 1;
+        min-height: 0;
+      }
     }
     @media (max-width: 768px) {
       button,
@@ -930,9 +1046,18 @@
       </div>
     </div>
   </header>
+  <div id="missionStickyBar" style="position:sticky;top:0;z-index:12;background:var(--surface-interface-gray);border-bottom:1px solid var(--surface-interface-gray);padding:8px 16px;display:flex;gap:12px;align-items:center;">
+    <button type="button" class="danger" id="btnAbortSticky" disabled>Emergency Abort</button>
+    <div class="hint" id="stickyEpochLabel" style="margin:0;">Epoch: -- / --</div>
+    <progress id="stickyEpochProgress" max="100" value="0" style="width:260px;"></progress>
+    <span id="stickyRunLabel" class="hint" style="margin:0;">No active run</span>
+  </div>
   <nav class="app-tabs" role="tablist" aria-label="Main views">
-    <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Training</button>
-    <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false">Infrastructure</button>
+    <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Launchpad</button>
+    <button type="button" class="app-tab" id="tabBtnMission" role="tab" aria-selected="false">Mission Control</button>
+    <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false">Node Health</button>
+    <button type="button" class="app-tab" id="tabBtnQuantum" role="tab" aria-selected="false">Quantum Topology</button>
+    <button type="button" class="app-tab" id="tabBtnRegistry" role="tab" aria-selected="false">Artifact Registry</button>
   </nav>
   <main id="main-content">
     <div id="panelTraining" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnTraining">
@@ -972,8 +1097,8 @@
         </p>
         <div class="hint">Streaming over WebSocket from training stdout/stderr metrics and alerts.</div>
         <div id="telemetryStatus" class="status">No run selected.</div>
-        <canvas id="chartReturn" height="120" class="stack-sm"></canvas>
-        <canvas id="chartMSE" height="120" class="stack-sm"></canvas>
+        <canvas id="chartReturn" height="220" class="stack-sm"></canvas>
+        <canvas id="chartMSE" height="220" class="stack-sm"></canvas>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
       <section class="dash-card" data-card-id="start-config" data-col="1">
@@ -1260,8 +1385,26 @@
     </div>
     </div>
 
+    <div id="panelMission" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnMission" hidden>
+      <div class="training-canvas">
+        <section>
+          <h2>Mission Control</h2>
+          <p class="hint">Active runtime telemetry, alerts, and logs are consolidated here while Launchpad is dedicated to setup/init.</p>
+        </section>
+        <div class="training-grid-wrap" id="missionGrid"></div>
+        <div id="missionLogHost" class="stack-md"></div>
+      </div>
+    </div>
+
     <div id="panelInfra" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnInfra" hidden>
       <div id="infraCanvas" class="infrastructure-tab">
+        <section class="infra-section">
+          <h2>Compute Utilization</h2>
+          <div class="kv" id="nodeHealthKv"></div>
+          <div class="row">
+            <button type="button" class="ghost" id="btnNodeHealthRefresh">Refresh Node Health</button>
+          </div>
+        </section>
         <div class="dashboard-toolbar">
           <label for="floatInfraToggle">
             <input type="checkbox" id="floatInfraToggle" />
@@ -1318,12 +1461,57 @@
         </div>
       </div>
     </div>
+
+    <div id="panelQuantum" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnQuantum" hidden>
+      <div class="training-canvas">
+        <section>
+          <h2>Quantum Topology</h2>
+          <div class="kv" id="quantumTopologyKv"></div>
+          <div class="row">
+            <button type="button" class="ghost" id="btnQuantumRefresh">Refresh Quantum Topology</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="panelRegistry" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnRegistry" hidden>
+      <div class="training-canvas">
+        <section>
+          <h2>Artifact Registry</h2>
+          <div class="row align-center">
+            <label for="hfRepo" class="mb-0">HF model repo</label>
+            <input id="hfRepo" type="text" placeholder="username/model-repo" style="max-width:280px;">
+            <label for="hfToken" class="mb-0">HF token</label>
+            <input id="hfToken" type="text" placeholder="hf_..." style="max-width:240px;">
+          </div>
+          <div class="row">
+            <button type="button" class="ghost" id="btnRegistryRefresh">Refresh local checkpoints</button>
+          </div>
+          <div id="registryMsg" class="status"></div>
+          <div style="overflow:auto;max-height:320px;">
+            <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+              <thead>
+                <tr>
+                  <th style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">File</th>
+                  <th style="text-align:right;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">Size</th>
+                  <th style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">Modified</th>
+                  <th style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);padding:6px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="registryBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
   </main>
+  <div id="toastHost" style="position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:25;"></div>
   <script>
     const $ = (id) => document.getElementById(id);
     let pollTimer = null;
     let logOffset = 0;
     let activeRunId = null;
+    let stickyLastEpoch = 0;
     let infraFloatPendingSnap = false;
     let bWizardStep = 1;
     let logPlainAccum = "";
@@ -1722,6 +1910,30 @@
       $("mRuns").textContent = String(runs.length);
       const active = runs.find((r) => r.running);
       $("mActive").textContent = active ? active.id.slice(0, 8) : "none";
+      if (!active) {
+        $("stickyEpochLabel").textContent = "Epoch: -- / --";
+        $("stickyEpochProgress").value = 0;
+        $("stickyRunLabel").textContent = "No active run";
+      } else {
+        $("stickyRunLabel").textContent = `Active run: ${active.id.slice(0,8)}`;
+        try {
+          const nh = await fetch("/api/node/health");
+          const nhd = await nh.json();
+          const ar = nhd.node_health && nhd.node_health.active_run ? nhd.node_health.active_run : null;
+          if (ar) {
+            const cur = Number(ar.epoch || 0);
+            const tot = Number(ar.total_epochs || 0);
+            $("stickyEpochLabel").textContent = `Epoch: ${cur || "--"} / ${tot || "--"}`;
+            if (tot > 0) {
+              $("stickyEpochProgress").value = Math.max(0, Math.min(100, (cur / tot) * 100));
+            }
+            if (cur > stickyLastEpoch && cur > 0) {
+              addToast(`Epoch ${cur} complete`);
+              stickyLastEpoch = cur;
+            }
+          }
+        } catch (_) {}
+      }
       for (const run of runs) {
         const li = document.createElement("li");
         const left = document.createElement("span");
@@ -2076,6 +2288,25 @@
             }
           });
         }
+      }
+    }
+
+    function splitLaunchpadMissionCards() {
+      const missionGrid = $("missionGrid");
+      const missionLogHost = $("missionLogHost");
+      if (!missionGrid || !missionLogHost) return;
+      const missionCardIds = ["quick-metrics", "live-telemetry", "runs"];
+      for (const id of missionCardIds) {
+        const card = document.querySelector(`[data-card-id="${id}"]`);
+        if (card) missionGrid.appendChild(card);
+      }
+      const logCard = document.querySelector('[data-card-id="training-log"]');
+      if (logCard) missionLogHost.appendChild(logCard);
+
+      // Registry has its own dedicated tab now; keep legacy launchpad artifact card hidden.
+      const legacyArtifactsCard = document.querySelector('[data-card-id="artifacts"]');
+      if (legacyArtifactsCard) {
+        legacyArtifactsCard.style.display = "none";
       }
     }
 
@@ -2581,6 +2812,8 @@
       $("log").innerHTML = "";
       $("logTitle").textContent = id ? "· " + (configPath || id) : "";
       $("btnStop").disabled = !id;
+      $("btnAbortSticky").disabled = !id;
+      $("stickyRunLabel").textContent = id ? `Active run: ${id.slice(0,8)}` : "No active run";
       if (pollTimer) clearInterval(pollTimer);
       if (!id) return;
       pollTimer = setInterval(pollLog, 800);
@@ -2599,6 +2832,7 @@
         }
         logOffset = data.next_offset || logOffset;
         $("btnStop").disabled = !data.running;
+        $("btnAbortSticky").disabled = !data.running;
         await loadRuns();
       } catch (e) {
         console.error(e);
@@ -2644,6 +2878,7 @@
       await loadRuns();
       pollLog();
     };
+    $("btnAbortSticky").onclick = () => $("btnStop").click();
 
     $("btnReloadSchema").onclick = async () => {
       try {
@@ -2695,21 +2930,38 @@
 
     const RUNPOD_TFVARS = "terraform.tfvars";
 
+    const ACTIVE_TAB_KEY = "qmw_active_tab_v1";
     function showAppTab(which) {
       const train = $("panelTraining");
+      const mission = $("panelMission");
       const infra = $("panelInfra");
+      const quantum = $("panelQuantum");
+      const registry = $("panelRegistry");
       const bTrain = $("tabBtnTraining");
+      const bMission = $("tabBtnMission");
       const bInfra = $("tabBtnInfra");
-      const showTrain = which === "training";
-      train.hidden = !showTrain;
-      infra.hidden = showTrain;
-      bTrain.classList.toggle("active", showTrain);
-      bInfra.classList.toggle("active", !showTrain);
-      bTrain.setAttribute("aria-selected", showTrain ? "true" : "false");
-      bInfra.setAttribute("aria-selected", showTrain ? "false" : "true");
-      if (!showTrain) {
+      const bQuantum = $("tabBtnQuantum");
+      const bRegistry = $("tabBtnRegistry");
+      train.hidden = which !== "training";
+      mission.hidden = which !== "mission";
+      infra.hidden = which !== "infra";
+      quantum.hidden = which !== "quantum";
+      registry.hidden = which !== "registry";
+      bTrain.classList.toggle("active", which === "training");
+      bMission.classList.toggle("active", which === "mission");
+      bInfra.classList.toggle("active", which === "infra");
+      bQuantum.classList.toggle("active", which === "quantum");
+      bRegistry.classList.toggle("active", which === "registry");
+      bTrain.setAttribute("aria-selected", which === "training" ? "true" : "false");
+      bMission.setAttribute("aria-selected", which === "mission" ? "true" : "false");
+      bInfra.setAttribute("aria-selected", which === "infra" ? "true" : "false");
+      bQuantum.setAttribute("aria-selected", which === "quantum" ? "true" : "false");
+      bRegistry.setAttribute("aria-selected", which === "registry" ? "true" : "false");
+      localStorage.setItem(ACTIVE_TAB_KEY, which);
+      if (which === "infra") {
         loadTfvarsEditor();
         loadRunpodStatus();
+        loadNodeHealth();
         if (infraFloatPendingSnap) {
           const ic = $("infraCanvas");
           const it = $("floatInfraToggle");
@@ -2722,9 +2974,100 @@
           }
         }
       }
+      if (which === "quantum") loadQuantumTopology();
+      if (which === "registry") loadRegistryArtifacts();
     }
     $("tabBtnTraining").onclick = () => showAppTab("training");
+    $("tabBtnMission").onclick = () => showAppTab("mission");
     $("tabBtnInfra").onclick = () => showAppTab("infra");
+    $("tabBtnQuantum").onclick = () => showAppTab("quantum");
+    $("tabBtnRegistry").onclick = () => showAppTab("registry");
+
+    function addToast(text, kind = "done") {
+      const host = $("toastHost");
+      const node = document.createElement("div");
+      node.className = "status " + (kind === "error" ? "error" : "done");
+      node.style.cssText = "background:var(--surface-interface-gray);border:1px solid var(--surface-interface-gray);padding:8px 12px;border-radius:6px;max-width:340px;";
+      node.textContent = text;
+      host.appendChild(node);
+      setTimeout(() => node.remove(), 3200);
+    }
+
+    async function loadNodeHealth() {
+      try {
+        const r = await fetch("/api/node/health");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const h = data.node_health || {};
+        const kv = $("nodeHealthKv");
+        kv.innerHTML = "";
+        const rows = [
+          ["Go process alloc (MB)", Number(h.go_process_alloc_mb || 0).toFixed(2)],
+          ["Go process sys (MB)", Number(h.go_process_sys_mb || 0).toFixed(2)],
+          ["Go goroutines", String(h.go_goroutines || 0)],
+          ["Active run", h.active_run && h.active_run.id ? h.active_run.id.slice(0,8) : "none"],
+          ["WASM mode", h.active_run && h.active_run.wasm_mock ? "mock fallback" : "native/unknown"],
+        ];
+        for (const [k, v] of rows) {
+          const dk = document.createElement("div"); dk.className = "k"; dk.textContent = k;
+          const dv = document.createElement("div"); dv.className = "v"; dv.textContent = v;
+          kv.appendChild(dk); kv.appendChild(dv);
+        }
+      } catch (e) {
+        $("nodeHealthKv").innerHTML = `<div class="k">Error</div><div class="v">${escapeHtml(String(e.message || e))}</div>`;
+      }
+    }
+
+    async function loadQuantumTopology() {
+      try {
+        const r = await fetch("/api/quantum/topology");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const q = data.quantum_topology || {};
+        const kv = $("quantumTopologyKv");
+        kv.innerHTML = "";
+        const rows = [
+          ["Active run", q.run_id ? String(q.run_id).slice(0,8) : "none"],
+          ["Ternary pruning", q.pruned_from_nodes && q.pruned_to_nodes ? `${q.pruned_from_nodes} -> ${q.pruned_to_nodes}` : "not emitted yet"],
+          ["QAOA sim load (ms)", q.qaoa_sim_ms || 0],
+          ["Estimated QPU load (ms)", q.qpu_est_ms || 0],
+          ["Routing matrix", q.routing_matrix_hint || "not available"],
+        ];
+        for (const [k, v] of rows) {
+          const dk = document.createElement("div"); dk.className = "k"; dk.textContent = k;
+          const dv = document.createElement("div"); dv.className = "v"; dv.textContent = String(v);
+          kv.appendChild(dk); kv.appendChild(dv);
+        }
+      } catch (e) {
+        $("quantumTopologyKv").innerHTML = `<div class="k">Error</div><div class="v">${escapeHtml(String(e.message || e))}</div>`;
+      }
+    }
+
+    async function loadRegistryArtifacts() {
+      const msg = $("registryMsg");
+      const body = $("registryBody");
+      msg.textContent = "Loading local checkpoints...";
+      body.innerHTML = "";
+      try {
+        const r = await fetch("/api/artifacts");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const rows = data.artifacts || [];
+        for (const a of rows) {
+          const tr = document.createElement("tr");
+          tr.innerHTML =
+            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><code>${escapeHtml(a.path || a.name || "")}</code></td>` +
+            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray);text-align:right">${fmtBytes(a.size_bytes)}</td>` +
+            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)">${escapeHtml(a.modified || "")}</td>` +
+            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><button type="button" class="ghost" data-push="${encodeURIComponent(a.path)}">Push to HF</button> <a href="/api/artifacts/download?path=${encodeURIComponent(a.path)}">Download</a></td>`;
+          body.appendChild(tr);
+        }
+        msg.textContent = `${rows.length} checkpoint artifact(s)`;
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
 
     async function loadTfvarsEditor() {
       const msg = $("tfvarsMsg");
@@ -2838,6 +3181,9 @@
     };
 
     $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); loadRunpodStatus(); };
+    $("btnNodeHealthRefresh").onclick = loadNodeHealth;
+    $("btnQuantumRefresh").onclick = loadQuantumTopology;
+    $("btnRegistryRefresh").onclick = loadRegistryArtifacts;
     $("btnInfraRefresh").onclick = loadRunpodStatus;
     $("btnCopyPodIP").onclick = () => {
       if (lastInfraPodIp) copyToClipboard(lastInfraPodIp, "Pod IP copied.");
@@ -2927,6 +3273,7 @@
       if (activeRunId) pollLog();
     };
 
+    splitLaunchpadMissionCards();
     initDashboardLayouts();
     initTelemetryCharts();
     initHfExtraCheckboxes();
@@ -2940,7 +3287,36 @@
     loadServerMeta();
     loadSchemaForm().catch(() => {});
     loadArtifacts().catch(() => {});
+    const savedTab = localStorage.getItem(ACTIVE_TAB_KEY);
+    if (savedTab) showAppTab(savedTab);
     setInterval(loadRuns, 5000);
+
+    $("registryBody").addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("button[data-push]");
+      if (!btn) return;
+      const path = decodeURIComponent(btn.getAttribute("data-push"));
+      const repo = $("hfRepo").value.trim();
+      const token = $("hfToken").value.trim();
+      if (!repo) {
+        addToast("Set HF model repo before push.", "error");
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const r = await fetch("/api/artifacts/push_hf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path, repo, token }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        addToast(`Pushed ${path} to ${repo}`);
+      } catch (e) {
+        addToast(String(e.message || e), "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     $("serverBindBanner").onclick = async () => {
       const addr = $("serverBindBanner").dataset.addr || "";

@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,9 +43,12 @@ var (
 )
 
 var (
-	metricLineRe = regexp.MustCompile(`epoch=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_loss=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_return=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_mse=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
-	alertXPU     = "ACCELERATOR=xpu but PyTorch XPU is not available"
-	alertWASM    = "switching to mock WASM mode"
+	metricLineRe    = regexp.MustCompile(`epoch=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_loss=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_return=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_mse=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
+	epochProgressRe = regexp.MustCompile(`(?i)\bepoch\s+(\d+)\s*/\s*(\d+)\b`)
+	pruneStatsRe    = regexp.MustCompile(`(?i)\b(?:base graph|graph)\s*:\s*(\d+)\s*nodes?\s*->\s*pruned\s*to\s*(\d+)\s*nodes?\b`)
+	qaoaLoadRe      = regexp.MustCompile(`(?i)\bqaoa_sim_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+qpu_est_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
+	alertXPU        = "ACCELERATOR=xpu but PyTorch XPU is not available"
+	alertWASM       = "switching to mock WASM mode"
 )
 
 // artifactModelDir returns repo-relative path artifacts/models/<stem>/ (forward slashes).
@@ -233,6 +237,9 @@ func main() {
 	mux.HandleFunc("/api/meta", handleMeta)
 	mux.HandleFunc("/api/artifacts", handleArtifactsList)
 	mux.HandleFunc("/api/artifacts/download", handleArtifactDownload)
+	mux.HandleFunc("/api/artifacts/push_hf", handleArtifactsPushHF)
+	mux.HandleFunc("/api/node/health", handleNodeHealth)
+	mux.HandleFunc("/api/quantum/topology", handleQuantumTopology)
 	mux.HandleFunc("/api/runpod/status", handleRunpodStatus)
 	mux.HandleFunc("/api/runpod/tofu", handleRunpodTofu)
 	mux.HandleFunc("/api/runpod/tfvars", handleRunpodTfvars)
@@ -782,6 +789,135 @@ func handleArtifactDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, abs)
+}
+
+func handleArtifactsPushHF(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Path  string `json:"path"`
+		Repo  string `json:"repo"`
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	rel := strings.TrimSpace(body.Path)
+	repo := strings.TrimSpace(body.Repo)
+	if rel == "" || repo == "" {
+		jsonErr(w, http.StatusBadRequest, "path and repo are required")
+		return
+	}
+	abs := PathJoinRepo(repoRoot, rel)
+	base := filepath.Join(repoRoot, "artifacts")
+	relBase, err := filepath.Rel(base, abs)
+	if err != nil || strings.HasPrefix(relBase, "..") {
+		jsonErr(w, http.StatusBadRequest, "invalid artifact path")
+		return
+	}
+	if st, err := os.Stat(abs); err != nil || st.IsDir() {
+		jsonErr(w, http.StatusNotFound, "artifact not found")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	script := `
+import os
+from huggingface_hub import HfApi
+path = os.environ["QMW_HF_PATH"]
+repo = os.environ["QMW_HF_REPO"]
+token = os.environ.get("QMW_HF_TOKEN", "") or None
+api = HfApi(token=token)
+api.upload_file(
+    path_or_fileobj=path,
+    path_in_repo=os.path.basename(path),
+    repo_id=repo,
+    repo_type="model",
+)
+print("ok")
+`
+	cmd := exec.CommandContext(ctx, pythonExe, "-c", script)
+	cmd.Dir = repoRoot
+	cmd.Env = append(
+		os.Environ(),
+		"QMW_HF_PATH="+abs,
+		"QMW_HF_REPO="+repo,
+		"QMW_HF_TOKEN="+strings.TrimSpace(body.Token),
+	)
+	var outb, errb bytes.Buffer
+	cmd.Stdout = &outb
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errb.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		jsonErr(w, http.StatusBadRequest, "hf push failed: "+msg)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"path":    rel,
+		"repo":    repo,
+		"message": strings.TrimSpace(outb.String()),
+	})
+}
+
+func handleNodeHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	active := runManager.activeRunSummary()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"node_health": map[string]any{
+			"go_process_alloc_mb": float64(ms.Alloc) / (1024 * 1024),
+			"go_process_sys_mb":   float64(ms.Sys) / (1024 * 1024),
+			"go_goroutines":       runtime.NumGoroutine(),
+			"active_run":          active,
+		},
+	})
+}
+
+func handleQuantumTopology(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	active := runManager.activeRunSummary()
+	qt := map[string]any{
+		"run_id":              "",
+		"pruned_from_nodes":   0,
+		"pruned_to_nodes":     0,
+		"qaoa_sim_ms":         0.0,
+		"qpu_est_ms":          0.0,
+		"has_live_topology":   false,
+		"routing_matrix_hint": "No live routing matrix emitted yet.",
+	}
+	if active != nil {
+		qt["run_id"] = active["id"]
+		qt["pruned_from_nodes"] = active["pruned_from_nodes"]
+		qt["pruned_to_nodes"] = active["pruned_to_nodes"]
+		qt["qaoa_sim_ms"] = active["qaoa_sim_ms"]
+		qt["qpu_est_ms"] = active["qpu_est_ms"]
+		hasLive := false
+		if v, ok := active["pruned_to_nodes"].(int); ok && v > 0 {
+			hasLive = true
+		}
+		qt["has_live_topology"] = hasLive
+		if hasLive {
+			qt["routing_matrix_hint"] = "Live QUBO matrix visualization can be enabled from emitted telemetry payloads."
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"quantum_topology": qt})
 }
 
 func missingLoadCheckpointFromConfig(configAbs string) (string, error) {
@@ -1928,6 +2064,17 @@ type runRecord struct {
 	logBuf              bytes.Buffer
 	stdoutLineBuf       strings.Builder
 	stderrLineBuf       strings.Builder
+	LastEpoch           int
+	TotalEpochs         int
+	LastMeanLoss        float64
+	LastMeanReturn      float64
+	LastMeanMSE         float64
+	XPUFallbackSeen     bool
+	WasmMockSeen        bool
+	PrunedFromNodes     int
+	PrunedToNodes       int
+	QAOASimMS           float64
+	QPUEstMS            float64
 	maxRuns             int // ring of finished ids for list
 }
 
@@ -2061,13 +2208,6 @@ func (m *manager) appendLog(id string, p []byte, stream string) {
 	m.mu.Lock()
 	rec := m.byID[id]
 	m.mu.Unlock()
-	wsHub.broadcast(id, map[string]any{
-		"type":      "lifecycle",
-		"run_id":    id,
-		"state":     "finished",
-		"ts":        time.Now().UTC().Format(time.RFC3339),
-		"exit_code": m.exitCode(id),
-	})
 	if rec == nil {
 		return
 	}
@@ -2119,10 +2259,53 @@ func (m *manager) handleLogLine(id, line, stream string) {
 				"mean_mse":    meanMSE,
 				"line":        line,
 			})
+			m.mu.Lock()
+			if rec := m.byID[id]; rec != nil {
+				rec.LastEpoch = int(epoch)
+				rec.LastMeanLoss = meanLoss
+				rec.LastMeanReturn = meanReturn
+				rec.LastMeanMSE = meanMSE
+			}
+			m.mu.Unlock()
+		}
+		if pm := epochProgressRe.FindStringSubmatch(line); len(pm) == 3 {
+			cur, _ := strconv.Atoi(pm[1])
+			tot, _ := strconv.Atoi(pm[2])
+			m.mu.Lock()
+			if rec := m.byID[id]; rec != nil {
+				rec.LastEpoch = cur
+				rec.TotalEpochs = tot
+			}
+			m.mu.Unlock()
+		}
+		if qm := pruneStatsRe.FindStringSubmatch(line); len(qm) == 3 {
+			base, _ := strconv.Atoi(qm[1])
+			pruned, _ := strconv.Atoi(qm[2])
+			m.mu.Lock()
+			if rec := m.byID[id]; rec != nil {
+				rec.PrunedFromNodes = base
+				rec.PrunedToNodes = pruned
+			}
+			m.mu.Unlock()
+		}
+		if lm := qaoaLoadRe.FindStringSubmatch(line); len(lm) == 3 {
+			sim, _ := strconv.ParseFloat(lm[1], 64)
+			qpu, _ := strconv.ParseFloat(lm[2], 64)
+			m.mu.Lock()
+			if rec := m.byID[id]; rec != nil {
+				rec.QAOASimMS = sim
+				rec.QPUEstMS = qpu
+			}
+			m.mu.Unlock()
 		}
 		return
 	}
 	if strings.Contains(line, alertXPU) {
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.XPUFallbackSeen = true
+		}
+		m.mu.Unlock()
 		wsHub.broadcast(id, map[string]any{
 			"type":     "alert",
 			"run_id":   id,
@@ -2133,6 +2316,11 @@ func (m *manager) handleLogLine(id, line, stream string) {
 		})
 	}
 	if strings.Contains(strings.ToLower(line), strings.ToLower(alertWASM)) {
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.WasmMockSeen = true
+		}
+		m.mu.Unlock()
 		wsHub.broadcast(id, map[string]any{
 			"type":     "alert",
 			"run_id":   id,
@@ -2156,6 +2344,13 @@ func (m *manager) wait(id string) {
 	destroyPod := rec.RunpodDestroyOnExit
 	runpodVF := rec.RunpodVarFile
 	m.mu.Unlock()
+	wsHub.broadcast(id, map[string]any{
+		"type":      "lifecycle",
+		"run_id":    id,
+		"state":     "finished",
+		"ts":        time.Now().UTC().Format(time.RFC3339),
+		"exit_code": m.exitCode(id),
+	})
 	if cmd == nil {
 		return
 	}
@@ -2238,6 +2433,33 @@ func (m *manager) list() []map[string]any {
 		})
 	}
 	return out
+}
+
+func (m *manager) activeRunSummary() map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, id := range m.ordered {
+		r := m.byID[id]
+		if r == nil || !r.Running {
+			continue
+		}
+		return map[string]any{
+			"id":                r.ID,
+			"config":            r.ConfigRel,
+			"epoch":             r.LastEpoch,
+			"total_epochs":      r.TotalEpochs,
+			"mean_loss":         r.LastMeanLoss,
+			"mean_return":       r.LastMeanReturn,
+			"mean_mse":          r.LastMeanMSE,
+			"xpu_fallback":      r.XPUFallbackSeen,
+			"wasm_mock":         r.WasmMockSeen,
+			"pruned_from_nodes": r.PrunedFromNodes,
+			"pruned_to_nodes":   r.PrunedToNodes,
+			"qaoa_sim_ms":       r.QAOASimMS,
+			"qpu_est_ms":        r.QPUEstMS,
+		}
+	}
+	return nil
 }
 
 func (m *manager) stop(id string) error {
