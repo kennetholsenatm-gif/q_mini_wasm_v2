@@ -1349,7 +1349,42 @@
       </section>
       <section class="dash-card" data-card-id="schema-form" data-col="2">
         <h2>Schema-driven custom run</h2>
-        <p class="hint">Fields are generated from `/api/schema` and saved to a generated custom TOML.</p>
+        <p class="hint">Guided Auto mode: schema fields are generated from `/api/schema` and tuned defaults are applied before start.</p>
+        <div class="grid mt-md">
+          <div>
+            <label for="schemaDataScheme">Data scheme</label>
+            <select id="schemaDataScheme">
+              <option value="mesh">mesh (synthetic/algorithmic)</option>
+              <option value="hf_tabular">hf_tabular (Hugging Face dataset)</option>
+              <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
+            </select>
+          </div>
+          <div>
+            <label for="schemaDatasetPreset">Dataset preset</label>
+            <select id="schemaDatasetPreset">
+              <option value="">(custom / keep manual values)</option>
+              <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
+              <option value="google-research-datasets/mbpp|full">MBPP</option>
+              <option value="openai/gsm8k|">GSM8K</option>
+              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
+              <option value="qminiwasm/hf-multi|">Multi-dataset placeholder (extras-only)</option>
+            </select>
+          </div>
+          <div>
+            <label for="schemaQuantumMode">Quantum execution</label>
+            <select id="schemaQuantumMode">
+              <option value="simulator">Simulator (default)</option>
+              <option value="hardware_pref">Hardware preferred (toggle B)</option>
+            </select>
+          </div>
+          <div>
+            <label class="checkline mt-lg">
+              <input id="schemaAutoLR" type="checkbox" checked />
+              Auto-adjust learning rate before start
+            </label>
+          </div>
+        </div>
+        <p class="hint">Data is read from your selected source (HF datasets stream from hub when configured). Model outputs/checkpoints are written under <code>artifacts/models/...</code>.</p>
         <div class="row align-center">
           <label for="schemaRunName" class="mb-0">Run name</label>
           <input id="schemaRunName" type="text" placeholder="custom-run" style="max-width:320px" />
@@ -1874,6 +1909,72 @@
         values[id] = raw;
       }
       return values;
+    }
+
+    function applySchemaGuidedOverrides(values) {
+      const out = { ...values };
+      const scheme = ($("schemaDataScheme")?.value || "").trim();
+      const preset = ($("schemaDatasetPreset")?.value || "").trim();
+      const qmode = ($("schemaQuantumMode")?.value || "simulator").trim();
+
+      if (scheme) {
+        // Engine currently consumes hf_tabular + mesh_blend_fraction for hybrid.
+        out["data.source"] = scheme === "hybrid_mesh_hf_tabular" ? "hf_tabular" : scheme;
+        if (scheme === "hybrid_mesh_hf_tabular" && !out["huggingface.mesh_blend_fraction"]) {
+          out["huggingface.mesh_blend_fraction"] = "0.20";
+        }
+      }
+      if (preset) {
+        const [path, cfg] = preset.split("|");
+        if (path) out["data.path"] = path;
+        if (cfg) out["huggingface.dataset_config"] = cfg;
+      }
+
+      // Default back to simulator unless user toggles hardware-preferred mode.
+      if (qmode === "hardware_pref") {
+        out["hardware.quantum_backend"] = out["hardware.quantum_backend"] || "auto";
+      } else {
+        out["hardware.quantum_backend"] = "penny_lane";
+      }
+      return out;
+    }
+
+    function schemaValuesToBuildPayload(values) {
+      const intOr = (v, d) => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? Math.trunc(n) : d;
+      };
+      const numOr = (v, d) => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? n : d;
+      };
+      const scheme = ($("schemaDataScheme")?.value || "").trim();
+      return {
+        name: ($("schemaRunName")?.value || "").trim() || "custom-run",
+        accelerator: values["hardware.accelerator"] || "cpu",
+        quantum_backend: values["hardware.quantum_backend"] || "penny_lane",
+        quantum_policy:
+          ($("schemaQuantumMode")?.value || "simulator") === "hardware_pref"
+            ? "prefer_hardware_fallback"
+            : "simulator_only",
+        ibm_backend_name: "",
+        data_source: scheme || values["data.source"] || "mesh",
+        data_path: values["data.path"] || "",
+        hf_dataset_config: values["huggingface.dataset_config"] || "",
+        hf_split: values["huggingface.split"] || "train",
+        hf_mesh_blend_fraction: Number(values["huggingface.mesh_blend_fraction"] || 0),
+        hf_num_samples: intOr(values["huggingface.num_samples"], 0),
+        hf_extra_specs: [],
+        epochs: intOr(values["training.epochs"], 25),
+        batch_size: intOr(values["training.batch_size"], 32),
+        learning_rate: numOr(values["training.learning_rate"], 0.0001),
+        lr_trial_mode: true,
+        lr_trial_epochs: 2,
+        resume_latest: false,
+        run_target: "local",
+        runpod_destroy_on_exit: false,
+        runpod_var_file: "",
+      };
     }
 
     async function loadSchemaForm() {
@@ -2926,12 +3027,25 @@
       msg.className = "status";
       $("btnStartCustomRun").disabled = true;
       try {
+        let values = applySchemaGuidedOverrides(collectSchemaValues());
+        if ($("schemaAutoLR")?.checked) {
+          msg.textContent = "Tuning learning rate for custom run...";
+          const lrResp = await fetch("/api/lr/auto", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(schemaValuesToBuildPayload(values)),
+          });
+          const lrData = await lrResp.json().catch(() => ({}));
+          if (lrResp.ok && lrData.recommended_lr !== undefined && lrData.recommended_lr !== null) {
+            values["training.learning_rate"] = String(lrData.recommended_lr);
+          }
+        }
         const r = await fetch("/api/runs/custom", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: $("schemaRunName").value.trim(),
-            values: collectSchemaValues(),
+            values,
           }),
         });
         const data = await r.json();
@@ -2949,6 +3063,13 @@
       }
     };
     $("schemaBasicOnly").onchange = renderSchemaForm;
+    $("schemaDataScheme").onchange = () => {
+      const scheme = ($("schemaDataScheme").value || "").trim();
+      if (scheme === "hybrid_mesh_hf_tabular" && $("schemaBasicOnly").checked) {
+        // Encourage visibility of HF knobs when hybrid mode is selected.
+        $("schemaBasicOnly").checked = false;
+      }
+    };
 
     $("btnRefreshArtifacts").onclick = async () => {
       try {
