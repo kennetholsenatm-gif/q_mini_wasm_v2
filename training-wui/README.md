@@ -35,10 +35,10 @@ Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 
 ### Tabs (workflow)
 
-- **Launchpad** — Start from an existing TOML, **Build + Run**, preflight, runs list, log, and a shortcut to **Configuration**.
-- **Configuration** — **Schema-driven custom run**: all guided fields from `/api/schema` (hardware, training, data, Hugging Face revision, WASM limits, checkpoints, …). Writes `configs/training/<name>.toml` and starts training — no CLI or hand-edited files for normal use.
-- **Dataset Builder** — Curated + **custom Hub dataset ids** for a multi-dataset mix. Selections are merged into the custom-run payload as `data.path = qminiwasm/hf-multi` and `[huggingface].extra_specs`. **Apply mix** syncs Launchpad and the Configuration form; you can also select datasets and start directly from Configuration (live mix is picked up).
-- **Mission Control**, **Node Health**, **Quantum Topology**, **Artifact Registry** — unchanged.
+- **Training** — Single **LEGO-style wizard** (five steps on one tab): (1) dataset mix, (2) model & runtime, (3) data source, (4) training knobs + full **schema** form, (5) review/save, **Launch training** (only control that starts `python -m engine`), preflight, runs, artifacts. All saves target **`configs/training/wui_working.toml`** unless you pick another file in the dropdown.
+- **Mission Control**, **Node Health**, **Quantum Topology**, **Artifact Registry** — unchanged (Mission Control holds quick metrics, live telemetry, and the training log moved off the wizard for headroom).
+
+`POST /api/runs/build` and `POST /api/runs/custom` only write `wui_working.toml`; **`POST /api/runs`** starts training.
 
 Only one training process at a time is allowed (start another after the current run finishes or after **Stop**).
 
@@ -54,11 +54,11 @@ The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python 
 
 **Infrastructure tab:** edit **`infra/runpod/terraform.tfvars`** in the browser (Save / Reload / Insert example from `terraform.tfvars.example`), then **Status** (token / `infra/runpod` / `tofu`, outputs, copy buttons, **Remote GPU** snippets) and **OpenTofu CLI** (`tofu init` / `plan` / `apply` / `destroy` — use **plan** to debug apply exit 1). **Training** tab stays focused on configs and runs; **log** stays at the bottom on both tabs.
 
-**Floating panels (optional):** On **Launchpad** (Training) and **Infrastructure**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. On **Launchpad** this includes the **Log** panel (live output). Layout is stored in **`localStorage`**. The log stays on **Launchpad**; open **Configuration** for the guided form without floating layout there.
+**Floating panels (optional):** On **Training** and **Infrastructure**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. The **Log** panel lives on **Mission Control** when using the default layout. Layout is stored in **`localStorage`**.
 
-### Agent / inference outputs (Build + Run)
+### Agent / inference outputs (after Launch training)
 
-Each **Build + Run** writes training checkpoints under **`artifacts/models/<model-slug>/`** (repo root, gitignored):
+Each training run writes checkpoints under **`artifacts/models/<model-slug>/`** (repo root, gitignored):
 
 | File | Role |
 |------|------|
@@ -74,7 +74,7 @@ After training, point tools or agents at **`agent_bundle.json`** or set **`QMINI
 
 **Preflight FAQ**
 
-- **CPU vs Build wizard accelerator**: Preflight loads the TOML from the **left config dropdown** (e.g. `cascade_mopd.toml` has `accelerator = "cpu"`). The **Build + Run** form’s accelerator is sent as `?accelerator=` so device resolution matches what you intend to train with, without editing that file.
+- **CPU vs Build wizard accelerator**: Preflight loads the TOML from the **config dropdown** (e.g. `cascade_mopd.toml` has `accelerator = "cpu"`). The **Build wizard** accelerator is sent as `?accelerator=` so device resolution matches what you intend to train with, without editing that file.
 - **IBM “pending jobs” = 0**: That field is the **backend queue depth** (jobs waiting on that IBM device). Zero does not mean “no quantum access”; it usually means nothing is queued right now. Training may still use a local/simulator path until it submits hardware jobs.
 - **HF “dataset config” (none)**: Optional subset name for multi-config datasets. Empty means the **default** config on Hugging Face; Model Facts shows `(none)` when omitted.
 

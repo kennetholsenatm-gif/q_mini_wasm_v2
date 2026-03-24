@@ -472,6 +472,75 @@
       border-color: var(--alert-success-green);
       color: var(--alert-success-green);
     }
+    .lego-rail-wrap {
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      background: var(--surface-command-gray);
+      padding: var(--space-md);
+      margin-bottom: var(--space-md);
+    }
+    .lego-rail-wrap > .lego-title {
+      margin: 0 0 var(--space-xs);
+      font-size: var(--text-lg);
+      font-weight: 700;
+      color: var(--text-primary);
+      text-transform: none;
+      letter-spacing: 0.02em;
+    }
+    .lego-rail {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+      margin: var(--space-sm) 0 var(--space-md);
+    }
+    .lego-pip {
+      font-size: var(--text-xs);
+      padding: var(--space-sm) var(--space-md);
+      border-radius: 6px;
+      border: 1px solid var(--surface-interface-gray);
+      background: var(--bg-tactical-black);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: inherit;
+      text-align: left;
+      line-height: 1.35;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .lego-pip:hover {
+      border-color: var(--action-primary-blue);
+      color: var(--text-primary);
+    }
+    .lego-pip:focus-visible {
+      outline: 2px solid var(--action-primary-blue);
+      outline-offset: 2px;
+    }
+    .lego-pip.active {
+      border-color: var(--action-primary-blue);
+      color: var(--text-primary);
+      background: rgba(0, 120, 212, 0.2);
+      font-weight: 600;
+    }
+    .lego-pip.done {
+      border-color: rgba(16, 124, 16, 0.55);
+      color: var(--alert-success-green);
+    }
+    .lego-rail-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+      align-items: center;
+    }
+    .training-grid-wrap.lego-flow {
+      grid-template-columns: 1fr;
+      max-width: 52rem;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .training-grid-wrap.lego-flow > [data-col="1"],
+    .training-grid-wrap.lego-flow > [data-col="2"] {
+      grid-column: 1;
+      grid-row: auto;
+    }
     .wizard-nav {
       display: flex;
       gap: var(--space-sm);
@@ -1115,9 +1184,7 @@
     <span id="stickyRunLabel" class="hint" style="margin:0;">No active run</span>
   </div>
   <nav class="app-tabs" role="tablist" aria-label="Main views">
-    <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Launchpad</button>
-    <button type="button" class="app-tab" id="tabBtnConfig" role="tab" aria-selected="false">Configuration</button>
-    <button type="button" class="app-tab" id="tabBtnDataset" role="tab" aria-selected="false">Dataset Builder</button>
+    <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Training</button>
     <button type="button" class="app-tab" id="tabBtnMission" role="tab" aria-selected="false">Mission Control</button>
     <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false">Node Health</button>
     <button type="button" class="app-tab" id="tabBtnQuantum" role="tab" aria-selected="false">Quantum Topology</button>
@@ -1132,10 +1199,28 @@
           Floating panels
         </label>
         <button type="button" class="ghost" id="btnResetLayout">Reset layout</button>
-        <span class="hint" style="margin:0">Drag any panel by its title (including <strong>Log</strong>); resize from the corner grip. Layout is saved in this browser.</span>
+        <span class="hint" style="margin:0">Drag any panel by its title; resize from the corner grip. Training <strong>log</strong> is on <strong>Mission Control</strong> by default. Layout is saved in this browser.</span>
       </div>
       <div class="training-body">
-      <div class="training-grid-wrap">
+      <div class="lego-rail-wrap dash-card" data-card-id="lego-rail">
+        <h2 class="lego-title">Training setup wizard</h2>
+        <p class="hint" style="margin:0 0 var(--space-sm)">
+          Stack five blocks into one file — <code>configs/training/wui_working.toml</code> — then launch. Each step adds to the same config; use the tiles to jump or <strong>Next</strong> / <strong>Back</strong>.
+        </p>
+        <div class="lego-rail" role="tablist" aria-label="Training setup steps">
+          <button type="button" class="lego-pip active" data-lego="1" role="tab" id="legoPip1" aria-selected="true">1 · Dataset mix</button>
+          <button type="button" class="lego-pip" data-lego="2" role="tab" id="legoPip2" aria-selected="false">2 · Model &amp; runtime</button>
+          <button type="button" class="lego-pip" data-lego="3" role="tab" id="legoPip3" aria-selected="false">3 · Data source</button>
+          <button type="button" class="lego-pip" data-lego="4" role="tab" id="legoPip4" aria-selected="false">4 · Training &amp; all fields</button>
+          <button type="button" class="lego-pip" data-lego="5" role="tab" id="legoPip5" aria-selected="false">5 · Save, check, launch</button>
+        </div>
+        <div class="lego-rail-nav">
+          <button type="button" class="ghost" id="btnLegoPrev" disabled>Back</button>
+          <button type="button" class="primary" id="btnLegoNext">Next step</button>
+        </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </div>
+      <div class="training-grid-wrap lego-flow">
       <section class="dash-card" data-card-id="quick-metrics" data-col="1">
         <h2>Quick metrics</h2>
         <div class="metrics">
@@ -1165,9 +1250,291 @@
         <canvas id="chartMSE" height="220" class="stack-sm"></canvas>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section class="dash-card" data-card-id="start-config" data-col="1">
-        <h2>Start from existing config</h2>
-        <label for="cfg">Config (configs/training/*.toml)</label>
+      <section class="dash-card" data-card-id="dataset-builder" data-col="1" data-lego-step="1">
+        <h2>1 · Dataset mix</h2>
+        <p class="hint hint-block" style="margin-top:0">
+          Pick Hugging Face datasets to combine (max <strong>9</strong>). <strong>Apply mix &amp; save</strong> updates the working TOML and syncs steps 2–3. You can skip this step if you use a single dataset in step 3.
+        </p>
+        <div class="grid mt-md">
+          <div>
+            <label for="datasetTargetSamples">Target HF row budget per epoch (split across datasets)</label>
+            <select id="datasetTargetSamples">
+              <option value="500000">500,000</option>
+              <option value="750000" selected>750,000</option>
+              <option value="1000000">1,000,000</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint stack-sm">Large budgets stream from the Hub; ensure RAM/disk and HF token are appropriate for your environment.</p>
+        <div id="datasetCatalogGrid" class="dataset-catalog-grid stack-md" role="group" aria-label="Curated Hub datasets"></div>
+        <details class="stack-md mt-md">
+          <summary>Add custom Hub dataset</summary>
+          <div class="grid mt-md">
+            <div>
+              <label for="datasetCustomPath">Dataset id</label>
+              <input id="datasetCustomPath" type="text" placeholder="owner/repo" />
+            </div>
+            <div>
+              <label for="datasetCustomConfig">Config (optional)</label>
+              <input id="datasetCustomConfig" type="text" placeholder="e.g. python — leave blank for default" />
+            </div>
+            <div class="row align-end">
+              <button type="button" class="ghost" id="btnDatasetAddCustom">Add to mix</button>
+            </div>
+          </div>
+        </details>
+        <div id="datasetCustomListHost" class="stack-sm mt-md">
+          <span class="label-like">Custom entries (click × to remove)</span>
+          <div id="datasetCustomList"></div>
+        </div>
+        <div class="row stack-md mt-md">
+          <button type="button" class="primary" id="btnDatasetApplyMix">Apply mix &amp; save working config</button>
+          <button type="button" class="ghost" id="btnDatasetClearMix">Clear mix override</button>
+          <button type="button" class="ghost" id="btnDatasetSelectNone">Clear all checks</button>
+        </div>
+        <p class="status stack-md" id="datasetMixStatus" aria-live="polite"></p>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="lego-runtime" data-col="1" data-lego-step="2">
+        <h2>2 · Model &amp; where it runs</h2>
+        <p class="hint hint-block" style="margin-top:0">Name outputs, choose GPU/RunPod, and quantum behavior. Matches the launch card in step 5 after you save.</p>
+        <div class="grid">
+          <div>
+            <label for="bName">Model name</label>
+            <input id="bName" type="text" placeholder="qminiwasm-stem-coder-v1" />
+            <div class="hint">Checkpoints and agent files go under <code>artifacts/models/&lt;slug&gt;/</code> (final, best, latest <code>.pt</code>, plus <code>serve.toml</code> and <code>agent_bundle.json</code>).</div>
+            <label class="checkline">
+              <input id="bResumeLatest" type="checkbox" />
+              Resume from this model's latest checkpoint if available
+            </label>
+          </div>
+          <div>
+            <label for="bRunTarget">Execution target</label>
+            <select id="bRunTarget">
+              <option value="local">Local (this machine)</option>
+              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
+            </select>
+          </div>
+          <div id="bRunpodDestroyWrap" style="display:none">
+            <label class="checkline stack-sm">
+              <input id="bRunpodDestroy" type="checkbox" checked />
+              Destroy RunPod when training stops
+            </label>
+            <div class="hint">Uncheck only if you will destroy manually (continues billing).</div>
+          </div>
+          <div>
+            <label for="bAccel">Accelerator</label>
+            <select id="bAccel">
+              <option value="cpu">cpu</option>
+              <option value="sycl">sycl</option>
+              <option value="xpu">xpu</option>
+              <option value="cuda">cuda</option>
+            </select>
+          </div>
+          <div>
+            <label for="bQuantumPolicy">Quantum execution mode</label>
+            <select id="bQuantumPolicy">
+              <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
+              <option value="hardware_only">Hardware only (fail if unavailable)</option>
+              <option value="simulator_only">Simulator only</option>
+            </select>
+          </div>
+          <div>
+            <label for="bQuantumBackend">Quantum backend id (optional)</label>
+            <input id="bQuantumBackend" type="text" placeholder="auto / ibm_kyoto / pennylane" />
+          </div>
+          <div>
+            <label for="bIBMBackendName">IBM backend override (optional)</label>
+            <input id="bIBMBackendName" type="text" placeholder="leave blank for IBM auto-select" />
+          </div>
+        </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="lego-data" data-col="1" data-lego-step="3">
+        <h2>3 · Data source</h2>
+        <p class="hint hint-block" style="margin-top:0">Mesh vs Hugging Face, presets, primary path, and optional multi-dataset extras.</p>
+        <div class="grid">
+          <div>
+            <label for="bDataSource">Data source</label>
+            <select id="bDataSource">
+              <option value="mesh">mesh</option>
+              <option value="hf_tabular">hf_tabular</option>
+              <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
+            </select>
+          </div>
+          <div id="hfPresetWrap">
+            <label for="bDatasetPreset">HF dataset preset</label>
+            <select id="bDatasetPreset">
+              <option value="">(custom / keep current)</option>
+              <option value="qminiwasm/hf-multi|">Multi-dataset (extras only — set primary to placeholder)</option>
+              <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
+              <option value="code-search-net/code_search_net|java">CodeSearchNet (java)</option>
+              <option value="code-search-net/code_search_net|javascript">CodeSearchNet (javascript)</option>
+              <option value="code-search-net/code_search_net|ruby">CodeSearchNet (ruby)</option>
+              <option value="google-research-datasets/mbpp|full">MBPP (code problems)</option>
+              <option value="neulab/docprompting-conala|">CoNaLa (code + NL)</option>
+              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT (math)</option>
+              <option value="openai/gsm8k|">GSM8K (grade-school math)</option>
+              <option value="hendrycks/competition_math|">Competition Math (MATH)</option>
+              <option value="wikitext|wikitext-2-raw-v1">WikiText-2 raw (general text)</option>
+              <option value="imdb|">IMDb reviews (general sentiment)</option>
+            </select>
+            <div class="hint">Choose a preset to auto-fill dataset id and config.</div>
+          </div>
+          <div id="hfExtraWrap">
+            <span class="label-like">Additional HF datasets (optional; max 8 with a normal primary, or 9 in extras-only mode)</span>
+            <div id="hfExtraChecks" class="stack-sm hf-extra-grid" role="group" aria-label="Additional Hugging Face datasets"></div>
+            <div class="hint">Check extras to mix with the primary id above. Use preset <strong>Multi-dataset</strong> or type <code>qminiwasm/hf-multi</code> as primary to load <em>only</em> checked extras (up to 9). The HF row budget is split evenly; hybrid mesh blend applies after merge.</div>
+          </div>
+          <div id="hfPathWrap">
+            <label for="bDataPath">HF dataset id (data.path)</label>
+            <input id="bDataPath" type="text" placeholder="code-search-net/code_search_net or qminiwasm/hf-multi" />
+            <div class="hint">Required for <code>hf_tabular</code> and hybrid mode. Reserved <code>qminiwasm/hf-multi</code> skips a primary Hub load; select at least one extra below.</div>
+          </div>
+        </div>
+        <details class="adv stack-md mt-md">
+          <summary>Advanced data options</summary>
+          <div class="grid stack-sm">
+            <div id="hfConfigWrap">
+              <label for="bDatasetConfig">HF dataset config (optional)</label>
+              <input id="bDatasetConfig" type="text" placeholder="python" />
+              <div class="hint">Subset name for multi-config datasets (e.g. <code>python</code> on CodeSearchNet). Leave blank for <strong>default</strong> — shows as (none) in facts; many datasets (e.g. NuminaMath-CoT) use a single config.</div>
+            </div>
+            <div id="hfSplitWrap">
+              <label for="bSplit">HF split</label>
+              <input id="bSplit" type="text" value="train" />
+            </div>
+            <div id="hfBlendWrap">
+              <label for="bBlend">HF mesh blend fraction</label>
+              <input id="bBlend" type="text" value="0.20" />
+            </div>
+            <div id="hfNumSamplesWrap">
+              <label for="bHfNumSamples">HF max rows (num_samples)</label>
+              <input id="bHfNumSamples" type="text" placeholder="auto (32k–300k)" />
+              <div class="hint">Cap on Hub rows loaded in total (split across merged datasets). Leave blank for automatic sizing. Set <strong>500000</strong> here, or use env <code>HF_NUM_SAMPLES=500000</code>, or add <code>num_samples = 500000</code> under <code>[huggingface]</code> in your TOML.</div>
+            </div>
+          </div>
+        </details>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="lego-train" data-col="1" data-lego-step="4">
+        <h2>4 · Training &amp; every TOML field</h2>
+        <p class="hint hint-block" style="margin-top:0">Quick knobs first; the schema form is the same file — use either <strong>Save working config</strong> button (wizard payload or full schema).</p>
+        <div class="grid">
+          <div>
+            <label for="bEpochs">Epochs</label>
+            <input id="bEpochs" type="text" value="25" />
+          </div>
+          <div>
+            <label for="bBatch">Batch size</label>
+            <input id="bBatch" type="text" value="32" />
+          </div>
+          <div>
+            <label for="bLR">Learning rate</label>
+            <input id="bLR" type="text" value="0.0001" />
+            <label class="checkline">
+              <input id="bLRTrialMode" type="checkbox" />
+              Treat as LR trial run
+            </label>
+            <div id="bLRTrialWrap" class="stack-sm" style="display:none">
+              <label for="bLRTrialEpochs">Trial epochs</label>
+              <input id="bLRTrialEpochs" type="text" value="2" />
+              <div class="hint">Runs short and adds per-epoch eval logging for LR comparison.</div>
+            </div>
+          </div>
+        </div>
+        <div class="row stack-sm mt-md">
+          <button type="button" class="ghost" id="btnAutoLR">Auto-select learning rate</button>
+          <span class="status" id="autoLRMsg" aria-live="polite"></span>
+        </div>
+        <div class="model-card stack-md mt-md" data-card-id="schema-form" style="margin-top:var(--space-md)">
+          <h3>Schema-driven fields</h3>
+          <p class="hint">From <code>/api/schema</code> (<code>configs/training/schema.toml</code>). Step 1 mix and step 3 presets stay in sync when you save from the wizard above or here.</p>
+          <div class="grid mt-md">
+            <div>
+              <label for="schemaDataScheme">Data scheme</label>
+              <select id="schemaDataScheme">
+                <option value="mesh">mesh (synthetic/algorithmic)</option>
+                <option value="hf_tabular">hf_tabular (Hugging Face dataset)</option>
+                <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
+              </select>
+            </div>
+            <div>
+              <label for="schemaDatasetPreset">Dataset preset</label>
+              <select id="schemaDatasetPreset">
+                <option value="">(custom / keep manual values)</option>
+                <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
+                <option value="google-research-datasets/mbpp|full">MBPP</option>
+                <option value="openai/gsm8k|">GSM8K</option>
+                <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
+                <option value="qminiwasm/hf-multi|">Multi-dataset placeholder (extras-only)</option>
+              </select>
+              <div class="hint stack-sm">Multi-dataset: use step <strong>1 · Dataset mix</strong> or <code>qminiwasm/hf-multi</code> + extras in step 3.</div>
+            </div>
+            <div>
+              <label for="schemaDataPathArtifact">Artifact file (non-checkpoint)</label>
+              <select id="schemaDataPathArtifact">
+                <option value="">(none — use preset or Hub id below)</option>
+              </select>
+              <div class="hint stack-sm">
+                Training data for <code>hf_tabular</code> must be a <strong>Hugging Face dataset id</strong> (e.g. <code>code-search-net/code_search_net</code>), not a <code>.pt</code> checkpoint. Checkpoints belong in <code>[checkpoint].load_path</code>. The list below skips <code>.pt</code> files from artifacts.
+              </div>
+            </div>
+            <div>
+              <label for="schemaDataPathCustom">Hub dataset id (custom)</label>
+              <input id="schemaDataPathCustom" type="text" placeholder="owner/repo — not .pt checkpoints" />
+            </div>
+            <div>
+              <label for="schemaQuantumMode">Quantum execution</label>
+              <select id="schemaQuantumMode">
+                <option value="simulator">Simulator (default)</option>
+                <option value="hardware_pref">Hardware preferred (toggle B)</option>
+              </select>
+            </div>
+            <div>
+              <label class="checkline mt-lg">
+                <input id="schemaAutoLR" type="checkbox" checked />
+                Adaptive learning rate every epoch (no fixed LR schedule)
+              </label>
+            </div>
+          </div>
+          <div class="row align-center stack-sm mt-md">
+            <label for="schemaRunName" class="mb-0">Run name</label>
+            <input id="schemaRunName" type="text" placeholder="custom-run" style="max-width:320px" />
+            <label for="schemaBasicOnly" class="mb-0"><input id="schemaBasicOnly" type="checkbox" checked /> Basic fields only</label>
+            <button type="button" class="ghost" id="btnReloadSchema">Reload schema</button>
+          </div>
+          <div id="schemaFormHost" class="grid mt-md"></div>
+          <div class="row mt-md">
+            <button type="button" class="primary" id="btnStartCustomRun">Save working config (schema)</button>
+            <span id="schemaRunMsg" class="status"></span>
+          </div>
+        </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="lego-review" data-col="1" data-lego-step="5">
+        <h2>5 · Review file &amp; save</h2>
+        <p class="hint hint-block" style="margin-top:0">Sanity-check the payload, then save to <code>wui_working.toml</code>. Model facts call the same preview API.</p>
+        <div class="review-box" id="bReview"></div>
+        <div class="row stack-md mt-md">
+          <button type="button" class="primary" id="btnBuildRun">Save working config (wizard)</button>
+        </div>
+        <div class="model-card">
+          <h3>Model Facts</h3>
+          <div class="row model-facts-toolbar">
+            <button type="button" class="ghost" id="btnModelFacts">Refresh facts</button>
+          </div>
+          <div class="kv" id="modelFacts"></div>
+        </div>
+        <p class="status stack-md" id="buildMsg" aria-live="polite"></p>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="start-config" data-col="1" data-lego-step="5">
+        <h2>Launch training</h2>
+        <p class="hint hint-block" style="margin-top:0">
+          <strong>Only this button starts the engine.</strong> Choose the config file (usually <code>wui_working.toml</code>), then <strong>Launch training</strong>.
+        </p>
+        <label for="cfg">Config file to run</label>
         <select id="cfg"></select>
         <div class="grid mt-md">
           <div>
@@ -1202,204 +1569,25 @@
           </div>
         </div>
         <div class="row">
-          <button type="button" class="primary" id="btnStart">Start training</button>
+          <button type="button" class="primary" id="btnStart">Launch training</button>
         </div>
         <p class="status stack-md" id="msg" aria-live="polite"></p>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section class="dash-card" data-card-id="preflight" data-col="1">
+      <section class="dash-card" data-card-id="preflight" data-col="1" data-lego-step="5">
         <h2>Preflight <span id="preflightBadge" class="badge">UNKNOWN</span></h2>
-        <p class="hint hint-block">Uses the <strong>config file</strong> from the left dropdown for TOML-backed settings. <strong>Accelerator</strong> for device check follows the <strong>Build + Run</strong> form when set (overrides <code>[hardware].accelerator</code> in that file). Quantum env lines use the Build form fields.</p>
+        <p class="hint hint-block">Uses the <strong>config file</strong> from the launch card. After saving the wizard, select <code>wui_working.toml</code> and refresh. Preflight <strong>accelerator</strong> can follow <code>?accelerator=</code> from step 2 when you refresh after save.</p>
         <p class="status stack-md" id="preflightMsg" aria-live="polite"></p>
         <div class="kv" id="preflightKv"></div>
         <p class="hint hint-block-md"><strong>IBM pending jobs</strong> is that backend’s <em>queue length</em> (jobs waiting to run there). <strong>0</strong> is normal when nothing is queued—your training may use the simulator first, or you haven’t submitted IBM Runtime jobs yet.</p>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section class="dash-card" data-card-id="runs" data-col="1">
+      <section class="dash-card" data-card-id="runs" data-col="1" data-lego-step="5">
         <h2>Active / recent runs</h2>
         <ul class="runs" id="runs"></ul>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section class="dash-card" data-card-id="build-run" data-col="2">
-        <h2>Build + run config</h2>
-        <div class="wizard-head">
-          <label class="wizard-label-inline">
-            <input id="bWizardMode" type="checkbox" checked />
-            Wizard mode
-          </label>
-        </div>
-        <div role="group" aria-label="Build configuration wizard">
-        <div class="wizard-steps" id="bWizardSteps" style="display:none">
-          <span class="wstep" id="ws1">1 Basics</span>
-          <span class="wstep" id="ws2">2 Data</span>
-          <span class="wstep" id="ws3">3 Training</span>
-          <span class="wstep" id="ws4">4 Review</span>
-        </div>
-        <div class="grid">
-          <div class="wizard-pane" data-step="1">
-            <label for="bName">Model name</label>
-            <input id="bName" type="text" placeholder="qminiwasm-stem-coder-v1" />
-            <div class="hint">Checkpoints and agent files go under <code>artifacts/models/&lt;slug&gt;/</code> (final, best, latest <code>.pt</code>, plus <code>serve.toml</code> and <code>agent_bundle.json</code>).</div>
-            <label class="checkline">
-              <input id="bResumeLatest" type="checkbox" />
-              Resume from this model's latest checkpoint if available
-            </label>
-          </div>
-          <div class="wizard-pane" data-step="1">
-            <label for="bRunTarget">Execution target</label>
-            <select id="bRunTarget">
-              <option value="local">Local (this machine)</option>
-              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
-            </select>
-          </div>
-          <div id="bRunpodDestroyWrap" class="wizard-pane" data-step="1" style="display:none">
-            <label class="checkline stack-sm">
-              <input id="bRunpodDestroy" type="checkbox" checked />
-              Destroy RunPod when training stops
-            </label>
-            <div class="hint">Uncheck only if you will destroy manually (continues billing).</div>
-          </div>
-          <div class="wizard-pane" data-step="1">
-            <label for="bAccel">Accelerator</label>
-            <select id="bAccel">
-              <option value="cpu">cpu</option>
-              <option value="sycl">sycl</option>
-              <option value="xpu">xpu</option>
-              <option value="cuda">cuda</option>
-            </select>
-          </div>
-          <div class="wizard-pane" data-step="1">
-            <label for="bQuantumPolicy">Quantum execution mode</label>
-            <select id="bQuantumPolicy">
-              <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
-              <option value="hardware_only">Hardware only (fail if unavailable)</option>
-              <option value="simulator_only">Simulator only</option>
-            </select>
-          </div>
-          <div class="wizard-pane" data-step="1">
-            <label for="bQuantumBackend">Quantum backend id (optional)</label>
-            <input id="bQuantumBackend" type="text" placeholder="auto / ibm_kyoto / pennylane" />
-          </div>
-          <div class="wizard-pane" data-step="1">
-            <label for="bIBMBackendName">IBM backend override (optional)</label>
-            <input id="bIBMBackendName" type="text" placeholder="leave blank for IBM auto-select" />
-          </div>
-          <div class="wizard-pane" data-step="2">
-            <label for="bDataSource">Data source</label>
-            <select id="bDataSource">
-              <option value="mesh">mesh</option>
-              <option value="hf_tabular">hf_tabular</option>
-              <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
-            </select>
-          </div>
-          <div id="hfPresetWrap" class="wizard-pane" data-step="2">
-            <label for="bDatasetPreset">HF dataset preset</label>
-            <select id="bDatasetPreset">
-              <option value="">(custom / keep current)</option>
-              <option value="qminiwasm/hf-multi|">Multi-dataset (extras only — set primary to placeholder)</option>
-              <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
-              <option value="code-search-net/code_search_net|java">CodeSearchNet (java)</option>
-              <option value="code-search-net/code_search_net|javascript">CodeSearchNet (javascript)</option>
-              <option value="code-search-net/code_search_net|ruby">CodeSearchNet (ruby)</option>
-              <option value="google-research-datasets/mbpp|full">MBPP (code problems)</option>
-              <option value="neulab/docprompting-conala|">CoNaLa (code + NL)</option>
-              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT (math)</option>
-              <option value="openai/gsm8k|">GSM8K (grade-school math)</option>
-              <option value="hendrycks/competition_math|">Competition Math (MATH)</option>
-              <option value="wikitext|wikitext-2-raw-v1">WikiText-2 raw (general text)</option>
-              <option value="imdb|">IMDb reviews (general sentiment)</option>
-            </select>
-            <div class="hint">Choose a preset to auto-fill dataset id and config.</div>
-          </div>
-          <div id="hfExtraWrap" class="wizard-pane" data-step="2">
-            <span class="label-like">Additional HF datasets (optional; max 8 with a normal primary, or 9 in extras-only mode)</span>
-            <div id="hfExtraChecks" class="stack-sm hf-extra-grid" role="group" aria-label="Additional Hugging Face datasets"></div>
-            <div class="hint">Check extras to mix with the primary id above. Use preset <strong>Multi-dataset</strong> or type <code>qminiwasm/hf-multi</code> as primary to load <em>only</em> checked extras (up to 9). The HF row budget is split evenly; hybrid mesh blend applies after merge.</div>
-          </div>
-          <div id="hfPathWrap" class="wizard-pane" data-step="2">
-            <label for="bDataPath">HF dataset id (data.path)</label>
-            <input id="bDataPath" type="text" placeholder="code-search-net/code_search_net or qminiwasm/hf-multi" />
-            <div class="hint">Required for <code>hf_tabular</code> and hybrid mode. Reserved <code>qminiwasm/hf-multi</code> skips a primary Hub load; select at least one extra below.</div>
-          </div>
-          <div class="wizard-pane" data-step="3">
-            <label for="bEpochs">Epochs</label>
-            <input id="bEpochs" type="text" value="25" />
-          </div>
-          <div class="wizard-pane" data-step="3">
-            <label for="bBatch">Batch size</label>
-            <input id="bBatch" type="text" value="32" />
-          </div>
-          <div class="wizard-pane" data-step="3">
-            <label for="bLR">Learning rate</label>
-            <input id="bLR" type="text" value="0.0001" />
-            <label class="checkline">
-              <input id="bLRTrialMode" type="checkbox" />
-              Treat Build+Run as LR trial run
-            </label>
-            <div id="bLRTrialWrap" class="stack-sm" style="display:none">
-              <label for="bLRTrialEpochs">Trial epochs</label>
-              <input id="bLRTrialEpochs" type="text" value="2" />
-              <div class="hint">Runs short and adds per-epoch eval logging for LR comparison.</div>
-            </div>
-          </div>
-          <div class="wizard-pane" data-step="4" style="grid-column:1/-1">
-            <div class="review-box" id="bReview"></div>
-          </div>
-        </div>
-        <details class="adv wizard-pane" data-step="2">
-          <summary>Advanced data options</summary>
-          <div class="grid stack-sm">
-            <div id="hfConfigWrap">
-              <label for="bDatasetConfig">HF dataset config (optional)</label>
-              <input id="bDatasetConfig" type="text" placeholder="python" />
-              <div class="hint">Subset name for multi-config datasets (e.g. <code>python</code> on CodeSearchNet). Leave blank for <strong>default</strong> — shows as (none) in facts; many datasets (e.g. NuminaMath-CoT) use a single config.</div>
-            </div>
-            <div id="hfSplitWrap">
-              <label for="bSplit">HF split</label>
-              <input id="bSplit" type="text" value="train" />
-            </div>
-            <div id="hfBlendWrap">
-              <label for="bBlend">HF mesh blend fraction</label>
-              <input id="bBlend" type="text" value="0.20" />
-            </div>
-            <div id="hfNumSamplesWrap">
-              <label for="bHfNumSamples">HF max rows (num_samples)</label>
-              <input id="bHfNumSamples" type="text" placeholder="auto (32k–300k)" />
-              <div class="hint">Cap on Hub rows loaded in total (split across merged datasets). Leave blank for automatic sizing. Set <strong>500000</strong> here, or use env <code>HF_NUM_SAMPLES=500000</code>, or add <code>num_samples = 500000</code> under <code>[huggingface]</code> in your TOML.</div>
-            </div>
-          </div>
-        </details>
-        <div class="wizard-nav" id="bWizardNav" style="display:none">
-          <button type="button" class="ghost" id="btnWPrev">Back</button>
-          <button type="button" class="ghost" id="btnWNext">Next</button>
-        </div>
-        </div>
-        <div class="row wizard-pane" data-step="3">
-          <button type="button" class="ghost" id="btnAutoLR">Auto-select learning rate</button>
-          <span class="status" id="autoLRMsg" aria-live="polite"></span>
-        </div>
-        <div class="row">
-          <button type="button" class="primary" id="btnBuildRun">Build + Start training</button>
-        </div>
-        <div class="model-card">
-          <h3>Model Facts</h3>
-          <div class="row model-facts-toolbar">
-            <button type="button" class="ghost" id="btnModelFacts">Refresh facts</button>
-          </div>
-          <div class="kv" id="modelFacts"></div>
-        </div>
-        <p class="status stack-md" id="buildMsg" aria-live="polite"></p>
-        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
-      </section>
-      <section class="dash-card" data-card-id="config-shortcut" data-col="2">
-        <h2>Training configuration</h2>
-        <p class="hint hint-block">
-          Guided training options (hardware, data, checkpoints, Hugging Face revision, WASM limits) live on the <strong>Configuration</strong> tab. Build a dataset mix in <strong>Dataset Builder</strong>, then start a <strong>custom form</strong> run from Configuration — the mix syncs into the generated TOML without editing files by hand.
-        </p>
-        <button type="button" class="primary" id="btnGotoConfig">Open Configuration</button>
-        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
-      </section>
-      <section class="dash-card" data-card-id="artifacts" data-col="2">
+      <section class="dash-card" data-card-id="artifacts" data-col="1" data-lego-step="5">
         <h2>Artifacts</h2>
         <div class="row">
           <button type="button" class="ghost" id="btnRefreshArtifacts">Refresh artifacts</button>
@@ -1441,127 +1629,6 @@
     </div>
     </div>
 
-    <div id="panelConfig" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnConfig" hidden>
-      <div id="configCanvas" class="training-canvas" style="max-width:960px;margin:0 auto;">
-        <section class="dash-card" data-card-id="schema-form" style="margin-bottom:var(--space-md)">
-          <h2>Schema-driven custom run</h2>
-          <p class="hint">Fields come from <code>/api/schema</code> (aligned with <code>configs/training/schema.toml</code>). Dataset Builder selections (catalog + custom Hub ids) are merged automatically when you start — use <strong>Apply mix</strong> to persist the mix, or select datasets and start directly.</p>
-          <div class="grid mt-md">
-            <div>
-              <label for="schemaDataScheme">Data scheme</label>
-              <select id="schemaDataScheme">
-                <option value="mesh">mesh (synthetic/algorithmic)</option>
-                <option value="hf_tabular">hf_tabular (Hugging Face dataset)</option>
-                <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
-              </select>
-            </div>
-            <div>
-              <label for="schemaDatasetPreset">Dataset preset</label>
-              <select id="schemaDatasetPreset">
-                <option value="">(custom / keep manual values)</option>
-                <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
-                <option value="google-research-datasets/mbpp|full">MBPP</option>
-                <option value="openai/gsm8k|">GSM8K</option>
-                <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
-                <option value="qminiwasm/hf-multi|">Multi-dataset placeholder (extras-only)</option>
-              </select>
-              <div class="hint stack-sm">
-                For multi-dataset runs, use the <strong>Dataset Builder</strong> tab (custom Hub ids + catalog). Mix is injected as <code>data.path = qminiwasm/hf-multi</code> and <code>[huggingface].extra_specs</code>.
-              </div>
-            </div>
-            <div>
-              <label for="schemaDataPathArtifact">Artifact file (non-checkpoint)</label>
-              <select id="schemaDataPathArtifact">
-                <option value="">(none — use preset or Hub id below)</option>
-              </select>
-              <div class="hint stack-sm">
-                Training data for <code>hf_tabular</code> must be a <strong>Hugging Face dataset id</strong> (e.g. <code>code-search-net/code_search_net</code>), not a <code>.pt</code> checkpoint. Checkpoints belong in <code>[checkpoint].load_path</code>. The list below skips <code>.pt</code> files from artifacts.
-              </div>
-            </div>
-            <div>
-              <label for="schemaDataPathCustom">Hub dataset id (custom)</label>
-              <input id="schemaDataPathCustom" type="text" placeholder="owner/repo — not .pt checkpoints" />
-            </div>
-            <div>
-              <label for="schemaQuantumMode">Quantum execution</label>
-              <select id="schemaQuantumMode">
-                <option value="simulator">Simulator (default)</option>
-                <option value="hardware_pref">Hardware preferred (toggle B)</option>
-              </select>
-            </div>
-            <div>
-              <label class="checkline mt-lg">
-                <input id="schemaAutoLR" type="checkbox" checked />
-                Adaptive learning rate every epoch (no fixed LR schedule)
-              </label>
-            </div>
-          </div>
-          <p class="hint">Outputs go under <code>artifacts/models/&lt;run-name&gt;/</code>. This flow writes a TOML under <code>configs/training/</code> and starts training — no manual CLI or hand-edited files required.</p>
-          <div class="row align-center">
-            <label for="schemaRunName" class="mb-0">Run name</label>
-            <input id="schemaRunName" type="text" placeholder="custom-run" style="max-width:320px" />
-            <label for="schemaBasicOnly" class="mb-0"><input id="schemaBasicOnly" type="checkbox" checked /> Basic fields only</label>
-            <button type="button" class="ghost" id="btnReloadSchema">Reload schema</button>
-          </div>
-          <div id="schemaFormHost" class="grid mt-md"></div>
-          <div class="row">
-            <button type="button" class="primary" id="btnStartCustomRun">Start training (custom form)</button>
-            <span id="schemaRunMsg" class="status"></span>
-          </div>
-        </section>
-      </div>
-    </div>
-
-    <div id="panelDataset" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnDataset" hidden>
-      <div class="training-canvas" style="max-width:1200px;margin:0 auto;padding:var(--space-md) var(--space-lg);">
-        <section>
-          <h2>Dataset Builder</h2>
-          <p class="hint hint-block">
-            Check Hugging Face datasets to mix into a single training run. The WUI uses <code>data.path = qminiwasm/hf-multi</code> and emits <code>[huggingface].extra_specs</code> for each selection (max <strong>9</strong>).
-            Your <strong>samples per epoch</strong> budget is split evenly across checked datasets (same behavior as the training loop’s multi-dataset merge).
-          </p>
-          <div class="grid mt-md">
-            <div>
-              <label for="datasetTargetSamples">Target HF row budget per epoch (split across datasets)</label>
-              <select id="datasetTargetSamples">
-                <option value="500000">500,000</option>
-                <option value="750000" selected>750,000</option>
-                <option value="1000000">1,000,000</option>
-              </select>
-            </div>
-          </div>
-          <p class="hint stack-sm">Large budgets stream from the Hub; ensure RAM/disk and HF token are appropriate for your environment.</p>
-          <div id="datasetCatalogGrid" class="dataset-catalog-grid stack-md" role="group" aria-label="Curated Hub datasets"></div>
-          <details class="stack-md mt-md">
-            <summary>Add custom Hub dataset</summary>
-            <div class="grid mt-md">
-              <div>
-                <label for="datasetCustomPath">Dataset id</label>
-                <input id="datasetCustomPath" type="text" placeholder="owner/repo" />
-              </div>
-              <div>
-                <label for="datasetCustomConfig">Config (optional)</label>
-                <input id="datasetCustomConfig" type="text" placeholder="e.g. python — leave blank for default" />
-              </div>
-              <div class="row align-end">
-                <button type="button" class="ghost" id="btnDatasetAddCustom">Add to mix</button>
-              </div>
-            </div>
-          </details>
-          <div id="datasetCustomListHost" class="stack-sm mt-md">
-            <span class="label-like">Custom entries (click × to remove)</span>
-            <div id="datasetCustomList"></div>
-          </div>
-          <div class="row stack-md mt-md">
-            <button type="button" class="primary" id="btnDatasetApplyMix">Apply mix (Launchpad + Configuration)</button>
-            <button type="button" class="ghost" id="btnDatasetClearMix">Clear mix override</button>
-            <button type="button" class="ghost" id="btnDatasetSelectNone">Clear all checks</button>
-          </div>
-          <p class="status stack-md" id="datasetMixStatus" aria-live="polite"></p>
-        </section>
-      </div>
-    </div>
-
     <div id="panelMission" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnMission" hidden>
       <div id="missionCanvas" class="training-canvas">
         <div class="dashboard-toolbar">
@@ -1574,7 +1641,7 @@
         </div>
         <section>
           <h2>Mission Control</h2>
-          <p class="hint">Active runtime telemetry, alerts, and logs are consolidated here while Launchpad is dedicated to setup/init.</p>
+          <p class="hint">Active runtime telemetry, alerts, and logs are consolidated here while the <strong>Training</strong> tab holds the setup wizard.</p>
         </section>
         <div class="training-grid-wrap" id="missionGrid"></div>
         <div id="missionLogHost" class="stack-md"></div>
@@ -1716,7 +1783,7 @@
     let activeRunId = null;
     let stickyLastEpoch = 0;
     let infraFloatPendingSnap = false;
-    let bWizardStep = 1;
+    let legoStep = 1;
     let logPlainAccum = "";
     const logTrendState = { last: Object.create(null) };
     let telemetryWS = null;
@@ -2344,9 +2411,9 @@
       const ov = datasetMixExtraSpecsOverride && datasetMixExtraSpecsOverride.length;
       el.textContent =
         n > 0
-          ? `${n} dataset(s) selected in builder` + (ov ? ` — ${ov} applied as Build + Run override` : " — click Apply to push into Launchpad")
+          ? `${n} dataset(s) selected in builder` + (ov ? ` — ${ov} applied as wizard override` : " — Apply mix & save to update wui_working.toml")
           : ov
-          ? `Mix override active (${ov} dataset(s)) — Launchpad uses this for hf_extra_specs until cleared.`
+          ? `Mix override active (${ov} dataset(s)) — wizard uses this for hf_extra_specs until cleared.`
           : "No dataset mix selected.";
       el.className = "status " + (n > 0 || ov ? "done" : "");
     }
@@ -2446,7 +2513,7 @@
       });
     }
 
-    function applyDatasetMixToLaunchpad() {
+    async function applyDatasetMixToLaunchpad() {
       const specs = collectDatasetBuilderSpecs();
       if (!specs.length) {
         addToast("Select at least one catalog dataset or add a custom Hub id.", "error");
@@ -2485,10 +2552,17 @@
       refreshModelFacts();
       refreshWizardReview();
       updateDatasetMixStatus();
-      addToast(
-        `Dataset mix applied: ${datasetMixExtraSpecsOverride.length} source(s), ${Number($("datasetTargetSamples").value).toLocaleString()} HF rows (split across sources).`
-      );
       showAppTab("training");
+      setLegoStep(2);
+      try {
+        await saveWorkingConfigFromBuildWizard();
+        await loadPreflight();
+        addToast(
+          `Saved wui_working.toml (${datasetMixExtraSpecsOverride.length} Hub source(s), ${Number($("datasetTargetSamples").value).toLocaleString()} row budget). Go to step 5 when ready to launch.`
+        );
+      } catch (e) {
+        addToast(String(e.message || e), "error");
+      }
     }
 
     function clearDatasetMixOverride() {
@@ -2502,8 +2576,8 @@
       const stillMulti = $("bDataPath").value.trim() === "qminiwasm/hf-multi";
       addToast(
         stillMulti
-          ? "Cleared mix override. data.path is still hf-multi — check Launchpad HF extras or apply a mix again before running."
-          : "Cleared dataset mix override. Launchpad HF extras checkboxes apply again."
+          ? "Cleared mix override. data.path is still hf-multi — check step 3 HF extras or apply a mix again before running."
+          : "Cleared dataset mix override. Step 3 HF extras checkboxes apply again."
       );
     }
 
@@ -2899,6 +2973,41 @@
       }
     }
 
+    function syncLaunchPanelFromBuildWizard() {
+      const st = $("sRunTarget");
+      const bt = $("bRunTarget");
+      if (st && bt) st.value = bt.value;
+      const sd = $("sRunpodDestroy");
+      const bd = $("bRunpodDestroy");
+      if (sd && bd) sd.checked = bd.checked;
+      const sqp = $("sQuantumPolicy");
+      const bqp = $("bQuantumPolicy");
+      if (sqp && bqp) sqp.value = bqp.value;
+      const sqb = $("sQuantumBackend");
+      const bqb = $("bQuantumBackend");
+      if (sqb && bqb) sqb.value = bqb.value;
+      const sibm = $("sIBMBackendName");
+      const bibm = $("bIBMBackendName");
+      if (sibm && bibm) sibm.value = bibm.value;
+      const wrap = $("sRunpodDestroyWrap");
+      if (wrap && st) wrap.style.display = st.value === "runpod" ? "" : "none";
+    }
+
+    async function saveWorkingConfigFromBuildWizard() {
+      const r = await fetch("/api/runs/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload()),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      await loadConfigs();
+      const sel = $("cfg");
+      if (sel && data.config) sel.value = data.config;
+      syncLaunchPanelFromBuildWizard();
+      return data;
+    }
+
     function buildPayload() {
       return {
         name: $("bName").value.trim(),
@@ -3092,24 +3201,44 @@
         `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}`;
     }
 
-    function renderWizard() {
-      const wiz = $("bWizardMode").checked;
-      $("bWizardSteps").style.display = wiz ? "flex" : "none";
-      $("bWizardNav").style.display = wiz ? "flex" : "none";
-      const panes = document.querySelectorAll(".wizard-pane");
-      for (const el of panes) {
-        const step = Number(el.getAttribute("data-step") || "0");
-        el.hidden = wiz ? (step !== bWizardStep) : false;
+    function setLegoStep(n) {
+      legoStep = Math.max(1, Math.min(5, n | 0));
+      renderLegoWizard();
+    }
+
+    function renderLegoWizard() {
+      document.querySelectorAll("[data-lego-step]").forEach((el) => {
+        const s = parseInt(el.getAttribute("data-lego-step"), 10);
+        if (!Number.isFinite(s)) return;
+        el.hidden = s !== legoStep;
+      });
+      document.querySelectorAll(".lego-rail .lego-pip").forEach((btn) => {
+        const n = parseInt(btn.getAttribute("data-lego"), 10);
+        btn.classList.toggle("active", n === legoStep);
+        btn.classList.toggle("done", n < legoStep);
+        btn.setAttribute("aria-selected", n === legoStep ? "true" : "false");
+      });
+      const prev = $("btnLegoPrev");
+      const next = $("btnLegoNext");
+      if (prev) prev.disabled = legoStep <= 1;
+      if (next) {
+        next.style.display = legoStep >= 5 ? "none" : "inline-block";
+        next.textContent = legoStep >= 4 ? "Go to save & launch" : "Next step";
       }
-      for (let i = 1; i <= 4; i++) {
-        const s = $("ws" + i);
-        s.className = "wstep" + (i === bWizardStep ? " active" : (i < bWizardStep ? " done" : ""));
+      if (legoStep === 5) {
+        refreshWizardReview();
+        refreshModelFacts();
       }
-      $("btnWPrev").disabled = !wiz || bWizardStep <= 1;
-      $("btnWNext").style.display = wiz && bWizardStep < 4 ? "inline-block" : "none";
-      $("btnBuildRun").style.display = wiz && bWizardStep < 4 ? "none" : "inline-block";
-      if (wiz && bWizardStep === 4) refreshWizardReview();
-      refreshModelFacts();
+      if (legoStep === 4) {
+        loadSchemaForm().catch((e) => {
+          const m = $("schemaRunMsg");
+          if (m) {
+            m.textContent = String(e.message || e);
+            m.className = "status error";
+          }
+        });
+      }
+      toggleHFFields();
     }
 
     function toggleLRTrial() {
@@ -3248,7 +3377,7 @@
           if (outs.cost_per_hr != null && String(outs.cost_per_hr).trim() !== "") lines.push(["Cost / hr", String(outs.cost_per_hr)]);
           if (outs.desired_status != null) lines.push(["Desired status", String(outs.desired_status)]);
         } else if (rp.token_present && rp.infra_dir_exists) {
-          lines.push(["Terraform outputs", "(no state yet — run Build + Run with RunPod, or: cd infra/runpod && tofu apply)"]);
+          lines.push(["Terraform outputs", "(no state yet — Launch training with RunPod, or: cd infra/runpod && tofu apply)"]);
         }
         box.innerHTML = "";
         for (const [k, v] of lines) {
@@ -3449,7 +3578,7 @@
 
     $("btnStartCustomRun").onclick = async () => {
       const msg = $("schemaRunMsg");
-      msg.textContent = "Starting custom run...";
+      msg.textContent = "Saving working config...";
       msg.className = "status";
       $("btnStartCustomRun").disabled = true;
       try {
@@ -3469,7 +3598,7 @@
           }
           if (!Array.isArray(specList) || specList.length === 0) {
             throw new Error(
-              "data.path is qminiwasm/hf-multi (extras-only): open Dataset Builder, select or add custom Hub datasets, then Apply mix or start custom run — extra_specs must list at least one dataset."
+              "data.path is qminiwasm/hf-multi (extras-only): use step 1 · Apply mix & save or set extra_specs — at least one Hub dataset required."
             );
           }
         }
@@ -3483,11 +3612,14 @@
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
-        msg.textContent = "Started " + data.id + " (" + data.config + ")";
-        msg.className = "status running";
         await loadConfigs();
-        await loadRuns();
-        selectRun(data.id, data.config);
+        const sel = $("cfg");
+        if (sel && data.config) sel.value = data.config;
+        msg.textContent =
+          data.message || "Saved " + (data.config || "wui_working.toml") + " — go to step 5 and click Launch training.";
+        msg.className = "status done";
+        setLegoStep(5);
+        await loadPreflight();
       } catch (e) {
         msg.textContent = String(e.message || e);
         msg.className = "status error";
@@ -3522,43 +3654,33 @@
     const RUNPOD_TFVARS = "terraform.tfvars";
 
     const ACTIVE_TAB_KEY = "qmw_active_tab_v1";
-    const VALID_APP_TABS = new Set(["training", "config", "dataset", "mission", "infra", "quantum", "registry"]);
+    const VALID_APP_TABS = new Set(["training", "mission", "infra", "quantum", "registry"]);
     function showAppTab(which) {
       const train = $("panelTraining");
-      const config = $("panelConfig");
       const mission = $("panelMission");
       const infra = $("panelInfra");
       const quantum = $("panelQuantum");
       const registry = $("panelRegistry");
-      const dataset = $("panelDataset");
       const bTrain = $("tabBtnTraining");
-      const bConfig = $("tabBtnConfig");
       const bMission = $("tabBtnMission");
       const bInfra = $("tabBtnInfra");
       const bQuantum = $("tabBtnQuantum");
       const bRegistry = $("tabBtnRegistry");
-      const bDataset = $("tabBtnDataset");
       train.hidden = which !== "training";
-      if (config) config.hidden = which !== "config";
       mission.hidden = which !== "mission";
       infra.hidden = which !== "infra";
       quantum.hidden = which !== "quantum";
       registry.hidden = which !== "registry";
-      if (dataset) dataset.hidden = which !== "dataset";
       bTrain.classList.toggle("active", which === "training");
-      if (bConfig) bConfig.classList.toggle("active", which === "config");
       bMission.classList.toggle("active", which === "mission");
       bInfra.classList.toggle("active", which === "infra");
       bQuantum.classList.toggle("active", which === "quantum");
       bRegistry.classList.toggle("active", which === "registry");
-      if (bDataset) bDataset.classList.toggle("active", which === "dataset");
       bTrain.setAttribute("aria-selected", which === "training" ? "true" : "false");
-      if (bConfig) bConfig.setAttribute("aria-selected", which === "config" ? "true" : "false");
       bMission.setAttribute("aria-selected", which === "mission" ? "true" : "false");
       bInfra.setAttribute("aria-selected", which === "infra" ? "true" : "false");
       bQuantum.setAttribute("aria-selected", which === "quantum" ? "true" : "false");
       bRegistry.setAttribute("aria-selected", which === "registry" ? "true" : "false");
-      if (bDataset) bDataset.setAttribute("aria-selected", which === "dataset" ? "true" : "false");
       localStorage.setItem(ACTIVE_TAB_KEY, which);
       if (which === "infra") {
         loadTfvarsEditor();
@@ -3578,27 +3700,20 @@
       }
       if (which === "quantum") loadQuantumTopology();
       if (which === "registry") loadRegistryArtifacts();
-      if (which === "config") {
-        loadSchemaForm().catch((e) => {
-          const m = $("schemaRunMsg");
-          if (m) {
-            m.textContent = String(e.message || e);
-            m.className = "status error";
-          }
-        });
-      }
+      if (which === "training") renderLegoWizard();
     }
     $("tabBtnTraining").onclick = () => showAppTab("training");
-    if ($("tabBtnConfig")) $("tabBtnConfig").onclick = () => showAppTab("config");
-    const btnGotoConfig = $("btnGotoConfig");
-    if (btnGotoConfig) btnGotoConfig.onclick = () => showAppTab("config");
-    if ($("tabBtnDataset")) $("tabBtnDataset").onclick = () => showAppTab("dataset");
+    document.querySelectorAll(".lego-rail .lego-pip").forEach((btn) => {
+      btn.onclick = () => setLegoStep(parseInt(btn.getAttribute("data-lego"), 10));
+    });
+    $("btnLegoPrev").onclick = () => setLegoStep(legoStep - 1);
+    $("btnLegoNext").onclick = () => setLegoStep(legoStep + 1);
     $("tabBtnMission").onclick = () => showAppTab("mission");
     $("tabBtnInfra").onclick = () => showAppTab("infra");
     $("tabBtnQuantum").onclick = () => showAppTab("quantum");
     $("tabBtnRegistry").onclick = () => showAppTab("registry");
     const btnApplyMix = $("btnDatasetApplyMix");
-    if (btnApplyMix) btnApplyMix.onclick = () => applyDatasetMixToLaunchpad();
+    if (btnApplyMix) btnApplyMix.onclick = () => void applyDatasetMixToLaunchpad();
     const btnClrMix = $("btnDatasetClearMix");
     if (btnClrMix) btnClrMix.onclick = () => clearDatasetMixOverride();
     const btnSelNone = $("btnDatasetSelectNone");
@@ -3834,9 +3949,6 @@
     $("bAccel").addEventListener("change", loadPreflight);
     $("btnModelFacts").onclick = refreshModelFacts;
     $("bDatasetPreset").onchange = applyDatasetPreset;
-    $("bWizardMode").onchange = () => { bWizardStep = 1; renderWizard(); };
-    $("btnWPrev").onclick = () => { bWizardStep = Math.max(1, bWizardStep - 1); renderWizard(); };
-    $("btnWNext").onclick = () => { bWizardStep = Math.min(4, bWizardStep + 1); renderWizard(); };
     $("btnAutoLR").onclick = async () => {
       const msg = $("autoLRMsg");
       msg.textContent = "Running short LR sweep...";
@@ -3865,29 +3977,23 @@
     };
     $("btnBuildRun").onclick = async () => {
       const msg = $("buildMsg");
-      msg.textContent = "Starting run... this can take a bit on first invocation.";
+      msg.textContent = "Saving working config...";
       msg.className = "status";
-      const payload = buildPayload();
       $("btnBuildRun").disabled = true;
       try {
-        const r = await fetch("/api/runs/build", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error || r.statusText);
+        const data = await saveWorkingConfigFromBuildWizard();
         const ag = data.agent || {};
         const agHint =
           ag.agent_bundle != null && String(ag.agent_bundle).trim() !== ""
-            ? " — agent: " + String(ag.agent_bundle)
+            ? " Agent bundle: " + String(ag.agent_bundle)
             : "";
-        msg.textContent = "Built and started " + data.id + " (" + data.config + ")" + agHint;
-        msg.className = "status running";
-        await loadConfigs();
-        await loadRuns();
+        msg.textContent =
+          (data.message || "Saved " + (data.config || "")) +
+          ". Step 5: Launch training when ready." +
+          agHint;
+        msg.className = "status done";
+        setLegoStep(5);
         await loadPreflight();
-        selectRun(data.id, data.config);
       } catch (e) {
         msg.textContent = String(e.message || e);
         msg.className = "status error";
@@ -3909,8 +4015,6 @@
     initHfExtraCheckboxes();
     toggleHFFields();
     toggleLRTrial();
-    renderWizard();
-    refreshModelFacts();
     syncRunpodPanels();
     loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
     loadRuns();
@@ -3922,8 +4026,19 @@
     syncDatasetBuilderCheckboxesFromOverride();
     renderDatasetBuilderCustomList();
     updateDatasetMixStatus();
-    const savedTab = localStorage.getItem(ACTIVE_TAB_KEY);
+    let savedTab = localStorage.getItem(ACTIVE_TAB_KEY);
+    if (savedTab === "config") {
+      legoStep = 4;
+      localStorage.setItem(ACTIVE_TAB_KEY, "training");
+      savedTab = "training";
+    } else if (savedTab === "dataset") {
+      legoStep = 1;
+      localStorage.setItem(ACTIVE_TAB_KEY, "training");
+      savedTab = "training";
+    }
     if (savedTab && VALID_APP_TABS.has(savedTab)) showAppTab(savedTab);
+    else renderLegoWizard();
+    refreshModelFacts();
     setInterval(loadRuns, 5000);
 
     $("registryBody").addEventListener("click", async (ev) => {

@@ -19,6 +19,9 @@ secrets.enc.json
 
 # Build Artifacts
 artifacts/
+
+# Training WUI — single working TOML written by Save working config (not for version control)
+configs/training/wui_working.toml
 *.pyc
 __pycache__/
 *.log
