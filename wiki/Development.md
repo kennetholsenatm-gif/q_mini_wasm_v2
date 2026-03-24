@@ -58,7 +58,7 @@ All commits must pass the following pre-commit hooks:
 
 ### Training web UI (optional)
 
-A small **Go** UI under [`training-wui/`](../training-wui) lists `configs/training/*.toml` and runs `python -m engine --config …` from the repo root. To provision an Incus guest with deps + mount + built WUI, use [`training-wui/incus/`](../training-wui/incus) (`setup-instance.sh`). See [`training-wui/README.md`](../training-wui/README.md).
+A small **Go** UI under [`training-wui/`](../training-wui) lists `configs/training/*.toml` and runs `python -m engine --config …` from the repo root. To provision an Incus guest with deps + mount + built WUI, use the ops runbook in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus` (`setup-instance.sh`). See [`training-wui/README.md`](../training-wui/README.md).
 
 ### IBM Quantum (optional, training MoE)
 

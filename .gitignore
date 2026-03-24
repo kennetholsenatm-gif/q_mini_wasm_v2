@@ -223,7 +223,6 @@ wheels/
 *.sh
 !infra/runpod/tofu.sh
 !scripts/runpod_sync_and_train.example.sh
-!training-wui/incus/*.sh
 
 # Unit test / coverage reports
 htmlcov/

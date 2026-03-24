@@ -6,7 +6,7 @@ Small web UI to pick a `configs/training/*.toml` file and run `python -m engine 
 
 - [Go](https://go.dev/dl/) 1.22+
 - Python env with the package installed (`pip install -e ".[training]"`) and `python` on `PATH`
-- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Incus guests: `training-wui/incus/install-opentofu.sh` installs `tofu` to `/usr/local/bin`.
+- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Incus/host automation now lives in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus`.
 
 ## Run
 
@@ -40,7 +40,7 @@ Only one training process at a time is allowed (start another after the current 
 The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python -m engine` and **`destroy`** when the job exits or you **Stop** (optional checkbox: skip destroy if you want to keep the pod).
 
 - Set **`RUNPOD_TOKEN`** (or `RUNPOD_API_KEY`) in the repo **`.env`**; the WUI loads it on startup (`loadDotenvFromRepo`).
-- Stack lives in **`infra/runpod`** (see that folder’s README). **`tofu` or `terraform` must be on `PATH`** (OpenTofu releases: `tofu`; install script in **`training-wui/incus/install-opentofu.sh`** for Linux/Incus).
+- Stack lives in **`infra/runpod`** (see that folder’s README). **`tofu` or `terraform` must be on `PATH`** (OpenTofu releases: `tofu`; install script now in **`C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus\install-opentofu.sh`** for Linux/Incus).
 - **Training still runs on the same host as the WUI** (subprocess). The RunPod pod is provisioned for GPU / remote work; use **`public_ip`** from status outputs and SSH into the pod if you want training on the GPU there.
 
 **Cloud GPU (CUDA):** Pods default to **`ACCELERATOR=cuda`** in container env (`infra/runpod/variables.tf`). See **`infra/runpod/CLOUD_ACCELERATOR.md`** and **`scripts/runpod_sync_and_train.example.sh`** for rsync + SSH + `python -m engine` on the pod.
@@ -71,17 +71,17 @@ After training, point tools or agents at **`agent_bundle.json`** or set **`QMINI
 - **IBM “pending jobs” = 0**: That field is the **backend queue depth** (jobs waiting on that IBM device). Zero does not mean “no quantum access”; it usually means nothing is queued right now. Training may still use a local/simulator path until it submits hardware jobs.
 - **HF “dataset config” (none)**: Optional subset name for multi-config datasets. Empty means the **default** config on Hugging Face; Model Facts shows `(none)` when omitted.
 
-## Incus container (in this repo)
+## Incus container (ops repo)
 
 On the machine where `incus` runs (e.g. WSL):
 
 ```bash
-cd /mnt/c/GitHub/LLM_Pract/qminiwasm-core/training-wui/incus   # adjust to your clone
-chmod +x run-setup.sh setup-instance.sh install-opentofu.sh
+cd /mnt/c/GiTeaRepos/System_admin/runbooks/qminiwasm/incus
+chmod +x run-setup.sh setup-instance.sh install-opentofu.sh install-systemd-wui.sh
 ./run-setup.sh
 ```
 
-Or **`./setup-instance.sh /absolute/path/to/qminiwasm-core`**. Full details, autostart, and troubleshooting: [`incus/README.md`](incus/README.md). In the guest, repo root is **`/opt/qmw`** (WUI `-root`).
+Or **`./setup-instance.sh /absolute/path/to/qminiwasm-core`**. Full details, autostart, and troubleshooting are in the `System_admin` runbook README. In the guest, repo root remains **`/opt/qmw`** (WUI `-root`).
 
 ## Security note
 
