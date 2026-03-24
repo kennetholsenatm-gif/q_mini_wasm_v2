@@ -12,6 +12,7 @@ def main(config: EngineConfig | None = None) -> dict:
     load_dotenv_if_available()
     if config is None:
         config = EngineConfig()
+    wasm_kw = config.wasm_runtime_kwargs()
     mesh_algos = None
     if getattr(config, "mesh_algorithms", None):
         mesh_algos = [a.strip() for a in str(config.mesh_algorithms).split(",") if a.strip()]
@@ -94,4 +95,6 @@ def main(config: EngineConfig | None = None) -> dict:
         hf_max_buffered_rows=getattr(config, "hf_max_buffered_rows", None),
         hf_text_truncate_bytes=getattr(config, "hf_text_truncate_bytes", None),
         hf_deterministic_keep_every_n=getattr(config, "hf_deterministic_keep_every_n", None),
+        hf_dataset_revision=str(getattr(config, "hf_dataset_revision", None) or "main"),
+        wasm_runtime=wasm_kw["runtime"],
     )

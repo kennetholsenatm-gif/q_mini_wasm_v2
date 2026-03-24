@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from qminiwasm.wasm import MESH_EXPORT_NAMES, WasmCompiler, WasmEngine, MESH_ALGORITHMS
+from qminiwasm.wasm import MESH_EXPORT_NAMES, WasmCompiler, WasmEngine, MESH_ALGORITHMS, WasmRuntimeConfig
 
 BytesLike = Union[bytes, bytearray, memoryview]
 
@@ -81,12 +81,12 @@ class DataPipeline:
     - Continuous pre-training and CISPO integration
     """
 
-    def __init__(self):
+    def __init__(self, wasm_runtime: Optional[WasmRuntimeConfig] = None):
         """Initialize the DataPipeline."""
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         self.logger.info("Initialized DataPipeline")
-        self.wasm_engine = WasmEngine(use_mock=False)  # Use actual WASM compilation
+        self.wasm_engine = WasmEngine(use_mock=False, runtime=wasm_runtime)
         self.wasm_compiler = WasmCompiler(self.wasm_engine)
         self.hullkv_cache = HullKVCache()
         self._wasm_cache = {}

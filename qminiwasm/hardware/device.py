@@ -3,14 +3,13 @@
 This module provides a unified device dispatcher for AI training and inference.
 It supports Intel **XPU** (discrete Arc or integrated **Iris Xe** when PyTorch XPU
 /IPEX is installed), NVIDIA CUDA, and CPU. ``accelerator="sycl"`` is accepted as
-an alias for XPU-first selection with CPU fallback. When accelerator is not specified,
-behavior is driven by env ``PREFER_XPU`` and ``PREFER_CUDA``.
+an alias for XPU-first selection with CPU fallback. When ``accelerator`` is omitted,
+defaults to CPU unless ``prefer_xpu=True`` is passed explicitly (no environment variables).
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Literal, Tuple
 
 import torch
@@ -68,15 +67,15 @@ def get_device(
 ) -> torch.device:
     """Return the best available device for training and inference.
 
-    When accelerator is specified, that type is used (with fallback to CPU if
-    unavailable). When accelerator is None, env PREFER_XPU and PREFER_CUDA
-    are used; prefer_xpu (or legacy kwarg) overrides env for backward compatibility.
+    When ``accelerator`` is set in TOML / EngineConfig, that type is used (with
+    fallback to CPU if unavailable). When ``accelerator`` is None, defaults to CPU
+    unless ``prefer_xpu=True`` is passed explicitly by tests or callers.
 
     Args:
-        accelerator: "cuda", "xpu", "cpu", or "sycl". If None, use env / prefer_xpu.
+        accelerator: "cuda", "xpu", "cpu", or "sycl". If None, see ``prefer_xpu``.
         device_index: Device index for cuda or xpu (e.g. 0). Ignored on CPU.
-        prefer_xpu: Legacy: If True, use XPU; if False, prefer CPU (or CUDA if only that
-            is set). If None, use env.
+        prefer_xpu: If True, try XPU when ``accelerator`` is None. If None or False,
+            use CPU when ``accelerator`` is None.
 
     Returns:
         torch.device: cuda:index, xpu:index, or cpu.
@@ -121,23 +120,11 @@ def get_device(
             return torch.device("cpu")
         raise ValueError(f"Unknown accelerator: {accelerator}")
 
-    # Legacy / env-driven: prefer_xpu takes precedence over env if explicitly set
-    use_xpu = prefer_xpu
-    if use_xpu is None:
-        use_xpu = os.environ.get("PREFER_XPU", "1").strip().lower() in ("1", "true", "yes")
-    use_cuda = os.environ.get("PREFER_CUDA", "0").strip().lower() in ("1", "true", "yes")
-    if prefer_xpu is False:
-        use_xpu = False
-
-    if use_xpu and _xpu_available():
+    if prefer_xpu is True and _xpu_available():
         dev = torch.device(f"xpu:{idx}")
-        logger.info("Using Intel XPU device for training/inference: %s", dev)
+        logger.info("Using Intel XPU device (prefer_xpu=True): %s", dev)
         return dev
-    if use_cuda and _cuda_available():
-        dev = torch.device(f"cuda:{idx}")
-        logger.info("Using CUDA device for training/inference: %s", dev)
-        return dev
-    logger.info("Using CPU device")
+    logger.info("Using CPU device (no accelerator in config)")
     return torch.device("cpu")
 
 

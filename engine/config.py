@@ -1,17 +1,13 @@
-"""Engine config: TOML file + optional CLI kwargs, with env fallback and secrets from env."""
+"""Engine config: TOML file + explicit kwargs. Secrets (HF token) may be read from env."""
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .secret_sanitize import sanitize_api_key_like
-
-if TYPE_CHECKING:
-    from .training_schema import TrainingConfig
 
 
 def _normalize_hf_extra_specs(items: Any) -> List[Dict[str, Any]]:
@@ -38,13 +34,11 @@ def _normalize_hf_extra_specs(items: Any) -> List[Dict[str, Any]]:
 
 
 class EngineConfig:
-    """Configuration for the ML engine on the cloud instance.
+    """Configuration for the ML engine.
 
-    Constructor arguments that are ``None`` fall back to environment variables (legacy)
-    or built-in defaults. Values passed explicitly (including from a loaded TOML file)
-    take precedence over the environment for non-secret fields.
-    Secrets (``hf_token``) are always merged from ``HUGGING_FACE_HUB_TOKEN`` / ``HF_TOKEN``
-    when not passed explicitly.
+    Non-secret options must come from a training TOML file or explicit constructor
+    arguments. The only environment variables read here are **HUGGING_FACE_HUB_TOKEN**
+    and **HF_TOKEN** when ``hf_token`` is not passed explicitly.
     """
 
     def __init__(
@@ -62,8 +56,6 @@ class EngineConfig:
         qaoa_prune_threshold: Optional[float] = None,
         qaoa_prune_min_nodes: Optional[int] = None,
         qaoa_warm_start_cache_ttl: Optional[int] = None,
-        #: WUI / env QUANTUM_EXECUTION_POLICY:
-        #: hardware_only | prefer_hardware_fallback | simulator_only
         quantum_execution_policy: Optional[str] = None,
         diff_method: Optional[str] = None,
         epochs: Optional[int] = None,
@@ -121,176 +113,116 @@ class EngineConfig:
         hf_max_buffered_rows: Optional[int] = None,
         hf_text_truncate_bytes: Optional[int] = None,
         hf_deterministic_keep_every_n: Optional[int] = None,
+        hf_dataset_revision: Optional[str] = None,
+        wasm_store_memory_limit_mb: Optional[int] = None,
+        wasm_fallback_policy: Optional[str] = None,
+        wasm_force_mock: Optional[bool] = None,
+        wasm_store_instance_limit: Optional[int] = None,
+        wasm_store_memories_limit: Optional[int] = None,
     ):
-        self.accelerator = (
-            accelerator
-            if accelerator is not None
-            else (os.environ.get("ACCELERATOR", "").strip() or None)
-        )
-        _idx = os.environ.get("DEVICE_INDEX", "")
-        self.device_index = (
-            int(device_index) if device_index is not None else (int(_idx) if _idx.isdigit() else 0)
-        )
+        self.accelerator = accelerator
+        self.device_index = int(device_index) if device_index is not None else 0
         self.quantum_backend = (
-            quantum_backend
-            if quantum_backend is not None
-            else os.environ.get("QUANTUM_BACKEND", "penny_lane")
+            quantum_backend if quantum_backend is not None else "penny_lane"
         )
-        self.num_qubits = (
-            int(num_qubits) if num_qubits is not None else int(os.environ.get("NUM_QUBITS", "8"))
-        )
-        self.qaoa_layers = (
-            int(qaoa_layers) if qaoa_layers is not None else int(os.environ.get("QAOA_LAYERS", "3"))
-        )
-        _qem = (
-            qaoa_execution_mode
-            if qaoa_execution_mode is not None
-            else os.environ.get("QMINIWASM_QAOA_EXECUTION", "pennylane")
-        )
+        self.num_qubits = int(num_qubits) if num_qubits is not None else 8
+        self.qaoa_layers = int(qaoa_layers) if qaoa_layers is not None else 3
+        _qem = qaoa_execution_mode if qaoa_execution_mode is not None else "pennylane"
         self.qaoa_execution_mode = (_qem or "pennylane").strip().lower()
-        self.ibm_qaoa_shots = (
-            int(ibm_qaoa_shots)
-            if ibm_qaoa_shots is not None
-            else int(os.environ.get("IBM_QAOA_SHOTS", "1024"))
-        )
+        self.ibm_qaoa_shots = int(ibm_qaoa_shots) if ibm_qaoa_shots is not None else 1024
         self.qaoa_simulator_backend = (
             str(qaoa_simulator_backend).strip().lower()
             if qaoa_simulator_backend is not None
-            else str(os.environ.get("QAOA_SIMULATOR_BACKEND", "auto")).strip().lower()
+            else "auto"
         )
         if qaoa_mps_max_bond_dim is not None:
             self.qaoa_mps_max_bond_dim = int(qaoa_mps_max_bond_dim)
         else:
-            _qmbd = os.environ.get("QAOA_MPS_MAX_BOND_DIM", "").strip()
-            self.qaoa_mps_max_bond_dim = int(_qmbd) if _qmbd.isdigit() else None
+            self.qaoa_mps_max_bond_dim = None
         if qaoa_prune_enabled is not None:
             self.qaoa_prune_enabled = bool(qaoa_prune_enabled)
         else:
-            _qpe = os.environ.get("QAOA_PRUNE_ENABLED", "").strip().lower()
-            self.qaoa_prune_enabled = _qpe in ("1", "true", "yes", "on")
+            self.qaoa_prune_enabled = False
         if qaoa_prune_threshold is not None:
             self.qaoa_prune_threshold = float(qaoa_prune_threshold)
         else:
-            self.qaoa_prune_threshold = float(os.environ.get("QAOA_PRUNE_THRESHOLD", "0.0"))
+            self.qaoa_prune_threshold = 0.0
         if qaoa_prune_min_nodes is not None:
             self.qaoa_prune_min_nodes = max(1, int(qaoa_prune_min_nodes))
         else:
-            _qpmn = os.environ.get("QAOA_PRUNE_MIN_NODES", "").strip()
-            self.qaoa_prune_min_nodes = max(1, int(_qpmn)) if _qpmn.isdigit() else 4
+            self.qaoa_prune_min_nodes = 4
         if qaoa_warm_start_cache_ttl is not None:
             self.qaoa_warm_start_cache_ttl = max(1, int(qaoa_warm_start_cache_ttl))
         else:
-            _qws = os.environ.get("QAOA_WARM_START_CACHE_TTL", "").strip()
-            self.qaoa_warm_start_cache_ttl = max(1, int(_qws)) if _qws.isdigit() else 128
+            self.qaoa_warm_start_cache_ttl = 128
         self.quantum_execution_policy = (
-            (quantum_execution_policy or os.environ.get("QUANTUM_EXECUTION_POLICY", "") or "")
-            .strip()
-            .lower()
+            (quantum_execution_policy or "").strip().lower()
         )
-        # WUI "hardware only" must enable the Qiskit IBM QAOA path;
-        # default pennylane leaves MoE as identity.
         if (
             self.quantum_execution_policy == "hardware_only"
             and self.qaoa_execution_mode == "pennylane"
         ):
             _log = logging.getLogger(__name__)
             _log.info(
-                "QUANTUM_EXECUTION_POLICY=hardware_only: using qaoa_execution_mode=qiskit_ibm "
+                "quantum_execution_policy=hardware_only: using qaoa_execution_mode=qiskit_ibm "
                 "(pennylane would skip real QAOA in HybridQuantumMoE)"
             )
             self.qaoa_execution_mode = "qiskit_ibm"
         self.diff_method = (
-            diff_method
-            if diff_method is not None
-            else os.environ.get("DIFF_METHOD", "parameter-shift")
+            diff_method if diff_method is not None else "parameter-shift"
         )
-        self.epochs = int(epochs) if epochs is not None else int(os.environ.get("EPOCHS", "25"))
-        self.batch_size = (
-            int(batch_size) if batch_size is not None else int(os.environ.get("BATCH_SIZE", "32"))
-        )
-        _lr_env = os.environ.get("LEARNING_RATE", "").strip()
+        self.epochs = int(epochs) if epochs is not None else 25
+        self.batch_size = int(batch_size) if batch_size is not None else 32
         if learning_rate is not None:
             self.learning_rate = float(learning_rate)
-        elif _lr_env:
-            self.learning_rate = float(_lr_env)
         else:
             self.learning_rate = 1e-4
 
-        self.data_path = data_path if data_path is not None else os.environ.get("DATA_PATH")
+        self.data_path = data_path
         if training_data_source is not None:
             self.training_data_source = str(training_data_source).strip() or "mesh"
         else:
-            self.training_data_source = (
-                os.environ.get("TRAINING_DATA_SOURCE", "mesh") or "mesh"
-            ).strip()
+            self.training_data_source = "mesh"
 
         _tds = self.training_data_source.lower()
-        if (
-            learning_rate is None
-            and not _lr_env
-            and _tds == "hf_tabular"
-            and self.learning_rate == 1e-4
-        ):
+        if learning_rate is None and _tds == "hf_tabular" and self.learning_rate == 1e-4:
             self.learning_rate = 1.5e-4
 
         self.mesh_algorithms = (
             mesh_algorithms
             if mesh_algorithms is not None
-            else os.environ.get(
-                "MESH_ALGORITHMS",
-                "hash,encrypt,network,routing,consensus",
-            )
+            else "hash,encrypt,network,routing,consensus"
         )
-        self.hf_dataset_config = (
-            hf_dataset_config
-            if hf_dataset_config is not None
-            else os.environ.get("HF_DATASET_CONFIG")
-        )
+        self.hf_dataset_config = hf_dataset_config
         if hf_num_samples is not None:
             self.hf_num_samples = hf_num_samples
         else:
-            _hns = os.environ.get("HF_NUM_SAMPLES", "").strip()
-            self.hf_num_samples = int(_hns) if _hns.isdigit() else None
+            self.hf_num_samples = None
 
         if hf_split is not None:
             self.hf_split = str(hf_split).strip() or "train"
         else:
-            self.hf_split = (os.environ.get("HF_SPLIT") or "train").strip() or "train"
+            self.hf_split = "train"
 
         if hf_text_fields is not None:
             self.hf_text_fields = hf_text_fields
         else:
-            _htf = os.environ.get("HF_TEXT_FIELDS", "").strip()
-            self.hf_text_fields = (
-                [x.strip() for x in _htf.split(",") if x.strip()] if _htf else None
-            )
+            self.hf_text_fields = None
 
         if hf_context_fields is not None:
             self.hf_context_fields = hf_context_fields
         else:
-            _hc = os.environ.get("HF_CONTEXT_FIELDS", "").strip().lower()
-            if _hc in ("0", "false", "none", "off", "disable", "disabled"):
-                self.hf_context_fields = []
-            elif os.environ.get("HF_CONTEXT_FIELDS", "").strip():
-                self.hf_context_fields = [
-                    x.strip()
-                    for x in os.environ.get("HF_CONTEXT_FIELDS", "").split(",")
-                    if x.strip()
-                ]
-            else:
-                self.hf_context_fields = None
+            self.hf_context_fields = None
 
         if hf_wasi_slice_only is not None:
             self.hf_wasi_slice_only = hf_wasi_slice_only
         else:
-            _hw = os.environ.get("HF_WASI_SLICE_ONLY", "").strip().lower()
-            self.hf_wasi_slice_only = _hw in ("1", "true", "yes", "on")
+            self.hf_wasi_slice_only = False
 
         if hf_wasi_max_scan is not None:
             self.hf_wasi_max_scan = hf_wasi_max_scan
         else:
-            _hms = os.environ.get("HF_WASI_MAX_SCAN", "").strip()
-            self.hf_wasi_max_scan = int(_hms) if _hms.isdigit() else None
+            self.hf_wasi_max_scan = None
 
         self.hf_token = hf_token
         if self.hf_token is None:
@@ -299,333 +231,230 @@ class EngineConfig:
             self.hf_token = _hub or _hf or None
         self.hf_token = sanitize_api_key_like(self.hf_token)
 
-        if seed is not None:
-            self.seed = seed
-        else:
-            _sd = os.environ.get("SEED", "").strip()
-            if _sd:
-                try:
-                    self.seed = int(_sd)
-                except ValueError:
-                    self.seed = None
-            else:
-                self.seed = None
+        self.seed = seed if seed is not None else None
 
         if grad_clip_norm is not None:
             self.grad_clip_norm = grad_clip_norm if grad_clip_norm > 0 else None
+        elif _tds == "hf_tabular":
+            self.grad_clip_norm = 1.0
         else:
-            _gcn = os.environ.get("GRAD_CLIP_NORM", "").strip()
-            if _gcn:
-                try:
-                    v = float(_gcn)
-                    self.grad_clip_norm = v if v > 0 else None
-                except ValueError:
-                    self.grad_clip_norm = None
-            elif _tds == "hf_tabular":
-                self.grad_clip_norm = 1.0
-            else:
-                self.grad_clip_norm = None
+            self.grad_clip_norm = None
 
         if lr_plateau_patience is not None:
             self.lr_plateau_patience = lr_plateau_patience
+        elif _tds == "hf_tabular":
+            self.lr_plateau_patience = 2
         else:
-            _lp = os.environ.get("LR_PLATEAU_PATIENCE", "").strip()
-            if _lp.isdigit():
-                self.lr_plateau_patience = int(_lp)
-            elif _lp == "0":
-                self.lr_plateau_patience = 0
-            elif _tds == "hf_tabular":
-                self.lr_plateau_patience = 2
-            else:
-                self.lr_plateau_patience = None
+            self.lr_plateau_patience = None
 
         self.lr_plateau_factor = (
-            float(lr_plateau_factor)
-            if lr_plateau_factor is not None
-            else float(os.environ.get("LR_PLATEAU_FACTOR", "0.5"))
+            float(lr_plateau_factor) if lr_plateau_factor is not None else 0.5
         )
         self.lr_plateau_min_lr = (
-            float(lr_plateau_min_lr)
-            if lr_plateau_min_lr is not None
-            else float(os.environ.get("LR_PLATEAU_MIN_LR", "1e-7"))
+            float(lr_plateau_min_lr) if lr_plateau_min_lr is not None else 1e-7
         )
 
         if early_stop_patience is not None:
             self.early_stop_patience = early_stop_patience
         else:
-            _es = os.environ.get("EARLY_STOP_PATIENCE", "").strip()
-            self.early_stop_patience = int(_es) if _es.isdigit() else None
+            self.early_stop_patience = None
 
-        self.checkpoint_load_path = (
-            checkpoint_load_path
-            if checkpoint_load_path is not None
-            else (os.environ.get("CHECKPOINT_LOAD_PATH", "").strip() or None)
-        )
-        self.checkpoint_save_path = (
-            checkpoint_save_path
-            if checkpoint_save_path is not None
-            else (os.environ.get("CHECKPOINT_SAVE_PATH", "").strip() or None)
-        )
-        self.checkpoint_best_path = (
-            checkpoint_best_path
-            if checkpoint_best_path is not None
-            else (os.environ.get("CHECKPOINT_BEST_PATH", "").strip() or None)
-        )
-        self.checkpoint_latest_path = (
-            checkpoint_latest_path
-            if checkpoint_latest_path is not None
-            else (os.environ.get("CHECKPOINT_LATEST_PATH", "").strip() or None)
-        )
+        self.checkpoint_load_path = checkpoint_load_path
+        self.checkpoint_save_path = checkpoint_save_path
+        self.checkpoint_best_path = checkpoint_best_path
+        self.checkpoint_latest_path = checkpoint_latest_path
 
         if eval_holdout_fraction is not None:
             self.eval_holdout_fraction = float(eval_holdout_fraction)
         else:
-            _eh = os.environ.get("EVAL_HOLDOUT_FRACTION", "").strip()
-            if _eh:
-                try:
-                    self.eval_holdout_fraction = float(_eh)
-                except ValueError:
-                    self.eval_holdout_fraction = 0.0
-            else:
-                self.eval_holdout_fraction = 0.0
+            self.eval_holdout_fraction = 0.0
 
         if eval_every_epoch is not None:
             self.eval_every_epoch = eval_every_epoch
         else:
-            _ee = os.environ.get("EVAL_EVERY_EPOCH", "").strip().lower()
-            self.eval_every_epoch = _ee in ("1", "true", "yes", "on")
+            self.eval_every_epoch = False
 
         if target_mean_mse is not None:
             self.target_mean_mse = target_mean_mse
+        elif _tds == "hf_tabular":
+            self.target_mean_mse = 1e-4
         else:
-            _tm = os.environ.get("TARGET_MEAN_MSE", "").strip()
-            if _tm:
-                try:
-                    self.target_mean_mse = float(_tm)
-                except ValueError:
-                    self.target_mean_mse = None
-            elif _tds == "hf_tabular":
-                self.target_mean_mse = 1e-4
-            else:
-                self.target_mean_mse = None
+            self.target_mean_mse = None
 
         if stop_on_target_mse is not None:
             self.stop_on_target_mse = stop_on_target_mse
         else:
-            _so = os.environ.get("STOP_ON_TARGET_MSE", "").strip().lower()
-            self.stop_on_target_mse = _so in ("1", "true", "yes", "on")
+            self.stop_on_target_mse = False
 
         if hybrid_adapter is not None:
             self.hybrid_adapter = hybrid_adapter
         else:
-            _hy = os.environ.get("HYBRID_ADAPTER", "").strip().lower()
-            self.hybrid_adapter = _hy in ("1", "true", "yes", "on")
+            self.hybrid_adapter = False
 
         if hybrid_adapter_hidden is not None:
             self.hybrid_adapter_hidden = max(32, int(hybrid_adapter_hidden))
         else:
-            _hh = os.environ.get("HYBRID_ADAPTER_HIDDEN", "").strip()
-            self.hybrid_adapter_hidden = max(32, int(_hh)) if _hh.isdigit() else 1024
+            self.hybrid_adapter_hidden = 1024
 
         if tequila_deadzone is not None:
             self.tequila_deadzone = float(tequila_deadzone)
         else:
-            _td = os.environ.get("TEQUILA_DEADZONE", "").strip()
-            if _td:
-                try:
-                    self.tequila_deadzone = float(_td)
-                except ValueError:
-                    self.tequila_deadzone = 0.0
-            else:
-                self.tequila_deadzone = 0.0
+            self.tequila_deadzone = 0.0
 
         if lota_rank is not None:
             self.lota_rank = int(lota_rank)
         else:
-            _lr = os.environ.get("LOTA_RANK", "").strip()
-            self.lota_rank = int(_lr) if _lr.isdigit() else 0
+            self.lota_rank = 0
 
         if use_tsign_ternary is not None:
             self.use_tsign_ternary = use_tsign_ternary
         else:
-            _ut = os.environ.get("TSIGN_SGD_TERNARY", "").strip().lower()
-            self.use_tsign_ternary = _ut in ("1", "true", "yes", "on")
+            self.use_tsign_ternary = False
 
         if tsign_learning_rate is not None:
             self.tsign_learning_rate = float(tsign_learning_rate)
         else:
-            _tsl = os.environ.get("TSIGN_LEARNING_RATE", "").strip()
-            if _tsl:
-                try:
-                    self.tsign_learning_rate = float(_tsl)
-                except ValueError:
-                    self.tsign_learning_rate = 1e-3
-            else:
-                self.tsign_learning_rate = 1e-3
+            self.tsign_learning_rate = 1e-3
 
         if lota_merge_every_epoch is not None:
             self.lota_merge_every_epoch = lota_merge_every_epoch
         else:
-            _lm = os.environ.get("LOTA_MERGE_EVERY_EPOCH", "").strip().lower()
-            self.lota_merge_every_epoch = _lm in ("1", "true", "yes", "on")
+            self.lota_merge_every_epoch = False
 
         if use_cascade_rl is not None:
             self.use_cascade_rl = use_cascade_rl
         else:
-            _cr = os.environ.get("CASCADE_RL", "").strip().lower()
-            if _cr in ("0", "false", "no", "off", "disable", "disabled"):
-                self.use_cascade_rl = False
-            elif _cr in ("1", "true", "yes", "on"):
-                self.use_cascade_rl = True
-            else:
-                self.use_cascade_rl = True
+            self.use_cascade_rl = True
 
         if cascade_policy_lr is not None:
             self.cascade_policy_lr = float(cascade_policy_lr)
+        elif _tds == "hf_tabular":
+            self.cascade_policy_lr = 0.5 * float(self.learning_rate)
         else:
-            _cpl = os.environ.get("CASCADE_POLICY_LR", "").strip()
-            if _cpl:
-                try:
-                    self.cascade_policy_lr = float(_cpl)
-                except ValueError:
-                    self.cascade_policy_lr = self.learning_rate
-            elif _tds == "hf_tabular":
-                self.cascade_policy_lr = 0.5 * float(self.learning_rate)
-            else:
-                self.cascade_policy_lr = self.learning_rate
+            self.cascade_policy_lr = self.learning_rate
 
         if cascade_steps_per_epoch is not None:
             self.cascade_steps_per_epoch = int(cascade_steps_per_epoch)
         else:
-            _cse = os.environ.get("CASCADE_STEPS_PER_EPOCH", "").strip()
-            self.cascade_steps_per_epoch = int(_cse) if _cse.isdigit() else 2
+            self.cascade_steps_per_epoch = 2
 
         if cascade_group_size is not None:
             self.cascade_group_size = int(cascade_group_size)
         else:
-            _cgs = os.environ.get("CASCADE_GROUP_SIZE", "").strip()
-            self.cascade_group_size = int(_cgs) if _cgs.isdigit() else 4
+            self.cascade_group_size = 4
 
         if cascade_state_dim is not None:
             self.cascade_state_dim = int(cascade_state_dim)
         else:
-            _csd = os.environ.get("CASCADE_STATE_DIM", "").strip()
-            self.cascade_state_dim = int(_csd) if _csd.isdigit() else 8
+            self.cascade_state_dim = 8
 
         if cascade_num_actions is not None:
             self.cascade_num_actions = int(cascade_num_actions)
         else:
-            _cna = os.environ.get("CASCADE_NUM_ACTIONS", "").strip()
-            self.cascade_num_actions = int(_cna) if _cna.isdigit() else 4
+            self.cascade_num_actions = 4
 
         if cascade_mopd_lambda is not None:
             self.cascade_mopd_lambda = float(cascade_mopd_lambda)
         else:
-            _cml = os.environ.get("CASCADE_MOPD_LAMBDA", "").strip()
-            if _cml:
-                try:
-                    self.cascade_mopd_lambda = float(_cml)
-                except ValueError:
-                    self.cascade_mopd_lambda = 0.0
-            else:
-                self.cascade_mopd_lambda = 0.0
+            self.cascade_mopd_lambda = 0.0
 
         if cascade_mopd_feat_loss is not None:
             self.cascade_mopd_feat_loss = cascade_mopd_feat_loss
         else:
-            _cmfl = os.environ.get("CASCADE_MOPD_FEAT_LOSS", "").strip().lower()
-            if _cmfl in ("cosine", "cos"):
-                self.cascade_mopd_feat_loss = "cosine"
-            else:
-                self.cascade_mopd_feat_loss = "mse"
+            self.cascade_mopd_feat_loss = "mse"
 
         if cascade_seed_from_hidden is not None:
             self.cascade_seed_from_hidden = cascade_seed_from_hidden
         else:
-            _csh = os.environ.get("CASCADE_SEED_FROM_HIDDEN", "").strip().lower()
-            if _csh in ("0", "false", "no", "off", "disable", "disabled"):
-                self.cascade_seed_from_hidden = False
-            else:
-                self.cascade_seed_from_hidden = True
+            self.cascade_seed_from_hidden = True
 
         if use_cascade_router is not None:
             self.use_cascade_router = use_cascade_router
         else:
-            _ucr = os.environ.get("USE_CASCADE_ROUTER", "").strip().lower()
-            self.use_cascade_router = _ucr in ("1", "true", "yes", "on")
+            self.use_cascade_router = False
 
         if cascade_learned_projector is not None:
             self.cascade_learned_projector = cascade_learned_projector
         else:
-            _clp = os.environ.get("CASCADE_LEARNED_PROJECTOR", "").strip().lower()
-            self.cascade_learned_projector = _clp in ("1", "true", "yes", "on")
+            self.cascade_learned_projector = False
 
         if cascade_router_hidden is not None:
             self.cascade_router_hidden = int(cascade_router_hidden)
         else:
-            _crh = os.environ.get("CASCADE_ROUTER_HIDDEN", "").strip()
-            self.cascade_router_hidden = int(_crh) if _crh.isdigit() else 32
+            self.cascade_router_hidden = 32
 
         if cascade_couple_forward is not None:
             self.cascade_couple_forward = cascade_couple_forward
         else:
-            _ccf = os.environ.get("CASCADE_COUPLE_FORWARD", "").strip().lower()
-            if _ccf in ("0", "false", "no", "off", "disable", "disabled"):
-                self.cascade_couple_forward = False
-            else:
-                self.cascade_couple_forward = True
+            self.cascade_couple_forward = True
 
         if hf_mesh_blend_fraction is not None:
             self.hf_mesh_blend_fraction = max(0.0, float(hf_mesh_blend_fraction))
         else:
-            _hmb = os.environ.get("HF_MESH_BLEND_FRACTION", "").strip()
-            if _hmb:
-                try:
-                    self.hf_mesh_blend_fraction = max(0.0, float(_hmb))
-                except ValueError:
-                    self.hf_mesh_blend_fraction = 0.0
-            else:
-                self.hf_mesh_blend_fraction = 0.0
+            self.hf_mesh_blend_fraction = 0.0
 
         if hf_extra_specs is not None:
             self.hf_extra_specs = _normalize_hf_extra_specs(hf_extra_specs)
         else:
-            _raw = os.environ.get("HF_EXTRA_SPECS", "").strip()
-            if _raw:
-                try:
-                    parsed = json.loads(_raw)
-                    self.hf_extra_specs = _normalize_hf_extra_specs(parsed)
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    _log = logging.getLogger(__name__)
-                    _log.warning("HF_EXTRA_SPECS is not valid JSON; ignoring.")
-                    self.hf_extra_specs = []
-            else:
-                self.hf_extra_specs = []
+            self.hf_extra_specs = []
+
         if hf_streaming is not None:
             self.hf_streaming = bool(hf_streaming)
         else:
-            _hs = os.environ.get("HF_STREAMING", "").strip().lower()
-            self.hf_streaming = _hs in ("1", "true", "yes", "on")
+            self.hf_streaming = False
+
         if hf_max_scan_rows is not None:
             self.hf_max_scan_rows = int(hf_max_scan_rows)
         else:
-            _hmsr = os.environ.get("HF_MAX_SCAN_ROWS", "").strip()
-            self.hf_max_scan_rows = int(_hmsr) if _hmsr.isdigit() else None
+            self.hf_max_scan_rows = None
+
         if hf_max_buffered_rows is not None:
             self.hf_max_buffered_rows = int(hf_max_buffered_rows)
         else:
-            _hmbr = os.environ.get("HF_MAX_BUFFERED_ROWS", "").strip()
-            self.hf_max_buffered_rows = int(_hmbr) if _hmbr.isdigit() else None
+            self.hf_max_buffered_rows = None
+
         if hf_text_truncate_bytes is not None:
             self.hf_text_truncate_bytes = int(hf_text_truncate_bytes)
         else:
-            _httb = os.environ.get("HF_TEXT_TRUNCATE_BYTES", "").strip()
-            self.hf_text_truncate_bytes = int(_httb) if _httb.isdigit() else None
+            self.hf_text_truncate_bytes = None
+
         if hf_deterministic_keep_every_n is not None:
             self.hf_deterministic_keep_every_n = int(hf_deterministic_keep_every_n)
         else:
-            _hdk = os.environ.get("HF_DETERMINISTIC_KEEP_EVERY_N", "").strip()
-            self.hf_deterministic_keep_every_n = int(_hdk) if _hdk.isdigit() else None
+            self.hf_deterministic_keep_every_n = None
+
+        if hf_dataset_revision is not None:
+            self.hf_dataset_revision = str(hf_dataset_revision).strip() or "main"
+        else:
+            self.hf_dataset_revision = "main"
+
+        self.wasm_store_memory_limit_mb = wasm_store_memory_limit_mb
+        self.wasm_fallback_policy = wasm_fallback_policy
+        self.wasm_force_mock = wasm_force_mock
+        self.wasm_store_instance_limit = wasm_store_instance_limit
+        self.wasm_store_memories_limit = wasm_store_memories_limit
+
+    def wasm_runtime_kwargs(self) -> Dict[str, Any]:
+        """Build kwargs for :class:`qminiwasm.wasm.engine.WasmRuntimeConfig`."""
+        from qminiwasm.wasm.engine import WasmRuntimeConfig
+
+        mb = self.wasm_store_memory_limit_mb
+        lim_b = int(mb) * 1024 * 1024 if mb is not None and mb > 0 else 256 * 1024 * 1024
+        fp = (self.wasm_fallback_policy or "mock").strip().lower()
+        if fp in ("error", "fail", "strict"):
+            fp = "error"
+        else:
+            fp = "mock"
+        fm = bool(self.wasm_force_mock) if self.wasm_force_mock is not None else False
+        return {
+            "runtime": WasmRuntimeConfig(
+                store_memory_limit_bytes=lim_b,
+                fallback_policy=fp,
+                force_mock=fm,
+                store_instance_limit=self.wasm_store_instance_limit,
+                store_memories_limit=self.wasm_store_memories_limit,
+            )
+        }
 
     @classmethod
     def from_training_toml(cls, path: str | Path) -> EngineConfig:
@@ -640,7 +469,7 @@ class EngineConfig:
 
 
 def _raise_if_hf_multi_without_specs(cfg: EngineConfig, path: str | Path) -> None:
-    """Fail fast after TOML + env merge when extras-only HF mode has no datasets."""
+    """Fail fast when extras-only HF mode has no datasets."""
     tds = (cfg.training_data_source or "mesh").strip().lower()
     if tds != "hf_tabular":
         return
@@ -652,13 +481,13 @@ def _raise_if_hf_multi_without_specs(cfg: EngineConfig, path: str | Path) -> Non
     p = Path(path).resolve()
     raise ValueError(
         f"{p}: [data].path is qminiwasm/hf-multi (extras-only Hub mode) but no datasets were "
-        "configured. Add [huggingface].extra_specs in this TOML, or set HF_EXTRA_SPECS in "
-        "the environment to a JSON array, e.g. "
-        '[{"path":"code-search-net/code_search_net","dataset_config":"python"}].'
+        "configured. Add [huggingface].extra_specs in this TOML (e.g. from Dataset Builder "
+        "Apply mix), e.g. "
+        '[{path = "code-search-net/code_search_net", dataset_config = "python"}].'
     )
 
 
-def load_training_config(path: str | Path) -> TrainingConfig:
+def load_training_config(path: str | Path) -> Any:
     """Load and validate training TOML (Pydantic root model)."""
     from .training_schema import load_training_toml
 

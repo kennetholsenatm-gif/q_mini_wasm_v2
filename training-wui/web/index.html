@@ -861,6 +861,48 @@
     .tab-panel[hidden] {
       display: none !important;
     }
+    .dataset-catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: var(--space-sm);
+      max-height: min(70vh, 640px);
+      overflow: auto;
+      padding: var(--space-sm);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      background: var(--surface-command-gray);
+    }
+    .dataset-catalog-grid label {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-sm);
+      margin: 0;
+      padding: var(--space-sm);
+      border-radius: 4px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-size: var(--text-sm);
+    }
+    .dataset-catalog-grid label:hover {
+      border-color: var(--surface-interface-gray);
+      background: var(--bg-tactical-black);
+    }
+    .dataset-catalog-grid .dc-meta {
+      display: block;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    .dataset-custom-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      margin: 4px 8px 4px 0;
+      border-radius: 999px;
+      border: 1px solid var(--surface-interface-gray);
+      font-size: var(--text-sm);
+    }
     .infrastructure-tab {
       max-width: 1100px;
       margin: 0 auto;
@@ -1074,6 +1116,8 @@
   </div>
   <nav class="app-tabs" role="tablist" aria-label="Main views">
     <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Launchpad</button>
+    <button type="button" class="app-tab" id="tabBtnConfig" role="tab" aria-selected="false">Configuration</button>
+    <button type="button" class="app-tab" id="tabBtnDataset" role="tab" aria-selected="false">Dataset Builder</button>
     <button type="button" class="app-tab" id="tabBtnMission" role="tab" aria-selected="false">Mission Control</button>
     <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false">Node Health</button>
     <button type="button" class="app-tab" id="tabBtnQuantum" role="tab" aria-selected="false">Quantum Topology</button>
@@ -1347,55 +1391,12 @@
         <p class="status stack-md" id="buildMsg" aria-live="polite"></p>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
-      <section class="dash-card" data-card-id="schema-form" data-col="2">
-        <h2>Schema-driven custom run</h2>
-        <p class="hint">Guided Auto mode: schema fields are generated from `/api/schema` and tuned defaults are applied before start.</p>
-        <div class="grid mt-md">
-          <div>
-            <label for="schemaDataScheme">Data scheme</label>
-            <select id="schemaDataScheme">
-              <option value="mesh">mesh (synthetic/algorithmic)</option>
-              <option value="hf_tabular">hf_tabular (Hugging Face dataset)</option>
-              <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
-            </select>
-          </div>
-          <div>
-            <label for="schemaDatasetPreset">Dataset preset</label>
-            <select id="schemaDatasetPreset">
-              <option value="">(custom / keep manual values)</option>
-              <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
-              <option value="google-research-datasets/mbpp|full">MBPP</option>
-              <option value="openai/gsm8k|">GSM8K</option>
-              <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
-              <option value="qminiwasm/hf-multi|">Multi-dataset placeholder (extras-only)</option>
-            </select>
-          </div>
-          <div>
-            <label for="schemaQuantumMode">Quantum execution</label>
-            <select id="schemaQuantumMode">
-              <option value="simulator">Simulator (default)</option>
-              <option value="hardware_pref">Hardware preferred (toggle B)</option>
-            </select>
-          </div>
-          <div>
-            <label class="checkline mt-lg">
-              <input id="schemaAutoLR" type="checkbox" checked />
-              Auto-adjust learning rate before start
-            </label>
-          </div>
-        </div>
-        <p class="hint">Data is read from your selected source (HF datasets stream from hub when configured). Model outputs/checkpoints are written under <code>artifacts/models/...</code>.</p>
-        <div class="row align-center">
-          <label for="schemaRunName" class="mb-0">Run name</label>
-          <input id="schemaRunName" type="text" placeholder="custom-run" style="max-width:320px" />
-          <label for="schemaBasicOnly" class="mb-0"><input id="schemaBasicOnly" type="checkbox" checked /> Basic fields only</label>
-          <button type="button" class="ghost" id="btnReloadSchema">Reload schema</button>
-        </div>
-        <div id="schemaFormHost" class="grid mt-md"></div>
-        <div class="row">
-          <button type="button" class="primary" id="btnStartCustomRun">Start Training (Custom Form)</button>
-          <span id="schemaRunMsg" class="status"></span>
-        </div>
+      <section class="dash-card" data-card-id="config-shortcut" data-col="2">
+        <h2>Training configuration</h2>
+        <p class="hint hint-block">
+          Guided training options (hardware, data, checkpoints, Hugging Face revision, WASM limits) live on the <strong>Configuration</strong> tab. Build a dataset mix in <strong>Dataset Builder</strong>, then start a <strong>custom form</strong> run from Configuration — the mix syncs into the generated TOML without editing files by hand.
+        </p>
+        <button type="button" class="primary" id="btnGotoConfig">Open Configuration</button>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
       <section class="dash-card" data-card-id="artifacts" data-col="2">
@@ -1438,6 +1439,127 @@
       </section>
       </div>
     </div>
+    </div>
+
+    <div id="panelConfig" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnConfig" hidden>
+      <div id="configCanvas" class="training-canvas" style="max-width:960px;margin:0 auto;">
+        <section class="dash-card" data-card-id="schema-form" style="margin-bottom:var(--space-md)">
+          <h2>Schema-driven custom run</h2>
+          <p class="hint">Fields come from <code>/api/schema</code> (aligned with <code>configs/training/schema.toml</code>). Dataset Builder selections (catalog + custom Hub ids) are merged automatically when you start — use <strong>Apply mix</strong> to persist the mix, or select datasets and start directly.</p>
+          <div class="grid mt-md">
+            <div>
+              <label for="schemaDataScheme">Data scheme</label>
+              <select id="schemaDataScheme">
+                <option value="mesh">mesh (synthetic/algorithmic)</option>
+                <option value="hf_tabular">hf_tabular (Hugging Face dataset)</option>
+                <option value="hybrid_mesh_hf_tabular">hybrid mesh + hf_tabular</option>
+              </select>
+            </div>
+            <div>
+              <label for="schemaDatasetPreset">Dataset preset</label>
+              <select id="schemaDatasetPreset">
+                <option value="">(custom / keep manual values)</option>
+                <option value="code-search-net/code_search_net|python">CodeSearchNet (python)</option>
+                <option value="google-research-datasets/mbpp|full">MBPP</option>
+                <option value="openai/gsm8k|">GSM8K</option>
+                <option value="AI-MO/NuminaMath-CoT|">NuminaMath-CoT</option>
+                <option value="qminiwasm/hf-multi|">Multi-dataset placeholder (extras-only)</option>
+              </select>
+              <div class="hint stack-sm">
+                For multi-dataset runs, use the <strong>Dataset Builder</strong> tab (custom Hub ids + catalog). Mix is injected as <code>data.path = qminiwasm/hf-multi</code> and <code>[huggingface].extra_specs</code>.
+              </div>
+            </div>
+            <div>
+              <label for="schemaDataPathArtifact">Artifact file (non-checkpoint)</label>
+              <select id="schemaDataPathArtifact">
+                <option value="">(none — use preset or Hub id below)</option>
+              </select>
+              <div class="hint stack-sm">
+                Training data for <code>hf_tabular</code> must be a <strong>Hugging Face dataset id</strong> (e.g. <code>code-search-net/code_search_net</code>), not a <code>.pt</code> checkpoint. Checkpoints belong in <code>[checkpoint].load_path</code>. The list below skips <code>.pt</code> files from artifacts.
+              </div>
+            </div>
+            <div>
+              <label for="schemaDataPathCustom">Hub dataset id (custom)</label>
+              <input id="schemaDataPathCustom" type="text" placeholder="owner/repo — not .pt checkpoints" />
+            </div>
+            <div>
+              <label for="schemaQuantumMode">Quantum execution</label>
+              <select id="schemaQuantumMode">
+                <option value="simulator">Simulator (default)</option>
+                <option value="hardware_pref">Hardware preferred (toggle B)</option>
+              </select>
+            </div>
+            <div>
+              <label class="checkline mt-lg">
+                <input id="schemaAutoLR" type="checkbox" checked />
+                Adaptive learning rate every epoch (no fixed LR schedule)
+              </label>
+            </div>
+          </div>
+          <p class="hint">Outputs go under <code>artifacts/models/&lt;run-name&gt;/</code>. This flow writes a TOML under <code>configs/training/</code> and starts training — no manual CLI or hand-edited files required.</p>
+          <div class="row align-center">
+            <label for="schemaRunName" class="mb-0">Run name</label>
+            <input id="schemaRunName" type="text" placeholder="custom-run" style="max-width:320px" />
+            <label for="schemaBasicOnly" class="mb-0"><input id="schemaBasicOnly" type="checkbox" checked /> Basic fields only</label>
+            <button type="button" class="ghost" id="btnReloadSchema">Reload schema</button>
+          </div>
+          <div id="schemaFormHost" class="grid mt-md"></div>
+          <div class="row">
+            <button type="button" class="primary" id="btnStartCustomRun">Start training (custom form)</button>
+            <span id="schemaRunMsg" class="status"></span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="panelDataset" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnDataset" hidden>
+      <div class="training-canvas" style="max-width:1200px;margin:0 auto;padding:var(--space-md) var(--space-lg);">
+        <section>
+          <h2>Dataset Builder</h2>
+          <p class="hint hint-block">
+            Check Hugging Face datasets to mix into a single training run. The WUI uses <code>data.path = qminiwasm/hf-multi</code> and emits <code>[huggingface].extra_specs</code> for each selection (max <strong>9</strong>).
+            Your <strong>samples per epoch</strong> budget is split evenly across checked datasets (same behavior as the training loop’s multi-dataset merge).
+          </p>
+          <div class="grid mt-md">
+            <div>
+              <label for="datasetTargetSamples">Target HF row budget per epoch (split across datasets)</label>
+              <select id="datasetTargetSamples">
+                <option value="500000">500,000</option>
+                <option value="750000" selected>750,000</option>
+                <option value="1000000">1,000,000</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint stack-sm">Large budgets stream from the Hub; ensure RAM/disk and HF token are appropriate for your environment.</p>
+          <div id="datasetCatalogGrid" class="dataset-catalog-grid stack-md" role="group" aria-label="Curated Hub datasets"></div>
+          <details class="stack-md mt-md">
+            <summary>Add custom Hub dataset</summary>
+            <div class="grid mt-md">
+              <div>
+                <label for="datasetCustomPath">Dataset id</label>
+                <input id="datasetCustomPath" type="text" placeholder="owner/repo" />
+              </div>
+              <div>
+                <label for="datasetCustomConfig">Config (optional)</label>
+                <input id="datasetCustomConfig" type="text" placeholder="e.g. python — leave blank for default" />
+              </div>
+              <div class="row align-end">
+                <button type="button" class="ghost" id="btnDatasetAddCustom">Add to mix</button>
+              </div>
+            </div>
+          </details>
+          <div id="datasetCustomListHost" class="stack-sm mt-md">
+            <span class="label-like">Custom entries (click × to remove)</span>
+            <div id="datasetCustomList"></div>
+          </div>
+          <div class="row stack-md mt-md">
+            <button type="button" class="primary" id="btnDatasetApplyMix">Apply mix (Launchpad + Configuration)</button>
+            <button type="button" class="ghost" id="btnDatasetClearMix">Clear mix override</button>
+            <button type="button" class="ghost" id="btnDatasetSelectNone">Clear all checks</button>
+          </div>
+          <p class="status stack-md" id="datasetMixStatus" aria-live="polite"></p>
+        </section>
+      </div>
     </div>
 
     <div id="panelMission" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnMission" hidden>
@@ -1616,7 +1738,32 @@
       "checkpoint.load_path",
     ]);
 
-    const LOG_FLOAT_RE = "[-+]?(?:\\d+\\.?\\d*|\\d*\\.\\d+)(?:[eE][-+]?\\d+)?";
+    const DATASET_MIX_STORAGE_KEY = "qmw_dataset_mix_override_v1";
+    const DATASET_MIX_CUSTOM_KEY = "qmw_dataset_mix_custom_v1";
+    let datasetMixExtraSpecsOverride = null;
+    let datasetBuilderCustomRows = [];
+
+    /** Curated Hub datasets (path|config). Config empty = Hub default subset. */
+    const DATASET_BUILDER_CATALOG = [
+      { value: "teknium/OpenHermes-2.5|", label: "OpenHermes 2.5", hint: "Large instruction mix (~1M rows classically cited)" },
+      { value: "meta-math/MetaMathQA|", label: "MetaMathQA", hint: "Math reasoning, ~395K rows" },
+      { value: "Open-Orca/OpenOrca|", label: "OpenOrca", hint: "General / CoT-style instruction data" },
+      { value: "ise-uiuc/Magicoder-Evol-Instruct-110K|", label: "Magicoder Evol Instruct", hint: "Code-focused evolved instructions" },
+      { value: "HuggingFaceH4/toolbench|", label: "ToolBench", hint: "Tool / API calling patterns" },
+      { value: "migtissera/Synthia-v1.3|", label: "Synthia v1.3", hint: "Synthetic assistant / sysadmin-style" },
+      { value: "code-search-net/code_search_net|python", label: "CodeSearchNet (python)", hint: "Code pairs, config python" },
+      { value: "code-search-net/code_search_net|java", label: "CodeSearchNet (java)", hint: "Code pairs, config java" },
+      { value: "google-research-datasets/mbpp|full", label: "MBPP", hint: "Python problems" },
+      { value: "neulab/docprompting-conala|", label: "CoNaLa", hint: "Code + natural language" },
+      { value: "openai/gsm8k|", label: "GSM8K", hint: "Grade-school math word problems" },
+      { value: "AI-MO/NuminaMath-CoT|", label: "NuminaMath-CoT", hint: "Math with chain-of-thought" },
+      { value: "hendrycks/competition_math|", label: "Competition Math (MATH)", hint: "Hard competition math" },
+      { value: "wikitext|wikitext-103-raw-v1", label: "WikiText-103 raw", hint: "General language modeling corpus" },
+      { value: "imdb|", label: "IMDb reviews", hint: "Sentiment classification text" },
+      { value: "argilla/distilabel-capybara-dpo-7k|", label: "Capybara DPO (7k)", hint: "Small preference / alignment set" },
+    ];
+
+    const LOG_FLOAT_RE = "[-+]?(?:\\d+\\.?\\d*|\\d*\\.?\\d+)(?:[eE][-+]?\\d+)?";
     const LOG_METRIC_REGEX = new RegExp(
       "\\b(accuracy|train(?:ing)?_loss|val(?:idation)?_loss|eval_loss|train_acc|val_acc|perplexity|precision|recall|learning_rate|learning\\s+rate|f1_score|\\bf1\\b|\\bauc\\b|\\bleu\\b|\\bmse\\b|\\brmse\\b|\\bmae\\b|\\bnll\\b|\\bppl\\b|\\bloss\\b|\\bacc\\b|\\blr\\b|\\bepoch\\b)\\s*[:=]?\\s*(" +
         LOG_FLOAT_RE +
@@ -1915,6 +2062,8 @@
       const out = { ...values };
       const scheme = ($("schemaDataScheme")?.value || "").trim();
       const preset = ($("schemaDatasetPreset")?.value || "").trim();
+      const pickedArtifactPath = ($("schemaDataPathArtifact")?.value || "").trim();
+      const customPath = ($("schemaDataPathCustom")?.value || "").trim();
       const qmode = ($("schemaQuantumMode")?.value || "simulator").trim();
 
       if (scheme) {
@@ -1929,6 +2078,12 @@
         if (path) out["data.path"] = path;
         if (cfg) out["huggingface.dataset_config"] = cfg;
       }
+      if (pickedArtifactPath) {
+        out["data.path"] = pickedArtifactPath;
+      }
+      if (customPath) {
+        out["data.path"] = customPath;
+      }
 
       // Default back to simulator unless user toggles hardware-preferred mode.
       if (qmode === "hardware_pref") {
@@ -1936,45 +2091,68 @@
       } else {
         out["hardware.quantum_backend"] = "penny_lane";
       }
+
+      // Adaptive schedule: keep a seed LR, but enforce per-epoch evaluation + LR plateau updates.
+      if ($("schemaAutoLR")?.checked) {
+        out["eval.every_epoch"] = true;
+        out["training.lr_plateau_patience"] = out["training.lr_plateau_patience"] || "1";
+        out["training.lr_plateau_factor"] = out["training.lr_plateau_factor"] || "0.7";
+        out["training.lr_plateau_min_lr"] = out["training.lr_plateau_min_lr"] || "1e-6";
+      }
+
+      const mixSpecs = resolveDatasetMixSpecsForSchema();
+      if (mixSpecs.length > 0) {
+        out["data.path"] = "qminiwasm/hf-multi";
+        out["huggingface.extra_specs"] = JSON.stringify(mixSpecs);
+        if (scheme === "hybrid_mesh_hf_tabular") {
+          out["data.source"] = "hf_tabular";
+          if (!out["huggingface.mesh_blend_fraction"]) {
+            out["huggingface.mesh_blend_fraction"] = "0.20";
+          }
+        } else {
+          out["data.source"] = "hf_tabular";
+        }
+        const ts = $("datasetTargetSamples");
+        if (ts) {
+          const n = Math.floor(Number(String(ts.value || "").trim()));
+          if (n > 0 && !Number.isNaN(n)) {
+            out["huggingface.num_samples"] = String(n);
+          }
+        }
+      } else {
+        const dpMix = String(out["data.path"] || "")
+          .trim()
+          .toLowerCase();
+        if (dpMix === "qminiwasm/hf-multi") {
+          const specs = getHfExtraSpecs();
+          if (specs.length > 0) {
+            out["huggingface.extra_specs"] = JSON.stringify(specs);
+          }
+        }
+      }
       return out;
     }
 
-    function schemaValuesToBuildPayload(values) {
-      const intOr = (v, d) => {
-        const n = Number(v);
-        return Number.isFinite(n) && n > 0 ? Math.trunc(n) : d;
-      };
-      const numOr = (v, d) => {
-        const n = Number(v);
-        return Number.isFinite(n) && n > 0 ? n : d;
-      };
-      const scheme = ($("schemaDataScheme")?.value || "").trim();
-      return {
-        name: ($("schemaRunName")?.value || "").trim() || "custom-run",
-        accelerator: values["hardware.accelerator"] || "cpu",
-        quantum_backend: values["hardware.quantum_backend"] || "penny_lane",
-        quantum_policy:
-          ($("schemaQuantumMode")?.value || "simulator") === "hardware_pref"
-            ? "prefer_hardware_fallback"
-            : "simulator_only",
-        ibm_backend_name: "",
-        data_source: scheme || values["data.source"] || "mesh",
-        data_path: values["data.path"] || "",
-        hf_dataset_config: values["huggingface.dataset_config"] || "",
-        hf_split: values["huggingface.split"] || "train",
-        hf_mesh_blend_fraction: Number(values["huggingface.mesh_blend_fraction"] || 0),
-        hf_num_samples: intOr(values["huggingface.num_samples"], 0),
-        hf_extra_specs: [],
-        epochs: intOr(values["training.epochs"], 25),
-        batch_size: intOr(values["training.batch_size"], 32),
-        learning_rate: numOr(values["training.learning_rate"], 0.0001),
-        lr_trial_mode: true,
-        lr_trial_epochs: 2,
-        resume_latest: false,
-        run_target: "local",
-        runpod_destroy_on_exit: false,
-        runpod_var_file: "",
-      };
+    async function loadSchemaArtifactOptions() {
+      const sel = $("schemaDataPathArtifact");
+      if (!sel) return;
+      const keep = sel.value;
+      sel.innerHTML = '<option value="">(new/custom data path)</option>';
+      try {
+        const r = await fetch("/api/artifacts");
+        const data = await r.json();
+        const rows = Array.isArray(data.artifacts) ? data.artifacts : [];
+        for (const a of rows) {
+          const p = String(a.path || "").trim();
+          if (!p) continue;
+          if (/\.(pt|pth)$/i.test(p)) continue;
+          const o = document.createElement("option");
+          o.value = p;
+          o.textContent = p;
+          sel.appendChild(o);
+        }
+      } catch (_) {}
+      if (keep) sel.value = keep;
     }
 
     async function loadSchemaForm() {
@@ -1982,6 +2160,7 @@
       const data = await r.json();
       schemaFields = Array.isArray(data.fields) ? data.fields : [];
       renderSchemaForm();
+      await loadSchemaArtifactOptions();
     }
 
     function fmtBytes(n) {
@@ -2113,7 +2292,254 @@
       }
     }
 
+    function hfSpecFromParts(path, cfg) {
+      const p = String(path || "").trim();
+      if (!p) return null;
+      const c = String(cfg || "").trim();
+      const row = { path: p };
+      if (c) row.dataset_config = c;
+      return row;
+    }
+
+    function dedupeHfSpecs(list) {
+      const seen = new Set();
+      const out = [];
+      for (const row of list) {
+        if (!row || !row.path) continue;
+        const k = row.path + "\0" + (row.dataset_config || "");
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(row);
+        if (out.length >= 9) break;
+      }
+      return out;
+    }
+
+    function collectDatasetBuilderSpecs() {
+      const raw = [];
+      document.querySelectorAll('input[name="datasetMixCat"]:checked').forEach((cb) => {
+        const parts = String(cb.value || "").split("|");
+        const spec = hfSpecFromParts(parts[0], parts[1]);
+        if (spec) raw.push(spec);
+      });
+      for (const row of datasetBuilderCustomRows) {
+        const spec = hfSpecFromParts(row.path, row.cfg);
+        if (spec) raw.push(spec);
+      }
+      return dedupeHfSpecs(raw);
+    }
+
+    /** Prefer persisted Apply-mix override; else live Dataset Builder selection (catalog + custom). */
+    function resolveDatasetMixSpecsForSchema() {
+      if (datasetMixExtraSpecsOverride && datasetMixExtraSpecsOverride.length > 0) {
+        return dedupeHfSpecs(datasetMixExtraSpecsOverride.slice(0, 9));
+      }
+      return collectDatasetBuilderSpecs();
+    }
+
+    function updateDatasetMixStatus() {
+      const el = $("datasetMixStatus");
+      if (!el) return;
+      const n = collectDatasetBuilderSpecs().length;
+      const ov = datasetMixExtraSpecsOverride && datasetMixExtraSpecsOverride.length;
+      el.textContent =
+        n > 0
+          ? `${n} dataset(s) selected in builder` + (ov ? ` — ${ov} applied as Build + Run override` : " — click Apply to push into Launchpad")
+          : ov
+          ? `Mix override active (${ov} dataset(s)) — Launchpad uses this for hf_extra_specs until cleared.`
+          : "No dataset mix selected.";
+      el.className = "status " + (n > 0 || ov ? "done" : "");
+    }
+
+    function renderDatasetBuilderCatalog() {
+      const grid = $("datasetCatalogGrid");
+      if (!grid) return;
+      grid.innerHTML = "";
+      for (const item of DATASET_BUILDER_CATALOG) {
+        const id =
+          "dm_" +
+          String(item.value)
+            .replace(/[^a-zA-Z0-9]+/g, "_")
+            .slice(0, 56);
+        const lab = document.createElement("label");
+        const inp = document.createElement("input");
+        inp.type = "checkbox";
+        inp.name = "datasetMixCat";
+        inp.id = id;
+        inp.value = item.value;
+        inp.addEventListener("change", () => {
+          const specs = collectDatasetBuilderSpecs();
+          if (specs.length > 9) {
+            inp.checked = false;
+            addToast("At most 9 Hub datasets per run.", "error");
+          }
+          updateDatasetMixStatus();
+        });
+        lab.appendChild(inp);
+        const span = document.createElement("span");
+        span.innerHTML =
+          `<strong>${escapeHtml(item.label)}</strong><code class="dc-meta">${escapeHtml(item.value.replace(/\|$/, ""))}</code>` +
+          (item.hint ? `<span class="dc-meta">${escapeHtml(item.hint)}</span>` : "");
+        lab.appendChild(span);
+        grid.appendChild(lab);
+      }
+    }
+
+    function renderDatasetBuilderCustomList() {
+      const host = $("datasetCustomList");
+      if (!host) return;
+      host.innerHTML = "";
+      datasetBuilderCustomRows.forEach((row, idx) => {
+        const chip = document.createElement("span");
+        chip.className = "dataset-custom-chip";
+        const cfg = row.cfg ? ` · ${row.cfg}` : "";
+        chip.innerHTML = `<code>${escapeHtml(row.path)}${escapeHtml(cfg)}</code>`;
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.textContent = "×";
+        rm.className = "ghost";
+        rm.style.padding = "0 6px";
+        rm.title = "Remove";
+        rm.onclick = () => {
+          datasetBuilderCustomRows.splice(idx, 1);
+          try {
+            localStorage.setItem(DATASET_MIX_CUSTOM_KEY, JSON.stringify(datasetBuilderCustomRows));
+          } catch (_) {}
+          renderDatasetBuilderCustomList();
+          updateDatasetMixStatus();
+        };
+        chip.appendChild(rm);
+        host.appendChild(chip);
+      });
+    }
+
+    function persistDatasetMixOverride(specs) {
+      try {
+        localStorage.setItem(DATASET_MIX_STORAGE_KEY, JSON.stringify(specs));
+      } catch (_) {}
+    }
+
+    function loadDatasetMixFromStorage() {
+      try {
+        const raw = localStorage.getItem(DATASET_MIX_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length) datasetMixExtraSpecsOverride = dedupeHfSpecs(parsed);
+        }
+      } catch (_) {
+        datasetMixExtraSpecsOverride = null;
+      }
+      try {
+        const raw2 = localStorage.getItem(DATASET_MIX_CUSTOM_KEY);
+        if (raw2) {
+          const parsed2 = JSON.parse(raw2);
+          if (Array.isArray(parsed2)) datasetBuilderCustomRows = parsed2.filter((r) => r && r.path);
+        }
+      } catch (_) {}
+    }
+
+    function syncDatasetBuilderCheckboxesFromOverride() {
+      if (!datasetMixExtraSpecsOverride || !datasetMixExtraSpecsOverride.length) return;
+      const want = new Set(datasetMixExtraSpecsOverride.map((s) => s.path + "|" + (s.dataset_config || "")));
+      document.querySelectorAll('input[name="datasetMixCat"]').forEach((cb) => {
+        cb.checked = want.has(cb.value);
+      });
+    }
+
+    function applyDatasetMixToLaunchpad() {
+      const specs = collectDatasetBuilderSpecs();
+      if (!specs.length) {
+        addToast("Select at least one catalog dataset or add a custom Hub id.", "error");
+        return;
+      }
+      $("bDataSource").value = "hf_tabular";
+      $("bDataPath").value = "qminiwasm/hf-multi";
+      $("bDatasetConfig").value = "";
+      $("bHfNumSamples").value = $("datasetTargetSamples").value;
+      const preset = $("bDatasetPreset");
+      if (preset) {
+        const opt = Array.from(preset.querySelectorAll("option")).find((o) =>
+          String(o.value || "").startsWith("qminiwasm/hf-multi")
+        );
+        if (opt) preset.value = opt.value;
+      }
+      datasetMixExtraSpecsOverride = specs.slice(0, 9);
+      persistDatasetMixOverride(datasetMixExtraSpecsOverride);
+      document.querySelectorAll('input[name="hfExtra"]').forEach((x) => {
+        x.checked = false;
+      });
+      const schScheme = $("schemaDataScheme");
+      if (schScheme) schScheme.value = "hf_tabular";
+      const schPreset = $("schemaDatasetPreset");
+      if (schPreset) {
+        const opt = Array.from(schPreset.querySelectorAll("option")).find((o) =>
+          String(o.value || "").startsWith("qminiwasm/hf-multi")
+        );
+        if (opt) schPreset.value = opt.value;
+      }
+      const schArt = $("schemaDataPathArtifact");
+      if (schArt) schArt.value = "";
+      const schCustom = $("schemaDataPathCustom");
+      if (schCustom) schCustom.value = "qminiwasm/hf-multi";
+      toggleHFFields();
+      refreshModelFacts();
+      refreshWizardReview();
+      updateDatasetMixStatus();
+      addToast(
+        `Dataset mix applied: ${datasetMixExtraSpecsOverride.length} source(s), ${Number($("datasetTargetSamples").value).toLocaleString()} HF rows (split across sources).`
+      );
+      showAppTab("training");
+    }
+
+    function clearDatasetMixOverride() {
+      datasetMixExtraSpecsOverride = null;
+      try {
+        localStorage.removeItem(DATASET_MIX_STORAGE_KEY);
+      } catch (_) {}
+      updateDatasetMixStatus();
+      refreshModelFacts();
+      refreshWizardReview();
+      const stillMulti = $("bDataPath").value.trim() === "qminiwasm/hf-multi";
+      addToast(
+        stillMulti
+          ? "Cleared mix override. data.path is still hf-multi — check Launchpad HF extras or apply a mix again before running."
+          : "Cleared dataset mix override. Launchpad HF extras checkboxes apply again."
+      );
+    }
+
+    function addDatasetBuilderCustomRow() {
+      const path = $("datasetCustomPath").value.trim();
+      const cfg = ($("datasetCustomConfig").value || "").trim();
+      if (!path) {
+        addToast("Enter a Hub dataset id (owner/repo).", "error");
+        return;
+      }
+      datasetBuilderCustomRows.push({ path, cfg });
+      try {
+        localStorage.setItem(DATASET_MIX_CUSTOM_KEY, JSON.stringify(datasetBuilderCustomRows));
+      } catch (_) {}
+      const specs = collectDatasetBuilderSpecs();
+      if (specs.length > 9) {
+        datasetBuilderCustomRows.pop();
+        try {
+          localStorage.setItem(DATASET_MIX_CUSTOM_KEY, JSON.stringify(datasetBuilderCustomRows));
+        } catch (_) {}
+        renderDatasetBuilderCustomList();
+        updateDatasetMixStatus();
+        addToast("At most 9 datasets in one mix (catalog + custom).", "error");
+        return;
+      }
+      $("datasetCustomPath").value = "";
+      $("datasetCustomConfig").value = "";
+      renderDatasetBuilderCustomList();
+      updateDatasetMixStatus();
+      addToast("Added custom dataset to the mix.");
+    }
+
     function getHfExtraSpecs() {
+      if (datasetMixExtraSpecsOverride && datasetMixExtraSpecsOverride.length > 0) {
+        return datasetMixExtraSpecsOverride.slice(0, 9);
+      }
       const primary = $("bDataPath").value.trim();
       const primaryCfg = ($("bDatasetConfig").value || "").trim();
       const boxes = document.querySelectorAll('input[name="hfExtra"]:checked');
@@ -3028,16 +3454,23 @@
       $("btnStartCustomRun").disabled = true;
       try {
         let values = applySchemaGuidedOverrides(collectSchemaValues());
-        if ($("schemaAutoLR")?.checked) {
-          msg.textContent = "Tuning learning rate for custom run...";
-          const lrResp = await fetch("/api/lr/auto", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(schemaValuesToBuildPayload(values)),
-          });
-          const lrData = await lrResp.json().catch(() => ({}));
-          if (lrResp.ok && lrData.recommended_lr !== undefined && lrData.recommended_lr !== null) {
-            values["training.learning_rate"] = String(lrData.recommended_lr);
+        const dp = String(values["data.path"] || "")
+          .trim()
+          .toLowerCase();
+        if (dp === "qminiwasm/hf-multi") {
+          let specList = [];
+          try {
+            const raw = values["huggingface.extra_specs"];
+            if (raw != null && String(raw).trim()) {
+              specList = JSON.parse(String(raw));
+            }
+          } catch (_) {
+            specList = [];
+          }
+          if (!Array.isArray(specList) || specList.length === 0) {
+            throw new Error(
+              "data.path is qminiwasm/hf-multi (extras-only): open Dataset Builder, select or add custom Hub datasets, then Apply mix or start custom run — extra_specs must list at least one dataset."
+            );
           }
         }
         const r = await fetch("/api/runs/custom", {
@@ -3070,6 +3503,12 @@
         $("schemaBasicOnly").checked = false;
       }
     };
+    $("schemaDataPathArtifact").onchange = () => {
+      const v = ($("schemaDataPathArtifact").value || "").trim();
+      if (v && !$("schemaDataPathCustom").value.trim()) {
+        $("schemaDataPathCustom").value = v;
+      }
+    };
 
     $("btnRefreshArtifacts").onclick = async () => {
       try {
@@ -3083,32 +3522,43 @@
     const RUNPOD_TFVARS = "terraform.tfvars";
 
     const ACTIVE_TAB_KEY = "qmw_active_tab_v1";
+    const VALID_APP_TABS = new Set(["training", "config", "dataset", "mission", "infra", "quantum", "registry"]);
     function showAppTab(which) {
       const train = $("panelTraining");
+      const config = $("panelConfig");
       const mission = $("panelMission");
       const infra = $("panelInfra");
       const quantum = $("panelQuantum");
       const registry = $("panelRegistry");
+      const dataset = $("panelDataset");
       const bTrain = $("tabBtnTraining");
+      const bConfig = $("tabBtnConfig");
       const bMission = $("tabBtnMission");
       const bInfra = $("tabBtnInfra");
       const bQuantum = $("tabBtnQuantum");
       const bRegistry = $("tabBtnRegistry");
+      const bDataset = $("tabBtnDataset");
       train.hidden = which !== "training";
+      if (config) config.hidden = which !== "config";
       mission.hidden = which !== "mission";
       infra.hidden = which !== "infra";
       quantum.hidden = which !== "quantum";
       registry.hidden = which !== "registry";
+      if (dataset) dataset.hidden = which !== "dataset";
       bTrain.classList.toggle("active", which === "training");
+      if (bConfig) bConfig.classList.toggle("active", which === "config");
       bMission.classList.toggle("active", which === "mission");
       bInfra.classList.toggle("active", which === "infra");
       bQuantum.classList.toggle("active", which === "quantum");
       bRegistry.classList.toggle("active", which === "registry");
+      if (bDataset) bDataset.classList.toggle("active", which === "dataset");
       bTrain.setAttribute("aria-selected", which === "training" ? "true" : "false");
+      if (bConfig) bConfig.setAttribute("aria-selected", which === "config" ? "true" : "false");
       bMission.setAttribute("aria-selected", which === "mission" ? "true" : "false");
       bInfra.setAttribute("aria-selected", which === "infra" ? "true" : "false");
       bQuantum.setAttribute("aria-selected", which === "quantum" ? "true" : "false");
       bRegistry.setAttribute("aria-selected", which === "registry" ? "true" : "false");
+      if (bDataset) bDataset.setAttribute("aria-selected", which === "dataset" ? "true" : "false");
       localStorage.setItem(ACTIVE_TAB_KEY, which);
       if (which === "infra") {
         loadTfvarsEditor();
@@ -3128,12 +3578,40 @@
       }
       if (which === "quantum") loadQuantumTopology();
       if (which === "registry") loadRegistryArtifacts();
+      if (which === "config") {
+        loadSchemaForm().catch((e) => {
+          const m = $("schemaRunMsg");
+          if (m) {
+            m.textContent = String(e.message || e);
+            m.className = "status error";
+          }
+        });
+      }
     }
     $("tabBtnTraining").onclick = () => showAppTab("training");
+    if ($("tabBtnConfig")) $("tabBtnConfig").onclick = () => showAppTab("config");
+    const btnGotoConfig = $("btnGotoConfig");
+    if (btnGotoConfig) btnGotoConfig.onclick = () => showAppTab("config");
+    if ($("tabBtnDataset")) $("tabBtnDataset").onclick = () => showAppTab("dataset");
     $("tabBtnMission").onclick = () => showAppTab("mission");
     $("tabBtnInfra").onclick = () => showAppTab("infra");
     $("tabBtnQuantum").onclick = () => showAppTab("quantum");
     $("tabBtnRegistry").onclick = () => showAppTab("registry");
+    const btnApplyMix = $("btnDatasetApplyMix");
+    if (btnApplyMix) btnApplyMix.onclick = () => applyDatasetMixToLaunchpad();
+    const btnClrMix = $("btnDatasetClearMix");
+    if (btnClrMix) btnClrMix.onclick = () => clearDatasetMixOverride();
+    const btnSelNone = $("btnDatasetSelectNone");
+    if (btnSelNone) {
+      btnSelNone.onclick = () => {
+        document.querySelectorAll('input[name="datasetMixCat"]').forEach((cb) => {
+          cb.checked = false;
+        });
+        updateDatasetMixStatus();
+      };
+    }
+    const btnAddCustom = $("btnDatasetAddCustom");
+    if (btnAddCustom) btnAddCustom.onclick = () => addDatasetBuilderCustomRow();
 
     function addToast(text, kind = "done") {
       const host = $("toastHost");
@@ -3439,8 +3917,13 @@
     loadServerMeta();
     loadSchemaForm().catch(() => {});
     loadArtifacts().catch(() => {});
+    loadDatasetMixFromStorage();
+    renderDatasetBuilderCatalog();
+    syncDatasetBuilderCheckboxesFromOverride();
+    renderDatasetBuilderCustomList();
+    updateDatasetMixStatus();
     const savedTab = localStorage.getItem(ACTIVE_TAB_KEY);
-    if (savedTab) showAppTab(savedTab);
+    if (savedTab && VALID_APP_TABS.has(savedTab)) showAppTab(savedTab);
     setInterval(loadRuns, 5000);
 
     $("registryBody").addEventListener("click", async (ev) => {

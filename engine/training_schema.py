@@ -77,6 +77,8 @@ class HuggingFaceSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dataset_config: Optional[str] = None
+    #: Hub git ref (branch, tag, or commit) passed to ``datasets.load_dataset(..., revision=)``.
+    dataset_revision: Optional[str] = None
     num_samples: Optional[int] = None
     split: Optional[str] = None
     text_fields: Optional[List[str]] = None
@@ -141,6 +143,20 @@ class CascadeSection(BaseModel):
     couple_forward: Optional[bool] = None
 
 
+class WasmSection(BaseModel):
+    """Wasmtime store limits for curriculum WASM (see ``qminiwasm.wasm.engine.WasmRuntimeConfig``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    store_memory_limit_mb: Optional[int] = None
+    fallback_policy: Optional[str] = Field(
+        None, description="mock: fall back to mock WASM on init/exec failure; error: raise"
+    )
+    force_mock: Optional[bool] = None
+    store_instance_limit: Optional[int] = None
+    store_memories_limit: Optional[int] = None
+
+
 class ServeSection(BaseModel):
     """Inference server (optional; used by configs/serve/*.toml)."""
 
@@ -168,6 +184,7 @@ class TrainingConfig(BaseModel):
     eval: EvalSection = Field(default_factory=EvalSection)
     adapter: AdapterSection = Field(default_factory=AdapterSection)
     cascade: CascadeSection = Field(default_factory=CascadeSection)
+    wasm: WasmSection = Field(default_factory=WasmSection)
     serve: ServeSection = Field(default_factory=ServeSection)
 
     def to_engine_kwargs(self) -> dict[str, Any]:
@@ -220,6 +237,7 @@ class TrainingConfig(BaseModel):
         hf = self.huggingface.model_dump(exclude_none=True)
         key_map = {
             "dataset_config": "hf_dataset_config",
+            "dataset_revision": "hf_dataset_revision",
             "num_samples": "hf_num_samples",
             "split": "hf_split",
             "text_fields": "hf_text_fields",
@@ -282,6 +300,17 @@ class TrainingConfig(BaseModel):
         }
         for k, v in c.items():
             out[c_map[k]] = v
+
+        w = self.wasm.model_dump(exclude_none=True)
+        wmap = {
+            "store_memory_limit_mb": "wasm_store_memory_limit_mb",
+            "fallback_policy": "wasm_fallback_policy",
+            "force_mock": "wasm_force_mock",
+            "store_instance_limit": "wasm_store_instance_limit",
+            "store_memories_limit": "wasm_store_memories_limit",
+        }
+        for k, v in w.items():
+            out[wmap[k]] = v
 
         return out
 

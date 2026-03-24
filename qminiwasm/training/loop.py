@@ -11,6 +11,7 @@ import inspect
 import logging
 import math
 import random
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 import torch
@@ -20,6 +21,7 @@ import torch.nn.functional as F
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
+from ..wasm.engine import WasmRuntimeConfig
 from .cascade_mopd_teacher import build_noise_state_mopd_fns
 from .cascade_rl import (
     CascadeRouter,
@@ -311,6 +313,8 @@ def run_training_loop(
     qaoa_prune_threshold: float = 0.0,
     qaoa_prune_min_nodes: int = 4,
     qaoa_warm_start_cache_ttl: int = 128,
+    hf_dataset_revision: str = "main",
+    wasm_runtime: Optional[WasmRuntimeConfig] = None,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -318,7 +322,7 @@ def run_training_loop(
         epochs: Number of training epochs.
         batch_size: Batch size for the dataloader.
         learning_rate: AdamW learning rate.
-        accelerator: "cuda", "xpu", or "cpu"; if None, use env PREFER_XPU / PREFER_CUDA.
+        accelerator: "cuda", "xpu", or "cpu"; if None, defaults to CPU (see TOML ``[hardware]``).
         device_index: Device index for cuda/xpu.
         quantum_backend: Logical backend name (also used with IBM device selection).
         num_qubits: QAOA width when ``qaoa_execution_mode`` is ``qiskit_*``.
@@ -351,7 +355,9 @@ def run_training_loop(
         lr_plateau_factor: LR multiplicative factor when plateau triggers.
         lr_plateau_min_lr: Minimum LR for the scheduler.
         early_stop_patience: If > 0, stop after this many epochs without improvement on best epoch MSE.
-        checkpoint_load_path: If set, load trainable weights before training.
+        checkpoint_load_path: If set and the path exists, load trainable weights before training.
+            If the path is missing, log a warning and train from scratch (template TOMLs often
+            point at a future ``latest.pt``).
         checkpoint_save_path: If set, save weights after training completes.
         checkpoint_best_path: If set, save when epoch mean MSE improves.
         checkpoint_latest_path: If set, overwrite this file after each epoch that ran batches
@@ -426,6 +432,7 @@ def run_training_loop(
         qaoa_prune_threshold=float(qaoa_prune_threshold),
         qaoa_prune_min_nodes=max(1, int(qaoa_prune_min_nodes)),
         qaoa_warm_start_cache_ttl=max(1, int(qaoa_warm_start_cache_ttl)),
+        wasm_runtime=wasm_runtime,
     )
     model.quantum_router.train()
     if hasattr(model, "ternary_expert"):
@@ -436,12 +443,19 @@ def run_training_loop(
     checkpoint_latest_saved: str | None = None
 
     if checkpoint_load_path:
-        try:
-            load_checkpoint_into_model(model, checkpoint_load_path, map_location=device)
-            logger.info("Loaded checkpoint from %s", checkpoint_load_path)
-        except Exception as e:
-            logger.error("Failed to load checkpoint %s: %s", checkpoint_load_path, e)
-            raise
+        ck = Path(checkpoint_load_path)
+        if not ck.is_file():
+            logger.warning(
+                "Checkpoint load_path %s does not exist (or is not a file); training from scratch.",
+                checkpoint_load_path,
+            )
+        else:
+            try:
+                load_checkpoint_into_model(model, checkpoint_load_path, map_location=device)
+                logger.info("Loaded checkpoint from %s", checkpoint_load_path)
+            except Exception as e:
+                logger.error("Failed to load checkpoint %s: %s", checkpoint_load_path, e)
+                raise
 
     use_tsign = bool(use_tsign_ternary)
     adam_params = (
@@ -465,7 +479,9 @@ def run_training_loop(
         )
 
     pipeline = (
-        model.data_pipeline if getattr(model, "data_pipeline", None) is not None else DataPipeline()
+        model.data_pipeline
+        if getattr(model, "data_pipeline", None) is not None
+        else DataPipeline(wasm_runtime=wasm_runtime)
     )
     source = (training_data_source or "mesh").strip().lower()
     num_samples = max(1, batch_size * 4)
@@ -507,8 +523,8 @@ def run_training_loop(
             if _is_hf_multi_primary_placeholder(dp_hf):
                 raise ValueError(
                     "data.path is qminiwasm/hf-multi (or qminiwasm/multi) but no Hub datasets were "
-                    "merged: add [huggingface].extra_specs in the training TOML, or set HF_EXTRA_SPECS "
-                    'to a JSON array, e.g. [{"path":"username/dataset"}].'
+                    "merged: add [huggingface].extra_specs in the training TOML (or use Dataset Builder "
+                    'to author the mix), e.g. [{"path":"username/dataset"}].'
                 )
             raise ValueError(
                 "data_path must be a Hugging Face dataset id when training_data_source=hf_tabular, "
@@ -533,6 +549,7 @@ def run_training_loop(
                 max_buffered_rows=hf_max_buffered_rows,
                 text_truncate_bytes=hf_text_truncate_bytes,
                 deterministic_keep_every_n=hf_deterministic_keep_every_n,
+                hub_revision=(hf_dataset_revision or "main").strip() or "main",
             )
             merged.extend(chunk)
         processed_data = merged

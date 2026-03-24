@@ -8,7 +8,7 @@ Q-Mini-WASM architecture. It handles:
 - Error handling and validation
 """
 
-from .engine import MESH_EXPORT_NAMES, WasmEngine, WasmCompiler, MESH_ALGORITHMS
+from .engine import MESH_EXPORT_NAMES, WasmEngine, WasmCompiler, MESH_ALGORITHMS, WasmRuntimeConfig
 from .wasi_link import (
     build_clang_wasm_compile_command,
     instantiate_wasmtime_module,
@@ -17,6 +17,7 @@ from .wasi_link import (
 from . import trit_pack
 
 __all__ = [
+    "WasmRuntimeConfig",
     "WasmEngine",
     "WasmCompiler",
     "MESH_ALGORITHMS",

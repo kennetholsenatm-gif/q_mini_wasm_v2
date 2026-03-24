@@ -75,6 +75,19 @@ def test_run_training_loop_cascade_can_be_disabled() -> None:
     assert "epoch_cascade_loss" not in m
 
 
+def test_run_training_loop_missing_checkpoint_load_path_trains_from_scratch() -> None:
+    """load_path in TOML may point at a not-yet-created latest.pt; do not fail startup."""
+    out = run_training_loop(
+        epochs=1,
+        batch_size=2,
+        learning_rate=1e-3,
+        accelerator="cpu",
+        use_cascade_rl=False,
+        checkpoint_load_path="artifacts/models/__no_such_run__/latest.pt",
+    )
+    assert out["epochs_run"] >= 1
+
+
 def test_run_training_loop_cascade_with_mopd_lambda() -> None:
     out = run_training_loop(
         epochs=1,

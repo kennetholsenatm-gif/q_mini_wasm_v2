@@ -10,7 +10,8 @@ The implementation follows the white paper's specifications for:
 - Quantum-classical hybrid inference
 - Model interface methods
 
-AI training prefers Intel XPU (Arc / Iris Xe) when PyTorch XPU is available; CUDA is optional.
+Training device selection follows TOML ``[hardware].accelerator`` (via :func:`get_device`); when
+unset, the default is CPU unless tests pass ``prefer_xpu=True``.
 """
 
 import logging
@@ -31,7 +32,7 @@ from .layers.lota import LoRALinearSide, merge_lora_into_linear_weight
 from .layers.ptqtp import PTQTPLinear
 from .training.cascade_rl import CascadeRouter
 from .layers.attention import TropicalAttention
-from .wasm.engine import WasmEngine as WasmExecutor
+from .wasm.engine import WasmEngine as WasmExecutor, WasmRuntimeConfig
 from .hardware import SYCLHardware
 from .hardware.device import get_device
 from .data.pipeline import DataPipeline
@@ -77,6 +78,7 @@ class QMiniWASM:
         qaoa_prune_threshold: float = 0.0,
         qaoa_prune_min_nodes: int = 4,
         qaoa_warm_start_cache_ttl: int = 128,
+        wasm_runtime: Optional[WasmRuntimeConfig] = None,
     ):
         """Initialize the QMiniWASM model.
 
@@ -151,9 +153,9 @@ class QMiniWASM:
                 "hybrid_adapter enabled (hidden=%s) for extra trainable capacity",
                 h_adapt,
             )
-        self.wasm_executor = WasmExecutor()
+        self.wasm_executor = WasmExecutor(use_mock=False, runtime=wasm_runtime)
         self.sycl_hardware = SYCLHardware()
-        self.data_pipeline = DataPipeline()
+        self.data_pipeline = DataPipeline(wasm_runtime=wasm_runtime)
         self.state_migration = StateMigrationInterconnect()
         self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
         self.cascade_router: Optional[CascadeRouter] = None

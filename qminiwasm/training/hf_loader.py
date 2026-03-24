@@ -32,7 +32,6 @@ Runbook (CodeSearchNet Python example, after ``pip install -e ".[training]"``):
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -169,6 +168,27 @@ def encoded_blob_references_wasi(blob: bytes) -> bool:
     return any(m in lower for m in _WASI_MARKERS_LOWER)
 
 
+def validate_hf_hub_dataset_id_not_checkpoint(dataset_id: str) -> None:
+    """Raise if ``dataset_id`` looks like a local checkpoint/weights path, not a Hub dataset id.
+
+    Users sometimes put ``[checkpoint].load_path``-style paths into ``[data].path``; Hugging Face
+    then tries to resolve ``artifacts/.../model.pt`` as a Hub repo and fails with a cryptic error.
+    """
+    s = (dataset_id or "").strip()
+    if not s:
+        return
+    low = s.replace("\\", "/").lower()
+    for ext in (".pt", ".pth", ".pkl", ".safetensors", ".onnx", ".bin"):
+        if low.endswith(ext):
+            raise ValueError(
+                f"data.path={dataset_id!r} looks like a model checkpoint or weights file, not a "
+                "Hugging Face dataset id. For hf_tabular training, set [data].path to a Hub id "
+                '(e.g. "code-search-net/code_search_net") or "qminiwasm/hf-multi" with '
+                "[huggingface].extra_specs. Put resume weights in [checkpoint].load_path, not "
+                "[data].path."
+            )
+
+
 def normalize_hf_dataset_spec(
     dataset_id: str,
     config_name: Optional[str],
@@ -202,6 +222,7 @@ def load_hf_tabular_samples(
     max_buffered_rows: Optional[int] = None,
     text_truncate_bytes: Optional[int] = None,
     deterministic_keep_every_n: Optional[int] = None,
+    hub_revision: str = "main",
 ) -> List[Dict[str, Any]]:
     """Load up to ``num_samples`` rows from Hugging Face ``datasets`` and encode for training.
 
@@ -229,6 +250,7 @@ def load_hf_tabular_samples(
         ) from e
 
     _pre_id = (dataset_id or "").strip()
+    validate_hf_hub_dataset_id_not_checkpoint(_pre_id)
     dataset_id, config_name = normalize_hf_dataset_spec(dataset_id, config_name)
     if _pre_id.lower() == "muennighoff/mbpp":
         logger.info(
@@ -239,7 +261,7 @@ def load_hf_tabular_samples(
     load_kw: Dict[str, Any] = {}
     if token:
         load_kw["token"] = token
-    hub_revision = os.environ.get("HF_DATASET_REVISION", "main").strip() or "main"
+    rev = (hub_revision or "main").strip() or "main"
 
     use_streaming = bool(wasi_slice_only or streaming)
     try:
@@ -249,7 +271,7 @@ def load_hf_tabular_samples(
                 config_name,
                 split=split,
                 streaming=use_streaming,
-                revision=hub_revision,
+                revision=rev,
                 **load_kw,
             )
         else:
@@ -257,7 +279,7 @@ def load_hf_tabular_samples(
                 dataset_id,
                 split=split,
                 streaming=use_streaming,
-                revision=hub_revision,
+                revision=rev,
                 **load_kw,
             )
     except Exception as e:

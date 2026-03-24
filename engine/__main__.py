@@ -34,12 +34,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Training TOML (see configs/training/). When omitted, settings come from environment."
         ),
     )
+    p.add_argument(
+        "--log-level",
+        default=None,
+        metavar="LEVEL",
+        help="Python logging level. When omitted, uses LOG_LEVEL (if set) or INFO.",
+    )
     return p.parse_args(argv)
 
 
 if __name__ == "__main__":
     load_dotenv_if_available()
-    level = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
+    args = _parse_args()
+    lvl = args.log_level if args.log_level is not None else os.environ.get("LOG_LEVEL", "INFO")
+    level = (lvl or "INFO").strip().upper()
     logging.basicConfig(
         level=getattr(logging, level, logging.INFO),
         format="%(levelname)s %(name)s: %(message)s",
@@ -49,19 +57,12 @@ if __name__ == "__main__":
     _quiet_third_party_loggers()
     log = logging.getLogger(__name__)
 
-    args = _parse_args()
     if args.config is not None:
         cfg_path = args.config.expanduser().resolve()
         if not cfg_path.is_file():
             log.error("Config file not found: %s", cfg_path)
             sys.exit(1)
         config = EngineConfig.from_training_toml(cfg_path)
-        acc = os.environ.get("ACCELERATOR", "").strip()
-        if acc:
-            config.accelerator = acc or None
-        qbe = os.environ.get("QUANTUM_BACKEND", "").strip()
-        if qbe:
-            config.quantum_backend = qbe
     else:
         log.warning(
             "Training without --config PATH is deprecated; use a TOML file under configs/training/ "

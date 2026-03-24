@@ -54,23 +54,22 @@ def test_engine_config_from_toml_merges_hf_token_from_env(monkeypatch, tmp_path)
     assert c.hf_token == "tok_from_env"
 
 
-def test_engine_config_hardware_only_sets_qiskit_ibm_when_default_pennylane(monkeypatch):
+def test_engine_config_hardware_only_sets_qiskit_ibm_when_default_pennylane():
     """WUI hardware_only + default MoE mode must use IBM QAOA path, not identity pennylane."""
-    monkeypatch.delenv("QMINIWASM_QAOA_EXECUTION", raising=False)
-    monkeypatch.setenv("QUANTUM_EXECUTION_POLICY", "hardware_only")
     from engine.config import EngineConfig
 
-    c = EngineConfig()
+    c = EngineConfig(quantum_execution_policy="hardware_only")
     assert c.qaoa_execution_mode == "qiskit_ibm"
     assert c.quantum_execution_policy == "hardware_only"
 
 
-def test_engine_config_explicit_qaoa_mode_not_overridden_by_hardware_only_policy(monkeypatch):
-    monkeypatch.setenv("QUANTUM_EXECUTION_POLICY", "hardware_only")
-    monkeypatch.setenv("QMINIWASM_QAOA_EXECUTION", "qiskit_statevector")
+def test_engine_config_explicit_qaoa_mode_not_overridden_by_hardware_only_policy():
     from engine.config import EngineConfig
 
-    c = EngineConfig()
+    c = EngineConfig(
+        quantum_execution_policy="hardware_only",
+        qaoa_execution_mode="qiskit_statevector",
+    )
     assert c.qaoa_execution_mode == "qiskit_statevector"
 
 
@@ -170,7 +169,7 @@ def test_hf_multi_without_extra_specs_raises(tmp_path):
     )
     from engine.config import EngineConfig
 
-    with pytest.raises(ValueError, match="extra_specs|HF_EXTRA_SPECS"):
+    with pytest.raises(ValueError, match="extra_specs"):
         EngineConfig.from_training_toml(f)
 
 

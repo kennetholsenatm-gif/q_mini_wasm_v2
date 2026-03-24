@@ -25,13 +25,20 @@ go build -o training-wui .
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 
-### Flags / environment
+### Flags
 
-| Flag | Env | Default | Meaning |
-|------|-----|---------|---------|
-| `-addr` | `TRAINING_WUI_ADDR` | `:8765` | Listen address |
-| `-root` | `TRAINING_WUI_ROOT` | `.` | **Absolute path to repo root** (parent of `configs/` and `engine/`) |
-| `-python` | `TRAINING_WUI_PYTHON` | `python` | Python executable |
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `-addr` | `:8765` | Listen address (`host:port`) |
+| `-root` | `.` | **Repo root** (directory that contains `configs/` and `engine/`) |
+| `-python` | `python` | Python executable name or path on `PATH` |
+
+### Tabs (workflow)
+
+- **Launchpad** — Start from an existing TOML, **Build + Run**, preflight, runs list, log, and a shortcut to **Configuration**.
+- **Configuration** — **Schema-driven custom run**: all guided fields from `/api/schema` (hardware, training, data, Hugging Face revision, WASM limits, checkpoints, …). Writes `configs/training/<name>.toml` and starts training — no CLI or hand-edited files for normal use.
+- **Dataset Builder** — Curated + **custom Hub dataset ids** for a multi-dataset mix. Selections are merged into the custom-run payload as `data.path = qminiwasm/hf-multi` and `[huggingface].extra_specs`. **Apply mix** syncs Launchpad and the Configuration form; you can also select datasets and start directly from Configuration (live mix is picked up).
+- **Mission Control**, **Node Health**, **Quantum Topology**, **Artifact Registry** — unchanged.
 
 Only one training process at a time is allowed (start another after the current run finishes or after **Stop**).
 
@@ -47,7 +54,7 @@ The dashboard can target **RunPod** so OpenTofu runs **`apply`** before `python 
 
 **Infrastructure tab:** edit **`infra/runpod/terraform.tfvars`** in the browser (Save / Reload / Insert example from `terraform.tfvars.example`), then **Status** (token / `infra/runpod` / `tofu`, outputs, copy buttons, **Remote GPU** snippets) and **OpenTofu CLI** (`tofu init` / `plan` / `apply` / `destroy` — use **plan** to debug apply exit 1). **Training** tab stays focused on configs and runs; **log** stays at the bottom on both tabs.
 
-**Floating panels (optional):** On **Training** and **Infrastructure**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. On the **Training** tab this includes the **Log** panel (live output). Layout (positions + sizes + float on/off) is stored in **`localStorage`** for this origin. **Reset layout** clears saved positions and re-snaps from the default grid. The log is only on the **Training** tab (switch to **Infrastructure** to work on RunPod; return to **Training** to see the log).
+**Floating panels (optional):** On **Launchpad** (Training) and **Infrastructure**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. On **Launchpad** this includes the **Log** panel (live output). Layout is stored in **`localStorage`**. The log stays on **Launchpad**; open **Configuration** for the guided form without floating layout there.
 
 ### Agent / inference outputs (Build + Run)
 

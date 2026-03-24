@@ -12,8 +12,18 @@ from qminiwasm.training.hf_loader import (
     normalize_hf_dataset_spec,
     row_to_encoded_blob,
     load_hf_tabular_samples,
+    validate_hf_hub_dataset_id_not_checkpoint,
 )
 from qminiwasm.wasm.memory_encode import BODY_SLOTS, encode_linear_memory
+
+
+def test_validate_hf_hub_dataset_id_rejects_checkpoint_paths():
+    with pytest.raises(ValueError, match="checkpoint"):
+        validate_hf_hub_dataset_id_not_checkpoint("artifacts/qminiwasm_trainable.pt")
+    with pytest.raises(ValueError, match="checkpoint"):
+        validate_hf_hub_dataset_id_not_checkpoint(r"C:\models\weights.pt")
+    validate_hf_hub_dataset_id_not_checkpoint("code-search-net/code_search_net")
+    validate_hf_hub_dataset_id_not_checkpoint("qminiwasm/hf-multi")
 
 
 def test_normalize_hf_dataset_spec_mbpp_legacy():

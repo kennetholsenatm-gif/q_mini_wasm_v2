@@ -31,6 +31,7 @@
 
 [huggingface]
 # dataset_config = "repo/dataset"
+# dataset_revision = "main"
 # num_samples = 1000
 # split = "train"
 # text_fields = ["field_a"]
@@ -77,6 +78,14 @@
 # learned_projector = false
 # router_hidden = 32
 # couple_forward = true
+
+[wasm]
+# Wasmtime curriculum WASM limits (see qminiwasm.wasm.engine.WasmRuntimeConfig).
+# store_memory_limit_mb = 256
+# fallback_policy = "mock"
+# force_mock = false
+# store_instance_limit =
+# store_memories_limit =
 
 [serve]
 # Used when loading configs/serve/*.toml (inference). Optional in training files.

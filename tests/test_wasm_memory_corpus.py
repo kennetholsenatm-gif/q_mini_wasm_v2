@@ -10,7 +10,7 @@ import torch
 import wasmtime
 
 from qminiwasm.data.pipeline import DataPipeline
-from qminiwasm.wasm.engine import WasmEngine
+from qminiwasm.wasm.engine import WasmEngine, WasmRuntimeConfig
 from qminiwasm.wasm.memory_encode import D_MODEL, encode_linear_memory
 
 
@@ -94,9 +94,11 @@ def test_generate_training_data_from_corpus(tmp_path: Path):
         assert isinstance(s["wasm_memory"], (bytes, bytearray))
 
 
-def test_wasm_engine_store_memory_limit_from_env(monkeypatch):
-    monkeypatch.setenv("QMINIWASM_WASM_STORE_MEMORY_LIMIT_MB", "128")
-    eng = WasmEngine(use_mock=True)
+def test_wasm_engine_store_memory_limit_from_config():
+    eng = WasmEngine(
+        use_mock=True,
+        runtime=WasmRuntimeConfig(store_memory_limit_bytes=128 * 1024 * 1024),
+    )
     assert eng._store_memory_limit_bytes == 128 * 1024 * 1024
 
 
@@ -110,8 +112,7 @@ def test_wasm_engine_memory_error_strict_policy_raises(monkeypatch):
       (export "run" (func $run))
     )
     """
-    monkeypatch.setenv("QMINIWASM_WASM_FALLBACK_POLICY", "error")
-    eng = WasmEngine(use_mock=False)
+    eng = WasmEngine(use_mock=False, runtime=WasmRuntimeConfig(fallback_policy="error"))
     if eng.use_mock:
         pytest.skip("WASM runtime unavailable in this environment")
     mod = eng.compile_wasm(wasmtime.wat2wasm(wat))
@@ -135,8 +136,7 @@ def test_wasm_engine_memory_error_mock_policy_falls_back(monkeypatch):
       (export "run" (func $run))
     )
     """
-    monkeypatch.setenv("QMINIWASM_WASM_FALLBACK_POLICY", "mock")
-    eng = WasmEngine(use_mock=False)
+    eng = WasmEngine(use_mock=False, runtime=WasmRuntimeConfig(fallback_policy="mock"))
     if eng.use_mock:
         pytest.skip("WASM runtime unavailable in this environment")
     mod = eng.compile_wasm(wasmtime.wat2wasm(wat))

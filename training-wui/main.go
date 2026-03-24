@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -79,6 +80,74 @@ func countNonEmptyHFExtraSpecs(specs []hfExtraSpec) int {
 		}
 	}
 	return n
+}
+
+// parseExtraSpecsFromValues reads Dataset Builder / WUI payload under "huggingface.extra_specs"
+// (JSON string or JSON array from the client).
+func parseExtraSpecsFromValues(values map[string]any) []hfExtraSpec {
+	raw, ok := values["huggingface.extra_specs"]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch v := raw.(type) {
+	case string:
+		s := strings.TrimSpace(v)
+		if s == "" || s == "null" {
+			return nil
+		}
+		var out []hfExtraSpec
+		if err := json.Unmarshal([]byte(s), &out); err != nil {
+			return nil
+		}
+		return trimHFExtraSpecs(out)
+	case []any:
+		var out []hfExtraSpec
+		for _, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			p, _ := m["path"].(string)
+			if strings.TrimSpace(p) == "" {
+				continue
+			}
+			dc, _ := m["dataset_config"].(string)
+			out = append(out, hfExtraSpec{Path: strings.TrimSpace(p), DatasetConfig: strings.TrimSpace(dc)})
+		}
+		return trimHFExtraSpecs(out)
+	default:
+		return nil
+	}
+}
+
+func trimHFExtraSpecs(in []hfExtraSpec) []hfExtraSpec {
+	seen := make(map[string]struct{})
+	var out []hfExtraSpec
+	for _, ex := range in {
+		p := strings.TrimSpace(ex.Path)
+		if p == "" {
+			continue
+		}
+		c := strings.TrimSpace(ex.DatasetConfig)
+		key := p + "\x00" + c
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, hfExtraSpec{Path: p, DatasetConfig: c})
+		if len(out) >= 9 {
+			break
+		}
+	}
+	return out
+}
+
+func rawDataPathFromSchemaValues(values map[string]any) string {
+	v, ok := values["data.path"]
+	if !ok || v == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprintf("%v", v))
 }
 
 func buildServeToml(stem string) string {
@@ -153,64 +222,22 @@ func writeAgentDeploymentFiles(repoRoot, stem, trainingConfigRel string) error {
 }
 
 func main() {
-	addr := ":8765"
-	if v := os.Getenv("TRAINING_WUI_ADDR"); v != "" {
-		addr = v
-	}
-	root := "."
-	if v := os.Getenv("TRAINING_WUI_ROOT"); v != "" {
-		root = v
-	}
-	py := "python"
-	if v := os.Getenv("TRAINING_WUI_PYTHON"); v != "" {
-		py = v
-	}
+	addr := flag.String("addr", ":8765", "HTTP listen address (host:port)")
+	root := flag.String("root", ".", "repository root")
+	py := flag.String("python", "python", "Python executable name or path on PATH")
+	flag.Parse()
 
-	var addrFromFlag, pyFromFlag bool
-	args := os.Args[1:]
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-addr":
-			if i+1 < len(args) {
-				i++
-				addr = args[i]
-				addrFromFlag = true
-			}
-		case "-root":
-			if i+1 < len(args) {
-				i++
-				root = args[i]
-			}
-		case "-python":
-			if i+1 < len(args) {
-				i++
-				py = args[i]
-				pyFromFlag = true
-			}
-		}
-	}
-
-	abs, err := filepath.Abs(root)
+	abs, err := filepath.Abs(*root)
 	if err != nil {
 		log.Fatal(err)
 	}
 	repoRoot = filepath.Clean(abs)
 
-	// Load repo .env (e.g. /opt/qmw/.env from bind mount) so IBM/HF tokens and
-	// TRAINING_WUI_* are visible to this process and subprocesses (python -m engine).
+	// Load repo .env (e.g. /opt/qmw/.env from bind mount) so IBM/HF tokens are visible
+	// to this process and subprocesses (python -m engine).
 	loadDotenvFromRepo(repoRoot)
 
-	if !addrFromFlag {
-		if v := os.Getenv("TRAINING_WUI_ADDR"); v != "" {
-			addr = v
-		}
-	}
-	if !pyFromFlag {
-		if v := os.Getenv("TRAINING_WUI_PYTHON"); v != "" {
-			py = v
-		}
-	}
-	pythonExe = resolvePythonExecutable(py)
+	pythonExe = resolvePythonExecutable(*py)
 
 	trainingDir := filepath.Join(repoRoot, "configs", "training")
 	if st, err := os.Stat(trainingDir); err != nil || !st.IsDir() {
@@ -251,7 +278,7 @@ func main() {
 	}
 	mux.Handle("/", noCache(http.FileServer(http.FS(sub))))
 
-	actualAddr, ln, err := listenWithPortFallback(addr, 10)
+	actualAddr, ln, err := listenWithPortFallback(*addr, 10)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -516,7 +543,7 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "hardware.diff_method", Section: "hardware", Key: "diff_method", Type: "string", Default: defaults["hardware.diff_method"]},
 		{ID: "training.epochs", Section: "training", Key: "epochs", Type: "int", Required: true, Default: defaults["training.epochs"]},
 		{ID: "training.batch_size", Section: "training", Key: "batch_size", Type: "int", Required: true, Default: defaults["training.batch_size"]},
-		{ID: "training.learning_rate", Section: "training", Key: "learning_rate", Type: "float", Required: true, Default: defaults["training.learning_rate"], Description: "Learning rate. In Guided Auto mode, this can be tuned automatically before start."},
+		{ID: "training.learning_rate", Section: "training", Key: "learning_rate", Type: "float", Required: true, Default: defaults["training.learning_rate"], Description: "Seed learning rate. Adaptive per-epoch scheduling can update this during training."},
 		{ID: "training.seed", Section: "training", Key: "seed", Type: "int", Default: defaults["training.seed"]},
 		{ID: "training.grad_clip_norm", Section: "training", Key: "grad_clip_norm", Type: "float", Default: defaults["training.grad_clip_norm"]},
 		{ID: "training.lr_plateau_patience", Section: "training", Key: "lr_plateau_patience", Type: "int", Default: defaults["training.lr_plateau_patience"]},
@@ -527,6 +554,7 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "data.path", Section: "data", Key: "path", Type: "string", Default: defaults["data.path"], Description: "Dataset id/path. For Hugging Face use owner/dataset. Use qminiwasm/hf-multi for extras-only mode."},
 		{ID: "data.mesh_algorithms", Section: "data", Key: "mesh_algorithms", Type: "string", Default: defaults["data.mesh_algorithms"]},
 		{ID: "huggingface.dataset_config", Section: "huggingface", Key: "dataset_config", Type: "string", Default: defaults["huggingface.dataset_config"]},
+		{ID: "huggingface.dataset_revision", Section: "huggingface", Key: "dataset_revision", Type: "string", Default: defaults["huggingface.dataset_revision"], Description: "Hub git ref (branch, tag, or commit) for datasets.load_dataset revision=."},
 		{ID: "huggingface.num_samples", Section: "huggingface", Key: "num_samples", Type: "int", Default: defaults["huggingface.num_samples"]},
 		{ID: "huggingface.split", Section: "huggingface", Key: "split", Type: "string", Default: defaults["huggingface.split"]},
 		{ID: "huggingface.mesh_blend_fraction", Section: "huggingface", Key: "mesh_blend_fraction", Type: "float", Default: defaults["huggingface.mesh_blend_fraction"]},
@@ -558,6 +586,11 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "cascade.learned_projector", Section: "cascade", Key: "learned_projector", Type: "bool", Default: defaults["cascade.learned_projector"]},
 		{ID: "cascade.router_hidden", Section: "cascade", Key: "router_hidden", Type: "int", Default: defaults["cascade.router_hidden"]},
 		{ID: "cascade.couple_forward", Section: "cascade", Key: "couple_forward", Type: "bool", Default: defaults["cascade.couple_forward"]},
+		{ID: "wasm.store_memory_limit_mb", Section: "wasm", Key: "store_memory_limit_mb", Type: "int", Default: defaults["wasm.store_memory_limit_mb"], Description: "Wasmtime store linear memory cap (MiB); default engine uses 256 if unset."},
+		{ID: "wasm.fallback_policy", Section: "wasm", Key: "fallback_policy", Type: "enum", Options: []string{"mock", "error"}, Default: defaults["wasm.fallback_policy"], Description: "mock: use mock WASM on failure; error: fail fast."},
+		{ID: "wasm.force_mock", Section: "wasm", Key: "force_mock", Type: "bool", Default: defaults["wasm.force_mock"], Description: "If true, always use mock WASM (testing / constrained hosts)."},
+		{ID: "wasm.store_instance_limit", Section: "wasm", Key: "store_instance_limit", Type: "int", Default: defaults["wasm.store_instance_limit"]},
+		{ID: "wasm.store_memories_limit", Section: "wasm", Key: "store_memories_limit", Type: "int", Default: defaults["wasm.store_memories_limit"]},
 		{ID: "serve.checkpoint", Section: "serve", Key: "checkpoint", Type: "string", Default: defaults["serve.checkpoint"]},
 		{ID: "serve.hybrid_adapter", Section: "serve", Key: "hybrid_adapter", Type: "bool", Default: defaults["serve.hybrid_adapter"]},
 		{ID: "serve.hybrid_adapter_hidden", Section: "serve", Key: "hybrid_adapter_hidden", Type: "int", Default: defaults["serve.hybrid_adapter_hidden"]},
@@ -627,6 +660,18 @@ func buildCustomRunToml(values map[string]any) (string, error) {
 	for _, f := range fields {
 		fieldByID[f.ID] = f
 	}
+	extraSpecs := parseExtraSpecsFromValues(values)
+	if len(extraSpecs) > 9 {
+		return "", fmt.Errorf("huggingface.extra_specs: at most 9 Hub datasets")
+	}
+	dpRaw := rawDataPathFromSchemaValues(values)
+	if isHFMultiPrimaryPlaceholder(dpRaw) && countNonEmptyHFExtraSpecs(extraSpecs) == 0 {
+		return "", fmt.Errorf(
+			"data.path is qminiwasm/hf-multi (extras-only Hub mode) but no datasets were configured. " +
+				"In the WUI, open Dataset Builder, select Hub datasets, click Apply mix to Build + Run, then start the guided run again — " +
+				"or add [huggingface].extra_specs in this TOML.",
+		)
+	}
 	sections := map[string]map[string]string{}
 	for id, raw := range values {
 		fd, ok := fieldByID[id]
@@ -650,6 +695,9 @@ func buildCustomRunToml(values map[string]any) (string, error) {
 			return "", fmt.Errorf("missing required field: %s", f.ID)
 		}
 	}
+	if len(extraSpecs) > 0 && sections["huggingface"] == nil {
+		sections["huggingface"] = map[string]string{}
+	}
 	var secNames []string
 	for sec := range sections {
 		secNames = append(secNames, sec)
@@ -659,10 +707,13 @@ func buildCustomRunToml(values map[string]any) (string, error) {
 	b.WriteString("# Generated by training-wui dynamic schema form\n\n")
 	for _, sec := range secNames {
 		keys := sections[sec]
-		if len(keys) == 0 {
+		if len(keys) == 0 && !(sec == "huggingface" && len(extraSpecs) > 0) {
 			continue
 		}
 		b.WriteString("[" + sec + "]\n")
+		if sec == "huggingface" && isHFMultiPrimaryPlaceholder(dpRaw) && len(extraSpecs) > 0 {
+			b.WriteString("# data.path is a reserved placeholder; training loads only [huggingface].extra_specs.\n")
+		}
 		var ks []string
 		for k := range keys {
 			ks = append(ks, k)
@@ -670,6 +721,21 @@ func buildCustomRunToml(values map[string]any) (string, error) {
 		sort.Strings(ks)
 		for _, k := range ks {
 			b.WriteString(k + " = " + keys[k] + "\n")
+		}
+		if sec == "huggingface" && len(extraSpecs) > 0 {
+			b.WriteString("extra_specs = [\n")
+			for _, ex := range extraSpecs {
+				p := strings.TrimSpace(ex.Path)
+				if p == "" {
+					continue
+				}
+				b.WriteString("  { path = " + strconv.Quote(p))
+				if c := strings.TrimSpace(ex.DatasetConfig); c != "" {
+					b.WriteString(", dataset_config = " + strconv.Quote(c))
+				}
+				b.WriteString(" },\n")
+			}
+			b.WriteString("]\n")
 		}
 		b.WriteString("\n")
 	}
@@ -1283,6 +1349,7 @@ func handleModelFacts(w http.ResponseWriter, r *http.Request) {
 	py := `
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from engine.config import EngineConfig
 from qminiwasm.model import QMiniWASM
@@ -1291,6 +1358,7 @@ cfg_path = os.environ["QMW_FACTS_CONFIG"]
 model_stem = os.environ["QMW_FACTS_STEM"]
 repo_root = Path(os.environ["QMW_FACTS_REPO"]).resolve()
 cfg = EngineConfig.from_training_toml(cfg_path)
+wasm_rt = replace(cfg.wasm_runtime_kwargs()["runtime"], force_mock=True)
 m = QMiniWASM(
     device=None,
     use_hybrid_adapter=bool(getattr(cfg, "hybrid_adapter", False)),
@@ -1301,6 +1369,7 @@ m = QMiniWASM(
     cascade_state_dim=int(getattr(cfg, "cascade_state_dim", 8) or 8),
     cascade_num_actions=int(getattr(cfg, "cascade_num_actions", 4) or 4),
     cascade_router_hidden=int(getattr(cfg, "cascade_router_hidden", 32) or 32),
+    wasm_runtime=wasm_rt,
 )
 
 def count_params(obj):
@@ -1370,7 +1439,6 @@ print(json.dumps(out))
 	} else {
 		env = append(env, "QMW_FACTS_RESUME_REQUESTED=0")
 	}
-	env = append(env, "QMINIWASM_FORCE_MOCK_WASM=1")
 	env = append(env, "LOG_LEVEL=ERROR")
 	cmd.Env = env
 	var outb bytes.Buffer
