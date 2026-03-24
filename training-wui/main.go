@@ -210,7 +210,7 @@ func main() {
 			py = v
 		}
 	}
-	pythonExe = py
+	pythonExe = resolvePythonExecutable(py)
 
 	trainingDir := filepath.Join(repoRoot, "configs", "training")
 	if st, err := os.Stat(trainingDir); err != nil || !st.IsDir() {
@@ -258,6 +258,30 @@ func main() {
 	serverAddr = actualAddr
 	log.Printf("training-wui listening on %s (repo root %s, python %q)", actualAddr, repoRoot, pythonExe)
 	log.Fatal(http.Serve(ln, withCORS(mux)))
+}
+
+func resolvePythonExecutable(preferred string) string {
+	candidates := make([]string, 0, 5)
+	seen := map[string]bool{}
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			return
+		}
+		seen[v] = true
+		candidates = append(candidates, v)
+	}
+
+	add(preferred)
+	add("python")
+	add("python3")
+
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c); err == nil {
+			return c
+		}
+	}
+	return preferred
 }
 
 func handleMeta(w http.ResponseWriter, r *http.Request) {

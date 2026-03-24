@@ -195,15 +195,23 @@
       grid-row: 1 / span 4;
       align-self: start;
     }
-    #trainingCanvas.floating {
+    #trainingCanvas.floating,
+    #missionCanvas.floating,
+    #quantumCanvas.floating,
+    #registryCanvas.floating {
       position: relative;
       min-height: 100vh;
       padding-bottom: var(--space-xl);
     }
-    #trainingCanvas.floating .training-grid-wrap {
+    #trainingCanvas.floating .training-grid-wrap,
+    #missionCanvas.floating .training-grid-wrap,
+    #missionCanvas.floating #missionLogHost {
       display: contents;
     }
-    #trainingCanvas.floating .dash-card {
+    #trainingCanvas.floating .dash-card,
+    #missionCanvas.floating .dash-card,
+    #quantumCanvas.floating .dash-card,
+    #registryCanvas.floating .dash-card {
       position: absolute;
       margin: 0;
       z-index: 1;
@@ -214,17 +222,26 @@
       flex-direction: column;
       overflow: auto;
     }
-    #trainingCanvas.floating .dash-card.dash-active {
+    #trainingCanvas.floating .dash-card.dash-active,
+    #missionCanvas.floating .dash-card.dash-active,
+    #quantumCanvas.floating .dash-card.dash-active,
+    #registryCanvas.floating .dash-card.dash-active {
       z-index: 20;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
       outline: 1px solid var(--action-primary-blue);
     }
-    #trainingCanvas.floating .dash-card h2 {
+    #trainingCanvas.floating .dash-card h2,
+    #missionCanvas.floating .dash-card h2,
+    #quantumCanvas.floating .dash-card h2,
+    #registryCanvas.floating .dash-card h2 {
       cursor: grab;
       user-select: none;
       flex-shrink: 0;
     }
-    #trainingCanvas.floating .dash-card h2:active {
+    #trainingCanvas.floating .dash-card h2:active,
+    #missionCanvas.floating .dash-card h2:active,
+    #quantumCanvas.floating .dash-card h2:active,
+    #registryCanvas.floating .dash-card h2:active {
       cursor: grabbing;
     }
     #trainingCanvas .log-section {
@@ -283,6 +300,9 @@
       display: contents;
     }
     #trainingCanvas.floating .dash-resize-handle,
+    #missionCanvas.floating .dash-resize-handle,
+    #quantumCanvas.floating .dash-resize-handle,
+    #registryCanvas.floating .dash-resize-handle,
     #infraCanvas.floating .dash-resize-handle {
       display: block;
     }
@@ -1386,7 +1406,15 @@
     </div>
 
     <div id="panelMission" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnMission" hidden>
-      <div class="training-canvas">
+      <div id="missionCanvas" class="training-canvas">
+        <div class="dashboard-toolbar">
+          <label for="floatMissionToggle">
+            <input type="checkbox" id="floatMissionToggle" />
+            Floating panels
+          </label>
+          <button type="button" class="ghost" id="btnResetMissionLayout">Reset layout</button>
+          <span class="hint" style="margin:0">Drag Mission Control cards by title; resize from the corner grip.</span>
+        </div>
         <section>
           <h2>Mission Control</h2>
           <p class="hint">Active runtime telemetry, alerts, and logs are consolidated here while Launchpad is dedicated to setup/init.</p>
@@ -1463,20 +1491,37 @@
     </div>
 
     <div id="panelQuantum" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnQuantum" hidden>
-      <div class="training-canvas">
-        <section>
+      <div id="quantumCanvas" class="training-canvas">
+        <div class="dashboard-toolbar">
+          <label for="floatQuantumToggle">
+            <input type="checkbox" id="floatQuantumToggle" />
+            Floating panels
+          </label>
+          <button type="button" class="ghost" id="btnResetQuantumLayout">Reset layout</button>
+          <span class="hint" style="margin:0">Drag cards by title; resize from the corner grip.</span>
+        </div>
+        <section class="dash-card" data-card-id="quantum-overview">
           <h2>Quantum Topology</h2>
           <div class="kv" id="quantumTopologyKv"></div>
           <div class="row">
             <button type="button" class="ghost" id="btnQuantumRefresh">Refresh Quantum Topology</button>
           </div>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </section>
       </div>
     </div>
 
     <div id="panelRegistry" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnRegistry" hidden>
-      <div class="training-canvas">
-        <section>
+      <div id="registryCanvas" class="training-canvas">
+        <div class="dashboard-toolbar">
+          <label for="floatRegistryToggle">
+            <input type="checkbox" id="floatRegistryToggle" />
+            Floating panels
+          </label>
+          <button type="button" class="ghost" id="btnResetRegistryLayout">Reset layout</button>
+          <span class="hint" style="margin:0">Drag cards by title; resize from the corner grip.</span>
+        </div>
+        <section class="dash-card" data-card-id="registry-artifacts">
           <h2>Artifact Registry</h2>
           <div class="row align-center">
             <label for="hfRepo" class="mb-0">HF model repo</label>
@@ -1501,6 +1546,7 @@
               <tbody id="registryBody"></tbody>
             </table>
           </div>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </section>
       </div>
     </div>
@@ -1992,7 +2038,10 @@
     }
 
     const LAYOUT_TRAIN = "qmw_training_layout_v1";
+    const LAYOUT_MISSION = "qmw_mission_layout_v1";
     const LAYOUT_INFRA = "qmw_infra_layout_v1";
+    const LAYOUT_QUANTUM = "qmw_quantum_layout_v1";
+    const LAYOUT_REGISTRY = "qmw_registry_layout_v1";
 
     function parseLayout(json) {
       try {
@@ -2215,80 +2264,62 @@
       }
     }
 
+    function initFloatingLayout(canvasId, toggleId, resetId, storageKey, onEnableRestore = null) {
+      const canvas = $(canvasId);
+      const toggle = $(toggleId);
+      const reset = $(resetId);
+      if (!canvas || !toggle) return;
+      bindDashboardInteractions(canvas, storageKey);
+      const raw = localStorage.getItem(storageKey);
+      const saved = parseLayout(raw);
+      if (saved && saved.floating) {
+        toggle.checked = true;
+        requestAnimationFrame(() => {
+          if (typeof onEnableRestore === "function") {
+            onEnableRestore(canvas, storageKey);
+          } else {
+            setFloating(canvas, storageKey, true);
+          }
+        });
+      }
+      toggle.addEventListener("change", () => {
+        setFloating(canvas, storageKey, toggle.checked);
+      });
+      if (!reset) return;
+      reset.addEventListener("click", () => {
+        try {
+          localStorage.removeItem(storageKey);
+        } catch (_) {}
+        if (!toggle.checked) return;
+        canvas.classList.remove("floating");
+        getDashCards(canvas).forEach(clearCardStyles);
+        canvas.style.minHeight = "";
+        requestAnimationFrame(() => {
+          snapMeasurementsFromGrid(canvas);
+          saveLayout(canvas, storageKey);
+        });
+      });
+    }
+
     function initDashboardLayouts() {
-      const trainCanvas = $("trainingCanvas");
-      const trainToggle = $("floatLayoutToggle");
-      const trainReset = $("btnResetLayout");
-      const infraCanvas = $("infraCanvas");
-      const infraToggle = $("floatInfraToggle");
-      const infraReset = $("btnResetInfraLayout");
-
-      if (trainCanvas && trainToggle) {
-        bindDashboardInteractions(trainCanvas, LAYOUT_TRAIN);
-        const raw = localStorage.getItem(LAYOUT_TRAIN);
-        const s = parseLayout(raw);
-        if (s && s.floating) {
-          trainToggle.checked = true;
-          requestAnimationFrame(() => setFloating(trainCanvas, LAYOUT_TRAIN, true));
-        }
-        trainToggle.addEventListener("change", () => {
-          setFloating(trainCanvas, LAYOUT_TRAIN, trainToggle.checked);
-        });
-        if (trainReset) {
-          trainReset.addEventListener("click", () => {
-            try {
-              localStorage.removeItem(LAYOUT_TRAIN);
-            } catch (_) {}
-            if (trainToggle.checked) {
-              trainCanvas.classList.remove("floating");
-              getDashCards(trainCanvas).forEach(clearCardStyles);
-              trainCanvas.style.minHeight = "";
-              requestAnimationFrame(() => {
-                snapMeasurementsFromGrid(trainCanvas);
-                saveLayout(trainCanvas, LAYOUT_TRAIN);
-              });
-            }
-          });
-        }
-      }
-
-      if (infraCanvas && infraToggle) {
-        bindDashboardInteractions(infraCanvas, LAYOUT_INFRA);
-        const raw2 = localStorage.getItem(LAYOUT_INFRA);
-        const s2 = parseLayout(raw2);
-        if (s2 && s2.floating) {
-          infraToggle.checked = true;
-          requestAnimationFrame(() => {
-            const saved2 = parseLayout(localStorage.getItem(LAYOUT_INFRA));
-            if (saved2 && saved2.cards && applySavedLayout(infraCanvas, saved2)) {
-              infraFloatPendingSnap = false;
-            } else {
-              infraFloatPendingSnap = true;
-            }
-          });
-        }
-        infraToggle.addEventListener("change", () => {
-          infraFloatPendingSnap = false;
-          setFloating(infraCanvas, LAYOUT_INFRA, infraToggle.checked);
-        });
-        if (infraReset) {
-          infraReset.addEventListener("click", () => {
+      initFloatingLayout("trainingCanvas", "floatLayoutToggle", "btnResetLayout", LAYOUT_TRAIN);
+      initFloatingLayout("missionCanvas", "floatMissionToggle", "btnResetMissionLayout", LAYOUT_MISSION);
+      initFloatingLayout(
+        "infraCanvas",
+        "floatInfraToggle",
+        "btnResetInfraLayout",
+        LAYOUT_INFRA,
+        (infraCanvas, storageKey) => {
+          const saved = parseLayout(localStorage.getItem(storageKey));
+          if (saved && saved.cards && applySavedLayout(infraCanvas, saved)) {
             infraFloatPendingSnap = false;
-            try {
-              localStorage.removeItem(LAYOUT_INFRA);
-            } catch (_) {}
-            if (infraToggle.checked) {
-              infraCanvas.classList.remove("floating");
-              getDashCards(infraCanvas).forEach(clearCardStyles);
-              infraCanvas.style.minHeight = "";
-              requestAnimationFrame(() => {
-                snapMeasurementsFromGrid(infraCanvas);
-                saveLayout(infraCanvas, LAYOUT_INFRA);
-              });
-            }
-          });
+          } else {
+            infraFloatPendingSnap = true;
+          }
         }
-      }
+      );
+      initFloatingLayout("quantumCanvas", "floatQuantumToggle", "btnResetQuantumLayout", LAYOUT_QUANTUM);
+      initFloatingLayout("registryCanvas", "floatRegistryToggle", "btnResetRegistryLayout", LAYOUT_REGISTRY);
     }
 
     function splitLaunchpadMissionCards() {
