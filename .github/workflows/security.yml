@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   push:
-    tags: ["v*"]
+    tags: [v*]
   workflow_dispatch:
 
 permissions:
@@ -42,7 +42,8 @@ jobs:
 
       - name: Generate SBOM (CycloneDX)
         run: |
-          .venv/bin/pip-audit -f cyclonedx-json -o sbom.json || echo '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components":[]}' > sbom.json
+          .venv/bin/pip-audit -f cyclonedx-json -o sbom.json || \
+            echo '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components":[]}' > sbom.json
         continue-on-error: true
 
       - name: Ensure sbom.json exists

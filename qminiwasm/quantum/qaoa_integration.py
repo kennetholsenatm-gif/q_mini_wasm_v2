@@ -312,7 +312,9 @@ class NeuralQAOA(nn.Module):
                     self.gamma.copy_(g.to(device=self.gamma.device, dtype=self.gamma.dtype))
                     self.beta.copy_(b.to(device=self.beta.device, dtype=self.beta.dtype))
 
-    def _update_angle_cache(self, weights: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor) -> None:
+    def _update_angle_cache(
+        self, weights: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor
+    ) -> None:
         fp = self._topology_fingerprint(weights)
         self._angle_cache[fp] = (gamma.detach().clone(), beta.detach().clone())
         ttl = max(1, int(getattr(self.config, "qaoa_warm_start_cache_ttl", 128)))
@@ -389,7 +391,9 @@ class NeuralQAOA(nn.Module):
                 num_qubits=self.num_qubits,
                 num_layers=int(self.config.num_layers),
             )
-            return torch.from_numpy(sol.astype(np.float32)).to(device=weights.device, dtype=weights.dtype)
+            return torch.from_numpy(sol.astype(np.float32)).to(
+                device=weights.device, dtype=weights.dtype
+            )
         ibm_name = resolve_ibm_backend_name(
             getattr(self.config, "ibm_backend_name", None),
             config_quantum_backend=getattr(self.config, "engine_quantum_backend", None),

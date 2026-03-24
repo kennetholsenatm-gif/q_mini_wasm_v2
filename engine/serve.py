@@ -96,9 +96,10 @@ def get_model():
         if s is not None and s.checkpoint:
             ckpt = str(s.checkpoint).strip()
         if not ckpt:
-            ckpt = os.environ.get("QMINIWASM_CHECKPOINT", "").strip() or os.environ.get(
-                "CHECKPOINT_LOAD_PATH", ""
-            ).strip()
+            ckpt = (
+                os.environ.get("QMINIWASM_CHECKPOINT", "").strip()
+                or os.environ.get("CHECKPOINT_LOAD_PATH", "").strip()
+            )
         if ckpt:
             _model.load_trainable_checkpoint(ckpt, map_location=dev)
     return _model

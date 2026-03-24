@@ -8,13 +8,13 @@ permissions:
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
     paths:
-      - "infra/runpod/**"
+      - infra/runpod/**
   pull_request:
-    branches: [main, master]
+    branches: [main]
     paths:
-      - "infra/runpod/**"
+      - infra/runpod/**
   workflow_dispatch:
 
 env:

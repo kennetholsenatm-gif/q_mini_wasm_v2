@@ -17,7 +17,7 @@ on:
       - "Semgrep"
       - "GitHub Alerts to Tickets"
     types: [completed]
-    branches: [main, master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -128,7 +128,7 @@ jobs:
               }
             `);
             const project = result.user.projectV2;
-            const issueItem = project.items.nodes.find(item => 
+            const issueItem = project.items.nodes.find(item =>
               item.content?.title === `🚨 Workflow failed: ${context.payload.workflow_run.name} #${context.payload.workflow_run.run_number}`
             );
             if (issueItem) {
@@ -152,7 +152,10 @@ jobs:
         run: |
           echo "Created issue #${{ steps.create.outputs.issue_number }}: ${{ steps.create.outputs.issue_url }}"
           if [ "${{ steps.add_to_project.outcome }}" = "skipped" ] || [ "${{ steps.add_to_project.outcome }}" = "" ]; then
-            echo "::notice title=Project not updated::Issue was NOT added to project #3. Add repo secret ADD_TO_PROJECT_TOKEN (PAT with project scope) in Settings → Secrets and variables → Actions so failed-run issues appear at https://github.com/users/kennetholsenatm-gif/projects/3"
+            echo "::notice title=Project not updated::Issue was NOT added to project #3."
+            echo "Add repo secret ADD_TO_PROJECT_TOKEN (PAT with project scope)"
+            echo "in Settings → Secrets and variables → Actions so failed-run issues appear"
+            echo "at https://github.com/users/kennetholsenatm-gif/projects/3"
           else
             echo "Issue was added to project https://github.com/users/kennetholsenatm-gif/projects/3"
           fi

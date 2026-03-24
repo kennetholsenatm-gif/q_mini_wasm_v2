@@ -129,9 +129,7 @@ class EngineConfig:
         )
         _idx = os.environ.get("DEVICE_INDEX", "")
         self.device_index = (
-            int(device_index)
-            if device_index is not None
-            else (int(_idx) if _idx.isdigit() else 0)
+            int(device_index) if device_index is not None else (int(_idx) if _idx.isdigit() else 0)
         )
         self.quantum_backend = (
             quantum_backend
@@ -139,21 +137,17 @@ class EngineConfig:
             else os.environ.get("QUANTUM_BACKEND", "penny_lane")
         )
         self.num_qubits = (
-            int(num_qubits)
-            if num_qubits is not None
-            else int(os.environ.get("NUM_QUBITS", "8"))
+            int(num_qubits) if num_qubits is not None else int(os.environ.get("NUM_QUBITS", "8"))
         )
         self.qaoa_layers = (
-            int(qaoa_layers)
-            if qaoa_layers is not None
-            else int(os.environ.get("QAOA_LAYERS", "3"))
+            int(qaoa_layers) if qaoa_layers is not None else int(os.environ.get("QAOA_LAYERS", "3"))
         )
         _qem = (
             qaoa_execution_mode
             if qaoa_execution_mode is not None
             else os.environ.get("QMINIWASM_QAOA_EXECUTION", "pennylane")
         )
-        self.qaoa_execution_mode = ((_qem or "pennylane").strip().lower())
+        self.qaoa_execution_mode = (_qem or "pennylane").strip().lower()
         self.ibm_qaoa_shots = (
             int(ibm_qaoa_shots)
             if ibm_qaoa_shots is not None
@@ -210,13 +204,9 @@ class EngineConfig:
             if diff_method is not None
             else os.environ.get("DIFF_METHOD", "parameter-shift")
         )
-        self.epochs = (
-            int(epochs) if epochs is not None else int(os.environ.get("EPOCHS", "25"))
-        )
+        self.epochs = int(epochs) if epochs is not None else int(os.environ.get("EPOCHS", "25"))
         self.batch_size = (
-            int(batch_size)
-            if batch_size is not None
-            else int(os.environ.get("BATCH_SIZE", "32"))
+            int(batch_size) if batch_size is not None else int(os.environ.get("BATCH_SIZE", "32"))
         )
         _lr_env = os.environ.get("LEARNING_RATE", "").strip()
         if learning_rate is not None:
@@ -226,9 +216,7 @@ class EngineConfig:
         else:
             self.learning_rate = 1e-4
 
-        self.data_path = (
-            data_path if data_path is not None else os.environ.get("DATA_PATH")
-        )
+        self.data_path = data_path if data_path is not None else os.environ.get("DATA_PATH")
         if training_data_source is not None:
             self.training_data_source = str(training_data_source).strip() or "mesh"
         else:
@@ -665,7 +653,7 @@ def _raise_if_hf_multi_without_specs(cfg: EngineConfig, path: str | Path) -> Non
     raise ValueError(
         f"{p}: [data].path is qminiwasm/hf-multi (extras-only Hub mode) but no datasets were "
         "configured. Add [huggingface].extra_specs in this TOML, or set HF_EXTRA_SPECS in "
-        'the environment to a JSON array, e.g. '
+        "the environment to a JSON array, e.g. "
         '[{"path":"code-search-net/code_search_net","dataset_config":"python"}].'
     )
 

@@ -2,13 +2,9 @@
 name: Branch Protection
 on:
   push:
-    branches:
-      - master
-      - develop
+    branches: ["**"]
   pull_request:
-    branches:
-      - master
-      - develop
+    branches: ["**"]
 
 permissions: {}
 
@@ -18,5 +14,5 @@ jobs:
     steps:
       - name: Check branch protection
         run: |
-          echo "Branch protection rules are enforced for master and develop branches"
+          echo "Branch protection rules are enforced for all branches"
           echo "All changes must go through pull requests with reviews"

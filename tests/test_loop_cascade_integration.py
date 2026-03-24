@@ -118,7 +118,9 @@ def test_run_training_loop_cascade_mopd_invalid_feat_loss_defaults_to_mse() -> N
 
 def test_run_training_loop_reuses_model_pipeline(monkeypatch) -> None:
     def _should_not_construct_pipeline():
-        raise AssertionError("loop.DataPipeline should not be constructed when model has data_pipeline")
+        raise AssertionError(
+            "loop.DataPipeline should not be constructed when model has data_pipeline"
+        )
 
     monkeypatch.setattr("qminiwasm.training.loop.DataPipeline", _should_not_construct_pipeline)
     out = run_training_loop(

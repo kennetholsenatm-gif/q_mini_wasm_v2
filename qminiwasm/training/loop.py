@@ -464,7 +464,9 @@ def run_training_loop(
             min_lr=lr_plateau_min_lr,
         )
 
-    pipeline = model.data_pipeline if getattr(model, "data_pipeline", None) is not None else DataPipeline()
+    pipeline = (
+        model.data_pipeline if getattr(model, "data_pipeline", None) is not None else DataPipeline()
+    )
     source = (training_data_source or "mesh").strip().lower()
     num_samples = max(1, batch_size * 4)
 

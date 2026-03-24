@@ -12,11 +12,11 @@ name: Semgrep
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
   schedule:
-    - cron: '37 16 * * 4'
+    - cron: "37 16 * * 4"
 
 permissions:
   contents: read

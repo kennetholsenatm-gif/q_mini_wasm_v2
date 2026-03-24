@@ -12,8 +12,8 @@ name: Sync wiki
 
 on:
   push:
-    branches: [main, master]
-    paths: ["wiki/**"]
+    branches: [main]
+    paths: [wiki/**]
   workflow_dispatch:
 
 env:

@@ -110,7 +110,7 @@ def test_hf_extra_specs_toml_and_engine_config(tmp_path):
     f.write_text(
         '[data]\nsource = "hf_tabular"\npath = "openai/gsm8k"\n\n'
         "[huggingface]\n"
-        'extra_specs = [\n'
+        "extra_specs = [\n"
         '  { path = "imdb" },\n'
         '  { path = "wikitext", dataset_config = "wikitext-2-raw-v1" },\n'
         "]\n",

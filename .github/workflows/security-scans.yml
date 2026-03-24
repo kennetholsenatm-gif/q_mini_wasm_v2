@@ -7,9 +7,9 @@ permissions:
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -63,7 +63,9 @@ jobs:
         run: |
           mkdir -p scap-content
           SSG_VERSION="0.1.80"
-          curl -fsSL "https://github.com/ComplianceAsCode/content/releases/download/v${SSG_VERSION}/scap-security-guide-${SSG_VERSION}.zip" -o ssg.zip || true
+          curl -fsSL \
+            "https://github.com/ComplianceAsCode/content/releases/download/v${SSG_VERSION}/scap-security-guide-${SSG_VERSION}.zip" \
+            -o ssg.zip || true
           if [ -f ssg.zip ]; then unzip -q -o ssg.zip -d scap-content; fi
           echo "OSCAP_CONTENT_PATH=$(pwd)/scap-content" >> "$GITHUB_ENV"
         continue-on-error: true

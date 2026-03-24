@@ -49,4 +49,3 @@ def test_neural_qaoa_warm_start_cache_hit_updates_params():
     m._warm_start_angles_if_available(w)
     assert torch.allclose(m.gamma, torch.full_like(m.gamma, 0.123))
     assert torch.allclose(m.beta, torch.full_like(m.beta, 0.456))
-

@@ -12,7 +12,7 @@ on:
     types: [opened]
   pull_request:
     types: [opened]
-    branches: [main, master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -80,5 +80,7 @@ jobs:
       - name: Skip (no ADD_TO_PROJECT_TOKEN)
         if: secrets.ADD_TO_PROJECT_TOKEN == ''
         run: |
-          echo "ADD_TO_PROJECT_TOKEN secret not set. Add a PAT with project scope in repo Settings → Secrets to auto-add issues/PRs to project #3."
+          echo "ADD_TO_PROJECT_TOKEN secret not set."
+          echo "Add a PAT with project scope in repo Settings → Secrets"
+          echo "to auto-add issues/PRs to project #3."
           exit 0
