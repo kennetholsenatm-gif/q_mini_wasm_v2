@@ -36,6 +36,26 @@ def test_load_training_toml_invalid_type(tmp_path):
         load_training_toml(f)
 
 
+def test_runpod_serverless_section_parses(tmp_path):
+    """Optional [runpod_serverless] is for WUI; engine load must still succeed."""
+    f = tmp_path / "rp.toml"
+    f.write_text(
+        '[hardware]\naccelerator = "cpu"\n\n'
+        '[data]\nsource = "mesh"\n\n'
+        "[runpod_serverless]\n"
+        'worker_image = "docker.io/example/worker:v1"\n',
+        encoding="utf-8",
+    )
+    from engine.config import EngineConfig
+    from engine.training_schema import load_training_toml
+
+    cfg = load_training_toml(f)
+    assert cfg.runpod_serverless is not None
+    assert cfg.runpod_serverless.worker_image == "docker.io/example/worker:v1"
+
+    EngineConfig.from_training_toml(f)
+
+
 def test_engine_config_from_toml_merges_hf_token_from_env(monkeypatch, tmp_path):
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     monkeypatch.delenv("HF_TOKEN", raising=False)

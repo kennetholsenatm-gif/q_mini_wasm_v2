@@ -274,6 +274,13 @@ func main() {
 	mux.HandleFunc("/api/runpod/status", handleRunpodStatus)
 	mux.HandleFunc("/api/runpod/tofu", handleRunpodTofu)
 	mux.HandleFunc("/api/runpod/tfvars", handleRunpodTfvars)
+	mux.HandleFunc("/api/runpod/serverless/meta", handleRunpodServerlessMeta)
+	mux.HandleFunc("/api/runpod/serverless/endpoints", handleRunpodServerlessEndpoints)
+	mux.HandleFunc("/api/runpod/serverless/templates", handleRunpodServerlessTemplates)
+	mux.HandleFunc("/api/runpod/serverless/health", handleRunpodServerlessHealth)
+	mux.HandleFunc("/api/runpod/serverless/worker-image", handleRunpodServerlessWorkerImage)
+	mux.HandleFunc("/api/runpod/serverless/run", handleRunpodServerlessRun)
+	mux.HandleFunc("/api/runpod/serverless/job", handleRunpodServerlessJob)
 	mux.HandleFunc("/api/runs/", handleRunsItem)
 
 	sub, err := fs.Sub(webFS, "web")
@@ -332,6 +339,16 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 			"ssh":         runpodToolOK("ssh"),
 			"scp":         runpodToolOK("scp"),
 			"tar":         runpodToolOK("tar"),
+		},
+		"runpod_serverless": map[string]any{
+			"endpoint_configured":       runpodServerlessEndpointID() != "",
+			"token_present":             runpodServerlessQueueAPIKey() != "",
+			"endpoint_key_present":      strings.TrimSpace(os.Getenv("RUNPOD_TOKEN_END")) != "",
+			"management_key_present":    runpodAccountAPIKeyForREST() != "",
+			"api_base":                  "https://api.runpod.ai/v2",
+			"docs":                      "https://docs.runpod.io/serverless/overview",
+			"default_worker_image":      runpodServerlessDefaultWorkerImage(),
+			"default_container_disk_gb": runpodServerlessDefaultContainerDiskGB(),
 		},
 	})
 }
@@ -438,16 +455,17 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"runs": runManager.list()})
 	case http.MethodPost:
 		var body struct {
-			Config                 string `json:"config"`
-			QuantumBackend         string `json:"quantum_backend"`
-			QuantumPolicy          string `json:"quantum_policy"`
-			IBMBackendName         string `json:"ibm_backend_name"`
-			RunTarget              string `json:"run_target"`
-			RunpodDestroyOnExit    *bool  `json:"runpod_destroy_on_exit"`
-			RunpodVarFile          string `json:"runpod_var_file"`
-			RunpodSkipApply        *bool  `json:"runpod_skip_apply"`
-			RunpodTrainOnPod       *bool  `json:"runpod_train_on_pod"`
-			AllowMissingCheckpoint bool   `json:"allow_missing_checkpoint"`
+			Config                     string `json:"config"`
+			QuantumBackend             string `json:"quantum_backend"`
+			QuantumPolicy              string `json:"quantum_policy"`
+			IBMBackendName             string `json:"ibm_backend_name"`
+			RunTarget                  string `json:"run_target"`
+			RunpodDestroyOnExit        *bool  `json:"runpod_destroy_on_exit"`
+			RunpodVarFile              string `json:"runpod_var_file"`
+			RunpodSkipApply            *bool  `json:"runpod_skip_apply"`
+			RunpodTrainOnPod           *bool  `json:"runpod_train_on_pod"`
+			RunpodServerlessEndpointID string `json:"runpod_serverless_endpoint_id"`
+			AllowMissingCheckpoint     bool   `json:"allow_missing_checkpoint"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonErr(w, http.StatusBadRequest, "invalid JSON")
@@ -485,6 +503,7 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			body.RunpodVarFile,
 			body.RunpodSkipApply,
 			body.RunpodTrainOnPod,
+			body.RunpodServerlessEndpointID,
 		)
 		if err := validateRunTarget(opts); err != nil {
 			if configCleanup != "" {
@@ -1143,11 +1162,12 @@ func PathJoinRepo(root, maybeRel string) string {
 }
 
 type runStartOpts struct {
-	RunTarget           string `json:"run_target"`
-	RunpodDestroyOnExit bool   `json:"runpod_destroy_on_exit"`
-	RunpodVarFile       string `json:"runpod_var_file"` // optional basename under infra/runpod, e.g. terraform.tfvars
-	RunpodSkipApply     bool   `json:"runpod_skip_apply"`
-	RunpodTrainOnPod    bool   `json:"runpod_train_on_pod"` // ssh sync + engine on pod (default true for runpod)
+	RunTarget                  string `json:"run_target"`
+	RunpodDestroyOnExit        bool   `json:"runpod_destroy_on_exit"`
+	RunpodVarFile              string `json:"runpod_var_file"` // optional basename under infra/runpod, e.g. terraform.tfvars
+	RunpodSkipApply            bool   `json:"runpod_skip_apply"`
+	RunpodTrainOnPod           bool   `json:"runpod_train_on_pod"`           // ssh sync + engine on pod (default true for runpod)
+	RunpodServerlessEndpointID string `json:"runpod_serverless_endpoint_id"` // optional override; else RUNPOD_SERVERLESS_ENDPOINT_ID
 }
 
 func normalizeRunTarget(s string) string {
@@ -1163,6 +1183,7 @@ func runStartOptsFromRequest(
 	destroyPtr *bool,
 	runpodVarFile string,
 	skipApplyPtr, trainOnPodPtr *bool,
+	runpodServerlessEndpointID string,
 ) runStartOpts {
 	rt := normalizeRunTarget(runTarget)
 	destroy := true
@@ -1172,12 +1193,16 @@ func runStartOptsFromRequest(
 	if rt != "runpod" {
 		destroy = false
 	}
+	if rt == "runpod_serverless" {
+		destroy = false
+	}
 	o := runStartOpts{
-		RunTarget:           rt,
-		RunpodDestroyOnExit: destroy,
-		RunpodVarFile:       strings.TrimSpace(runpodVarFile),
-		RunpodSkipApply:     false,
-		RunpodTrainOnPod:    rt == "runpod",
+		RunTarget:                  rt,
+		RunpodDestroyOnExit:        destroy,
+		RunpodVarFile:              strings.TrimSpace(runpodVarFile),
+		RunpodSkipApply:            false,
+		RunpodTrainOnPod:           rt == "runpod",
+		RunpodServerlessEndpointID: strings.TrimSpace(runpodServerlessEndpointID),
 	}
 	if rt == "runpod" {
 		if skipApplyPtr != nil {
@@ -1190,15 +1215,18 @@ func runStartOptsFromRequest(
 		o.RunpodTrainOnPod = false
 		o.RunpodSkipApply = false
 	}
+	if rt != "runpod_serverless" {
+		o.RunpodServerlessEndpointID = ""
+	}
 	return o
 }
 
 func validateRunTarget(o runStartOpts) error {
 	switch o.RunTarget {
-	case "local", "runpod":
+	case "local", "runpod", "runpod_serverless":
 		return nil
 	default:
-		return errors.New("run_target must be local or runpod")
+		return errors.New("run_target must be local, runpod, or runpod_serverless")
 	}
 }
 
@@ -1849,6 +1877,10 @@ func buildGeneratedTOML(body buildRunRequest, accel, src, srcRaw, modelStem stri
 	b.WriteString("enabled = true\n")
 	b.WriteString("steps_per_epoch = 2\n")
 	b.WriteString("group_size = 4\n")
+	if normalizeRunTarget(body.RunTarget) == "runpod_serverless" {
+		b.WriteString("\n[runpod_serverless]\n")
+		b.WriteString("worker_image = " + strconv.Quote(runpodServerlessBuiltinWorkerImage) + "\n")
+	}
 	return b.String()
 }
 
@@ -2234,33 +2266,35 @@ func (h *runWSHub) broadcast(runID string, payload map[string]any) {
 }
 
 type runRecord struct {
-	ID                  string    `json:"id"`
-	ConfigRel           string    `json:"config"`
-	Started             time.Time `json:"started"`
-	Running             bool      `json:"running"`
-	ExitCode            int       `json:"exit_code,omitempty"`
-	Error               bool      `json:"error"`
-	RunTarget           string    `json:"run_target,omitempty"`
-	RunpodDestroyOnExit bool      `json:"runpod_destroy_on_exit,omitempty"`
-	RunpodVarFile       string    `json:"runpod_var_file,omitempty"`
-	configCleanup       string    `json:"-"` // temp TOML path to remove after the process exits
-	cmd                 *exec.Cmd
-	logMu               sync.Mutex
-	logBuf              bytes.Buffer
-	stdoutLineBuf       strings.Builder
-	stderrLineBuf       strings.Builder
-	LastEpoch           int
-	TotalEpochs         int
-	LastMeanLoss        float64
-	LastMeanReturn      float64
-	LastMeanMSE         float64
-	XPUFallbackSeen     bool
-	WasmMockSeen        bool
-	PrunedFromNodes     int
-	PrunedToNodes       int
-	QAOASimMS           float64
-	QPUEstMS            float64
-	maxRuns             int // ring of finished ids for list
+	ID                   string    `json:"id"`
+	ConfigRel            string    `json:"config"`
+	Started              time.Time `json:"started"`
+	Running              bool      `json:"running"`
+	ExitCode             int       `json:"exit_code,omitempty"`
+	Error                bool      `json:"error"`
+	RunTarget            string    `json:"run_target,omitempty"`
+	RunpodDestroyOnExit  bool      `json:"runpod_destroy_on_exit,omitempty"`
+	RunpodVarFile        string    `json:"runpod_var_file,omitempty"`
+	ServerlessJobID      string    `json:"serverless_job_id,omitempty"`
+	ServerlessEndpointID string    `json:"serverless_endpoint_id,omitempty"`
+	configCleanup        string    `json:"-"` // temp TOML path to remove after the process exits
+	cmd                  *exec.Cmd
+	logMu                sync.Mutex
+	logBuf               bytes.Buffer
+	stdoutLineBuf        strings.Builder
+	stderrLineBuf        strings.Builder
+	LastEpoch            int
+	TotalEpochs          int
+	LastMeanLoss         float64
+	LastMeanReturn       float64
+	LastMeanMSE          float64
+	XPUFallbackSeen      bool
+	WasmMockSeen         bool
+	PrunedFromNodes      int
+	PrunedToNodes        int
+	QAOASimMS            float64
+	QPUEstMS             float64
+	maxRuns              int // ring of finished ids for list
 }
 
 type manager struct {
@@ -2341,6 +2375,57 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		rec.logBuf.WriteByte('\n')
 	} else if opts.RunTarget == "runpod" && opts.RunpodSkipApply {
 		rec.logBuf.WriteString("=== runpod: skipped OpenTofu apply (using existing terraform state) ===\n")
+	}
+
+	if opts.RunTarget == "runpod_serverless" {
+		ep := strings.TrimSpace(opts.RunpodServerlessEndpointID)
+		if ep == "" {
+			ep = runpodServerlessEndpointID()
+		}
+		if ep == "" {
+			return nil, fmt.Errorf("runpod_serverless: no endpoint id — enter Serverless endpoint id in the training wizard (step 2) or configure it for the WUI server process")
+		}
+		if runpodServerlessQueueAPIKey() == "" {
+			return nil, fmt.Errorf("runpod_serverless: no queue API credentials — configure RUNPOD_TOKEN_END and/or RUNPOD_API_KEY or RUNPOD_TOKEN for the WUI process")
+		}
+		rec.logBuf.WriteString("=== runpod serverless: POST /run (async training job) ===\n")
+		ctxSub, cancelSub := context.WithTimeout(context.Background(), 5*time.Minute)
+		payload := buildQMWServerlessTrainInputV1(relDisplay, extraEnv)
+		if pb, err := json.MarshalIndent(payload, "", "  "); err == nil {
+			rec.logBuf.WriteString("=== runpod serverless payload ===\n")
+			rec.logBuf.Write(pb)
+			rec.logBuf.WriteByte('\n')
+		}
+		out, code, raw, subErr := RunpodServerlessRunAsync(ctxSub, ep, payload)
+		cancelSub()
+		if subErr != nil {
+			return nil, fmt.Errorf("runpod serverless /run: %w", subErr)
+		}
+		if code >= 400 {
+			return nil, fmt.Errorf("runpod serverless /run failed: HTTP %d: %s", code, string(raw))
+		}
+		jobID, _ := out["id"].(string)
+		if strings.TrimSpace(jobID) == "" {
+			return nil, fmt.Errorf("runpod serverless /run: no job id in response: %s", string(raw))
+		}
+		rec.ServerlessJobID = jobID
+		rec.ServerlessEndpointID = ep
+		rec.logBuf.WriteString(fmt.Sprintf("=== runpod serverless: job id %s ===\n", jobID))
+
+		m.byID[id] = rec
+		m.ordered = append([]string{id}, m.ordered...)
+		if len(m.ordered) > 32 {
+			m.ordered = m.ordered[:32]
+		}
+		go m.pollServerlessJob(id, ep, jobID, configCleanup)
+		wsHub.broadcast(id, map[string]any{
+			"type":   "lifecycle",
+			"run_id": id,
+			"state":  "started",
+			"ts":     time.Now().UTC().Format(time.RFC3339),
+		})
+		registered = true
+		return rec, nil
 	}
 
 	var cmd *exec.Cmd
@@ -2657,7 +2742,7 @@ func (m *manager) list() []map[string]any {
 		if r == nil {
 			continue
 		}
-		out = append(out, map[string]any{
+		row := map[string]any{
 			"id":                     r.ID,
 			"config":                 r.ConfigRel,
 			"started":                r.Started.Format(time.RFC3339),
@@ -2667,7 +2752,14 @@ func (m *manager) list() []map[string]any {
 			"run_target":             r.RunTarget,
 			"runpod_destroy_on_exit": r.RunpodDestroyOnExit,
 			"runpod_var_file":        r.RunpodVarFile,
-		})
+		}
+		if r.ServerlessJobID != "" {
+			row["serverless_job_id"] = r.ServerlessJobID
+		}
+		if r.ServerlessEndpointID != "" {
+			row["serverless_endpoint_id"] = r.ServerlessEndpointID
+		}
+		out = append(out, row)
 	}
 	return out
 }
@@ -2680,9 +2772,10 @@ func (m *manager) activeRunSummary() map[string]any {
 		if r == nil || !r.Running {
 			continue
 		}
-		return map[string]any{
+		s := map[string]any{
 			"id":                r.ID,
 			"config":            r.ConfigRel,
+			"run_target":        r.RunTarget,
 			"epoch":             r.LastEpoch,
 			"total_epochs":      r.TotalEpochs,
 			"mean_loss":         r.LastMeanLoss,
@@ -2695,6 +2788,10 @@ func (m *manager) activeRunSummary() map[string]any {
 			"qaoa_sim_ms":       r.QAOASimMS,
 			"qpu_est_ms":        r.QPUEstMS,
 		}
+		if r.ServerlessJobID != "" {
+			s["serverless_job_id"] = r.ServerlessJobID
+		}
+		return s
 	}
 	return nil
 }
@@ -2702,7 +2799,22 @@ func (m *manager) activeRunSummary() map[string]any {
 func (m *manager) stop(id string) error {
 	m.mu.Lock()
 	rec := m.byID[id]
-	if rec == nil || !rec.Running || rec.cmd == nil || rec.cmd.Process == nil {
+	if rec == nil || !rec.Running {
+		m.mu.Unlock()
+		return errors.New("run not active")
+	}
+	if rec.RunTarget == "runpod_serverless" && rec.ServerlessJobID != "" && rec.ServerlessEndpointID != "" {
+		jobID := rec.ServerlessJobID
+		ep := rec.ServerlessEndpointID
+		m.mu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		if err := RunpodServerlessCancel(ctx, ep, jobID); err != nil {
+			return err
+		}
+		return nil
+	}
+	if rec.cmd == nil || rec.cmd.Process == nil {
 		m.mu.Unlock()
 		return errors.New("run not active")
 	}

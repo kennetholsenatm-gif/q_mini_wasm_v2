@@ -1189,7 +1189,7 @@
   <nav class="app-tabs" role="tablist" aria-label="Main views">
     <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Training</button>
     <button type="button" class="app-tab" id="tabBtnMission" role="tab" aria-selected="false">Mission Control</button>
-    <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false" title="Node health, terraform.tfvars, RunPod status, OpenTofu">Infra &amp; RunPod</button>
+    <button type="button" class="app-tab" id="tabBtnInfra" role="tab" aria-selected="false" title="Node health, RunPod, OpenTofu, variables editor">Infra &amp; RunPod</button>
     <button type="button" class="app-tab" id="tabBtnQuantum" role="tab" aria-selected="false">Quantum Topology</button>
     <button type="button" class="app-tab" id="tabBtnRegistry" role="tab" aria-selected="false">Artifact Registry</button>
   </nav>
@@ -1322,7 +1322,32 @@
             <select id="bRunTarget">
               <option value="local">Local (this machine)</option>
               <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
+              <option value="runpod_serverless">RunPod Serverless (job API, no OpenTofu)</option>
             </select>
+          </div>
+          <div id="bRunpodServerlessWrap" style="display:none" class="stack-sm">
+            <p class="hint">
+              Training uses the same wizard flow. <strong>Launch training</strong> (step 5) creates a short-lived RunPod template and endpoint when needed, using the worker image from your selected training TOML (<code>[runpod_serverless] worker_image</code>) or the built-in default. Serverless template create omits disk/volume fields (RunPod rejects them). Your worker must accept
+              <code>qmw_schema_version</code>, <code>qmw_action: train</code>, and <code>config_rel</code>.
+            </p>
+            <p class="status stack-sm" id="bRunpodServerlessMsg" aria-live="polite"></p>
+            <details class="stack-sm">
+              <summary style="cursor:pointer;font-weight:600;">Advanced Serverless overrides</summary>
+              <div class="stack-sm mt-sm">
+                <div>
+                  <label for="bRunpodServerlessEndpointId">Reuse existing endpoint id (optional)</label>
+                  <input id="bRunpodServerlessEndpointId" type="text" placeholder="Leave blank to auto-create on each launch" style="width:100%;max-width:520px;box-sizing:border-box;" autocomplete="off" />
+                </div>
+                <div>
+                  <label for="bRunpodWorkerImage">Override worker Docker image (optional)</label>
+                  <input id="bRunpodWorkerImage" type="text" placeholder="Leave blank to use server default" style="width:100%;max-width:520px;box-sizing:border-box;" />
+                </div>
+                <div class="row stack-sm align-center flex-wrap">
+                  <button type="button" class="ghost" id="btnWizardProvisionServerless">Provision template &amp; endpoint only</button>
+                </div>
+                <p class="hint" style="margin:0">Provision only creates infrastructure without starting a training job. Remembered values apply in this browser.</p>
+              </div>
+            </details>
           </div>
           <div id="bRunpodDestroyWrap" style="display:none">
             <label class="checkline stack-sm">
@@ -1341,7 +1366,7 @@
               Skip OpenTofu apply (pod already up — use <code>public_ip</code> from existing terraform state)
             </label>
             <div class="hint">
-              WUI host needs <code>ssh</code>, <code>tar</code>, and <code>scp</code> (scp only if the run uses a generated temp config) on <code>PATH</code>. Set <code>RUNPOD_SSH_USER</code>, <code>RUNPOD_REMOTE_DIR</code>, <code>RUNPOD_SSH_KEY</code> in repo <code>.env</code> if not using defaults. Your repo <code>.env</code> is synced with the tree so Hub / IBM tokens work on the pod.
+              This machine needs <code>ssh</code>, <code>tar</code>, and <code>scp</code> (when a temp config is pushed) on <code>PATH</code>. The WUI syncs your project to the pod so Hub and IBM settings from your saved config apply there.
             </div>
           </div>
           <div>
@@ -1569,6 +1594,7 @@
         <h2>Launch training</h2>
         <p class="hint hint-block" style="margin-top:0">
           <strong>Only this button starts the engine.</strong> Pick the TOML (usually <code>wui_working.toml</code>). Run target and quantum settings come from <strong>step 2</strong> — no second copy here.
+          <strong>RunPod Serverless:</strong> if no endpoint id is set (step 2 Advanced), this button creates a short-lived template and endpoint, then starts training.
         </p>
         <label for="cfg">Config file to run</label>
         <select id="cfg"></select>
@@ -1656,7 +1682,7 @@
     <div id="panelInfra" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnInfra" hidden>
       <div id="infraCanvas" class="infrastructure-tab">
         <p class="hint hint-block" style="margin:0 0 var(--space-md)">
-          <strong>RunPod + OpenTofu</strong> — edit <code>terraform.tfvars</code> below, then <strong>Init</strong> / <strong>Plan</strong> / <strong>Apply</strong>. Requires <code>RUNPOD_TOKEN</code> in repo <code>.env</code> and <code>tofu</code> on <code>PATH</code> for the WUI process.
+          <strong>RunPod + OpenTofu</strong> — edit variables below, then <strong>Init</strong> / <strong>Plan</strong> / <strong>Apply</strong>. Needs a RunPod API token and <code>tofu</code> on <code>PATH</code> for the process that runs this WUI.
         </p>
         <section class="infra-section">
           <h2>Compute Utilization</h2>
@@ -1676,7 +1702,7 @@
         <div class="infra-dash-wrap">
         <div class="infra-section dash-card" data-card-id="infra-tfvars">
           <h2>terraform.tfvars</h2>
-          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. RunPod + OpenTofu use this file; <code>python -m engine</code> still runs on <strong>this</strong> host unless you SSH to the pod.</p>
+          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (default), the engine runs on the GPU pod after SSH sync; turn that off in step 2 to run <code>python -m engine</code> on the WUI host.</p>
           <label for="tfvarsEditor" class="sr-only">terraform.tfvars contents</label>
           <textarea id="tfvarsEditor" spellcheck="false" wrap="off" placeholder="# Load example or paste HCL variable assignments…"></textarea>
           <div class="row stack-md align-center">
@@ -1705,9 +1731,103 @@
           </details>
           <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </div>
+        <div class="infra-section dash-card" data-card-id="infra-serverless">
+          <h2>RunPod Serverless</h2>
+          <p class="hint mb-sm">Queue API (<code>https://api.runpod.ai/v2</code>) and management (<code>rest.runpod.io</code>) use credentials supplied to the WUI server. Use the controls below to inspect health, send test jobs, and list or create templates and endpoints.</p>
+          <p class="status stack-sm" id="slMetaMsg" aria-live="polite"></p>
+          <div class="row stack-sm align-center mb-sm">
+            <button type="button" class="ghost" id="btnSlMeta">Refresh meta</button>
+            <button type="button" class="ghost" id="btnSlHealth">GET /health</button>
+          </div>
+          <h3 class="mt-md mb-sm" style="font-size:var(--text-md);font-weight:600;margin-top:var(--space-md);">Serverless endpoints (management API)</h3>
+          <p class="hint mb-sm">List and create endpoints via <code>https://rest.runpod.io/v1</code> (<a href="https://docs.runpod.io/api-reference/endpoints/POST/endpoints" target="_blank" rel="noopener">POST /endpoints</a>). Creating an endpoint is <strong>billable</strong>.</p>
+          <p class="status stack-sm" id="slMgmtMsg" aria-live="polite"></p>
+          <div class="row stack-sm align-center mb-sm">
+            <button type="button" class="ghost" id="btnSlListEndpoints">Refresh endpoints</button>
+          </div>
+          <div id="slMgmtTableWrap" class="mb-sm" style="display:none;overflow:auto;max-height:240px;border:1px solid var(--surface-interface-gray);border-radius:4px;">
+            <table id="slMgmtTable" style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+              <thead>
+                <tr style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);">
+                  <th style="padding:6px 8px;">id</th>
+                  <th style="padding:6px 8px;">name</th>
+                  <th style="padding:6px 8px;">templateId</th>
+                  <th style="padding:6px 8px;width:1%;white-space:nowrap;"></th>
+                </tr>
+              </thead>
+              <tbody id="slMgmtTableBody"></tbody>
+            </table>
+          </div>
+          <label for="slMgmtCreateJson" class="mb-sm" style="display:block;font-size:var(--text-sm);">Create endpoint JSON (<code>templateId</code> required; see <a href="https://docs.runpod.io/api-reference/endpoints/POST/endpoints" target="_blank" rel="noopener">RunPod docs</a>)</label>
+          <textarea id="slMgmtCreateJson" spellcheck="false" wrap="off" style="width:100%;min-height:120px;font-family:IBM Plex Mono,monospace;font-size:var(--text-sm);padding:var(--space-sm);border-radius:4px;border:1px solid var(--surface-interface-gray);background:var(--bg-tactical-black);color:var(--text-primary);box-sizing:border-box;">{
+  "templateId": "replace-with-template-id-from-runpod-console",
+  "name": "qmw-serverless-endpoint",
+  "gpuTypeIds": ["NVIDIA RTX A4000"],
+  "workersMax": 1
+}</textarea>
+          <div class="row stack-md align-center mt-sm flex-wrap">
+            <button type="button" class="ghost" id="btnSlAutofillEndpoint" title="Fill name, gpuTypeIds, workersMax from wizard; templateId from last created template in this tab if any">Autofill from wizard</button>
+            <button type="button" class="primary" id="btnSlCreateEndpoint">Create endpoint</button>
+          </div>
+          <h3 class="mt-md mb-sm" style="font-size:var(--text-md);font-weight:600;margin-top:var(--space-md);">Templates (management API)</h3>
+          <p class="hint mb-sm"><strong>Create template</strong> uses RunPod <strong>GraphQL</strong> <code>saveTemplate</code> on <code>https://api.runpod.io/graphql</code> (see <a href="https://docs.runpod.io/sdks/graphql/manage-pod-templates" target="_blank" rel="noopener">manage templates</a>) — not REST <code>POST /templates</code>, which errors on Serverless <code>volumeInGb</code>. The WUI sends <code>volumeInGb: 0</code>, default <code>dockerArgs</code> <code>python /app/serverless/handler.py</code>, and <code>containerDiskInGb</code> 50 unless you override them in JSON. <strong>List templates</strong> still uses REST <code>rest.runpod.io</code>.</p>
+          <p class="status stack-sm" id="slTplMsg" aria-live="polite"></p>
+          <div class="row stack-sm align-center mb-sm flex-wrap">
+            <button type="button" class="ghost" id="btnSlListTemplates">Refresh templates</button>
+            <label class="checkline mb-0"><input type="checkbox" id="slTplIncEndpointBound" checked /> <code>includeEndpointBoundTemplates</code></label>
+            <label class="checkline mb-0"><input type="checkbox" id="slTplIncPublic" /> <code>includePublicTemplates</code></label>
+            <label class="checkline mb-0"><input type="checkbox" id="slTplIncRunpod" /> <code>includeRunpodTemplates</code></label>
+          </div>
+          <div id="slTplTableWrap" class="mb-sm" style="display:none;overflow:auto;max-height:240px;border:1px solid var(--surface-interface-gray);border-radius:4px;">
+            <table id="slTplTable" style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+              <thead>
+                <tr style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);">
+                  <th style="padding:6px 8px;">id</th>
+                  <th style="padding:6px 8px;">name</th>
+                  <th style="padding:6px 8px;">serverless</th>
+                  <th style="padding:6px 8px;">imageName</th>
+                  <th style="padding:6px 8px;width:1%;white-space:nowrap;"></th>
+                </tr>
+              </thead>
+              <tbody id="slTplTableBody"></tbody>
+            </table>
+          </div>
+          <label for="slTplCreateJson" class="mb-sm" style="display:block;font-size:var(--text-sm);">Create template JSON — fill <code>name</code> and <code>imageName</code> (your pushed worker image). No sample registry path here (avoid copy-paste mistakes). <a href="https://docs.runpod.io/api-reference/templates/POST/templates" target="_blank" rel="noopener">RunPod API</a></label>
+          <textarea id="slTplCreateJson" spellcheck="false" wrap="off" style="width:100%;min-height:120px;font-family:IBM Plex Mono,monospace;font-size:var(--text-sm);padding:var(--space-sm);border-radius:4px;border:1px solid var(--surface-interface-gray);background:var(--bg-tactical-black);color:var(--text-primary);box-sizing:border-box;">{
+  "name": "",
+  "imageName": "",
+  "dockerArgs": "python /app/serverless/handler.py",
+  "containerDiskInGb": 50
+}</textarea>
+          <div class="row stack-md align-center mt-sm flex-wrap">
+            <button type="button" class="ghost" id="btnSlAutofillTemplate" title="Fill name and imageName from wizard (GraphQL saveTemplate)">Autofill from wizard</button>
+            <button type="button" class="primary" id="btnSlCreateTemplate">Create template</button>
+          </div>
+          <label for="slJsonInput" class="sr-only">Serverless request JSON</label>
+          <textarea id="slJsonInput" spellcheck="false" wrap="off" style="width:100%;min-height:140px;font-family:IBM Plex Mono,monospace;font-size:var(--text-sm);padding:var(--space-sm);border-radius:4px;border:1px solid var(--surface-interface-gray);background:var(--bg-tactical-black);color:var(--text-primary);box-sizing:border-box;">{
+  "input": {
+    "qmw_schema_version": 1,
+    "qmw_action": "train",
+    "config_rel": "configs/training/wui_working.toml",
+    "extra_env": []
+  }
+}</textarea>
+          <label class="checkline stack-sm mt-sm">
+            <input type="checkbox" id="slRunsync" />
+            Use <code>/runsync</code> (short jobs only; HTTP wait up to 5 minutes per RunPod docs)
+          </label>
+          <div class="row stack-md align-center mt-sm">
+            <button type="button" class="primary" id="btnSlSend">Send test job</button>
+            <input type="text" id="slJobId" placeholder="job id from /run" style="flex:1;min-width:200px;max-width:420px;padding:6px 10px;" />
+            <button type="button" class="ghost" id="btnSlPoll">Poll /status</button>
+          </div>
+          <p class="status stack-md" id="slOutMsg" aria-live="polite"></p>
+          <pre id="slOutPre" class="infra-remote-cmd" style="display:none;max-height:240px;overflow:auto"></pre>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+        </div>
         <div class="infra-section dash-card" data-card-id="infra-tofu">
           <h2>OpenTofu CLI</h2>
-          <p class="hint mb-sm">Runs in <code>infra/runpod</code> with repo <code>.env</code> (token). Commands use <strong>terraform.tfvars</strong> from the editor above. Use <strong>Plan</strong> before <strong>Apply</strong>.</p>
+          <p class="hint mb-sm">Runs in <code>infra/runpod</code> with the RunPod token available to the WUI process. Commands use the variables from the editor above. Use <strong>Plan</strong> before <strong>Apply</strong>.</p>
           <div class="row stack-sm align-center">
             <button type="button" class="ghost" id="btnTofuInit">tofu init</button>
             <button type="button" class="ghost" id="btnTofuPlan">tofu plan</button>
@@ -1832,6 +1952,10 @@
 
     const DATASET_MIX_STORAGE_KEY = "qmw_dataset_mix_override_v1";
     const DATASET_MIX_CUSTOM_KEY = "qmw_dataset_mix_custom_v1";
+    const RUNPOD_LAST_TEMPLATE_ID_KEY = "qmw_last_runpod_template_id";
+    const RUNPOD_SERVERLESS_ENDPOINT_ID_STORAGE_KEY = "qmw_runpod_serverless_endpoint_id_v1";
+    const RUNPOD_WORKER_IMAGE_STORAGE_KEY = "qmw_runpod_worker_image_v1";
+    let runpodServerlessMetaDefaults = { default_worker_image: "", default_container_disk_gb: 50 };
     let datasetMixExtraSpecsOverride = null;
     let datasetBuilderCustomRows = [];
 
@@ -2346,6 +2470,23 @@
       $("mConfigs").textContent = String(sel.options.length || 0);
     }
 
+    function applyRunpodServerlessMetaFromPayload(data) {
+      const rs = data && data.runpod_serverless;
+      if (!rs || typeof rs !== "object") return;
+      runpodServerlessMetaDefaults = {
+        default_worker_image: rs.default_worker_image != null ? String(rs.default_worker_image) : "",
+        default_container_disk_gb: Number(rs.default_container_disk_gb) || 50,
+      };
+    }
+
+    async function refreshRunpodServerlessMetaDefaults() {
+      try {
+        const r = await fetch("/api/meta", { cache: "no-store" });
+        const data = await r.json();
+        if (r.ok) applyRunpodServerlessMetaFromPayload(data);
+      } catch (_) {}
+    }
+
     async function loadServerMeta() {
       try {
         const r = await fetch("/api/meta");
@@ -2354,6 +2495,7 @@
         const addr = data.server_addr || "(unknown)";
         $("serverBindBanner").textContent = `Server bind: ${addr}`;
         $("serverBindBanner").dataset.addr = addr;
+        applyRunpodServerlessMetaFromPayload(data);
       } catch (_) {
         $("serverBindBanner").textContent = "Server bind: unavailable";
         $("serverBindBanner").dataset.addr = "";
@@ -3136,7 +3278,8 @@
       const host = $("launchExecSummary");
       if (!host) return;
       const rtVal = $("bRunTarget").value;
-      const rtLabel = rtVal === "runpod" ? "RunPod" : "Local";
+      const rtLabel =
+        rtVal === "runpod" ? "RunPod" : rtVal === "runpod_serverless" ? "RunPod Serverless" : "Local";
       const trainRemote = rtVal === "runpod" && ($("bRunpodTrainOnPod") ? $("bRunpodTrainOnPod").checked : true);
       const skipApply = rtVal === "runpod" && $("bRunpodSkipApply") && $("bRunpodSkipApply").checked;
       const podNote =
@@ -3144,15 +3287,16 @@
           ? ($("bRunpodDestroy").checked ? "destroy pod when training stops" : "leave pod running") +
             (trainRemote ? "; train on pod (SSH)" : "; train on WUI host (local Python)") +
             (skipApply ? "; skip tofu apply" : "")
-          : "";
+          : rtVal === "runpod_serverless"
+            ? "POST /run + poll /status; no OpenTofu"
+            : "";
       const qpol = $("bQuantumPolicy").selectedOptions[0]?.textContent || $("bQuantumPolicy").value;
       const qb = ($("bQuantumBackend").value || "").trim() || "auto";
       const ibm = ($("bIBMBackendName").value || "").trim() || "(none)";
       host.innerHTML =
-        `<p style="margin:0 0 var(--space-xs)"><strong>From step 2</strong> — <strong>Target</strong>: ${escapeHtml(rtLabel)}` +
+        `<p style="margin:0 0 var(--space-sm)"><strong>From step 2</strong> — <strong>Target</strong>: ${escapeHtml(rtLabel)}` +
         (podNote ? ` (${escapeHtml(podNote)})` : "") +
         `. <strong>Quantum</strong>: ${escapeHtml(qpol)}. <strong>Backend id</strong>: ${escapeHtml(qb)}. <strong>IBM override</strong>: ${escapeHtml(ibm)}.</p>` +
-        `<p style="margin:0 0 var(--space-sm)">RunPod: prepare <code>infra/runpod/terraform.tfvars</code> on the <strong>Infra &amp; RunPod</strong> tab (OpenTofu buttons there).</p>` +
         `<button type="button" class="ghost" id="btnEditExecStep">Edit execution in step 2</button>`;
       const btn = $("btnEditExecStep");
       if (btn) btn.onclick = () => setLegoStep(2);
@@ -3201,7 +3345,56 @@
         lr_trial_mode: !!$("bLRTrialMode").checked,
         lr_trial_epochs: Number($("bLRTrialEpochs").value || "2"),
         resume_latest: !!$("bResumeLatest").checked,
+        runpod_serverless_endpoint_id: (() => {
+          const el = $("bRunpodServerlessEndpointId");
+          return el ? String(el.value || "").trim() : "";
+        })(),
       };
+    }
+
+    function persistRunpodServerlessEndpointId() {
+      const el = $("bRunpodServerlessEndpointId");
+      if (!el) return;
+      const v = String(el.value || "").trim();
+      try {
+        if (v) localStorage.setItem(RUNPOD_SERVERLESS_ENDPOINT_ID_STORAGE_KEY, v);
+        else localStorage.removeItem(RUNPOD_SERVERLESS_ENDPOINT_ID_STORAGE_KEY);
+      } catch (_) {}
+    }
+
+    function restoreRunpodServerlessEndpointId() {
+      const el = $("bRunpodServerlessEndpointId");
+      if (!el) return;
+      try {
+        const v = localStorage.getItem(RUNPOD_SERVERLESS_ENDPOINT_ID_STORAGE_KEY);
+        if (v && String(v).trim() !== "" && !String(el.value || "").trim()) el.value = String(v).trim();
+      } catch (_) {}
+    }
+
+    function setRunpodServerlessEndpointIdAndPersist(eid) {
+      const el = $("bRunpodServerlessEndpointId");
+      if (!el || !eid) return;
+      el.value = String(eid).trim();
+      persistRunpodServerlessEndpointId();
+    }
+
+    function persistRunpodWorkerImage() {
+      const el = $("bRunpodWorkerImage");
+      if (!el) return;
+      const v = String(el.value || "").trim();
+      try {
+        if (v) localStorage.setItem(RUNPOD_WORKER_IMAGE_STORAGE_KEY, v);
+        else localStorage.removeItem(RUNPOD_WORKER_IMAGE_STORAGE_KEY);
+      } catch (_) {}
+    }
+
+    function restoreRunpodWorkerImage() {
+      const el = $("bRunpodWorkerImage");
+      if (!el) return;
+      try {
+        const v = localStorage.getItem(RUNPOD_WORKER_IMAGE_STORAGE_KEY);
+        if (v && String(v).trim() !== "" && !String(el.value || "").trim()) el.value = String(v).trim();
+      } catch (_) {}
     }
 
     function modelSlugFromName(name) {
@@ -3212,6 +3405,172 @@
         .replace(/^-+|-+$/g, "")
         .replace(/--+/g, "-");
       return slug || "model_" + Math.floor(Date.now() / 1000);
+    }
+
+    function runpodInfraSlugFromWizard() {
+      return modelSlugFromName(buildPayload().name);
+    }
+
+    function runpodGpuTypeIdsFromAccel(accel) {
+      void accel;
+      return ["NVIDIA RTX A4000"];
+    }
+
+    function buildRunpodTemplateCreateObjectFromWizard(stamp, configWorkerImage) {
+      const t =
+        stamp != null && String(stamp).trim() !== ""
+          ? String(stamp).trim()
+          : Date.now() + "-" + Math.floor(Math.random() * 1e6);
+      const workerImgEl = $("bRunpodWorkerImage");
+      let imageName = workerImgEl ? String(workerImgEl.value || "").trim() : "";
+      if (!imageName && configWorkerImage != null && String(configWorkerImage).trim() !== "") {
+        imageName = String(configWorkerImage).trim();
+      }
+      if (!imageName) imageName = String(runpodServerlessMetaDefaults.default_worker_image || "").trim();
+      return {
+        name: "qmw-tpl-" + t,
+        imageName,
+      };
+    }
+
+    function buildRunpodEndpointCreateObjectFromWizard(overrideTemplateId, stamp) {
+      const p = buildPayload();
+      const t =
+        stamp != null && String(stamp).trim() !== ""
+          ? String(stamp).trim()
+          : Date.now() + "-" + Math.floor(Math.random() * 1e6);
+      let templateId = "replace-with-template-id-from-runpod-console";
+      const ov = overrideTemplateId != null ? String(overrideTemplateId).trim() : "";
+      if (ov) {
+        templateId = ov;
+      } else {
+        try {
+          const stored = sessionStorage.getItem(RUNPOD_LAST_TEMPLATE_ID_KEY);
+          if (stored && String(stored).trim() !== "") templateId = String(stored).trim();
+        } catch (_) {}
+      }
+      return {
+        templateId,
+        name: "qmw-ep-" + t,
+        gpuTypeIds: runpodGpuTypeIdsFromAccel(p.accelerator),
+        workersMax: 1,
+      };
+    }
+
+    /**
+     * If wizard already has an endpoint id, returns it. Otherwise creates template + endpoint via management API,
+     * fills the wizard, and returns the new endpoint id. Used by Launch training and the optional provision button.
+     * @param {{ statusEl?: Element | null, configRel?: string }} opt
+     */
+    async function ensureRunpodServerlessInfraReady(opt) {
+      const statusEl = opt && opt.statusEl;
+      const setStatus = (text, cls) => {
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.className = cls ? "status " + cls : "status";
+      };
+
+      let epId = buildPayload().runpod_serverless_endpoint_id;
+      if (epId) return epId;
+
+      const configRel =
+        (opt && opt.configRel && String(opt.configRel).trim()) ||
+        ($("cfg") && String($("cfg").value || "").trim()) ||
+        "configs/training/wui_working.toml";
+
+      await refreshRunpodServerlessMetaDefaults();
+      setStatus("Resolving worker image from training config…", "");
+      const wi = await fetch(
+        "/api/runpod/serverless/worker-image?config=" + encodeURIComponent(configRel),
+      );
+      const wd = await wi.json();
+      if (!wi.ok) throw new Error(wd.error || wi.statusText);
+      const resolvedImg = wd.image != null ? String(wd.image).trim() : "";
+      if (!resolvedImg) {
+        throw new Error(
+          "RunPod Serverless: worker image resolve returned empty image for " + configRel + ".",
+        );
+      }
+
+      const stamp = Date.now() + "-" + Math.floor(Math.random() * 1e6);
+      const tplBody = buildRunpodTemplateCreateObjectFromWizard(stamp, resolvedImg);
+      const imgOk = tplBody.imageName != null && String(tplBody.imageName).trim() !== "";
+      if (!imgOk) {
+        throw new Error(
+          "RunPod Serverless: add [runpod_serverless] worker_image to your training TOML, or open Advanced overrides and set a worker image.",
+        );
+      }
+
+      setStatus("Creating RunPod template…", "");
+      const r1 = await fetch("/api/runpod/serverless/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(tplBody),
+      });
+      const d1 = await r1.json();
+      if (!r1.ok) throw new Error(d1.error || r1.statusText);
+      if (!d1.ok) throw new Error(d1.error || "Template create failed");
+      const tid = d1.template && d1.template.id != null ? String(d1.template.id) : "";
+      if (!tid) throw new Error("Template created but response had no template id");
+      try {
+        sessionStorage.setItem(RUNPOD_LAST_TEMPLATE_ID_KEY, tid);
+      } catch (_) {}
+
+      const epBody = buildRunpodEndpointCreateObjectFromWizard(tid, stamp);
+      setStatus("Creating RunPod endpoint…", "");
+      const r2 = await fetch("/api/runpod/serverless/endpoints", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(epBody),
+      });
+      const d2 = await r2.json();
+      if (!r2.ok) throw new Error(d2.error || r2.statusText);
+      if (!d2.ok) throw new Error(d2.error || "Endpoint create failed");
+      const eid = d2.endpoint && d2.endpoint.id != null ? String(d2.endpoint.id) : "";
+      if (!eid) throw new Error("Endpoint created but response had no endpoint id");
+
+      setRunpodServerlessEndpointIdAndPersist(eid);
+      const taT = $("slTplCreateJson");
+      const taE = $("slMgmtCreateJson");
+      if (taT) taT.value = JSON.stringify(tplBody, null, 2);
+      if (taE) taE.value = JSON.stringify(epBody, null, 2);
+
+      return eid;
+    }
+
+    async function wizardProvisionRunpodServerless() {
+      const msg = $("bRunpodServerlessMsg");
+      if (!msg) return;
+      msg.textContent = "";
+      msg.className = "status";
+      if (!confirm("Create a new RunPod Serverless template and endpoint? This is billable infrastructure.")) {
+        msg.textContent = "Cancelled.";
+        msg.className = "status";
+        return;
+      }
+      try {
+        const eid = await ensureRunpodServerlessInfraReady({ statusEl: msg });
+        msg.textContent = "Endpoint " + eid + " is ready. You can Launch training without another step.";
+        msg.className = "status done";
+        addToast("RunPod template and endpoint created.", "done");
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    function slAutofillTemplateFromWizard() {
+      const ta = $("slTplCreateJson");
+      if (!ta) return;
+      ta.value = JSON.stringify(buildRunpodTemplateCreateObjectFromWizard(), null, 2);
+      addToast("Template JSON filled from wizard.", "done");
+    }
+
+    function slAutofillEndpointFromWizard() {
+      const ta = $("slMgmtCreateJson");
+      if (!ta) return;
+      ta.value = JSON.stringify(buildRunpodEndpointCreateObjectFromWizard(), null, 2);
+      addToast("Endpoint JSON filled from wizard.", "done");
     }
 
     function renderModelFactsFallback() {
@@ -3359,7 +3718,13 @@
         `<strong>HF max rows</strong>: ${escapeHtml(p.hf_num_samples > 0 ? String(p.hf_num_samples) : "auto (≤300k)")}<br/>` +
         `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
         `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
-        `<strong>Execution target</strong>: ${escapeHtml(p.run_target || "local")}${p.run_target === "runpod" ? " (destroy after: " + (p.runpod_destroy_on_exit ? "yes" : "no") + ")" : ""}<br/>` +
+        `<strong>Execution target</strong>: ${escapeHtml(p.run_target || "local")}${
+          p.run_target === "runpod"
+            ? " (destroy after: " + (p.runpod_destroy_on_exit ? "yes" : "no") + ")"
+            : p.run_target === "runpod_serverless"
+              ? " (Serverless job API)"
+              : ""
+        }<br/>` +
         `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}<br/>` +
         `<strong>Resume latest checkpoint</strong>: ${p.resume_latest ? "yes" : "no"}`;
     }
@@ -3471,10 +3836,13 @@
     }
 
     function syncRunpodPanels() {
-      const bl = $("bRunTarget").value === "local";
-      $("bRunpodDestroyWrap").style.display = bl ? "none" : "block";
+      const rt = $("bRunTarget").value;
+      const pod = rt === "runpod";
+      $("bRunpodDestroyWrap").style.display = pod ? "block" : "none";
       const rw = $("bRunpodRemoteWrap");
-      if (rw) rw.style.display = bl ? "none" : "block";
+      if (rw) rw.style.display = pod ? "block" : "none";
+      const sw = $("bRunpodServerlessWrap");
+      if (sw) sw.style.display = rt === "runpod_serverless" ? "block" : "none";
     }
 
     let lastInfraPodIp = "";
@@ -3724,21 +4092,39 @@
           }
           allowMissingCheckpoint = true;
         }
+        const launchBody = {
+          config: path,
+          quantum_backend: $("bQuantumBackend").value.trim(),
+          quantum_policy: $("bQuantumPolicy").value,
+          ibm_backend_name: $("bIBMBackendName").value.trim(),
+          run_target: $("bRunTarget").value,
+          runpod_destroy_on_exit: $("bRunpodDestroy").checked,
+          runpod_var_file: "terraform.tfvars",
+          runpod_train_on_pod: $("bRunpodTrainOnPod") ? $("bRunpodTrainOnPod").checked : true,
+          runpod_skip_apply: $("bRunpodSkipApply") ? $("bRunpodSkipApply").checked : false,
+          allow_missing_checkpoint: allowMissingCheckpoint,
+        };
+        if ($("bRunTarget").value === "runpod_serverless") {
+          $("msg").className = "status";
+          try {
+            const ensured = await ensureRunpodServerlessInfraReady({
+              statusEl: $("msg"),
+              configRel: $("cfg").value || "configs/training/wui_working.toml",
+            });
+            launchBody.runpod_serverless_endpoint_id = ensured;
+            $("msg").textContent = "Starting training…";
+            $("msg").className = "status";
+          } catch (e) {
+            throw e;
+          }
+        } else {
+          const epId = buildPayload().runpod_serverless_endpoint_id;
+          if (epId) launchBody.runpod_serverless_endpoint_id = epId;
+        }
         const r = await fetch("/api/runs", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            config: path,
-            quantum_backend: $("bQuantumBackend").value.trim(),
-            quantum_policy: $("bQuantumPolicy").value,
-            ibm_backend_name: $("bIBMBackendName").value.trim(),
-            run_target: $("bRunTarget").value,
-            runpod_destroy_on_exit: $("bRunpodDestroy").checked,
-            runpod_var_file: "terraform.tfvars",
-            runpod_train_on_pod: $("bRunpodTrainOnPod") ? $("bRunpodTrainOnPod").checked : true,
-            runpod_skip_apply: $("bRunpodSkipApply") ? $("bRunpodSkipApply").checked : false,
-            allow_missing_checkpoint: allowMissingCheckpoint,
-          }),
+          headers: { "Content-Type": "application/json", "X-QMW-Source": "wizard-launch" },
+          body: JSON.stringify(launchBody),
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
@@ -3881,6 +4267,7 @@
       if (which === "infra") {
         loadTfvarsEditor();
         loadRunpodStatus();
+        loadServerlessInfra();
         loadNodeHealth();
         if (infraFloatPendingSnap) {
           const ic = $("infraCanvas");
@@ -4017,11 +4404,28 @@
       msg.textContent = "Loading…";
       msg.className = "status";
       try {
-        const r = await fetch("/api/runpod/tfvars");
+        const r = await fetch("/api/runpod/tfvars", { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
+        const abs = data.abs_path ? String(data.abs_path) : "";
+        if (data.exists) {
+          ed.value = data.content != null ? String(data.content) : "";
+          msg.textContent = "Loaded " + (data.path || "terraform.tfvars") + " from disk." + (abs ? " Path: " + abs : "");
+          msg.className = "status done";
+          return;
+        }
         ed.value = data.content != null ? String(data.content) : "";
-        msg.textContent = data.exists ? "Loaded " + (data.path || "terraform.tfvars") + " from disk." : "No file on disk yet — save to create it, or insert example.";
+        const r2 = await fetch("/api/runpod/tfvars?source=example", { cache: "no-store" });
+        const ex = await r2.json();
+        if (r2.ok && ex.content != null && String(ex.content).trim() !== "") {
+          ed.value = String(ex.content);
+          msg.textContent =
+            "No terraform.tfvars on disk — loaded template from terraform.tfvars.example. Edit and Save to create the file." +
+            (abs ? " Path: " + abs : "");
+        } else {
+          msg.textContent =
+            "No terraform.tfvars on disk yet — paste variables or use Insert example, then Save." + (abs ? " Path: " + abs : "");
+        }
         msg.className = "status done";
       } catch (e) {
         msg.textContent = String(e.message || e);
@@ -4061,7 +4465,7 @@
       msg.textContent = "Loading example…";
       msg.className = "status";
       try {
-        const r = await fetch("/api/runpod/tfvars?source=example");
+        const r = await fetch("/api/runpod/tfvars?source=example", { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         ed.value = data.content != null ? String(data.content) : "";
@@ -4076,6 +4480,375 @@
     $("btnTfvarsSave").onclick = saveTfvarsEditor;
     $("btnTfvarsReload").onclick = loadTfvarsEditor;
     $("btnTfvarsExample").onclick = insertTfvarsExample;
+
+    async function loadServerlessInfra() {
+      const metaEl = $("slMetaMsg");
+      if (!metaEl) return;
+      metaEl.textContent = "Loading Serverless meta…";
+      metaEl.className = "status";
+      try {
+        const r = await fetch("/api/runpod/serverless/meta", { cache: "no-store" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const ep = data.endpoint_configured ? "default endpoint id configured" : "no default endpoint id (launch can still pass one)";
+        const tok = data.token_present ? "API key present" : "API key missing";
+        metaEl.textContent = `${ep}; ${tok}. API: ${data.api_base || "https://api.runpod.ai/v2"}`;
+        metaEl.className = "status done";
+      } catch (e) {
+        metaEl.textContent = String(e.message || e);
+        metaEl.className = "status error";
+      }
+    }
+
+    function slMgmtTemplateCell(ep) {
+      if (ep.templateId != null && String(ep.templateId).trim() !== "") return String(ep.templateId);
+      const t = ep.template;
+      if (t && typeof t === "object") {
+        if (t.id != null) return String(t.id);
+        if (t.templateId != null) return String(t.templateId);
+      }
+      return "—";
+    }
+
+    async function slListEndpoints() {
+      const msg = $("slMgmtMsg");
+      const wrap = $("slMgmtTableWrap");
+      const tbody = $("slMgmtTableBody");
+      if (!msg || !wrap || !tbody) return;
+      msg.textContent = "Loading endpoints…";
+      msg.className = "status";
+      try {
+        const r = await fetch("/api/runpod/serverless/endpoints?includeTemplate=true", { cache: "no-store" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (!data.ok) throw new Error(data.error || "Request failed");
+        const list = Array.isArray(data.endpoints) ? data.endpoints : [];
+        tbody.replaceChildren();
+        for (const ep of list) {
+          const tr = document.createElement("tr");
+          tr.style.borderBottom = "1px solid var(--surface-interface-gray)";
+          const id = ep.id != null ? String(ep.id) : "";
+          const name = ep.name != null ? String(ep.name) : "—";
+          const tid = slMgmtTemplateCell(ep);
+          const mkCell = (text, mono) => {
+            const td = document.createElement("td");
+            td.style.padding = "6px 8px";
+            if (mono) {
+              td.style.fontFamily = "IBM Plex Mono,monospace";
+              td.style.fontSize = "11px";
+              td.style.wordBreak = "break-all";
+            }
+            td.textContent = text;
+            return td;
+          };
+          tr.appendChild(mkCell(id || "—", true));
+          tr.appendChild(mkCell(name, false));
+          tr.appendChild(mkCell(tid, true));
+          const tdBtn = document.createElement("td");
+          tdBtn.style.padding = "6px 8px";
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "ghost";
+          btn.textContent = "Copy id";
+          if (id) btn.onclick = () => void copyToClipboard(id, "Endpoint id copied.");
+          else btn.disabled = true;
+          tdBtn.appendChild(btn);
+          tr.appendChild(tdBtn);
+          tbody.appendChild(tr);
+        }
+        wrap.style.display = list.length === 0 ? "none" : "block";
+        msg.textContent = list.length === 0 ? "No endpoints returned (empty list)." : `Loaded ${list.length} endpoint(s).`;
+        msg.className = "status done";
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+        wrap.style.display = "none";
+      }
+    }
+
+    async function slCreateEndpoint() {
+      const msg = $("slMgmtMsg");
+      const ta = $("slMgmtCreateJson");
+      if (!msg || !ta) return;
+      if (!confirm("Create a new RunPod Serverless endpoint? This is billable infrastructure.")) return;
+      let body;
+      try {
+        body = JSON.parse(ta.value || "{}");
+      } catch (e) {
+        msg.textContent = "Invalid JSON: " + String(e.message || e);
+        msg.className = "status error";
+        return;
+      }
+      if (!body.templateId || String(body.templateId).trim() === "") {
+        msg.textContent = "templateId is required in the JSON body.";
+        msg.className = "status error";
+        return;
+      }
+      msg.textContent = "Creating endpoint…";
+      msg.className = "status";
+      try {
+        const r = await fetch("/api/runpod/serverless/endpoints", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (!data.ok) throw new Error(data.error || "Create failed");
+        const ep = data.endpoint || {};
+        const eid = ep.id != null ? String(ep.id) : "";
+        if (eid) setRunpodServerlessEndpointIdAndPersist(eid);
+        msg.textContent = eid
+          ? `Created endpoint id: ${eid}. Copy it if you need it for launch or test jobs.`
+          : "Create returned OK — check the Network tab if the response has no id.";
+        msg.className = "status done";
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    function slTemplatesListURL() {
+      const p = new URLSearchParams();
+      if ($("slTplIncEndpointBound") && $("slTplIncEndpointBound").checked) p.set("includeEndpointBoundTemplates", "true");
+      if ($("slTplIncPublic") && $("slTplIncPublic").checked) p.set("includePublicTemplates", "true");
+      if ($("slTplIncRunpod") && $("slTplIncRunpod").checked) p.set("includeRunpodTemplates", "true");
+      const q = p.toString();
+      return "/api/runpod/serverless/templates" + (q ? "?" + q : "");
+    }
+
+    async function slListTemplates() {
+      const msg = $("slTplMsg");
+      const wrap = $("slTplTableWrap");
+      const tbody = $("slTplTableBody");
+      if (!msg || !wrap || !tbody) return;
+      msg.textContent = "Loading templates…";
+      msg.className = "status";
+      try {
+        const r = await fetch(slTemplatesListURL(), { cache: "no-store" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (!data.ok) throw new Error(data.error || "Request failed");
+        const list = Array.isArray(data.templates) ? data.templates : [];
+        tbody.replaceChildren();
+        for (const t of list) {
+          const tr = document.createElement("tr");
+          tr.style.borderBottom = "1px solid var(--surface-interface-gray)";
+          const id = t.id != null ? String(t.id) : "";
+          const name = t.name != null ? String(t.name) : "—";
+          const sl = t.isServerless === true ? "yes" : t.isServerless === false ? "no" : String(t.isServerless ?? "—");
+          const img = t.imageName != null ? String(t.imageName) : "—";
+          const mkCell = (text, mono) => {
+            const td = document.createElement("td");
+            td.style.padding = "6px 8px";
+            if (mono) {
+              td.style.fontFamily = "IBM Plex Mono,monospace";
+              td.style.fontSize = "11px";
+              td.style.wordBreak = "break-all";
+            }
+            td.textContent = text;
+            return td;
+          };
+          tr.appendChild(mkCell(id || "—", true));
+          tr.appendChild(mkCell(name, false));
+          tr.appendChild(mkCell(sl, false));
+          tr.appendChild(mkCell(img, true));
+          const tdBtn = document.createElement("td");
+          tdBtn.style.padding = "6px 8px";
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "ghost";
+          btn.textContent = "Copy id";
+          if (id) btn.onclick = () => void copyToClipboard(id, "Template id copied (use as templateId).");
+          else btn.disabled = true;
+          tdBtn.appendChild(btn);
+          tr.appendChild(tdBtn);
+          tbody.appendChild(tr);
+        }
+        wrap.style.display = list.length === 0 ? "none" : "block";
+        msg.textContent = list.length === 0 ? "No templates returned (empty list)." : `Loaded ${list.length} template(s).`;
+        msg.className = "status done";
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+        wrap.style.display = "none";
+      }
+    }
+
+    async function slCreateTemplate() {
+      const msg = $("slTplMsg");
+      const ta = $("slTplCreateJson");
+      if (!msg || !ta) return;
+      if (!confirm("Create a new RunPod template? This registers a template in your account (use a real imageName you can pull).")) return;
+      let body;
+      try {
+        body = JSON.parse(ta.value || "{}");
+      } catch (e) {
+        msg.textContent = "Invalid JSON: " + String(e.message || e);
+        msg.className = "status error";
+        return;
+      }
+      const nameOk = body.name != null && String(body.name).trim() !== "";
+      const imgOk = body.imageName != null && String(body.imageName).trim() !== "";
+      if (!nameOk || !imgOk) {
+        if (!nameOk && !imgOk) {
+          msg.textContent =
+            'Edit the JSON: set "name" (unique template name) and "imageName" (image RunPod can pull, e.g. docker.io/you/qmw-worker:v1).';
+        } else if (!nameOk) {
+          msg.textContent = 'Set "name" to a non-empty string (template display name in RunPod).';
+        } else {
+          msg.textContent =
+            'Set "imageName" to a non-empty string (exact Docker image tag; must match RunPod field name imageName).';
+        }
+        msg.className = "status error";
+        return;
+      }
+      msg.textContent = "Creating template…";
+      msg.className = "status";
+      try {
+        const r = await fetch("/api/runpod/serverless/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (!data.ok) throw new Error(data.error || "Create failed");
+        const tpl = data.template || {};
+        const tid = tpl.id != null ? String(tpl.id) : "";
+        if (tid) {
+          try {
+            sessionStorage.setItem(RUNPOD_LAST_TEMPLATE_ID_KEY, tid);
+          } catch (_) {}
+        }
+        msg.textContent = tid
+          ? `Created template id: ${tid}. Use it as templateId in Create endpoint JSON above.`
+          : "Create returned OK — check the Network tab if the response has no id.";
+        msg.className = "status done";
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    async function slPostRun() {
+      const msg = $("slOutMsg");
+      const pre = $("slOutPre");
+      const raw = ($("slJsonInput") && $("slJsonInput").value) || "{}";
+      msg.textContent = "Sending…";
+      msg.className = "status";
+      if (pre) pre.style.display = "none";
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        msg.textContent = "Invalid JSON: " + String(e.message || e);
+        msg.className = "status error";
+        return;
+      }
+      if (!parsed.input || typeof parsed.input !== "object") {
+        msg.textContent = 'JSON must include an "input" object (RunPod queue API).';
+        msg.className = "status error";
+        return;
+      }
+      parsed.mode = $("slRunsync") && $("slRunsync").checked ? "sync" : "async";
+      parsed.wait_ms = 120000;
+      try {
+        const r = await fetch("/api/runpod/serverless/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-QMW-Source": "infra-send-test" },
+          body: JSON.stringify(parsed),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const rp = data.runpod || {};
+        const jid = rp.id != null ? String(rp.id) : "";
+        if (jid && $("slJobId")) $("slJobId").value = jid;
+        const text = JSON.stringify(data, null, 2);
+        msg.textContent = data.ok ? "OK — see output below." : "Request completed with errors.";
+        msg.className = data.ok ? "status done" : "status error";
+        if (pre) {
+          pre.textContent = text;
+          pre.style.display = "block";
+        }
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    async function slGetHealth() {
+      const msg = $("slOutMsg");
+      const pre = $("slOutPre");
+      msg.textContent = "GET /health…";
+      msg.className = "status";
+      if (pre) pre.style.display = "none";
+      try {
+        const r = await fetch("/api/runpod/serverless/health", { cache: "no-store" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const text = JSON.stringify(data, null, 2);
+        msg.textContent = "Health OK.";
+        msg.className = "status done";
+        if (pre) {
+          pre.textContent = text;
+          pre.style.display = "block";
+        }
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    async function slPollJob() {
+      const msg = $("slOutMsg");
+      const pre = $("slOutPre");
+      const jid = ($("slJobId") && $("slJobId").value.trim()) || "";
+      if (!jid) {
+        msg.textContent = "Enter a job id (from Send test job).";
+        msg.className = "status error";
+        return;
+      }
+      msg.textContent = "Polling /status…";
+      msg.className = "status";
+      if (pre) pre.style.display = "none";
+      try {
+        const r = await fetch("/api/runpod/serverless/job?id=" + encodeURIComponent(jid), { cache: "no-store" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        const text = JSON.stringify(data, null, 2);
+        msg.textContent = "Status retrieved.";
+        msg.className = "status done";
+        if (pre) {
+          pre.textContent = text;
+          pre.style.display = "block";
+        }
+      } catch (e) {
+        msg.textContent = String(e.message || e);
+        msg.className = "status error";
+      }
+    }
+
+    const btnSlMeta = $("btnSlMeta");
+    if (btnSlMeta) btnSlMeta.onclick = () => void loadServerlessInfra();
+    const btnSlListEndpoints = $("btnSlListEndpoints");
+    if (btnSlListEndpoints) btnSlListEndpoints.onclick = () => void slListEndpoints();
+    const btnSlCreateEndpoint = $("btnSlCreateEndpoint");
+    if (btnSlCreateEndpoint) btnSlCreateEndpoint.onclick = () => void slCreateEndpoint();
+    const btnSlAutofillEndpoint = $("btnSlAutofillEndpoint");
+    if (btnSlAutofillEndpoint) btnSlAutofillEndpoint.onclick = () => slAutofillEndpointFromWizard();
+    const btnSlListTemplates = $("btnSlListTemplates");
+    if (btnSlListTemplates) btnSlListTemplates.onclick = () => void slListTemplates();
+    const btnSlCreateTemplate = $("btnSlCreateTemplate");
+    if (btnSlCreateTemplate) btnSlCreateTemplate.onclick = () => void slCreateTemplate();
+    const btnSlAutofillTemplate = $("btnSlAutofillTemplate");
+    if (btnSlAutofillTemplate) btnSlAutofillTemplate.onclick = () => slAutofillTemplateFromWizard();
+    const btnSlHealth = $("btnSlHealth");
+    if (btnSlHealth) btnSlHealth.onclick = () => void slGetHealth();
+    const btnSlSend = $("btnSlSend");
+    if (btnSlSend) btnSlSend.onclick = () => void slPostRun();
+    const btnSlPoll = $("btnSlPoll");
+    if (btnSlPoll) btnSlPoll.onclick = () => void slPollJob();
 
     async function runpodTofuAction(action) {
       const vf = RUNPOD_TFVARS;
@@ -4136,6 +4909,18 @@
       syncRunpodPanels();
       updateLaunchExecSummary();
     };
+    const bRunpodServerlessEndpointEl = $("bRunpodServerlessEndpointId");
+    if (bRunpodServerlessEndpointEl) {
+      bRunpodServerlessEndpointEl.addEventListener("change", persistRunpodServerlessEndpointId);
+      bRunpodServerlessEndpointEl.addEventListener("blur", persistRunpodServerlessEndpointId);
+    }
+    const bRunpodWorkerImageEl = $("bRunpodWorkerImage");
+    if (bRunpodWorkerImageEl) {
+      bRunpodWorkerImageEl.addEventListener("change", persistRunpodWorkerImage);
+      bRunpodWorkerImageEl.addEventListener("blur", persistRunpodWorkerImage);
+    }
+    const btnWizardProvisionServerless = $("btnWizardProvisionServerless");
+    if (btnWizardProvisionServerless) btnWizardProvisionServerless.onclick = () => void wizardProvisionRunpodServerless();
     for (const id of ["bQuantumPolicy", "bQuantumBackend", "bIBMBackendName"]) {
       const el = $(id);
       if (el) el.addEventListener("change", updateLaunchExecSummary);
@@ -4225,6 +5010,8 @@
     toggleHFFields();
     toggleLRTrial();
     syncRunpodPanels();
+    restoreRunpodWorkerImage();
+    restoreRunpodServerlessEndpointId();
     updateLaunchExecSummary();
     loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
     loadRuns();
