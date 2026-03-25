@@ -1,191 +1,122 @@
-# Q-Mini-WASM: Ternary Network Execution Framework
+# qminiwasm-core
 
-A framework for training and executing BitNet-style ternary quantized neural networks within a WebAssembly runtime environment.
+`qminiwasm-core` bridges WebAssembly execution, edge-oriented ternary ML, and optional quantum routing in one runtime stack.
 
-## What It Is
+## Choose Your Path
 
-This framework provides a pipeline for converting neural network weights to ternary values (`{-1, 0, 1}`) and executing them in a WASM-based environment. The core components are:
+### Door A: Strategic and Executive
 
-- **Ternary Quantization**: Forces continuous weights into strict `{-1, 0, 1}` states using a Straight-Through Estimator (STE) during training
-- **WASM Execution Engine**: Compiles and executes WASM modules with deterministic stack mechanics
-- **Quantum-Classical Hybrid Routing**: Optional quantum-accelerated routing for model inference (defaults to local PennyLane simulator)
-- **Cascade RL and MOPD**: Optional per-epoch GRPO warm-up on a toy routing MDP with optional multi-domain-style feature loss; see [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
+Start here if you need the why, architecture, and strategic value without operational commands.
 
-The ternary quantization approach reduces model size and enables deterministic execution, making it suitable for resource-constrained edge environments.
+- Strategic overview: [docs/Project-Goals.md](docs/Project-Goals.md)
+- Architecture narrative: [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md)
+- Research and theory: [wiki/README.md](wiki/README.md)
 
-## How Ternary Quantization Works
+### Door B: Tactical and Operator
 
-The `TernaryWASMExpert` layer implements ternary quantization:
+Start here if you need to run the system, deploy infrastructure, or operate training workloads.
 
-1. **Adaptive Thresholding**: Weights are normalized by their absolute mean
-2. **Discretization**: Values are rounded to the nearest integer and clamped to `[-1, 1]`
-3. **Straight-Through Estimator**: During backpropagation, gradients flow through the continuous weights while forward passes use discrete ternary values
+- Happy-path onboarding: [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
+- Operations and infrastructure: [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
+- Hardware and advanced runtime config: [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
 
-This maintains differentiability during training while ensuring deterministic execution at inference time.
+## Door A: Strategic View
 
-## Pipeline Overview
+### Problem Framing
 
-```
-Training Data → TernaryWASMExpert → WASM Compilation → Execution
-```
+Modern edge AI has three recurring constraints:
 
-1. **Training**: Model weights are quantized to ternary values using STE
-2. **Compilation**: WASM modules are compiled from C source or bytecode
-3. **Execution**: The WASM engine runs the compiled modules with captured stack/memory state
+- constrained compute and memory budgets
+- trust and isolation requirements at the edge boundary
+- routing and optimization overhead when model choices become dynamic
 
-## Prerequisites
+`qminiwasm-core` addresses those constraints by combining deterministic WebAssembly execution with ternary-weight modeling and optional quantum-assisted routing.
 
-- Python 3.8+
-- PyTorch 2.0+
-- `clang` (for C-to-WASM compilation) or pre-compiled WASM modules
-- PennyLane (for quantum routing, optional)
+### Core Architecture (Conceptual)
 
-## Installation
+- **WebAssembly sandbox** for deterministic execution and stronger workload isolation
+- **Ternary model representation** (`{-1,0,1}`) for smaller state and predictable inference math
+- **Python orchestration layer** that coordinates training and routing decisions
+- **Quantum routing path (optional)** through Qiskit/IBM Runtime for QAOA-style expectation signals
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd qminiwasm-core
-
-# Install dependencies (includes PennyLane for local simulators)
-pip install -e .
-
-# Optional: FastAPI inference server (engine/serve.py)
-pip install -e ".[serve]"
-
-# Optional: Intel XPU (Arc / Iris Xe) — dpctl / SYCL helpers (requires oneAPI runtime on PATH)
-pip install -e ".[arc]"
+```text
+Edge Input -> Wasm Runtime -> Python Orchestrator -> Quantum Router (optional) -> Routed Output
 ```
 
-## Basic Usage
+### Value Proposition
 
-### Training a Ternary Model
+- Smaller model footprint and deterministic execution characteristics
+- Composable runtime where classical and quantum paths can coexist
+- Clear separation between concept-level architecture and operational workflows
 
-```python
-from qminiwasm.model import QMiniWASM
-import torch
+### Read Next (Strategic)
 
-# Initialize model (defaults to CPU or Intel ARC if available)
-model = QMiniWASM()
+- [docs/Project-Goals.md](docs/Project-Goals.md)
+- [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md)
+- [wiki/Business-Value.md](wiki/Business-Value.md)
+- [wiki/Mathematical-Formulation.md](wiki/Mathematical-Formulation.md)
 
-# Prepare training data
-hidden_states = torch.randn(32, 4096)  # batch_size=32, dim=4096
-targets = torch.randn(32, 4096)
+## Door B: Tactical View
 
-# Run training loop
-from qminiwasm.training.loop import run_training_loop
+### 0 to 1 Quickstart
 
-results = run_training_loop(
-    epochs=10,
-    batch_size=32,
-    learning_rate=1e-4,
-    quantum_backend="penny_lane",  # or None to disable quantum routing
-    num_qubits=8,
-    qaoa_layers=3,
-)
-```
+Use the guided happy path here:
 
-### Executing WASM Code
+- [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
 
-```python
-from qminiwasm.model import QMiniWASM
+What you get:
 
-model = QMiniWASM()
+- a local baseline run
+- a local HTTP endpoint on `localhost:8080`
+- one known-good validation command
 
-# Execute a WASM function
-wasm_code = b"...your wasm bytecode..."
-result, execution_state = model.execute_wasm(
-    wasm_code=wasm_code,
-    func_name="add",
-    args=[5, 3]
-)
+### Operator Workflows
 
-print(f"Result: {result}")
-print(f"Execution state: {execution_state}")
-```
+All deep operational procedures are consolidated here:
 
-### Hybrid Inference
+- [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
 
-```python
-# Run inference with quantum-classical hybrid routing
-hidden_states = torch.randn(1, 4096)
-output = model.hybrid_inference(hidden_states)
-```
+Includes:
 
-## Configuration
+- RunPod and OpenTofu workflows
+- serverless endpoint and worker patterns
+- SSH sync and remote execution patterns
+- advanced CLI and environment controls
 
-Configuration is loaded from environment variables or defaults:
+### Advanced Technical References
 
-- `ACCELERATOR`: `"cuda"`, `"xpu"`, or `"cpu"` (default: auto-detect)
-- `QUANTUM_BACKEND`: `"penny_lane"` or `None` (default: `"penny_lane"`)
-- `NUM_QUBITS`: Number of qubits for QAOA (default: `8`)
-- `QAOA_LAYERS`: QAOA circuit depth (default: `3`)
+- Training data and metrics: [docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)
+- Quantum execution modes: [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)
+- Cascade RL and MOPD: [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
+- Environment variables: [docs/environment-variables.md](docs/environment-variables.md)
 
-### Intel Iris Xe / Arc — PyTorch XPU and SYCL (dpctl)
+## Journey of a Vector
 
-**Training / inference (`QMiniWASM`, `python -m engine`):** use PyTorch **XPU** wheels (see **[docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md)** and `python scripts/install_torch_xpu.py`). Legacy option: [Intel Extension for PyTorch](https://intel.github.io/intel-extension-for-pytorch/) with their pinned `torch` versions. Then set:
+The core innovation is documented as a literal data-path walkthrough:
 
-```bash
-ACCELERATOR=xpu
-# optional: DEVICE_INDEX=0
-```
+- [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md)
 
-If XPU is unavailable, the stack falls back to **CPU** (you will see a warning if `ACCELERATOR=xpu`). **Logs showing “Intel Iris Xe” from dpctl/SYCL do not mean PyTorch is using that GPU**—`torch.nn` training only uses XPU when `torch.xpu.is_available()` is true after installing IPEX (or another XPU-enabled PyTorch).
+This trace explains how a vector moves from Wasm-edge execution into the Python router, through optional IBM Qiskit execution, and back into the classical result path.
 
-**SYCL helpers (`SYCLHardware`, matrix/vector paths):** `pip install -e ".[gpu]"` pulls `dpctl`. Install the **Intel oneAPI** runtime / GPU drivers so `dpctl` can load (on Windows, oneAPI DLLs must be on `PATH`). Prefer the integrated or discrete GPU:
+## Documentation Map
 
-```bash
-# Optional: narrow devices for oneAPI (Iris Xe / Arc)
-set ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-# Optional: force a specific SYCL filter for dpctl
-set QMINIWASM_SYCL_DEVICE=level_zero:gpu:0
-```
+- Getting started: [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
+- Operations: [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
+- Training and data: [docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)
+- Quantum integration: [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)
+- Hardware acceleration: [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
+- Wiki index: [wiki/README.md](wiki/README.md)
 
-To fall back to the old “default device” order without trying GPU filters first, set `QMINIWASM_SYCL_PREFER_GPU=0`. List devices: `python -m dpctl --list-devices` (when dpctl loads).
+## Project Structure (Condensed)
 
-See **[docs/SYCL-Integration.md](docs/SYCL-Integration.md)** for the hardware interface contract.
-
-## ML engine training (data sources and metrics)
-
-The `engine` package runs `run_training_loop` via:
-
-```bash
-pip install -e ".[training]"   # Hugging Face datasets (optional; for hf_tabular)
-python -m engine
-```
-
-**Data modes** (`TRAINING_DATA_SOURCE`): **`mesh`** (embedded C→WASM + memory snapshots), **`corpus`** (manifest of `.wasm` binaries under [`corpus/`](corpus/)), or **`hf_tabular`** (e.g. CodeSearchNet — encodes text to 4096-d vectors; not the same as WASM execution).
-
-With **`hf_tabular`**, unset **`HF_NUM_SAMPLES`** pulls a deeper default slice (floor **32k** rows, cap **300k**, scales with batch). Auto mode prepends a short **`[context]`** block (`language`, `func_name`, `repo`, `path`) before code so the fixed-width byte encoder sees richer structure; use **`HF_CONTEXT_FIELDS=0`** to turn it off.
-
-For Hub downloads, set **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** in your environment or in a repo-root **`.env`** (loaded automatically when you `pip install -e ".[training]"` and run `python -m engine` or `uvicorn engine.serve:app`). See [`.env.example`](.env.example); do not commit secrets.
-
-**Checkpoints:** set **`CHECKPOINT_SAVE_PATH`** (and optionally **`CHECKPOINT_BEST_PATH`**, **`CHECKPOINT_LOAD_PATH`**, **`EVAL_HOLDOUT_FRACTION`**, **`EVAL_EVERY_EPOCH`**) so weights persist and holdout MSE is reported. Prefer **`artifacts/models/<slug>/final.pt`** (and **`best.pt`** / **`latest.pt`**) so paths align with the **training WUI** and **`agent_bundle.json`**. See **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
-
-**Inference container:** after `pip install -e ".[serve]"`, run `uvicorn engine.serve:app --host 0.0.0.0 --port 8001` and set **`QMINIWASM_CHECKPOINT`** (or **`CHECKPOINT_LOAD_PATH`**) to the saved **`best.pt`** or **`final.pt`**. Device follows **`ACCELERATOR`** / `get_device()`.
-
-Full tables, **CodeSearchNet / `whole_func_string`** guidance, **example loss behavior**, and **environment variables** are documented in **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**.
-
-**Cloud GPU (RunPod):** OpenTofu stack under `infra/runpod`, helper scripts under `scripts/runpod_*.sh` — see **[docs/RUNPOD_QUICKSTART.md](docs/RUNPOD_QUICKSTART.md)** and [training-wui/README.md](training-wui/README.md).
-
-## Project Structure
-
-```
+```text
 qminiwasm-core/
-├── qminiwasm/
-│   ├── layers/
-│   │   └── ternary.py          # TernaryWASMExpert implementation
-│   ├── wasm/
-│   │   └── engine.py           # WASM compilation and execution
-│   ├── quantum/
-│   │   └── router.py           # Quantum routing (QAOA)
-│   ├── model.py                # Main QMiniWASM interface
-│   └── training/
-│       └── loop.py             # Training loop
-├── engine/                     # Training entrypoint (`python -m engine`)
-├── corpus/                     # Example bare-wasm manifest + scratch.wasm
-├── docs/                       # Documentation (see docs/TRAINING_DATA.md)
-└── requirements.txt
+|- qminiwasm/                  # core model, wasm engine, quantum router
+|- engine/                     # training/serving orchestration entrypoints
+|- docs/                       # canonical repository documentation
+|- wiki/                       # extended strategic/research documentation
+|- infra/runpod/               # OpenTofu stack for RunPod workflows
+`- training-wui/               # operator UI and automation layer
 ```
 
 ## License

@@ -87,6 +87,8 @@ Uncheck **Train on RunPod GPU** only if you want **`python -m engine` on the WUI
 
 **Alternative:** run the WUI **inside** the pod if you want zero SSH from your laptop (then use **local** target on the pod).
 
+**RunPod Serverless** (queue / worker jobs, no OpenTofu in that path): see **[RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)**.
+
 ## 6. Secrets on the pod
 
 Copy or recreate **`.env`** on the pod (or export vars) for `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`, IBM Quantum tokens, etc., before remote `python -m engine`.

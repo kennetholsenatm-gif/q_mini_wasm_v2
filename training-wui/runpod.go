@@ -295,6 +295,8 @@ func handleRunpodTfvars(w http.ResponseWriter, r *http.Request) {
 	dir := runpodInfraDir()
 	tfPath := runpodTfvarsPath()
 	exPath := filepath.Join(dir, "terraform.tfvars.example")
+	absTf, _ := filepath.Abs(tfPath)
+	absTfSlash := filepath.ToSlash(absTf)
 
 	switch r.Method {
 	case http.MethodGet:
@@ -305,33 +307,43 @@ func handleRunpodTfvars(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"ok":      true,
-				"content": string(b),
-				"source":  "example",
+				"ok":        true,
+				"content":   string(b),
+				"source":    "example",
+				"abs_path":  absTfSlash,
+				"repo_root": filepath.ToSlash(repoRoot),
 			})
 			return
 		}
 		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-			jsonErr(w, http.StatusNotFound, "infra/runpod not found in repo")
+			jsonErr(w, http.StatusNotFound, fmt.Sprintf("infra/runpod not found (repo root %s)", filepath.ToSlash(repoRoot)))
 			return
 		}
 		b, err := os.ReadFile(tfPath)
+		if err != nil && !os.IsNotExist(err) {
+			jsonErr(w, http.StatusInternalServerError, fmt.Sprintf("read %s: %v", absTfSlash, err))
+			return
+		}
 		exists := err == nil
 		content := ""
 		if exists {
 			content = string(b)
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":      true,
-			"content": content,
-			"exists":  exists,
-			"path":    filepath.ToSlash(filepath.Join("infra", "runpod", "terraform.tfvars")),
+			"ok":        true,
+			"content":   content,
+			"exists":    exists,
+			"path":      filepath.ToSlash(filepath.Join("infra", "runpod", "terraform.tfvars")),
+			"abs_path":  absTfSlash,
+			"repo_root": filepath.ToSlash(repoRoot),
 		})
 	case http.MethodPut:
 		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-			jsonErr(w, http.StatusNotFound, "infra/runpod not found in repo")
+			jsonErr(w, http.StatusNotFound, fmt.Sprintf("infra/runpod not found (repo root %s)", filepath.ToSlash(repoRoot)))
 			return
 		}
 		var body struct {
@@ -356,9 +368,11 @@ func handleRunpodTfvars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":   true,
-			"path": filepath.ToSlash(filepath.Join("infra", "runpod", "terraform.tfvars")),
+			"ok":       true,
+			"path":     filepath.ToSlash(filepath.Join("infra", "runpod", "terraform.tfvars")),
+			"abs_path": absTfSlash,
 		})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

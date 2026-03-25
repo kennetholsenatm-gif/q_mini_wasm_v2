@@ -171,6 +171,14 @@ class ServeSection(BaseModel):
     cascade_router_hidden: Optional[int] = None
 
 
+class RunpodServerlessSection(BaseModel):
+    """Optional WUI / RunPod Serverless hints (ignored by the training engine)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    worker_image: Optional[str] = None
+
+
 class TrainingConfig(BaseModel):
     """Root TOML document for training."""
 
@@ -186,6 +194,7 @@ class TrainingConfig(BaseModel):
     cascade: CascadeSection = Field(default_factory=CascadeSection)
     wasm: WasmSection = Field(default_factory=WasmSection)
     serve: ServeSection = Field(default_factory=ServeSection)
+    runpod_serverless: Optional[RunpodServerlessSection] = None
 
     def to_engine_kwargs(self) -> dict[str, Any]:
         """Map nested sections to EngineConfig keyword argument names (omit None)."""

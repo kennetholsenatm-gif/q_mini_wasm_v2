@@ -23,6 +23,8 @@ go build -o training-wui .
 ./training-wui -root ..
 ```
 
+From the **repository root**, you can use **[`scripts/deploy-wui.sh`](../scripts/deploy-wui.sh)** (`./scripts/deploy-wui.sh`) to build the same binary; set **`DEST=/path/to/training-wui`** to copy it after the build (optional). The script comments list **RunPod** env vars (`RUNPOD_TOKEN`, `RUNPOD_API_KEY`, **`RUNPOD_TOKEN_END`**, **`RUNPOD_SERVERLESS_ENDPOINT_ID`**) — see [`.env.example`](../.env.example) and [docs/RUNPOD_SERVERLESS.md](../docs/RUNPOD_SERVERLESS.md).
+
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 
 ### Flags
@@ -74,7 +76,11 @@ Each training run writes checkpoints under **`artifacts/models/<model-slug>/`** 
 
 After training, point tools or agents at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn engine.serve:app`** (see repo **`engine/serve.py`**, **`pip install -e ".[serve]"`**). Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle JSON for the exact contract.
 
-`GET /api/runpod/status` — token, binary, `tofu output` (when state exists), plus **`remote_ssh`**, **`remote_scp`**, **`remote_tar`**, **`remote_ssh_user`**, **`remote_dir`**, **`remote_ssh_key_set`**. `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional). **`POST /api/runs`** accepts `run_target`: `"local"` | `"runpod"`, `runpod_destroy_on_exit`, optional **`runpod_var_file`**, **`runpod_train_on_pod`** (default **true** when `runpod` — SSH sync + remote engine), **`runpod_skip_apply`** (reuse existing terraform state / IP).
+`GET /api/runpod/status` — token, binary, `tofu output` (when state exists), plus **`remote_ssh`**, **`remote_scp`**, **`remote_tar`**, **`remote_ssh_user`**, **`remote_dir`**, **`remote_ssh_key_set`**. `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional).
+
+**RunPod Serverless:** Queue calls use **`RUNPOD_TOKEN_END`** (endpoint API key) when set, else **`RUNPOD_API_KEY`** / **`RUNPOD_TOKEN`**. Management (`rest.runpod.io`: templates + endpoints) uses the account key only. Routes: `GET /api/runpod/serverless/meta`, `GET /api/runpod/serverless/worker-image?config=…`, `GET` / `POST /api/runpod/serverless/templates` (**`POST` creates templates via GraphQL `saveTemplate` on api.runpod.io**), `GET` / `POST /api/runpod/serverless/endpoints`, `GET /api/runpod/serverless/health`, `POST /api/runpod/serverless/run`, `GET /api/runpod/serverless/job?id=…`. See **[docs/RUNPOD_SERVERLESS.md](../docs/RUNPOD_SERVERLESS.md)**. **`GET /api/meta`** includes **`runpod_serverless`** flags (`endpoint_key_present`, `management_key_present`).
+
+**`POST /api/runs`** accepts `run_target`: `"local"` | `"runpod"` | **`"runpod_serverless"`**; for pods: `runpod_destroy_on_exit`, optional **`runpod_var_file`**, **`runpod_train_on_pod`** (default **true** when `runpod`), **`runpod_skip_apply`**. For serverless: optional **`runpod_serverless_endpoint_id`** (else `RUNPOD_SERVERLESS_ENDPOINT_ID` in `.env`).
 
 **Preflight FAQ**
 
