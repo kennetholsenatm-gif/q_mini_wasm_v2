@@ -14,11 +14,15 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 - **Merge rule:** For each key, if `[tpem]` sets a non-null value, it **overrides** the legacy table for that key when building `EngineConfig` (see `engine.training_schema.TrainingConfig.to_engine_kwargs`).
 - **Serve:** `[serve]` accepts optional `tpem = "path.pt"`; it is preferred over the legacy weight path when both are present (`engine.serve.get_model`).
 
+## Pilot 2 (landed): `qminiwasm.tpem` package
+
+- **What:** Canonical implementation in [`qminiwasm/tpem/trainable_tpem.py`](../qminiwasm/tpem/trainable_tpem.py); [`qminiwasm/tpem/__init__.py`](../qminiwasm/tpem/__init__.py) re-exports the public API.
+- **Compatibility:** [`qminiwasm/training/trainable_tpem.py`](../qminiwasm/training/trainable_tpem.py) and [`qminiwasm/training/checkpoint.py`](../qminiwasm/training/checkpoint.py) remain thin re-exports.
+
 ## Next pilots (not started)
 
 | Pilot | Idea | Risk |
 |-------|------|------|
-| P2 | `qminiwasm/tpem/` package: move `trainable_tpem.py` + thin `training/` re-export | Medium (import churn in tests/tools) |
 | P3 | Top-level `wasm_runtime/` or `edge/` for enclave + WASM (vs nested `qminiwasm/enclave/`) | High |
 | P4 | Retire `engine/` vs `qminiwasm/` split after boundary doc | High |
 

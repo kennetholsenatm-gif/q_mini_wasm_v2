@@ -32,7 +32,7 @@ from .cascade_rl import (
     cascade_rl_train_step,
     hidden_digest_for_cascade,
 )
-from .trainable_tpem import (
+from qminiwasm.tpem.trainable_tpem import (
     load_cascade_policy_from_trainable_tpem,
     load_trainable_tpem_into_model,
     save_trainable_tpem_artifact,

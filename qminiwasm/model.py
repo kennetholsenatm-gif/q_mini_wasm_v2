@@ -278,7 +278,7 @@ class QMiniWASM:
         Returns:
             Serialized ``meta`` dict from the artifact (may be empty).
         """
-        from qminiwasm.training.trainable_tpem import load_trainable_tpem_into_model
+        from qminiwasm.tpem.trainable_tpem import load_trainable_tpem_into_model
 
         loc = map_location if map_location is not None else self.device
         meta = load_trainable_tpem_into_model(self, path, map_location=loc)

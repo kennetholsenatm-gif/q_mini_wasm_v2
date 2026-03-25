@@ -1,8 +1,8 @@
-"""Compatibility imports; implementation is :mod:`qminiwasm.training.trainable_tpem`."""
+"""Compatibility imports; implementation is :mod:`qminiwasm.tpem.trainable_tpem`."""
 
 from __future__ import annotations
 
-from .trainable_tpem import (
+from qminiwasm.tpem.trainable_tpem import (
     CHECKPOINT_FORMAT_VERSION,
     D_MODEL,
     TRAINABLE_TPEM_FORMAT_VERSION,

@@ -1,8 +1,11 @@
-"""Backward-compatible import path; canonical implementation: :mod:`qminiwasm.tpem.trainable_tpem`."""
+"""TPEM (ternary-packed memory enclave) domain package.
+
+Trainable PyTorch save/load: :mod:`qminiwasm.tpem.trainable_tpem`.
+"""
 
 from __future__ import annotations
 
-from qminiwasm.tpem.trainable_tpem import (
+from .trainable_tpem import (
     CHECKPOINT_FORMAT_VERSION,
     D_MODEL,
     TRAINABLE_TPEM_FORMAT_VERSION,

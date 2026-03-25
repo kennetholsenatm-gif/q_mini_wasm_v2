@@ -6,6 +6,8 @@ This roadmap prioritizes **concrete implementation tooling** for the **Stateful 
 
 Normative protocol text for ZTEE remains [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md); this page tracks *engineering milestones* only.
 
+**Trainable TPEM layout:** PyTorch trainable artifact I/O is canonical in [`qminiwasm/tpem/`](../qminiwasm/tpem/); see [`docs/LAYOUT_REALIGNMENT_RFC.md`](../docs/LAYOUT_REALIGNMENT_RFC.md) for pilots.
+
 ```mermaid
 flowchart LR
   WLES[WLES_harness_wasmtime]

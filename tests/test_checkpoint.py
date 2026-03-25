@@ -9,7 +9,7 @@ import torch
 
 from qminiwasm.model import QMiniWASM
 from qminiwasm.training.cascade_rl import TinyCascadePolicy
-from qminiwasm.training.checkpoint import (
+from qminiwasm.tpem.trainable_tpem import (
     load_cascade_policy_from_checkpoint,
     load_checkpoint_into_model,
     save_checkpoint,

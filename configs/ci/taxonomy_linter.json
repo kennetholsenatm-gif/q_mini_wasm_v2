@@ -18,7 +18,7 @@
     {
       "regex": "(?i)\\bcheckpoint\\b",
       "hint": "Prefer trainable TPEM / TPEM artifact for persisted weights (WLES for full linear memory).",
-      "path_prefix": "qminiwasm/training/"
+      "path_prefixes": ["qminiwasm/training/", "qminiwasm/tpem/"]
     }
   ],
   "scan_extensions": [".md", ".toml", ".py", ".rs", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".c", ".go"],
