@@ -16,7 +16,7 @@ This document describes **cascade GRPO** (group-relative policy optimization for
 
 **Not IBM Quantum:** The cascade phase is **PyTorch-only** (toy env + GRPO). It does **not** submit jobs to **IBM Quantum** or any Qiskit Runtime queue. Seeing `cascade_rl mean_loss=…` in logs does **not** imply a hardware quantum job ran.
 
-**Default `quantum_router` in training:** `HybridQuantumMoE` ([`router.py`](../qminiwasm/quantum/router.py)) currently implements `forward` as a **pass-through** (`return hidden_states`). So the main supervised phase also does **not** execute circuits on IBM hardware by default. Config fields like `quantum_backend` are reserved for future / alternate code paths; they are **not** wired into this cascade MDP or that default router.
+**Default `quantum_router` in training:** `HybridQuantumMoE` ([`router.py`](../qminiwasm/fabric/router.py)) currently implements `forward` as a **pass-through** (`return hidden_states`). So the main supervised phase also does **not** execute circuits on IBM hardware by default. Config fields like `quantum_backend` are reserved for future / alternate code paths; they are **not** wired into this cascade MDP or that default router.
 
 **Purpose:** Before each epoch’s supervised MSE updates, run a few **on-policy** steps on a small discrete-action MDP (`ToyRoutingEnv` in [`cascade_rl.py`](../qminiwasm/training/cascade_rl.py)). The policy can be:
 

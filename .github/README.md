@@ -2,10 +2,11 @@
 
 ## CI (`ci.yml`)
 
+- **`taxonomy-lint`**: runs [`scripts/taxonomy_linter.py`](../scripts/taxonomy_linter.py) with `--diff-base` against the PR base commit (or `HEAD^` on push). Fails if **added lines** match forbidden legacy vocabulary ([`configs/ci/taxonomy_linter.json`](../configs/ci/taxonomy_linter.json)). External orchestrators (e.g. N8N after a Gitea webhook) can invoke the same command with a suitable `--diff-base` ref. Locally, `python scripts/taxonomy_linter.py --diff-working` checks uncommitted edits vs `HEAD`.
 - **Lint/test** run in an **AlmaLinux 9** Docker image: `black` / `flake8` on `qminiwasm/`, `tests/`, `engine/` (and `wui/backend/` when present). **`mypy` is run on `qminiwasm/` only**; full `mypy` on `engine/` is deferred until `engine/config.py` typing is tightened.
 - **`training-wui-go`** job: `go build` in `training-wui/` (Go 1.22).
 - **Security job**: `bandit` on `qminiwasm/` and `engine/`; `pip-audit` uses `requirements.txt`.
-- **Trivy / SBOM** jobs build `docker/Dockerfile.backend`.
+- **Container image scan / SPDX SBOM** are not run in this workflow (no canonical `docker/Dockerfile.backend` in-repo). Use `security-scans.yml` or local tooling if you need Trivy/SBOM on a built image.
 
 ## Security overlap
 

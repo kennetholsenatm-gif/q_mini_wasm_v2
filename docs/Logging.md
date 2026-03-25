@@ -15,10 +15,10 @@ This document describes logging conventions for the Q-Mini-WASM codebase so that
 
 ## Critical paths
 
-- **Edge cognitive loop:** Outcome (resolved vs escalate) and loop count are logged in `inference/edge.py`.
+- **Edge cognitive loop:** Outcome (resolved vs escalate) and loop count are logged in `qminiwasm/cognitive/edge.py`.
 - **Hybrid inference:** Start/failure and completion are logged in `model.py`.
-- **Quantum backend / QAOA:** Init failures and QAOA execution failures are logged in `quantum/router.py` and `quantum/backend_registry.py`.
-- **WASM load/compile/execute:** Failures are logged in `wasm/engine.py`; re-raise after log where appropriate.
+- **Quantum backend / QAOA:** Init failures and QAOA execution failures are logged in `qminiwasm/fabric/router.py` and `qminiwasm/fabric/backend_registry.py`.
+- **WASM load/compile/execute:** Failures are logged in `qminiwasm/enclave/engine.py`; re-raise after log where appropriate.
 - **Data pipeline:** Per-algorithm generation failures are logged in `data/pipeline.py`; the batch continues.
 
 ## What not to do

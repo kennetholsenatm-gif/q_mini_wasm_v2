@@ -5,9 +5,9 @@ import unittest
 import torch
 
 from qminiwasm.config import HierarchicalConfig
-from qminiwasm.inference.edge import EdgeOutcome, fog_escalation_triggered, run_edge_cognitive_loop
-from qminiwasm.inference.escalation import prepare_escalation_payload
-from qminiwasm.inference.semantic_abstraction import attach_semantic_blob_to_state
+from qminiwasm.cognitive.edge import EdgeOutcome, fog_escalation_triggered, run_edge_cognitive_loop
+from qminiwasm.cognitive.escalation import prepare_escalation_payload
+from qminiwasm.cognitive.semantic_abstraction import attach_semantic_blob_to_state
 
 
 class TestFogEscalation(unittest.TestCase):
@@ -38,3 +38,22 @@ class TestFogEscalation(unittest.TestCase):
 
         _, outcome, _, _ = run_edge_cognitive_loop(exec_block, lambda _s: 0.0, cfg)
         self.assertEqual(outcome, EdgeOutcome.ESCALATE_TO_FOG)
+
+    def test_local_containment_index_smoke(self):
+        """Local Containment Index (LCI): fraction RESOLVED_LOCAL on a golden loop fixture.
+
+        Production target > 95% on representative workloads; smoke uses high-certainty heuristic.
+        """
+        cfg = HierarchicalConfig(N_max_loops=10, T_conf=0.5)
+        n = 40
+        resolved = 0
+        for _ in range(n):
+
+            def exec_block(_i):
+                return 0, {"execution_state": {}}
+
+            _, outcome, _, _ = run_edge_cognitive_loop(exec_block, lambda _s: 0.99, cfg)
+            if outcome == EdgeOutcome.RESOLVED_LOCAL:
+                resolved += 1
+        lci_pct = 100.0 * resolved / float(n)
+        self.assertGreaterEqual(lci_pct, 95.0)

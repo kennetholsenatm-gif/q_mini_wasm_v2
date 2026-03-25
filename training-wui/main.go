@@ -1913,7 +1913,7 @@ import sys
 from engine.config import EngineConfig
 from engine._dotenv import load_dotenv_if_available
 from qminiwasm.hardware.device import get_device
-from qminiwasm.hardware.sycl.sycl_hardware import SYCLHardware
+from qminiwasm.hardware.sycl_hardware import SYCLHardware
 
 load_dotenv_if_available()
 

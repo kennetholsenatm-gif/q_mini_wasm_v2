@@ -32,7 +32,7 @@ from functools import wraps
 from datetime import datetime
 
 # Import the Vec2Text-RAG module
-from qminiwasm.inference.vec2text import (
+from qminiwasm.cognitive.vec2text import (
     ConditionalMaskedDiffusion,
     EnhancedSyntaxValidator,
     SyntaxForcedLatentCompensation,

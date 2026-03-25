@@ -67,6 +67,7 @@ By applying the 1.58-bit ternary packing density (averaging 1.6 bits per weight)
 | **Tier 1: Micro-Enclaves** | Sub-250 Megabytes | \~1.2 Billion Parameters | IoT Sensors, Wearables, Mobile Co-processors | High-speed, localized anomaly detection; intent parsing; formulating routing QUBOs. |
 | **Tier 2: Meso-Enclaves** | \~2 Gigabytes | \~10 Billion Parameters | Consumer Laptops, Standard Edge Gateway Devices | General semantic processing, Ephemeral State Inversion decoding, baseline cognitive loops. |
 | **Tier 3: Macro-Enclaves** | \~8 Gigabytes (Memory64 Bound) | \~40 Billion Parameters | Apple M4/M5 Studio, AMD Strix Halo Workstations | Autonomous reasoning, full QAHR execution, high-fidelity generative synthesis and arbitration. |
+| **Tiers 4–5: Workgroup / Enterprise Core Enclaves** | \~16 GB to 256 GB+ EF | Host-orchestrated | Enterprise datacenters, workgroup unified-memory pools | Same ECL/CGE/QAHR vocabulary at larger EF; centralized orchestration for multi-node trust domains. |
 
 ### **Tier 1: Micro-Enclaves (Sub-250MB)**
 
@@ -79,6 +80,25 @@ The Meso-Enclave tier addresses the vast middle market of consumer hardware, com
 ### **Tier 3: Macro-Enclaves (\~8GB)**
 
 The Macro-Enclave pushes the Q-Mini-WASM framework to the absolute maximum threshold of current production-grade WebAssembly runtimes. Relying on the Memory64 specification to traverse beyond the 4-gigabyte limit, the 8-gigabyte Macro-Enclave encapsulates an astonishing 40-billion effective parameter model entirely on the local device.13 This tier requires the extreme memory bandwidth and matrix execution capabilities inherent to the Apple M5 and AMD Strix Halo unified memory architectures.3 Because the Macro-Enclave relies on 64-bit addressing, the engine must insert range-checking branches to ensure that linear memory accesses do not trigger arbitrary out-of-bounds corruption.31 However, the raw computational throughput of the Strix Halo's 40 compute units and the Apple M5's matmul acceleration mask this minor branching latency entirely. The Macro-Enclave serves as a master cognitive node, executing deep Edge Cognitive Looping, managing extensive certainty thresholds, and autonomously executing Quantum-Assisted Hierarchical Routing without external guidance.3
+
+### **Tiers 4–5: Workgroup / Enterprise Core Enclaves**
+
+Tiers 4–5 extend the same execution semantics as Tier 1–3—bounded WASM linear-memory cognition (ECL), deterministic handoff (CGE), and quantum-assisted escalation routing (QAHR)—but operate at **larger EF envelopes** suitable for enterprise workgroups and unified-memory pools.
+
+In this tier range, the **orchestration layer** (host + control plane) is responsible for fleet scheduling, topic-scope policy, and topology injection updates, while the enclave maintains the same lifecycle vocabulary for cognition and escalation.
+
+## ZTEE Node Identity: hardware X.509 vs cognitive OIDC/JWT
+
+ZTEE separates identity into two layers so trust cannot be satisfied by only one of them:
+
+- **Hardware identity (host X.509 PKI)**: an internal Certificate Authority issues short-lived X.509 certificates bound to the provisioned compute node (often via TPM or secure-enclave-assisted key material). The host certificate is used for **mTLS 1.3** bootstrap to the message broker and the QAHR controller.
+- **Cognitive identity (enclave OIDC/OAuth2 JWT)**: each WASM enclave executes an OIDC client-credentials flow (or device flow) to obtain a signed JWT. JWT claims define:
+  - **enclave tier** and **EF capacity** (mapping to `enclave_tier` / `enclave_footprint_mb` in `configs/serve/default.toml` and `HierarchicalConfig` in `qminiwasm/config.py`)
+  - authorized **ingress/egress scopes** (allowed event topics to publish/subscribe)
+
+During enrollment, the QAHR controller validates JWT signatures against **JWKS**, then injects the node’s approved topology into its cost model and authorizes only the event topics permitted by the JWT scopes.
+
+Authoritative protocol text: [`docs/ZTEE_FRAMEWORK.md`](docs/ZTEE_FRAMEWORK.md) (single source of truth).
 
 ## **Part 3: Deployment Methodology and Evaluative Metrics**
 

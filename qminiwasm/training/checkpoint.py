@@ -1,7 +1,7 @@
 """Save/load trainable weights for QMiniWASM (router, ternary expert, optional hybrid_adapter).
 
 **WLES note:** PyTorch checkpoints store **trainable** subtensors. Full **WLES** dumps serialize
-guest linear memory (:mod:`qminiwasm.wasm.memory_encode` + native hooks); both may coexist.
+guest linear memory (:mod:`qminiwasm.enclave.memory_encode` + native hooks); both may coexist.
 """
 
 from __future__ import annotations
@@ -169,3 +169,8 @@ def load_cascade_policy_from_checkpoint(
             inc.unexpected_keys,
         )
     return True
+
+
+# TPEM-facing alias: trainable tensors are the PyTorch partition of the enclave story.
+build_tpem_training_payload = build_checkpoint_payload
+save_tpem_training_checkpoint = save_checkpoint

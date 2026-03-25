@@ -2,8 +2,8 @@
 
 import unittest
 
-from qminiwasm.wasm.trit_pack import pack_ternary_list
-from qminiwasm.wasm.trit_wasm_runtime import TritKernelInstance
+from qminiwasm.enclave.trit_pack import pack_ternary_list
+from qminiwasm.enclave.trit_wasm_runtime import TritKernelInstance
 
 
 class TestTritWasmGolden(unittest.TestCase):

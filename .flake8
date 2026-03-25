@@ -6,7 +6,7 @@ exclude = .git, __pycache__, .venv, venv, build, dist, .eggs, *.egg-info
 per-file-ignores =
     qminiwasm/quantum/integration_tester.py: E501, F401, F841
     qminiwasm/hardware/intel_sycl_integration.py: F401
-    qminiwasm/hardware/sycl/dpas_lowering.py: F401, F841
+    qminiwasm/hardware/dpas_lowering.py: F401, F841
     qminiwasm/layers/failure_taxonomy.py: F401, F841
     qminiwasm/layers/ternary_quantization.py: F401, F841
     qminiwasm/layers/tropical_geometry.py: F401, E501
@@ -16,7 +16,7 @@ per-file-ignores =
     qminiwasm/quantum/qubo.py: E501
     qminiwasm/quantum/router.py: E501
     qminiwasm/hardware/device.py: E501
-    qminiwasm/hardware/sycl/sycl_hardware.py: E501
+    qminiwasm/hardware/sycl_hardware.py: E501
     qminiwasm/training/__init__.py: E501
     qminiwasm/training/cascade_mopd_teacher.py: E501
     qminiwasm/training/cascade_rl.py: E501

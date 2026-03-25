@@ -22,17 +22,17 @@ import torch
 import torch.nn as nn
 
 from .config import DEFAULT_HIERARCHICAL_CONFIG, HierarchicalConfig
-from .inference.edge import EdgeOutcome, default_certainty_heuristic, run_edge_cognitive_loop
-from .inference.escalation import prepare_escalation_payload
-from .quantum.qaoa_integration import QAOAConfig, qahr_route_after_escalation
-from .quantum.router import HybridQuantumMoE
-from .quantum.interconnect import StateMigrationInterconnect
+from .cognitive.edge import EdgeOutcome, default_certainty_heuristic, run_edge_cognitive_loop
+from .cognitive.escalation import prepare_escalation_payload
+from .fabric.qaoa_integration import QAOAConfig, qahr_route_after_escalation
+from .fabric.router import HybridQuantumMoE
+from .fabric.interconnect import StateMigrationInterconnect
 from .layers.ternary import TernaryWASMExpert
 from .layers.lota import LoRALinearSide, merge_lora_into_linear_weight
 from .layers.ptqtp import PTQTPLinear
 from .training.cascade_rl import CascadeRouter
 from .layers.attention import TropicalAttention
-from .wasm.engine import WasmEngine as WasmExecutor, WasmRuntimeConfig
+from .enclave.engine import WasmEngine as WasmExecutor, WasmRuntimeConfig
 from .hardware import SYCLHardware
 from .hardware.device import get_device
 from .data.pipeline import DataPipeline
@@ -359,7 +359,7 @@ class QMiniWASM:
             execute_one_block, certainty_fn, cfg
         )
         if outcome in (EdgeOutcome.ESCALATE_TO_CLOUD, EdgeOutcome.ESCALATE_TO_FOG):
-            from .inference.semantic_abstraction import attach_semantic_blob_to_state
+            from .cognitive.semantic_abstraction import attach_semantic_blob_to_state
 
             attach_semantic_blob_to_state(last_state, device=self.device)
             last_state["escalation_payload"] = prepare_escalation_payload(last_state, cfg)

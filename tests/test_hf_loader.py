@@ -14,7 +14,7 @@ from qminiwasm.training.hf_loader import (
     load_hf_tabular_samples,
     validate_hf_hub_dataset_id_not_checkpoint,
 )
-from qminiwasm.wasm.memory_encode import BODY_SLOTS, encode_linear_memory
+from qminiwasm.enclave.memory_encode import BODY_SLOTS, encode_linear_memory
 
 
 def test_validate_hf_hub_dataset_id_rejects_checkpoint_paths():

@@ -6,7 +6,7 @@ import numpy as np
 
 
 def test_ibm_error_suggests_quota_or_capacity_fallback_heuristic():
-    from qminiwasm.quantum.qiskit_qaoa import ibm_error_suggests_quota_or_capacity_fallback
+    from qminiwasm.fabric.qiskit_qaoa import ibm_error_suggests_quota_or_capacity_fallback
 
     assert ibm_error_suggests_quota_or_capacity_fallback(
         RuntimeError(
@@ -19,7 +19,7 @@ def test_ibm_error_suggests_quota_or_capacity_fallback_heuristic():
 
 
 def test_ibm_safe_rzz_angle_maps_negative_and_clips():
-    from qminiwasm.quantum.qiskit_qaoa import _ibm_safe_rzz_angle
+    from qminiwasm.fabric.qiskit_qaoa import _ibm_safe_rzz_angle
 
     pi2 = np.pi / 2.0
     assert math.isclose(_ibm_safe_rzz_angle(-0.9272463446480117), 0.9272463446480117)
@@ -28,7 +28,7 @@ def test_ibm_safe_rzz_angle_maps_negative_and_clips():
 
 
 def test_resolve_ibm_backend_name_prefers_explicit_then_ibm_env_then_quantum_backend(monkeypatch):
-    from qminiwasm.quantum.qiskit_qaoa import resolve_ibm_backend_name
+    from qminiwasm.fabric.qiskit_qaoa import resolve_ibm_backend_name
 
     monkeypatch.delenv("IBM_BACKEND_NAME", raising=False)
     monkeypatch.delenv("QUANTUM_BACKEND", raising=False)
@@ -75,7 +75,7 @@ def test_ibm_isa_transpile_and_apply_layout_smoke():
 
 
 def test_run_z_expectations_statevector_shape():
-    from qminiwasm.quantum.qiskit_qaoa import run_z_expectations_statevector
+    from qminiwasm.fabric.qiskit_qaoa import run_z_expectations_statevector
 
     n, L = 4, 3
     w = np.random.randn(n)
@@ -93,7 +93,7 @@ def test_neural_qaoa_qiskit_branch_runs():
     """NeuralQAOA.quantum_circuit uses Qiskit statevector path."""
     import torch
 
-    from qminiwasm.quantum.qaoa_integration import NeuralQAOA, QAOAConfig
+    from qminiwasm.fabric.qaoa_integration import NeuralQAOA, QAOAConfig
 
     cfg = QAOAConfig(
         num_layers=2,

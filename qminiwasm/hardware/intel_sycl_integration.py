@@ -23,7 +23,7 @@ import torch
 from torch import nn
 
 from ..config import HierarchicalConfig
-from ..quantum.router import HybridQuantumMoE
+from ..fabric.router import HybridQuantumMoE
 from ..layers.ternary import TernaryWASMExpert
 
 

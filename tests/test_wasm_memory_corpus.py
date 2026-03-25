@@ -10,12 +10,12 @@ import torch
 import wasmtime
 
 from qminiwasm.data.pipeline import DataPipeline
-from qminiwasm.wasm.engine import (
+from qminiwasm.enclave.engine import (
     DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES,
     WasmEngine,
     WasmRuntimeConfig,
 )
-from qminiwasm.wasm.memory_encode import D_MODEL, encode_linear_memory
+from qminiwasm.enclave.memory_encode import D_MODEL, encode_linear_memory
 
 
 def test_encode_linear_memory_shape_and_stable_meta():
@@ -159,7 +159,7 @@ def test_wasm_engine_memory_error_strict_policy_raises(monkeypatch):
     def _boom(_store, _module):
         raise RuntimeError("mmap failed to reserve 0x104000000 bytes")
 
-    monkeypatch.setattr("qminiwasm.wasm.engine.instantiate_wasmtime_module", _boom)
+    monkeypatch.setattr("qminiwasm.enclave.engine.instantiate_wasmtime_module", _boom)
     with pytest.raises(RuntimeError, match="reservation failed"):
         eng.execute_wasm(mod, "run", [1, 2])
 
@@ -183,7 +183,7 @@ def test_wasm_engine_memory_error_mock_policy_falls_back(monkeypatch):
     def _boom(_store, _module):
         raise RuntimeError("Cannot allocate memory (os error 12)")
 
-    monkeypatch.setattr("qminiwasm.wasm.engine.instantiate_wasmtime_module", _boom)
+    monkeypatch.setattr("qminiwasm.enclave.engine.instantiate_wasmtime_module", _boom)
     out, hidden, target, _pre, _post = eng.execute_wasm(mod, "hash", [7, 11])
     assert eng.use_mock is True
     assert isinstance(out, int)

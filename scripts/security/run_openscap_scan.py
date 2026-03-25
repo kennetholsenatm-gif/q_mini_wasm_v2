@@ -186,7 +186,7 @@ def main_cli(
     ds = find_scap_content(content_path)
     if not ds:
         logger.error(
-            "No SCAP datastream found. Set OSCAP_CONTENT_PATH or install scap-security-guide (e.g. in docker/Dockerfile.inference)."
+            "No SCAP datastream found. Set OSCAP_CONTENT_PATH or install scap-security-guide on the host or CI image."
         )
         return 1
 

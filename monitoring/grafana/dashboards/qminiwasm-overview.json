@@ -702,6 +702,20 @@
           },
           "thresholds": []
         }
+      },
+      {
+        "type": "text",
+        "title": "SOA metrics (planned Prometheus names)",
+        "gridPos": {
+          "h": 5,
+          "w": 24,
+          "x": 0,
+          "y": 22
+        },
+        "options": {
+          "mode": "markdown",
+          "content": "## Stateful Operational Autonomy (SOA)\n\nWire exporters when available:\n\n- **LCI** — `qminiwasm_local_containment_ratio` (target greater than 0.95)\n- **LME** — RSS / process memory proxies vs idle baseline\n- **SML** — `qminiwasm_wles_package_seconds` (WLES envelope + transport stub)\n- **TtC** — wall time until certainty reaches T_conf\n- **LMS / TBR** — linear memory saturation and trit-to-bandwidth ratio (TPEM)\n"
+        }
       }
     ],
     "templating": {

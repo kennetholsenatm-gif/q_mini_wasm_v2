@@ -147,8 +147,8 @@ class TropicalAttention:
         self.w_v = torch.nn.Linear(d_model, d_model, bias=False)
         self.w_o = torch.nn.Linear(d_model, d_model, bias=False)
 
-        # HullKVCache for geometric state recovery
-        self.hull_cache = HullKVCache(config)
+        # ESIGeometricStateHull (legacy: HullKVCache) for geometric state recovery
+        self.hull_cache = ESIGeometricStateHull(config)
 
     def forward(
         self,
@@ -242,7 +242,7 @@ class TropicalAttention:
         return softmax_output
 
     def ingest_deltas(self, deltas: List[Dict[str, Any]], device: torch.device):
-        """Ingest state deltas into HullKVCache for geometric recovery"""
+        """Ingest state deltas into ESIGeometricStateHull for geometric recovery"""
         self.hull_cache.ingest_deltas(deltas, device)
 
     def query_geometric_recovery(self, query_vector: torch.Tensor) -> Optional[torch.Tensor]:
@@ -253,11 +253,11 @@ class TropicalAttention:
         return self.hull_cache.query_state_recovery(query_vector)
 
 
-class HullKVCache:
-    """Enhanced HullKVCache for Tropical Attention
+class ESIGeometricStateHull:
+    """Geometric hull for tropical attention (Ephemeral State Inversion–compatible store).
 
-    Specialized version of HullKVCache optimized for tropical attention operations.
     Maintains upper convex hull of historical Key vectors in tropical projective space.
+    Legacy name: HullKVCache.
     """
 
     def __init__(self, config: HierarchicalConfig):
@@ -578,3 +578,7 @@ class TropicalGeometryBridge:
         }
 
         return stats
+
+
+# Backward-compatible alias (deprecated name)
+HullKVCache = ESIGeometricStateHull

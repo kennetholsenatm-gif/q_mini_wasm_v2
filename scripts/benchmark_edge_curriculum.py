@@ -16,9 +16,9 @@ from pathlib import Path
 
 
 def _soa_smoke_metrics() -> dict:
-    from qminiwasm.inference.edge import EdgeOutcome, run_edge_cognitive_loop
-    from qminiwasm.quantum.qaoa_integration import formulate_qahr_cost_hamiltonian_spec
-    from qminiwasm.wasm.memory_encode import build_wles_envelope
+    from qminiwasm.cognitive.edge import EdgeOutcome, run_edge_cognitive_loop
+    from qminiwasm.fabric.qaoa_integration import formulate_qahr_cost_hamiltonian_spec
+    from qminiwasm.enclave.memory_encode import build_wles_envelope
 
     n = 30
     local = 0

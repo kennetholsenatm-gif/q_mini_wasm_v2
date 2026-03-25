@@ -1,11 +1,11 @@
-# Native C++ (`native/cpp`)
+# Native C++ (`cpp/`)
 
 CMake project (C++23) implementing packed ternary weights, CPUID-dispatched matvec (scalar / AVX2 / optional AVX-512 TU), a JSON-subset grammar mask toy, OTA state machine (`std::expected`), residual KV XOR blocks, QUBO + NLopt COBYLA (optional), and optional gRPC / SYCL / WasmEdge targets.
 
 ## Default configure (tests + core)
 
 ```bash
-cmake -S native/cpp -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/qminiwasm_cpp_tests
 ```
@@ -23,7 +23,7 @@ cmake --build build
 
 ### Python module
 
-Build the extension into the build tree and add it to `PYTHONPATH`, or install via your own packaging step. The module name is **`qminiwasm_cpp_native`** (distinct from `qminiwasm._native_ternary` in `native/ternary_packed/`).
+Build the extension into the build tree and add it to `PYTHONPATH`, or install via your own packaging step. The module name is **`qminiwasm_cpp_native`** (distinct from `qminiwasm._native_ternary` in `ternary_packed/`).
 
 ### CPU feature matrix
 

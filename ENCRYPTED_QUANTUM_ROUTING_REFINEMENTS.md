@@ -8,7 +8,7 @@ This document describes the comprehensive refinements made to the Quantum Approx
 
 ### Phase 1: Core Infrastructure
 
-#### 1. Enhanced Quantum Router (`qminiwasm/quantum/router.py`)
+#### 1. Enhanced Quantum Router (`qminiwasm/fabric/router.py`)
 
 **Key Enhancements:**
 - **Encrypted Vector Support**: Added comprehensive encrypted vector processing capabilities
@@ -27,7 +27,7 @@ This document describes the comprehensive refinements made to the Quantum Approx
 - `BarrenPlateauMitigator`: Added encrypted data support with `generate_encrypted_initial_params()` and `apply_encrypted_mitigation()`
 - `TernaryOptimizer`: Added encrypted ternary support with `apply_encrypted_ternary_support()`
 
-#### 2. Enhanced QUBO Formulation (`qminiwasm/quantum/qubo.py`)
+#### 2. Enhanced QUBO Formulation (`qminiwasm/fabric/qubo.py`)
 
 **New Functions Added:**
 - `encrypted_qubo_hamiltonian()`: QUBO formulation optimized for encrypted MoE routing
@@ -43,7 +43,7 @@ This document describes the comprehensive refinements made to the Quantum Approx
 
 ### Phase 2: Performance Optimization
 
-#### 3. Performance Optimizer (`qminiwasm/quantum/performance_optimizer.py`)
+#### 3. Performance Optimizer (`qminiwasm/fabric/performance_optimizer.py`)
 
 **Core Components:**
 - **EncryptedRoutingCache**: High-performance caching system with LRU eviction
@@ -79,7 +79,7 @@ This document describes the comprehensive refinements made to the Quantum Approx
 - **Routing Accuracy**: >70% accuracy for encrypted vs regular routing
 - **Performance**: Significant speedup for encrypted operations
 
-#### 5. Integration Testing (`qminiwasm/quantum/integration_tester.py`)
+#### 5. Integration Testing (`qminiwasm/fabric/integration_tester.py`)
 
 **Integration Test Suite:**
 - **End-to-End Routing**: Complete encrypted routing pipeline validation
@@ -230,7 +230,7 @@ class MicrosecondOptimizer:
 
 ### 1. Basic Encrypted Routing
 ```python
-from qminiwasm.quantum.router import EnhancedQuantumRouter
+from qminiwasm.fabric.router import EnhancedQuantumRouter
 from qminiwasm.security.crypto import encrypt_vector
 
 # Initialize router
@@ -251,7 +251,7 @@ results = router.find_k_nearest_neighbors_encrypted(encrypted_query, encrypted_d
 
 ### 2. Performance Optimization
 ```python
-from qminiwasm.quantum.performance_optimizer import optimize_encrypted_routing
+from qminiwasm.fabric.performance_optimizer import optimize_encrypted_routing
 
 # Optimize for microsecond performance
 results = await optimize_encrypted_routing(
@@ -267,7 +267,7 @@ print(f"Average latency: {performance_report['performance_stats']['avg_latency_u
 
 ### 3. Integration Testing
 ```python
-from qminiwasm.quantum.integration_tester import IntegrationTestSuite
+from qminiwasm.fabric.integration_tester import IntegrationTestSuite
 
 # Run comprehensive integration tests
 tester = IntegrationTestSuite()

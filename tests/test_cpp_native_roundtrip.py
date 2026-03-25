@@ -5,7 +5,7 @@ import pytest
 
 def test_pack_unpack_matches_python_trit_pack():
     cpp_native = pytest.importorskip("qminiwasm_cpp_native")
-    from qminiwasm.wasm import trit_pack
+    from qminiwasm.enclave import trit_pack
 
     weights = [-1, 0, 1, -1, 0, 1, 1, -1, 0, 1, -1, 0, 1]
     py_packed = trit_pack.pack_ternary_list(weights)
@@ -17,7 +17,7 @@ def test_pack_unpack_matches_python_trit_pack():
 
 def test_matvec_best_runs():
     cpp_native = pytest.importorskip("qminiwasm_cpp_native")
-    from qminiwasm.wasm import trit_pack
+    from qminiwasm.enclave import trit_pack
 
     in_f = 10
     rows = 2

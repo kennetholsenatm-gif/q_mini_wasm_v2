@@ -7,7 +7,7 @@ and state recovery mechanisms.
 The implementation follows the white paper's specifications for:
 - Wasmtime instrumentation and stack/memory delta capture
 - Intentional fault injection for robustness training
-- State recovery using HullKVCache
+- State recovery using ESIStateRecoveryHull (legacy name: HullKVCache)
 - Continuous pre-training and CISPO integration
 """
 
@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from qminiwasm.wasm import (
+from qminiwasm.enclave import (
     MESH_EXPORT_NAMES,
     WasmCompiler,
     WasmEngine,
@@ -43,8 +43,8 @@ class delta_payload_struct:
     deltas: List[Tuple[int, Optional[bytes]]]
 
 
-class HullKVCache:
-    """Mock HullKVCache for state recovery mechanism"""
+class ESIStateRecoveryHull:
+    """Ephemeral State Inversion—oriented hull for training pipeline state recovery (mock)."""
 
     def __init__(self):
         self.cache = {}
@@ -83,7 +83,7 @@ class DataPipeline:
     The implementation follows the white paper's specifications for:
     - Wasmtime instrumentation and stack/memory delta capture
     - Intentional fault injection for robustness training
-    - State recovery using HullKVCache
+    - State recovery using ESIStateRecoveryHull (legacy name: HullKVCache)
     - Continuous pre-training and CISPO integration
     """
 
@@ -94,7 +94,7 @@ class DataPipeline:
         self.logger.info("Initialized DataPipeline")
         self.wasm_engine = WasmEngine(use_mock=False, runtime=wasm_runtime)
         self.wasm_compiler = WasmCompiler(self.wasm_engine)
-        self.hullkv_cache = HullKVCache()
+        self.hullkv_cache = ESIStateRecoveryHull()
         self._wasm_cache = {}
 
     def generate_training_data(self, algorithms: List[str], num_samples: int) -> List[Dict]:
@@ -519,3 +519,7 @@ def compress_deltas(
         checksum=checksum,
         deltas=deltas,
     )
+
+
+# Backward-compatible alias (deprecated name)
+HullKVCache = ESIStateRecoveryHull

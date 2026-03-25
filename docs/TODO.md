@@ -1,8 +1,24 @@
-# Documentation and automation gaps
+# Tooling and ops backlog (`qminiwasm-core`)
 
-Short follow-ups for maintainers. Prefer **GitHub Issues** for new work items.
+Use this file for **Phase 4 implementation tooling** tracking and **maintainer hygiene**. Prefer **GitHub Issues** for owned work items, execution order, and assignees.
 
-## CI and security
+## Phase 4 tooling (checklist)
+
+Link to the full milestone narrative: [`wiki/Roadmap.md`](../wiki/Roadmap.md).
+
+1. **WLES test harness**
+   - Extend beyond envelope JSON tests toward **Wasmtime** snapshot / restore with **linear memory** identity checks.
+   - Entrypoints: [`memory_encode.py`](../qminiwasm/enclave/memory_encode.py) (`build_wles_envelope`), [`test_wles_esi_harness.py`](../tests/test_wles_esi_harness.py), [`engine.py`](../qminiwasm/enclave/engine.py), [`trit_wasm_runtime.py`](../qminiwasm/enclave/trit_wasm_runtime.py).
+
+2. **ZTEE local simulator**
+   - **Done:** in-process CA, JWT/JWKS RS256, `jti` revocation, AES-256-GCM — [`ztee_local_simulator.py`](../qminiwasm/security/ztee_local_simulator.py), [`test_ztee_handshake_simulator.py`](../tests/test_ztee_handshake_simulator.py).
+   - **Next:** HTTP **OIDC** stub (`localhost`); **gRPC**-shaped encrypted WLES transfer tests (see [`docs/ZTEE_FRAMEWORK.md`](ZTEE_FRAMEWORK.md)).
+
+3. **CPL integration**
+   - Read and refine spike: [`docs/CPL_INTEGRATION_SPIKE.md`](CPL_INTEGRATION_SPIKE.md).
+   - Follow-on: canonical CPL **event schema** versioned in docs or `configs/`, then backend + verifier tooling as separate issues.
+
+## Maintainer hygiene (CI and docs)
 
 | Item | Notes |
 |------|-------|
@@ -10,8 +26,8 @@ Short follow-ups for maintainers. Prefer **GitHub Issues** for new work items.
 | **OpenSCAP in CI** | Report may be missing; artifact upload uses `if-no-files-found: ignore`. |
 | **Trivy image job** | `continue-on-error: true` in `.github/workflows/ci.yml` until container images are hardened consistently. |
 
-## Wiki vs repo layout
+### Wiki vs repo layout
 
 Some **wiki** pages describe optional `containers/`, legacy `wui/`, or full-stack OpenTofu layouts that are not present in every checkout. For **training**, **engine**, and **RunPod**, use the repo [README.md](../README.md), [training-wui/README.md](../training-wui/README.md), and [docs/RUNPOD_QUICKSTART.md](RUNPOD_QUICKSTART.md).
 
-**Last updated:** After trimming obsolete docs from `docs/` (white-paper and greenfield guides removed).
+**Last updated:** 2026-03-25 (Phase 4 tooling pivot)

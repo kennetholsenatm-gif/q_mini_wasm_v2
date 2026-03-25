@@ -1,8 +1,5 @@
-"""State migration: delta compression and payload for Tier 2."""
+"""Shim: state migration helpers live in :mod:`qminiwasm.enclave`."""
 
-from .delta_compression import compress_deltas, delta_payload_struct
+from qminiwasm.enclave.delta_compression import compress_deltas, delta_payload_struct
 
-__all__ = [
-    "compress_deltas",
-    "delta_payload_struct",
-]
+__all__ = ["compress_deltas", "delta_payload_struct"]

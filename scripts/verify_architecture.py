@@ -18,8 +18,8 @@ from qminiwasm.security.crypto import (
     generate_symmetric_key,
     rotate_symmetric_key,
 )
-from qminiwasm.inference.vec2text import reconstruct_memory, validate_reconstructed_text
-from qminiwasm.quantum.router import enhanced_find_k_nearest_neighbors
+from qminiwasm.cognitive.vec2text import reconstruct_memory, validate_reconstructed_text
+from qminiwasm.fabric.router import enhanced_find_k_nearest_neighbors
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

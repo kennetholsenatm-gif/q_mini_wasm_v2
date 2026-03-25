@@ -4,6 +4,16 @@
 
 Q-Mini-WASM implements a comprehensive security framework that protects quantum computing applications throughout their lifecycle. Our security approach combines multiple layers of protection, automated scanning, and compliance validation to ensure the highest standards of security for quantum computing operations.
 
+## Stateful agent trust (ZTEE)
+
+For the stateful WASM agent paradigm, operational trust is governed by **Zero-Trust Ephemeral Enrollment (ZTEE)**:
+- host **X.509** PKI identity with **mTLS** bootstrap
+- enclave **OIDC/OAuth2 JWT** cognitive identity with tier/EF/topic scopes
+- **CRL/OCSP** revocation and IdP session/JWT family revocation
+- telemetry-driven **Cognitive Provenance Ledger (CPL)** eviction signals (LCI/EM)
+
+Canonical protocol text: [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md). Lifecycle flow: [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md).
+
 ## Security Architecture
 
 ### Defense in Depth Strategy

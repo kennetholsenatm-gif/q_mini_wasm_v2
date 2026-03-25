@@ -10,12 +10,14 @@ Q-Mini-WASM implements a comprehensive DevSecOps framework that integrates secur
 
 The project uses GitHub Actions for automated CI/CD with these workflows:
 
+**Enrollment and continuous trust (ZTEE):** For the normative zero-trust mesh enrollment protocol—host PKI vs enclave OIDC/JWT, mTLS bootstrap, encrypted **WLES** migration, **CRL/OCSP revocation + IdP session/JWT family revocation and broker socket drop**, and CPL-driven eviction—see [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md). In-production, **LCI** / **EM** (and related SOA signals) feed operational audits alongside CI smoke tests.
+
 #### CI Workflow (`.github/workflows/ci.yml`)
 - **Linting**: Black, Flake8
 - **Type Checking**: MyPy
 - **Testing**: Unit tests with coverage (pytest, coverage.xml)
 - **Security**: Bandit SAST, pip-audit dependency scanning
-- **Trivy image**: Builds `docker/Dockerfile.backend`, runs Trivy with CRITICAL/HIGH severity and `ignore-unfixed` (only fixable vulns fail the job); uploads SARIF and SBOM (CycloneDX). Accepted risks can be listed in [.trivyignore](.trivyignore). Image scan can be gated in-cluster via Kyverno.
+- **Container image scan / SPDX SBOM**: Not part of `ci.yml` (the legacy `docker/Dockerfile.backend` path is not in this repo). The **Security Scans** workflow still runs Trivy **filesystem** scans, Bandit, pip-audit, and OpenSCAP where configured. To scan a built image locally or in your own pipeline, build from `serverless/Dockerfile` or `wui/backend/Dockerfile` when present; accepted risks can be listed in [.trivyignore](.trivyignore); Kyverno can gate images in-cluster.
 
 #### Security Scans Workflow (`.github/workflows/security-scans.yml`)
 - **Trigger**: Push and pull requests to `main`/`master`
@@ -186,12 +188,12 @@ pwsh -File scripts/devsecops-workflow.ps1
 
 ### Data Stack (Event-Driven)
 - **Location:** `containers/data-stack/`
-- **Components:** PostgreSQL (pgvector), RabbitMQ, Apache NiFi; all with `deploy.resources`. Optional mTLS for Postgres via Vault PKI (`postgres-mtls.conf`).
+- **Components:** PostgreSQL (pgvector), RabbitMQ, Apache NiFi; all with `deploy.resources`. Optional mTLS for Postgres via internal X.509 CA-issued client certificates (`postgres-mtls.conf`).
 - **Docs:** [containers/data-stack/README.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/containers/data-stack/README.md)
 
 ### Security Stack (Zero Trust / PQC)
 - **Location:** `containers/security-stack/`
-- **Components:** Keycloak (FIDO2/Passkeys, OIDC for Teleport), Vault (PKI, short-lived mTLS certs), Envoy (TLS 1.3, PQC-ready curves).
+- **Components:** OIDC-compliant IdP (FIDO2/Passkeys, OIDC for Teleport), internal X.509 CA (short-lived mTLS certificates), Envoy (TLS 1.3, PQC-ready curves).
 - **Docs:** [containers/security-stack/README.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/containers/security-stack/README.md)
 
 ### Kubernetes / OpenTofu
@@ -201,23 +203,23 @@ pwsh -File scripts/devsecops-workflow.ps1
 
 ### OpenSCAP Compliance
 - **Script:** `scripts/security/run_openscap_scan.py` — runs `oscap xccdf eval`, produces HTML report and ARF; can fail on critical/kernel-memory findings.
-- **CI:** Run in Security Scans workflow; report uploaded as artifact. Optional inference image: `docker/Dockerfile.inference` includes OpenSCAP scanner.
+- **CI:** Run in Security Scans workflow; report uploaded as artifact when `oscap` and SCAP content are available (`OSCAP_CONTENT_PATH` or `scap-security-guide` on the runner). There is no dedicated inference Dockerfile in-repo; use your own image or install OpenSCAP content on the job image as needed.
 
 ## Security Architecture
 
 ### Network Security
 - **Firewalls**: firewalld on Packer-built image; container stacks use internal bridge networks and minimal exposed ports.
-- **Zero Trust**: Teleport for infrastructure access (ephemeral certs); Keycloak OIDC + WebAuthn for human identity.
+- **Zero Trust**: Teleport for infrastructure access (ephemeral certs); OIDC-compliant IdP + WebAuthn for human identity.
 - **TLS / PQC:** Envoy with TLS 1.3 and ML-KEM/Kyber-ready curves for security stack front-end.
 
 ### Application Security
-- **Authentication:** Keycloak (Passkeys); Teleport for SSH/Kubernetes.
-- **Machine Identity:** Vault PKI for short-lived client certs (mTLS to Postgres).
+- **Authentication:** OIDC-compliant IdP (Passkeys); Teleport for SSH/Kubernetes.
+- **Machine Identity:** internal X.509 CA for short-lived client certificates (mTLS to Postgres).
 - **Containers:** Non-root, securityContext (allowPrivilegeEscalation false, drop ALL) in Helm chart and Dockerfiles.
 
 ### Data Security
-- **Encryption in Transit:** TLS 1.3 at proxy; optional mTLS for database (Vault-issued certs).
-- **Secrets:** No hardcoded secrets; `.env` and Vault for credentials; `.env` in `.gitignore`.
+- **Encryption in Transit:** TLS 1.3 at proxy; optional mTLS for database (internal CA-issued client certificates).
+- **Secrets:** No hardcoded secrets; `.env` and an internal secret store for credentials; `.env` in `.gitignore`.
 
 ## Continuous Improvement
 

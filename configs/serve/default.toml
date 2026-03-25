@@ -1,4 +1,20 @@
 # Inference defaults (override with env in containers: ACCELERATOR, QMINIWASM_CHECKPOINT, ...).
+# Enclave tier presets (EF = Enclave Footprint). Uncomment one [enclave] block if overriding defaults.
+#
+# Tier 1 Micro-Enclave  (EF < 250 MiB):
+#   enclave_tier = "micro"
+#   enclave_footprint_mb = 248.0
+# Tier 2 Meso-Enclave   (~2 GiB EF):
+#   enclave_tier = "meso"
+#   enclave_footprint_mb = 2048.0
+# Tier 3 Macro-Enclave  (~8 GiB EF, Memory64):
+#   (see active [enclave] below)
+# Tier 4 Workgroup      (~16 GiB EF):
+#   enclave_tier = "workgroup"
+#   enclave_footprint_mb = 16384.0
+# Tier 5 Enterprise Core (256+ GiB EF; datacenter / host orchestrated):
+#   enclave_tier = "enterprise_core"
+#   enclave_footprint_mb = 262144.0
 
 [serve]
 # checkpoint = "checkpoints/latest.pt"

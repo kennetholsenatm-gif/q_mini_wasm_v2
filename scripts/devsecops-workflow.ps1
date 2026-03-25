@@ -348,26 +348,25 @@ function Run-TrivyImageScan {
         return 0
     }
     $dockerRel = $null
-    if (Test-Path (Join-Path $ProjectRoot "docker\Dockerfile.backend")) {
-        $dockerRel = "docker/Dockerfile.backend"
+    if (Test-Path (Join-Path $ProjectRoot "serverless\Dockerfile")) {
+        $dockerRel = "serverless/Dockerfile"
     } elseif (Test-Path (Join-Path $ProjectRoot "wui\backend\Dockerfile")) {
         $dockerRel = "wui/backend/Dockerfile"
     }
-    if ($null -ne $dockerRel) {
-        Log-Info "Building backend image for scan ($dockerRel)..."
-        Push-Location $ProjectRoot
-        try {
-            docker build -f $dockerRel -t $imageTag . 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                Log-Warning "Docker build failed; skipping image scan"
-                return 0
-            }
-        } finally {
-            Pop-Location
+    if ($null -eq $dockerRel) {
+        Log-Info "No serverless or wui backend Dockerfile; skipping Trivy image scan"
+        return 0
+    }
+    Log-Info "Building image for scan ($dockerRel)..."
+    Push-Location $ProjectRoot
+    try {
+        docker build -f $dockerRel -t $imageTag . 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Log-Warning "Docker build failed; skipping image scan"
+            return 0
         }
-    } else {
-        Log-Info "Using python:3.11-slim as scan target (no backend Dockerfile found)"
-        $imageTag = "python:3.11-slim"
+    } finally {
+        Pop-Location
     }
     $trivyReport = Join-Path $ReportDir "trivy-image-report.json"
     if (-not (Test-Path $ReportDir)) { New-Item -ItemType Directory -Path $ReportDir -Force | Out-Null }

@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from qminiwasm.quantum.mesh_qubo import prune_topology_from_edge_scores
-from qminiwasm.quantum.qaoa_integration import NeuralQAOA, QAOAConfig
+from qminiwasm.fabric.mesh_qubo import prune_topology_from_edge_scores
+from qminiwasm.fabric.qaoa_integration import NeuralQAOA, QAOAConfig
 
 
 def test_prune_topology_mapping_reversible():

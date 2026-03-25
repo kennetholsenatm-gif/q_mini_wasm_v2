@@ -26,7 +26,7 @@ class HierarchicalConfig:
     enclave_footprint_mb: Optional[float] = None
     """Enclave Footprint (EF) in MB: contiguous TPEM + static heap budget."""
     enclave_tier: Optional[str] = None
-    """Deployment tier label: micro | meso | macro."""
+    """Deployment tier label: micro | meso | macro | workgroup | enterprise_core (Tiers 1–5 EF taxonomy)."""
     max_linear_memory_pages: Optional[int] = None
     """Max WASM 64KiB pages when enforcing tier caps."""
     wasm_memory64_max_mb: Optional[float] = None
@@ -159,7 +159,8 @@ class HierarchicalConfig:
             return int(s)
 
         tier = (os.environ.get("ENCLAVE_TIER", "") or "").strip().lower()
-        if tier not in ("", "micro", "meso", "macro"):
+        _tiers = ("", "micro", "meso", "macro", "workgroup", "enterprise_core")
+        if tier not in _tiers:
             tier = ""
 
         mem64 = (os.environ.get("WASM_USE_MEMORY64", "") or "").strip().lower()

@@ -10,9 +10,17 @@ Operators SHOULD size deployments by **Enclave Footprint (EF)** and **Ternary-Pa
 - **Meso-Enclaves:** EF ≈2 GB (≈10B effective); fits classic 32-bit WASM bounds.
 - **Macro-Enclaves:** EF ≈8 GB with **Memory64** (≈40B effective); align host **WASM_MAX_MEMORY** / tier caps in `configs/serve/default.toml`.
 
-Runtime behavior uses **Edge Cognitive Looping (ECL)** and **Certainty Scalars** vs **`certainty_scalar_threshold` / $T_{conf}$**; **Certainty-Gated Escalation (CGE)** hands off to Tier 2/3. Context is managed via **Ephemeral State Inversion (ESI)** (not KV-cache growth). Remote path selection uses **Quantum-Assisted Hierarchical Routing (QAHR)**. Suspend/resume favors **WASM Linear Execution Snapshots (WLES)** over ad-hoc tensor-only checkpoints.
+Runtime behavior uses **Edge Cognitive Looping (ECL)** and **Certainty Scalars** vs **`certainty_scalar_threshold` / $T_{conf}$**; **Certainty-Gated Escalation (CGE)** hands off to Tier 2/3. Context is managed via **Ephemeral State Inversion (ESI)** (not non-ESI cache growth). Remote path selection uses **Quantum-Assisted Hierarchical Routing (QAHR)**. Suspend/resume favors **WASM Linear Execution Snapshots (WLES)** over ad-hoc tensor-only checkpoints.
 
 See [Concepts Explained](../Concepts-Explained.md) and [Architecture Overview](Architecture-Overview.md) for the full glossary.
+
+## Enclave lifecycle reference (operator)
+
+For the canonical operator lifecycle flow—**boot → ZTEE enrollment → ECL → CGE → WLES packaging → quantum-routed delivery**—see:
+
+- [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md)
+
+Use this guide for environment setup; use the lifecycle page for the step-by-step semantics and trust boundaries.
 
 ## Prerequisites
 

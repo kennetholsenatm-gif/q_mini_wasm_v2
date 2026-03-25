@@ -6,7 +6,7 @@ import unittest
 
 import wasmtime
 
-from qminiwasm.wasm.wasi_link import (
+from qminiwasm.enclave.wasi_link import (
     build_clang_wasm_compile_command,
     instantiate_wasmtime_module,
     wasm_module_needs_wasi,

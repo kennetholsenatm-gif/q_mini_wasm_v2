@@ -146,7 +146,7 @@ class CascadeSection(BaseModel):
 
 
 class WasmSection(BaseModel):
-    """Wasmtime limits; see ``WasmRuntimeConfig`` in ``qminiwasm.wasm.engine``."""
+    """Wasmtime limits; see ``WasmRuntimeConfig`` in ``qminiwasm.enclave.engine``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -183,7 +183,7 @@ class EnclaveSection(BaseModel):
         ge=0.0,
         description="Static Enclave Footprint (EF): TPEM + heap budget in MB",
     )
-    enclave_tier: Optional[Literal["micro", "meso", "macro"]] = None
+    enclave_tier: Optional[Literal["micro", "meso", "macro", "workgroup", "enterprise_core"]] = None
     certainty_scalar_threshold: Optional[float] = Field(
         None,
         ge=0.0,

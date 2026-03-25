@@ -378,23 +378,20 @@ Custom rules are in [infra/falco/](infra/falco/). Falco output is structured (JS
 
 ## Security Roadmap
 
-### Short-term Goals (1-6 months)
-- Implement new security tools
-- Enhance monitoring capabilities
-- Improve incident response
-- Update security policies
+Security engineering for this repository aligns with **Stateful WASM agent** tooling: verifiable **WLES** lifecycle, **ZTEE** enrollment and migration tests, and an append-only **CPL** audit path. Authoritative ZTEE protocol text: [`docs/ZTEE_FRAMEWORK.md`](docs/ZTEE_FRAMEWORK.md). Milestones: [`wiki/Roadmap.md`](wiki/Roadmap.md). CPL architecture spike: [`docs/CPL_INTEGRATION_SPIKE.md`](docs/CPL_INTEGRATION_SPIKE.md).
 
-### Medium-term Goals (6-18 months)
-- Achieve new certifications
-- Implement advanced security controls
-- Enhance automation capabilities
-- Improve compliance processes
+### Short-term (1–6 months)
+- **WLES harness:** Harden snapshot and restore around Wasmtime **linear memory**; reduce risk of undeclared state drift after suspend/resume (see [`docs/TODO.md`](docs/TODO.md)).
+- **ZTEE local stack:** Extend beyond in-process crypto tests toward **OIDC** HTTP stub and **gRPC**-shaped encrypted payload exercises (see [`qminiwasm/security/ztee_local_simulator.py`](qminiwasm/security/ztee_local_simulator.py)).
+- **CPL spike:** Socialize event schema and backend choice (Trillian vs Rekor) from [`docs/CPL_INTEGRATION_SPIKE.md`](docs/CPL_INTEGRATION_SPIKE.md).
 
-### Long-term Goals (18+ months)
-- Implement zero-trust architecture
-- Enhance threat intelligence capabilities
-- Improve security analytics
-- Achieve advanced security maturity
+### Medium-term (6–18 months)
+- **Staging transparency log:** Operate a non-production CPL feed with inclusion-proof verification in release or staging pipelines.
+- **Continuous trust instrumentation:** Map **LCI** / **EM** and broker signals to operational dashboards without logging raw **WLES** secrets (hashes and references only per ZTEE).
+
+### Long-term (18+ months)
+- **Fleet-scale zero-trust:** CRL/OCSP, IdP session revocation, and mesh eviction workflows validated against CPL evidence chains.
+- **Compliance and assurance:** Target organizational certifications and threat-detection automation **after** core harness and log semantics are stable.
 
 ## Security Culture
 

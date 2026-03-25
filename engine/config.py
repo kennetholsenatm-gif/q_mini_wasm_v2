@@ -431,8 +431,8 @@ class EngineConfig:
         self.wasm_store_memories_limit = wasm_store_memories_limit
 
     def wasm_runtime_kwargs(self) -> Dict[str, Any]:
-        """Build kwargs for :class:`qminiwasm.wasm.engine.WasmRuntimeConfig`."""
-        from qminiwasm.wasm.engine import (
+        """Build kwargs for :class:`qminiwasm.enclave.engine.WasmRuntimeConfig`."""
+        from qminiwasm.enclave.engine import (
             DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES,
             WasmRuntimeConfig,
         )

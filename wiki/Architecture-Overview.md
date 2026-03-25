@@ -18,10 +18,11 @@ The architecture follows a strict three-tier hierarchy that separates concerns w
 | **Micro-Enclaves** | Sub-250 MB | ~1.2B | Ultra-constrained edge; fast cold paths; initial QAHR problem formulation |
 | **Meso-Enclaves** | ~2 GB | ~10B | Laptops / gateways; ESI decode; baseline ECL without Memory64 |
 | **Macro-Enclaves** | ~8 GB (Memory64 bound) | ~40B | M-series / Strix Halo class; full ECL, CGE, QAHR |
+| **Workgroup / Enterprise Core** | ~16 GB–256 GB+ EF | Host-orchestrated | Tiers 4–5; datacenter unified-memory pools; same ECL/CGE/QAHR vocabulary at larger **EF** |
 
 **Components:**
 - **WebAssembly Enclaves:** Secure execution (WasmEdge / QMiniWasm); static graph + **Ternary-Packed Memory Enclave (TPEM)** in linear memory
-- **Memory management:** Encrypted embeddings + **ESI** regeneration—not unbounded KV-cache-style growth in linear memory
+- **Memory management:** Encrypted embeddings + **ESI** regeneration—not unbounded non-ESI cache-style growth in linear memory
 - **Cryptographic operations:** Sensitive transforms at the edge where policy requires
 - **Certainty-Gated Escalation (CGE):** When certainty scalars fail to reach $T_{conf}$, halt ECL and package state for Tier 2/3
 
@@ -49,7 +50,7 @@ The architecture follows a strict three-tier hierarchy that separates concerns w
 **Purpose:** Centralized storage and **Quantum-Assisted Hierarchical Routing (QAHR)** backends
 **Components:**
 - **Vector Database:** Chronological storage of encrypted states
-- **Quantum cluster / simulators:** Cost Hamiltonian / QUBO evaluation for QAHR (not informal “MoE-only” routing)
+- **Quantum cluster / simulators:** Cost Hamiltonian / QUBO evaluation for QAHR (not heuristic “cloud-only” routing narratives)
 - **Management Services:** Orchestration and monitoring
 - **Backup & Recovery:** Disaster recovery and data protection
 
@@ -61,7 +62,7 @@ The architecture follows a strict three-tier hierarchy that separates concerns w
 
 ## Horizontal scale and clustering (qminiwasm-core)
 
-The **training** stack in this repository (`qminiwasm-core`) has properties that often make **horizontal scaling and cluster operations easier to reason about** than for typical large autoregressive agents that rely on giant **Ephemeral State Inversion (ESI)**-hostile KV-style caches:
+The **training** stack in this repository (`qminiwasm-core`) has properties that often make **horizontal scaling and cluster operations easier to reason about** than for typical large autoregressive agents that rely on giant **Ephemeral State Inversion (ESI)**-hostile state buffers:
 
 **Why it tends to cluster cleanly**
 
@@ -96,8 +97,8 @@ The system is built on a container-first architecture using Docker and Kubernete
 - **Solace PubSub+:** Event broker for agent communication
 
 #### Security Containers
-- **Keycloak:** Identity and access management
-- **HashiCorp Vault:** Secrets management and PKI
+- **OIDC-compliant IdP:** Identity and access management
+- **Internal X.509 CA / internal secret store:** Secrets management and short-lived mTLS certificates
 - **Envoy:** Service mesh and API gateway
 - **Teleport:** Zero-trust access management
 
@@ -227,7 +228,7 @@ The monitoring architecture provides complete visibility into system health and 
 
 ### Resource Optimization
 - **Enclave Footprint (EF):** Size the WASM linear memory + **TPEM** to **Micro-** (sub-250 MB), **Meso-** (~2 GB), or **Macro-** (~8 GB Memory64) tiers
-- **CPU Optimization:** Efficient CPU usage; ternary forward paths favor add/subtract-dominant math
+- **CPU Optimization:** Efficient CPU usage; ECL arithmetic steps favor add/subtract-dominant math
 - **Storage Efficiency:** **WLES** to NVMe for suspend; avoid fragmenting linear memory with ad-hoc paging
 - **Network Optimization:** Bandwidth-efficient protocols; **QAHR** selects paths under policy
 
@@ -252,7 +253,7 @@ The monitoring architecture provides complete visibility into system health and 
 - **Quantum Optimization:** Quantum algorithms for optimization problems
 
 ### Stateful edge operations (SOA)
-- **TPEM / EF governance:** Deploy by enclave tier and packed footprint, not FP “tensor count” alone
+- **TPEM / EF governance:** Deploy by enclave tier and packed footprint, not floating-point “tensor count” alone
 - **Training pipelines:** Automated training and validation; **WLES**-style artifacts where applicable
 - **ECL tuning:** Certainty scalars, $T_{conf}$, and **CGE** policies per environment
 - **SOA monitoring:** LCI, LME, WLES restore latency, ESI fidelity—not only classical GPU throughput metrics

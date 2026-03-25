@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 import torch
 
-from qminiwasm.quantum.mesh_qubo import mesh_edge_selection_qubo
+from qminiwasm.fabric.mesh_qubo import mesh_edge_selection_qubo
 
 
 def classical_greedy_select(q_linear: torch.Tensor, q_quad: torch.Tensor, k: int) -> torch.Tensor:

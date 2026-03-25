@@ -6,7 +6,7 @@ This page explains **how** the Q-Mini-WASM / **qminiwasm-core** training path wo
 
 ## Goal
 
-Train the hybrid stack around `QMiniWASM` so **`hybrid_inference`** improves under a **supervised signal**: mean **MSE** between model output and a **4096-dimensional target**, built from [`memory_encode`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/wasm/memory_encode.py) (metadata slots plus byte-derived floats).
+Train the hybrid stack around `QMiniWASM` so **`hybrid_inference`** improves under a **supervised signal**: mean **MSE** between model output and a **4096-dimensional target**, built from [`memory_encode`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/enclave/memory_encode.py) (metadata slots plus byte-derived floats).
 
 The entrypoint is **`python -m engine`**, which loads env-driven [`EngineConfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/engine/config.py) and calls [`run_training_loop`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/training/loop.py) in [`engine/train.py`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/engine/train.py).
 

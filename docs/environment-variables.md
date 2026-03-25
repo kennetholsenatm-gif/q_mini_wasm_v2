@@ -51,7 +51,7 @@ This document provides a comprehensive reference for all environment variables u
 | `WASM_RUNTIME`  | string | `None` | Yes | WASM runtime to use (e.g., wasmtime) |
 | `QMINIWASM_SERVE_CONFIG` | string | `None` | No | Path to TOML with `[serve]` and optional `[enclave]` (see `configs/serve/default.toml`) |
 | `ENCLAVE_FOOTPRINT_MB` | float | `None` | No | Target **EF** in MB (TPEM + static heap); may cap wasmtime store limits when used from serve TOML |
-| `ENCLAVE_TIER` | string | `None` | No | `micro` \| `meso` \| `macro` (taxonomy tiers) |
+| `ENCLAVE_TIER` | string | `None` | No | `micro` \| `meso` \| `macro` \| `workgroup` \| `enterprise_core` (EF Tiers 1–5) |
 | `CERTAINTY_SCALAR_THRESHOLD` | float | `None` | No | CGE / ECL gate in [0, 1]; alias for `T_conf` when `T_CONF` unset |
 | `T_CONF` | float | `0.85` | No | Same as certainty scalar threshold ($T_{conf}$); local resolution when certainty >= value |
 | `WASM_MEMORY64_MAX_MB` | float | `None` | No | Memory64 linear memory ceiling (MB); Macro enclave ~8192 |
@@ -122,8 +122,10 @@ This document provides a comprehensive reference for all environment variables u
 | Variable | Type | Default | Required | Description |
 |----------|------|---------|----------|-------------|
 | `BATCH_SIZE`  | string | `None` | Yes | Batch size for processing operations |
-| `MAX_TOKENS`  | string | `None` | Yes | Maximum number of tokens for processing |
+| `MAX_TOKENS`  | string | `None` | Yes | Legacy cap; prefer documenting **Maximum State Aperture (MSA)** / eval budgets in serve config where applicable |
 | `RETRY_ATTEMPTS`  | string | `None` | Yes | Number of retry attempts for failed operations |
+
+**Taxonomy-aligned metrics (SOA):** **TtC** (Time-to-Confidence) and **LMS** (Linear Memory Saturation) are primarily observed via benchmarks/tests and optional telemetry—not a fixed env var set in this table.
 
 ## Intel Quantum
 

@@ -4,7 +4,7 @@ Build with Intel oneAPI (``icpx -fsycl``) when targeting Intel Arc / Xe.
 
 - ``ternary_dot_stub.cpp`` — placeholder queue and USM buffers; extend with
   ``sycl::ext::intel::experimental::matrix`` or manual VNNI-friendly packing
-  matching ``qminiwasm.wasm.trit_pack`` (MSB-first, five trits per byte).
+  matching ``qminiwasm.enclave.trit_pack`` (MSB-first, five trits per byte).
 
 ### Python integration (optional CPU extension)
 
@@ -22,4 +22,4 @@ Editable installs may skip compiling the extension; if `is_native_available()` i
 Import: `from qminiwasm.hardware.native_ternary import dot_u8_i8, is_native_available`.
 
 SYCL / VNNI: extend `ternary_dot_stub.cpp` or call into this path from
-`qminiwasm.hardware.sycl.sycl_hardware` when a GPU queue is available.
+`qminiwasm.hardware.sycl_hardware` when a GPU queue is available.

@@ -1,163 +1,96 @@
-# Roadmap
+# Roadmap: Stateful WASM tooling
 
-## Overview
+This roadmap prioritizes **concrete implementation tooling** for the **Stateful WASM Agent** paradigm—harnesses, local simulators, and audit integration spikes—not speculative algorithm research or quarterly “quantum advantage” narratives.
 
-Q-Mini-WASM's roadmap outlines the strategic vision for the future development of this quantum computing framework. The roadmap is designed to deliver continuous innovation, enhanced capabilities, and improved user experiences while maintaining the commitment to security
+**North star:** Ship deterministic **Edge Cognitive Looping (ECL)**, **Certainty-Gated Escalation (CGE)**, **WASM Linear Execution Snapshots (WLES)**, and **Zero-Trust Ephemeral Enrollment (ZTEE)** *as testable, automatable artifacts* in this repository.
 
-## Validated milestones (repository)
+Normative protocol text for ZTEE remains [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md); this page tracks *engineering milestones* only.
 
-These are **completed** integration points worth tracking alongside forward-looking phases:
+```mermaid
+flowchart LR
+  WLES[WLES_harness_wasmtime]
+  ZTEE[ZTEE_local_OIDC_gRPC]
+  CPL[CPL_spike_Trillian_Rekor]
+  WLES --> ZTEE
+  ZTEE --> CPL
+```
 
-- **IBM Quantum hardware in AI training (March 2026)** — The **`qiskit_ibm`** QAOA MoE path runs through **IBM Quantum Runtime** (`EstimatorV2`) inside the **`python -m engine`** / **`hybrid_inference`** training loop. End-to-end jobs have **completed successfully** on real devices (ISA-transpiled circuits; expectations used as a detached signal). Documentation: **[AI Training Pipeline](AI-Training-Pipeline.md)**, **[Quantum Optimization](Quantum-Optimization.md)**, in-repo **[QUANTUM_QISKIT.md](../docs/QUANTUM_QISKIT.md)**. *Not* every workload uses hardware by default—configuration, tokens, and **plan quotas** apply.
-
-## Strategic Vision
-
-### Long-term Goals
-- **Quantum Advantage**: Demonstrate practical quantum advantage in real-world applications
-- **Enterprise Adoption**: Drive enterprise adoption of quantum computing solutions
-- **Community Growth**: Foster a vibrant and inclusive quantum computing community
-- **Innovation Leadership**: Maintain leadership in quantum computing innovation
-
-### Core Principles
-- **Security First**: Security remains the top priority
-- **Performance Excellence**: Continuous performance optimization
-- **User Experience**: Enhanced user experience and accessibility
-- **Community Driven**: Community-driven development and innovation
-
-## Development Phases
-
-### Phase 1: Foundation Enhancement (Current - 3 months)
-- **Security Enhancements**: Advanced security features and compliance updates
-- **Performance Optimization**: Performance improvements and optimization
-- **Documentation Expansion**: Comprehensive documentation and tutorials
-- **Community Building**: Community engagement and support initiatives
-
-### Phase 2: Advanced Features (3-6 months)
-- **Advanced Monitoring**: Enhanced monitoring and observability features
-- **Scalability Improvements**: Distributed computing and scalability enhancements
-- **Integration Expansion**: Cloud platform and third-party integrations
-- **Community Features**: Collaboration tools and community features
-
-### Phase 3: Enterprise Features (6-12 months)
-- **Enterprise Capabilities**: Enterprise-grade features and support
-- **Advanced Security**: Advanced security capabilities and threat detection
-- **Performance Optimization**: Performance optimizations and quantum advantage demonstrations
-- **New Quantum Features**: New quantum computing features and protocols
-
-### Phase 4: Innovation Leadership (12+ months)
-- **Advanced Security**: Advanced security capabilities and threat detection
-- **Performance Optimizations**: Performance optimizations and quantum advantage demonstrations
-- **New Quantum Features**: New quantum computing features and protocols
-- **Enterprise Features**: Enterprise-grade features and support
-
-## Key Initiatives
-
-### Security Initiatives
-- **Advanced Threat Detection**: AI-powered threat detection capabilities
-- **Automated Response**: Automated security incident response
-- **Enhanced Monitoring**: Advanced security monitoring and analytics
-- **Improved Compliance**: Enhanced compliance automation and reporting
-
-### Performance Initiatives
-- **AI-powered Optimization**: Machine learning for performance optimization
-- **Automated Tuning**: Automated performance tuning
-- **Autonomous LR Discovery**: Add an agent-driven learning-rate discovery loop inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch), running short fixed-budget experiments to propose/validate `learning_rate` candidates before long runs.
-- **Advanced Analytics**: Advanced performance analytics
-- **Predictive Performance**: Predictive performance capabilities
-
-#### Autonomous LR Discovery Milestones
-- **M1 (Config + CLI Integration)**: Add a lightweight tuner command that sweeps LR ranges (log-scale) and writes best candidates back to generated training configs.
-- **M2 (WUI Integration)**: Expose “Auto-select learning rate” in Build + Run wizard, with visible trial budget and selected LR rationale.
-- **M3 (Safety + Reproducibility)**: Store trial metadata (seed, dataset, accelerator, wall-time budget, metric) for reproducible LR picks.
-- **M4 (Promotion Criteria)**: Promote a discovered LR only when it beats baseline on holdout metric with equal or lower runtime.
-
-### Community Initiatives
-- **Community Growth**: Community growth and engagement initiatives
-- **Education Programs**: Educational programs and initiatives
-- **Partnership Programs**: Partnership and collaboration programs
-- **Growth Metrics**: Community growth and engagement metrics
-
-## Technology Roadmap
-
-### Quantum Computing
-- **Algorithm Development**: New quantum algorithms and protocols
-- **Hardware Integration**: Quantum hardware integration and support *(IBM Quantum Runtime path for QAOA MoE validated March 2026 — see [Validated milestones](#validated-milestones-repository))*
-- **Simulation Enhancement**: Enhanced quantum simulation capabilities
-- **Optimization Techniques**: Advanced quantum optimization techniques
-
-### WebAssembly
-- **WASM Enhancement**: WASM performance and capability enhancements
-- **Integration Expansion**: Expanded WASM integration capabilities
-- **Optimization**: WASM optimization and performance improvements
-- **Security**: WASM security enhancements and capabilities
-
-### Platform Development
-- **Scalability**: Platform scalability and performance enhancements
-- **Integration**: Platform integration and expansion
-- **Security**: Platform security enhancements and capabilities
-- **Monitoring**: Platform monitoring and observability enhancements
-
-## Release Schedule
-
-### Release Cadence
-- **Major Releases**: Quarterly major releases
-- **Minor Releases**: Monthly minor releases
-- **Patch Releases**: Weekly patch releases
-- **Security Releases**: Immediate security releases
-
-### Release Features
-- **Major Releases**: New features and capabilities
-- **Minor Releases**: Feature enhancements and improvements
-- **Patch Releases**: Bug fixes and security patches
-- **Security Releases**: Security patches and updates
-
-## Community Involvement
-
-### Community Participation
-- **Feature Development**: Community-driven feature development
-- **Testing**: Community testing and validation
-- **Documentation**: Community documentation and guides
-- **Support**: Community support and assistance
-
-### Contribution Guidelines
-- **Code Contributions**: Guidelines for code contributions
-- **Documentation**: Guidelines for documentation contributions
-- **Testing**: Guidelines for testing contributions
-- **Security**: Guidelines for security contributions
-
-## Success Metrics
-
-### Performance Metrics
-- **Execution Time**: Quantum circuit execution time
-- **Resource Utilization**: CPU, memory, and network utilization
-- **Throughput**: Operations per second
-- **Latency**: Response time for quantum operations
-
-### Community Metrics
-- **Community Growth**: Community size and growth metrics
-- **Engagement Metrics**: Community engagement and participation metrics
-- **Contribution Metrics**: Contribution and participation metrics
-- **Satisfaction Metrics**: Community satisfaction and feedback metrics
-
-## Future Directions
-
-### Emerging Technologies
-- **AI Integration**: AI integration and capabilities
-- **Quantum Computing**: Quantum computing advancements
-- **WebAssembly**: WASM advancements and capabilities
-- **Cloud Computing**: Cloud computing advancements
-
-### Innovation Areas
-- **Advanced Security**: Advanced security capabilities
-- **Performance Optimization**: Performance optimization techniques
-- **User Experience**: User experience enhancements
-- **Community Building**: Community building and engagement
-
-## Getting Involved
-
-Ready to help shape the future of quantum computing? Follow the [Development Workflow](Development) guide to set up your development environment and begin contributing to this cutting-edge quantum computing framework.
+*Flow: snapshot and migration tooling informs enrollment and transport testing; both feed an append-only provenance narrative.*
 
 ---
 
-**Last Updated**: 2026-03-23
-**Version**: 1.4.0
+## Immediate tooling priorities
+
+### 1) WLES test harness
+
+**Goal:** Freeze a **Wasmtime** guest mid-loop, capture **linear memory** (and enough metadata to resume), restore, and prove **reconstruction without unplanned degradation** (byte-identity where the model promises it).
+
+| Area | Current repo state |
+|------|-------------------|
+| Envelope / metadata | [`qminiwasm/enclave/memory_encode.py`](../qminiwasm/enclave/memory_encode.py) (`build_wles_envelope`) |
+| Smoke tests | [`tests/test_wles_esi_harness.py`](../tests/test_wles_esi_harness.py) (JSON envelope invariants, CGE payload metadata—not full instance restore) |
+| Kernels / compile | [`qminiwasm/enclave/trit_wasm_runtime.py`](../qminiwasm/enclave/trit_wasm_runtime.py), [`qminiwasm/enclave/engine.py`](../qminiwasm/enclave/engine.py) |
+
+**Next milestones**
+
+1. **Instantiate + snapshot** — Run a minimal Wasmtime `Instance`, read exported memory into `build_wles_envelope`, persist and reload the envelope; assert structural fields and memory bytes match.
+2. **Cooperative suspend** — Guest exports a host-visible “yield” or uses a deterministic trap boundary so the harness can snapshot **mid** guest loop (not only at exit).
+3. **Restore + resume** — New instance (or reset path), write linear memory from envelope, resume execution; compare memory to a golden post-resume state or document tolerated deltas (globals, stack snapshot policy).
+
+**Docs:** [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md), [`docs/PIPELINE_STATEFUL_WASM_OPS.md`](../docs/PIPELINE_STATEFUL_WASM_OPS.md).
+
+---
+
+### 2) ZTEE local simulator (extend)
+
+**Goal:** Local mock environment: **internal CA**, **OIDC-shaped tokens**, and eventually **gRPC-style** payload sync tests—without a full production broker mesh.
+
+| Area | Current repo state |
+|------|-------------------|
+| Crypto / JWT / X.509 / AES-GCM | [`qminiwasm/security/ztee_local_simulator.py`](../qminiwasm/security/ztee_local_simulator.py) |
+| Tests | [`tests/test_ztee_handshake_simulator.py`](../tests/test_ztee_handshake_simulator.py) |
+
+**Done (M1):** Ephemeral CA + host EE chain verification, RS256 JWT with JWKS-shaped key set, `jti` revocation, AES-256-GCM encrypt/decrypt for WLES-sized blobs.
+
+**Next milestones**
+
+2. **HTTP OIDC stub** — Minimal `localhost` server: `/.well-known/openid-configuration`, token endpoint, static JWKS document; enclave client flow against stub (or curl contract tests).
+3. **gRPC delta-sync harness** — Small `.proto` + in-process or test-scoped server that carries **encrypted WLES** chunks consistent with [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md) (no claim of full QAHR or broker semantics).
+
+---
+
+### 3) Cognitive Provenance Ledger (CPL) integration
+
+**Goal:** Architectural path to an **append-only Merkle log** that can **audit** certainty scalars, **CGE/WLES** migration evidence, and bindings to **ZTEE** identities (by reference to external IdP/PKI).
+
+| Area | Current repo state |
+|------|-------------------|
+| Spike (this phase) | [`docs/CPL_INTEGRATION_SPIKE.md`](../docs/CPL_INTEGRATION_SPIKE.md) |
+| Protocol context | [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md) (CPL as external audit consumer) |
+
+**Milestones**
+
+1. **Spike doc** — Trillian vs Sigstore Rekor tradeoffs, event schema sketch, verification story (see doc).
+2. **Canonical event schema** — Agree on stable field names and hashes for: certainty scalar stream, WLES/CGE correlation IDs, envelope digests, enclave subject/`jti` references.
+3. **Backend choice + verifier hook** — Later: pick **Trillian** or **Rekor**, add optional offline inclusion verification CLI or CI check against a staging log.
+
+**Non-goal for this repo today:** Running a full transparency log stack in default CI.
+
+---
+
+## Deferred / research backlog
+
+The following are **not** primary roadmap drivers; they remain documented elsewhere for readers who need them.
+
+- **Autonomous LR discovery** and other training-meta automation experiments — defer to issue-driven work; not a release theme for the Stateful WASM agent stack.
+- **Generic “quantum advantage” or enterprise quarterly release** marketing phases — replaced by the tooling table above.
+- **Validated historical note:** Training integration that can use **IBM Quantum** hardware for certain QAOA paths is documented in [AI-Training-Pipeline](AI-Training-Pipeline.md) and [`docs/QUANTUM_QISKIT.md`](../docs/QUANTUM_QISKIT.md). It is optional to configuration and **not** centered in this roadmap.
+
+---
+
+## Maintainer references
+
+- Tooling execution checklist: [`docs/TODO.md`](../docs/TODO.md)
+- Edge AI taxonomy / CI gates: [`docs/Q-Mini-WASM_ Edge AI Taxonomy.md`](../docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md), [`configs/ci/taxonomy_linter.json`](../configs/ci/taxonomy_linter.json)
+
+**Last updated:** 2026-03-25 (Phase 4 tooling pivot)

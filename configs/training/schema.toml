@@ -1,6 +1,8 @@
 # Reference: training TOML layout (all tables/keys optional unless noted).
 # Validated by engine.training_schema.TrainingConfig (Pydantic).
 # Do not put secrets here — use HUGGING_FACE_HUB_TOKEN / HF_TOKEN in the environment.
+#
+# Operational sizing uses Enclave Footprint (EF) tiers (see Concepts-Explained.md), not informal “model size” alone.
 
 [hardware]
 # accelerator = "cpu" | "cuda" | "xpu" | "sycl" | ...
@@ -81,7 +83,7 @@
 # couple_forward = true
 
 [wasm]
-# Wasmtime curriculum WASM limits (see qminiwasm.wasm.engine.WasmRuntimeConfig).
+# Wasmtime curriculum WASM limits (see qminiwasm.enclave.engine.WasmRuntimeConfig).
 # Omit store_memory_limit_mb to use engine default (1e6 × d_model bytes, ~4 GiB cap).
 # store_instance_limit / store_memories_limit default high in code (mesh data gen); lower on tiny hosts if needed.
 # fallback_policy = "mock"

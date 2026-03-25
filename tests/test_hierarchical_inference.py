@@ -5,11 +5,11 @@ import unittest
 import torch
 
 from qminiwasm.config import HierarchicalConfig
-from qminiwasm.inference.edge import EdgeOutcome, run_edge_cognitive_loop
-from qminiwasm.inference.escalation import prepare_escalation_payload
-from qminiwasm.state.delta_compression import compress_deltas, delta_payload_struct
+from qminiwasm.cognitive.edge import EdgeOutcome, run_edge_cognitive_loop
+from qminiwasm.cognitive.escalation import prepare_escalation_payload
+from qminiwasm.enclave.delta_compression import compress_deltas, delta_payload_struct
 from qminiwasm.layers.attention import TropicalAttention
-from qminiwasm.quantum.interconnect import StateMigrationInterconnect
+from qminiwasm.fabric.interconnect import StateMigrationInterconnect
 from qminiwasm.data.pipeline import DataPipeline
 
 

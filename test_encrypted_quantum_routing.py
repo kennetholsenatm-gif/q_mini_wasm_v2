@@ -11,8 +11,8 @@ import torch
 import logging
 from typing import List, Tuple
 
-from qminiwasm.quantum.router import EnhancedQuantumRouter
-from qminiwasm.quantum.qubo import (
+from qminiwasm.fabric.router import EnhancedQuantumRouter
+from qminiwasm.fabric.qubo import (
     encrypted_qubo_hamiltonian,
     encrypted_qubo_to_ising,
     encrypted_affinity_from_compressed,

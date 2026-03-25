@@ -52,7 +52,7 @@ Successfully implemented a comprehensive ternary quantization system for the Q-M
 
 ### 4. QAOA Pre-conditioning Integration
 
-**Enhanced QAOA Pre-conditioner** (`qminiwasm/quantum/qaoa_preconditioner.py`):
+**Enhanced QAOA Pre-conditioner** (`qminiwasm/fabric/qaoa_preconditioner.py`):
 - **Quantum-aware optimization** for ternary weights
 - **Multi-level optimization** with classical-quantum hybrid approach
 - **Adaptive parameter tuning** based on weight distribution
@@ -66,7 +66,7 @@ Successfully implemented a comprehensive ternary quantization system for the Q-M
 
 ### 5. SYCL Hardware Orchestration
 
-**Updated SYCL Hardware Manager** (`qminiwasm/hardware/sycl/sycl_hardware.py`):
+**Updated SYCL Hardware Manager** (`qminiwasm/hardware/sycl_hardware.py`):
 - **Ternary-aware scheduling** for quantum-classical hybrid execution
 - **Memory optimization** for packed ternary weights
 - **Performance monitoring** for ternary operations

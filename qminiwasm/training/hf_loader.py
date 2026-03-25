@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional
 
 import torch
 
-from qminiwasm.wasm.memory_encode import BODY_SLOTS, encode_linear_memory
+from qminiwasm.enclave.memory_encode import BODY_SLOTS, encode_linear_memory
 
 logger = logging.getLogger(__name__)
 

@@ -23,7 +23,7 @@ import torch.nn.functional as F
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
-from ..wasm.engine import WasmRuntimeConfig
+from ..enclave.engine import WasmRuntimeConfig
 from .cascade_mopd_teacher import build_noise_state_mopd_fns
 from .cascade_rl import (
     CascadeRouter,

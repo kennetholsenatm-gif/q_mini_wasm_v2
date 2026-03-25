@@ -14,7 +14,7 @@ Start here:
 - [Home](Home.md)
 - [Overview](Overview.md)
 - [Business-Value](Business-Value.md)
-- [Roadmap](Roadmap.md)
+- [Roadmap](Roadmap.md) — **tooling-first** plan (WLES harness, ZTEE simulator extensions, CPL spike); not algorithm research milestones
 
 ## Architecture and Platform
 
@@ -36,6 +36,8 @@ Start here:
 - [Security-and-Compliance](Security-and-Compliance.md)
 - [Security](Security.md)
 - [Compliance](Compliance.md)
+- Zero-Trust Ephemeral Enrollment: [ZTEE Framework](../docs/ZTEE_FRAMEWORK.md)
+- Enclave lifecycle (boot → ZTEE → ECL → CGE): [ENCLAVE_LIFECYCLE](../docs/ENCLAVE_LIFECYCLE.md)
 - [DevSecOps](DevSecOps.md)
 - [Performance](Performance.md)
 - [Testing](Testing.md)
@@ -51,3 +53,4 @@ Start here:
 - Use `docs/getting-started` for the first successful run.
 - Use `docs/operations/OPERATIONS_RUNBOOK.md` for deployment and infra commands.
 - Use wiki pages for deeper context, analysis, and research narratives.
+- Use `docs/ZTEE_FRAMEWORK.md` as the single source of truth for ZTEE protocol text; other pages should link rather than duplicate.

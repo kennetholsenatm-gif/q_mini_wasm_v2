@@ -15,8 +15,8 @@ import logging
 import numpy as np
 import torch
 from typing import List, Tuple, Optional, Dict, Any
-from qminiwasm.quantum import backend_registry
-from qminiwasm.quantum.router import QuantumRouter
+from qminiwasm.fabric import backend_registry
+from qminiwasm.fabric.router import QuantumRouter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

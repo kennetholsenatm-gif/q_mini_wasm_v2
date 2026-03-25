@@ -16,11 +16,19 @@ The framework uses a single production lexicon aligned with [../docs/Q-Mini-WASM
 | **Ephemeral State Inversion (ESI)** | Context is regenerated from dense embeddings (Vec2Text-style inversion with beam search), replacing **KV-cache**-style growth and unbounded “context window” storage in linear memory. |
 | **Quantum-Assisted Hierarchical Routing (QAHR)** | Escalation routing as a structured optimization problem (QAOA / QUBO on the cost Hamiltonian), replacing informal “MoE routing” or heuristic load-balancing narratives for Tier-3 paths. |
 | **WASM Linear Execution Snapshots (WLES)** | Serialization of WASM linear memory and execution-relevant state to fast storage for suspend/resume—replacing heavyweight “model paging” or tensor-only checkpoints as the primary persistence story. |
+| **Time-to-Confidence (TtC)** | Latency framed as time until the ECL emits a certainty scalar at or above $T_{conf}$ (or until CGE/escalation)—not informal “tokens per second” or generic wall-clock inference latency in isolation. |
+| **Maximum State Aperture (MSA)** | The bounded width of reconstructible state for ESI/Vec2Text (history + RAG slots addressable without linear-memory blow-up)—replaces the vague “context window length” story for edge deployments. |
+| **Linear Memory Saturation (LMS)** | How fully the WASM linear memory arena is used under a fixed EF cap—replaces “VRAM utilization” on unified-memory hosts (Apple M-series, AMD Strix Halo class). |
+| **Trit-to-Bandwidth Ratio (TBR)** | Effective moved packed-trit throughput vs memory bandwidth—replaces informal “memory bandwidth utilization” when discussing TPEM-friendly kernels (`qminiwasm/enclave/trit_pack.py`). |
+| **Zero-Trust Boundary Escapes** | Count of escalations that cross the local trust boundary (Fog/Cloud paths after CGE)—use instead of informal “API calls” / “network requests” when describing controlled egress, not every HTTP use. |
+| **Zero-Trust Ephemeral Enrollment (ZTEE)** | Protocol pattern for enrolling WASM mesh nodes: host **X.509** + enclave **OIDC/JWT**, mTLS to broker/QAHR, encrypted **WLES** transfer with OOB keys, CRL/IdP revocation. See [docs/ZTEE_FRAMEWORK.md](docs/ZTEE_FRAMEWORK.md). |
+| **Cognitive Provenance Ledger (CPL)** | Conceptual audit trail binding enclave identity to runtime evidence (LCI, EM/ESI fidelity, telemetry). Operational store is outside this repo; ZTEE ties continuous trust to CPL ingestion. See [docs/ZTEE_FRAMEWORK.md](docs/ZTEE_FRAMEWORK.md). |
 
 **Model classification tiers (WASM deployment)**  
-- **Micro-Enclaves:** sub-250 MB linear memory (~1.2B effective parameters at ternary packing).  
-- **Meso-Enclaves:** ~2 GB (~10B effective).  
-- **Macro-Enclaves:** ~8 GB (Memory64-bound; ~40B effective).
+- **Tier 1 — Micro-Enclaves:** sub-250 MB EF (~1.2B effective parameters at ternary packing).  
+- **Tier 2 — Meso-Enclaves:** ~2 GB EF (~10B effective).  
+- **Tier 3 — Macro-Enclaves:** ~8 GB EF (Memory64-bound; ~40B effective).  
+- **Tiers 4–5 — Workgroup / Enterprise Core:** ~16 GB through 256 GB+ EF for datacenter-class unified memory; optional presets in `configs/serve/default.toml` (runtime support may trail Tier 1–3).
 
 For extended **enterprise-scale** enclave classes (workgroup to multi-100GB EF), see [../docs/UnifedMemory.md](../docs/UnifedMemory.md)—that taxonomy complements, and does not rename, the three tiers above.
 

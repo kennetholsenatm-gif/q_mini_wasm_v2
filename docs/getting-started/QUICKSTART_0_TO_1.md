@@ -63,6 +63,14 @@ Expected result:
 
 - JSON response with an `output` key containing one 4096-length vector
 
+## Security note (ZTEE)
+
+Production deployments use **Zero-Trust Ephemeral Enrollment (ZTEE)** to authenticate both:
+- the host (**X.509** PKI over **mTLS 1.3**)
+- the enclave (**OIDC/OAuth2 JWT** claims that encode tier + EF + topic scopes)
+
+Canonical protocol text: [`docs/ZTEE_FRAMEWORK.md`](../ZTEE_FRAMEWORK.md). For the full end-to-end lifecycle, see [`docs/ENCLAVE_LIFECYCLE.md`](../ENCLAVE_LIFECYCLE.md).
+
 ## What to do next
 
 - Strategic architecture path: [../../README.md](../../README.md#door-a-strategic-view)

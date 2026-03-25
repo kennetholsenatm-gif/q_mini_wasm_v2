@@ -20,8 +20,8 @@ from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
 
 from ..config import HierarchicalConfig
-from ..wasm.engine import WasmEngine
-from ..quantum.router import HybridQuantumMoE
+from ..enclave.engine import WasmEngine
+from ..fabric.router import HybridQuantumMoE
 
 
 class FailureCategory(Enum):
@@ -174,12 +174,12 @@ class DeterministicVerifier:
         return True
 
 
-class HullKVCache:
-    """Geometric Convex-Hull State Recovery
+class ESIFailureGeometricHull:
+    """Geometric convex-hull state recovery for failure taxonomy (ESI-aligned).
 
-    Implements the HullKVCache for combating hardware-induced bit-flips and correcting
-    corrupted machine states. Treats historical WASM Key vectors as literal Euclidean
-    coordinates in a two-dimensional plane for geometric state recovery.
+    Replaces the informal HullKVCache name: combats hardware-induced bit-flips and
+    corrects corrupted machine states. Treats historical WASM Key vectors as literal
+    Euclidean coordinates in a two-dimensional plane.
 
     Key features:
     - Upper convex hull maintenance using streaming Monotone-Chain algorithm
@@ -448,7 +448,7 @@ class FailureTaxonomyManager:
 
         # Initialize components
         self.verifier = DeterministicVerifier(config)
-        self.hull_cache = HullKVCache(config)
+        self.hull_cache = ESIFailureGeometricHull(config)
         self.qaoa_monitor = NoiseAwareQAOA(
             config, None
         )  # Will be set when quantum router is available
@@ -499,7 +499,10 @@ class FailureTaxonomyManager:
                 "deterministic_verifier",
                 "execution_engine",
             ],
-            FailureCategory.MEMORY_PIPELINE_DEGRADATION: ["HullKVCache", "memory_pipeline"],
+            FailureCategory.MEMORY_PIPELINE_DEGRADATION: [
+                "ESIFailureGeometricHull",
+                "memory_pipeline",
+            ],
             FailureCategory.ROUTING_TOPOLOGY_COLLAPSE: ["quantum_router", "QAOA_circuit"],
         }
         return component_map.get(category, [])
@@ -539,7 +542,7 @@ class FailureTaxonomyManager:
         """Handle hardware state corruption using geometric state recovery"""
         self.logger.info("Handling hardware state corruption with geometric recovery")
 
-        # Use HullKVCache for state recovery
+        # Use ESIFailureGeometricHull for state recovery
         recovery_result = {
             "action": "geometric_state_recovery",
             "status": "initiated",
@@ -596,3 +599,7 @@ class FailureTaxonomyManager:
             stats["severity_counts"][severity] = stats["severity_counts"].get(severity, 0) + 1
 
         return stats
+
+
+# Backward-compatible alias (deprecated name)
+HullKVCache = ESIFailureGeometricHull

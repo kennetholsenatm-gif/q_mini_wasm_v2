@@ -17,7 +17,7 @@ if os.environ.get("QMINIWASM_BUILD_NATIVE", "").strip().lower() in (
         _ext_modules = [
             Pybind11Extension(
                 "qminiwasm._native_ternary",
-                ["native/ternary_packed/bindings.cpp"],
+                ["ternary_packed/bindings.cpp"],
                 cxx_std=17,
             ),
         ]

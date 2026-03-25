@@ -16,7 +16,7 @@ ext_modules = []
 if dpctl_available:
     ext_modules = [
         Extension(
-            "qminiwasm.hardware.sycl.sycl_hardware",
+            "qminiwasm.hardware.sycl_hardware",
             sources=["sycl_hardware.py"],
             include_dirs=dpctl.get_include() if hasattr(dpctl, "get_include") else None,
             libraries=dpctl.get_libraries() if hasattr(dpctl, "get_libraries") else None,
@@ -34,7 +34,7 @@ setup(
     description="SYCL hardware acceleration for Q-Mini-WASM",
     author="Q-Mini-WASM Team",
     author_email="[REDACTED]",
-    packages=["qminiwasm.hardware.sycl"],
+    packages=[],
     ext_modules=ext_modules,
     install_requires=[
         "dpctl>=0.15.0",

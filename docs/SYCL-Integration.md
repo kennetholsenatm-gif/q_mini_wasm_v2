@@ -7,7 +7,7 @@ This document describes how a future C++/DPCPP SYCL extension would plug into th
 The package supports an optional backend switch via environment variable:
 
 - **`SYCL_BACKEND=sycl`** — Prefer a native SYCL extension module (`qminiwasm.hardware.sycl_native`) when present. If that module is not installed, import falls back to [qminiwasm/hardware/sycl_stubs.py](../qminiwasm/hardware/sycl_stubs.py).
-- **Unset** — [qminiwasm/hardware/__init__.py](../qminiwasm/hardware/__init__.py) loads **stubs** from `sycl_stubs.py`. That module still delegates to the **Python dpctl** implementation in [qminiwasm/hardware/sycl/sycl_hardware.py](../qminiwasm/hardware/sycl/sycl_hardware.py) when `SYCL_BACKEND=sycl` inside the stub loader (default there) and `import qminiwasm.hardware.sycl` succeeds.
+- **Unset** — [qminiwasm/hardware/__init__.py](../qminiwasm/hardware/__init__.py) loads **stubs** from `sycl_stubs.py`. That module still delegates to the **Python dpctl** implementation in [qminiwasm/hardware/sycl_hardware.py](../qminiwasm/hardware/sycl_hardware.py) when `SYCL_BACKEND=sycl` inside the stub loader (default there) and `from qminiwasm.hardware import sycl_hardware` (or an equivalent real backend import) succeeds.
 - **`SYCL_BACKEND=stubs`** — Force stub behavior only (no dpctl backend inside `sycl_stubs`).
 
 See [qminiwasm/hardware/__init__.py](../qminiwasm/hardware/__init__.py) for the import logic.
@@ -59,7 +59,7 @@ A native backend can be implemented as:
 
 2. **Entry point**: The hardware layer will try `from qminiwasm.hardware.sycl_native import SYCLHardware` when `SYCL_BACKEND=sycl`. The module name can be overridden later (e.g. via another env var) if multiple backends exist.
 
-3. **Build**: C++ project can live under `qminiwasm/hardware/sycl/` (or a separate repo) with CMake/Meson, building a shared library loadable as a Python extension. Dependencies: oneAPI DPCPP (or Intel oneAPI Base Toolkit), pybind11.
+3. **Build**: C++ project can live under `qminiwasm/hardware/` (or a separate repo) with CMake/Meson, building a shared library loadable as a Python extension. Dependencies: oneAPI DPCPP (or Intel oneAPI Base Toolkit), pybind11.
 
 4. **Fallback**: If the extension is not built or fails to load (e.g. missing SYCL runtime), the package falls back to the existing stubs so that training and inference still run without SYCL.
 

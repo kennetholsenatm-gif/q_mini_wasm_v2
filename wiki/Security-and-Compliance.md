@@ -10,6 +10,17 @@ This document details the comprehensive security and compliance framework for th
 - **Assume Breach:** Design for security incident response
 - **Micro-segmentation:** Network isolation between services
 
+## Stateful agent continuous trust (ZTEE)
+
+For enrolled stateful WASM enclaves, continuous trust is enforced by **Zero-Trust Ephemeral Enrollment (ZTEE)**:
+- **Hardware identity**: host **X.509** PKI
+- **Cognitive identity**: enclave **OIDC/OAuth2 JWT** claims
+- **Bootstrap**: **mTLS** enrollment to broker/control-plane services
+- **Revocation**: **CRL/OCSP** plus IdP session/JWT family revocation and broker socket drop
+- **Autonomous eviction**: CPL/telemetry-driven removal when anomalies or scope violations are detected
+
+Canonical protocol text: [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md). Lifecycle flow: [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md).
+
 ### Implementation Layers
 
 #### Identity and Access Management

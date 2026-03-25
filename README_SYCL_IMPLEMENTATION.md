@@ -14,10 +14,10 @@ The implementation provides native hardware acceleration for vector and matrix o
 
 ### Directory Structure
 ```
-qminiwasm/hardware/sycl/
-├── __init__.py          # Module initialization
-├── sycl_hardware.py     # Main SYCL implementation
-└── setup.py            # Build configuration
+qminiwasm/hardware/
+├── __init__.py                  # Module initialization
+├── sycl_hardware.py             # Main SYCL implementation
+└── sycl_extension_setup.py      # Optional setuptools stub for future C++ extension packaging
 ```
 
 ### Key Features
@@ -34,12 +34,12 @@ qminiwasm/hardware/sycl/
    pip install -r requirements/hardware.txt
    ```
 
-2. Build the SYCL extension:
+2. Optional packaging (if you add a compiled SYCL extension): from the repo root,
    ```bash
-   cd qminiwasm/hardware/sycl
-   python setup.py build
-   python setup.py install
+   cd qminiwasm/hardware
+   python sycl_extension_setup.py build_ext --inplace
    ```
+   The default tree uses the pure-Python `sycl_hardware.py` with dpctl when available.
 
 ### Configuration
 Set the `SYCL_BACKEND` environment variable to control behavior:

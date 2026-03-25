@@ -4,7 +4,7 @@ import unittest
 
 import torch
 
-from qminiwasm.quantum.mesh_qubo import mesh_edge_selection_qubo
+from qminiwasm.fabric.mesh_qubo import mesh_edge_selection_qubo
 
 
 class TestMeshQubo(unittest.TestCase):

@@ -69,8 +69,6 @@ Dockerfile*
 !containers/nginx/Dockerfile
 !containers/wui/Dockerfile
 !containers/wui/Dockerfile.almalinux
-!docker/Dockerfile.inference
-!docker/Dockerfile.backend
 !serverless/Dockerfile
 docker-compose*.yml
 docker-compose*.yaml

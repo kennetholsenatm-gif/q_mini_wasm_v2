@@ -22,7 +22,7 @@ Intel is working toward **quantum practicality**: moving quantum technology from
 
 - **Docs**: [Intel QS documentation](https://intel-qs.readthedocs.io/).
 - **Repo**: [intel/intel-qs](https://github.com/intel/intel-qs) – high-performance state-vector simulator with optional Python bindings and MPI for distributed runs.
-- When Intel QS (or Intel Quantum SDK) is installed, use `qminiwasm.quantum.intel_backend.get_intel_quantum_info()` and `get_intel_quantum_simulator_backend()` to detect and use these backends.
+- When Intel QS (or Intel Quantum SDK) is installed, use `qminiwasm.fabric.intel_backend.get_intel_quantum_info()` and `get_intel_quantum_simulator_backend()` to detect and use these backends.
 
 ### Horse Ridge and Cryoprober
 

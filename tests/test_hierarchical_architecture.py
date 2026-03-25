@@ -17,8 +17,8 @@ from qminiwasm.security.crypto import (
     validate_security_context,
     log_security_operation,
 )
-from qminiwasm.inference.vec2text import reconstruct_memory, validate_reconstructed_text
-from qminiwasm.quantum.router import enhanced_find_k_nearest_neighbors
+from qminiwasm.cognitive.vec2text import reconstruct_memory, validate_reconstructed_text
+from qminiwasm.fabric.router import enhanced_find_k_nearest_neighbors
 
 
 class TestEnhancedApproximateDCPE(unittest.TestCase):
@@ -173,7 +173,7 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
     def _enhanced_qubo_formulation(self, affinity: torch.Tensor, K: int, C: int):
         """Test enhanced QUBO formulation"""
         try:
-            from qminiwasm.quantum.qubo import enhanced_qubo_hamiltonian, enhanced_qubo_to_ising
+            from qminiwasm.fabric.qubo import enhanced_qubo_hamiltonian, enhanced_qubo_to_ising
 
             q_linear, q_quad = enhanced_qubo_hamiltonian(affinity, K, C)
             h, J = enhanced_qubo_to_ising(q_linear, q_quad)
@@ -192,7 +192,7 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
     def test_barren_plateau_mitigation(self):
         """Test barren plateau mitigation strategies"""
         # Test that mitigation strategies are applied
-        from qminiwasm.quantum.router import BarrenPlateauMitigator
+        from qminiwasm.fabric.router import BarrenPlateauMitigator
 
         mitigator = BarrenPlateauMitigator()
         initial_params = mitigator.generate_initial_params(100)
@@ -201,7 +201,7 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
     def test_ternary_expert_support(self):
         """Test ternary expert support via Grover's search"""
         # Test ternary weight optimization
-        from qminiwasm.quantum.router import TernaryOptimizer
+        from qminiwasm.fabric.router import TernaryOptimizer
 
         optimizer = TernaryOptimizer()
         test_weights = torch.randn(100)
@@ -211,7 +211,7 @@ class TestEnhancedQuantumRouter(unittest.TestCase):
     def test_quantum_aware_optimizations(self):
         """Test quantum-aware optimizations"""
         # Test quantum-aware affinity calculation
-        from qminiwasm.quantum.qubo import quantum_aware_affinity
+        from qminiwasm.fabric.qubo import quantum_aware_affinity
 
         compressed_states = torch.randn(10, 5, 1024)
         expert_signatures = torch.randn(20, 1024)

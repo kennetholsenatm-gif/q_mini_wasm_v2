@@ -1,13 +1,17 @@
-"""Hierarchical inference: edge cognitive loop, escalation, and outcome types."""
+"""Shim: public imports live in :mod:`qminiwasm.cognitive`."""
 
-from .edge import (
+from qminiwasm.cognitive import (
     EdgeOutcome,
+    prepare_cge_escalation_payload,
+    prepare_escalation_payload,
+    run_ecl,
     run_edge_cognitive_loop,
 )
-from .escalation import prepare_escalation_payload
 
 __all__ = [
     "EdgeOutcome",
     "run_edge_cognitive_loop",
+    "run_ecl",
     "prepare_escalation_payload",
+    "prepare_cge_escalation_payload",
 ]

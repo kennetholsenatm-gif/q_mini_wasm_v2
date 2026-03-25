@@ -1,0 +1,24 @@
+{
+  "$schema_comment": "Edge AI taxonomy gate: regexes matched against added/changed lines (CI) or file prose (full scan).",
+  "patterns": [
+    {"regex": "(?i)\\bVRAM\\b", "hint": "Prefer Linear Memory Saturation (LMS) or Enclave Footprint (EF)."},
+    {"regex": "(?i)\\bkv\\s*[- ]?cache\\b", "hint": "Prefer ESI / WLES vocabulary; geometric hull types use ESI* names."},
+    {"regex": "(?i)\\bforward\\s+pass\\b", "hint": "Prefer ECL step / cognitive step for edge-facing generation."},
+    {"regex": "(?i)tokens?\\s+per\\s+second", "hint": "Prefer Time-to-Confidence (TtC) where throughput is meant."},
+    {"regex": "(?i)\\bcontext\\s+window\\b", "hint": "Prefer Maximum State Aperture (MSA) for edge state bounds."},
+    {"regex": "(?i)\\bmixture\\s+of\\s+experts\\b", "hint": "Prefer QAHR for Tier-3 routing narrative."},
+    {"regex": "(?i)\\bfp16\\b", "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels."},
+    {"regex": "(?i)\\bbf16\\b", "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels."},
+    {"regex": "(?i)floating[- ]point", "hint": "Prefer trit/TPEM or scalar certainty language unless an external IEEE-754 API is unavoidable."},
+    {"regex": "(?i)\\bfloat16\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
+    {"regex": "(?i)\\bfloat32\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
+    {"regex": "(?i)\\bfloat64\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."}
+  ],
+  "scan_extensions": [".md", ".toml", ".py", ".rs", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".c", ".go"],
+  "path_prefixes": ["docs/", "wiki/", "configs/", "qminiwasm/", "engine/", "cpp/", "ternary_packed/", "scripts/", "tests/", "training-wui/"],
+  "ignore_path_substrings": ["/vendor/", "node_modules/", ".git/", "__pycache__/", ".cursor/", "mcps/"],
+  "skip_all_patterns_for_paths": [
+    "docs/Q-Mini-WASM_ Edge AI Taxonomy.md",
+    "docs/UnifedMemory.md"
+  ]
+}

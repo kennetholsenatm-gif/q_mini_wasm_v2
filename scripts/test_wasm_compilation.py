@@ -6,7 +6,7 @@ import random
 import tempfile
 import unittest
 
-from qminiwasm.wasm import MESH_ALGORITHMS, MESH_EXPORT_NAMES, WasmEngine
+from qminiwasm.enclave import MESH_ALGORITHMS, MESH_EXPORT_NAMES, WasmEngine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
