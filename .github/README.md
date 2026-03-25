@@ -27,6 +27,16 @@
 
 - **Informational only** (echo). Real enforcement is **Repository → Settings → Rules / branch protection** on GitHub.
 
+## Default branch (`main`)
+
+Integration work for the Stateful WASM layout lands on **`main`**. If **`origin/HEAD`** still points at an older branch (for example `white-paper-integration`), update the repository default:
+
+1. GitHub UI: **Settings → General → Default branch** → select **`main`** (and confirm).
+2. Local clones: `git remote set-head origin -a` (refreshes `refs/remotes/origin/HEAD` from the server).
+3. Optional CLI (authenticated): `gh repo edit <owner>/<repo> --default-branch main`
+
+After the default branch is **`main`**, you can retire obsolete long-lived branches via normal **delete branch** (UI or `git push origin --delete <branch>`), only when nothing critical still targets them.
+
 ## Semgrep
 
 - Triggers on **`main`** and **`master`** (aligned with CI).

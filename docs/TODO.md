@@ -30,4 +30,10 @@ Link to the full milestone narrative: [`wiki/Roadmap.md`](../wiki/Roadmap.md).
 
 Some **wiki** pages describe optional `containers/`, legacy `wui/`, or full-stack OpenTofu layouts that are not present in every checkout. For **training**, **engine**, and **RunPod**, use the repo [README.md](../README.md), [training-wui/README.md](../training-wui/README.md), and [docs/RUNPOD_QUICKSTART.md](RUNPOD_QUICKSTART.md).
 
+## GitHub repository follow-ups
+
+1. **Default branch** — Prefer **`main`** as the GitHub default so new clones and **`origin/HEAD`** match integration. Steps: [`.github/README.md`](../.github/README.md) (section **Default branch (main)**).
+2. **Fresh symref** — After changing the default on the server: `git fetch origin` then `git remote set-head origin -a`.
+3. **Optional branch cleanup** — `feature/stateful-wasm-realignment` may match **`main`** after merge; delete on the remote only if you no longer want that name. Do **not** delete **`white-paper-integration`** (or others) until the default branch is switched and no open PRs or automations depend on it.
+
 **Last updated:** 2026-03-25 (Phase 4 tooling pivot)
