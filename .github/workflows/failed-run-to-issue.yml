@@ -1,4 +1,4 @@
-# When CI or Security workflow fails, create an issue and add it to project #3
+﻿# When CI or Security workflow fails, open one issue per workflow name (deduped) or comment on the existing open issue.
 # Project: https://github.com/users/kennetholsenatm-gif/projects/3
 # View:   https://github.com/users/kennetholsenatm-gif/projects/3/views/1
 name: Failed run to issue
@@ -28,14 +28,18 @@ jobs:
     if: github.event.workflow_run.conclusion == 'failure' && github.repository_owner == 'kennetholsenatm-gif'
     runs-on: ubuntu-latest
     steps:
-      - name: Create issue for failed run
+      - name: Open or update failed-run issue (deduped by workflow name)
         id: create
         uses: actions/github-script@v8
         with:
           script: |
             const run = context.payload.workflow_run;
-            const body = [
-              '## Failed workflow run',
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const stableTitle = `🚨 Workflow failed: ${run.name}`;
+
+            const fullBody = [
+              '## Failed workflow run (latest)',
               '',
               `- **Workflow:** ${run.name}`,
               `- **Run:** [#${run.run_number}](${run.html_url})`,
@@ -43,30 +47,75 @@ jobs:
               `- **Event:** ${run.event}`,
               `- **Triggered by:** @${run.actor?.login || 'unknown'}`,
               '',
-              `**Failure Type:** ${run.name.includes('Security') ? 'Security' : run.name.includes('CI') ? 'CI' : 'Infrastructure'}`,
+              `**Failure type:** ${run.name.includes('Security') ? 'Security' : run.name.includes('CI') ? 'CI' : 'Infrastructure'}`,
               '',
-              `View the [run logs](${run.html_url}) to fix the failure.`,
+              `Inspect the [run logs](${run.html_url}) for the root cause.`,
               '',
               '---',
-              '### Next Steps:',
-              '1. Review the workflow logs to identify the root cause',
-              '2. Check if this is a regression or a new issue',
-              '3. Update tests or configuration if needed',
-              '4. Re-run the workflow once the issue is resolved'
+              '### Next steps',
+              '1. Inspect logs and fix the regression.',
+              '2. Ship a fix via PR or direct push to `main` as appropriate.',
+              '3. Close this issue once the workflow is green on `main`.',
+              '',
+              '_Additional failures append as comments; one open ticket per workflow name._'
             ].join('\n');
-            const { data: issue } = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🚨 Workflow failed: ${run.name} #${run.run_number}`,
-              body,
-              labels: ['bug', 'automated', 'needs-triage', 'workflow-failure']
+
+            const commentBody = [
+              '### Another failed run',
+              '',
+              `- **Run:** [#${run.run_number}](${run.html_url})`,
+              `- **Branch:** \`${run.head_branch}\``,
+              `- **Event:** ${run.event}`,
+              '',
+              `Logs: ${run.html_url}`,
+            ].join('\n');
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: 'workflow-failure',
+              per_page: 100,
             });
+
+            const existing = openIssues.find((i) => i.title === stableTitle);
+            let issue;
+            let createdNew = false;
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: existing.number,
+                body: commentBody,
+              });
+              const { data: full } = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: existing.number,
+              });
+              issue = full;
+              createdNew = false;
+            } else {
+              const { data: created } = await github.rest.issues.create({
+                owner,
+                repo,
+                title: stableTitle,
+                body: fullBody,
+                labels: ['bug', 'automated', 'needs-triage', 'workflow-failure'],
+              });
+              issue = created;
+              createdNew = true;
+            }
+
             core.setOutput('issue_node_id', issue.node_id);
-            core.setOutput('issue_number', issue.number);
+            core.setOutput('issue_number', String(issue.number));
             core.setOutput('issue_url', issue.html_url);
+            core.setOutput('created_new', createdNew ? 'true' : 'false');
 
       - name: Get project ID
         id: project
+        if: steps.create.outputs.created_new == 'true'
         continue-on-error: true
         uses: actions/github-script@v8
         with:
@@ -85,7 +134,7 @@ jobs:
 
       - name: Add issue to project
         id: add_to_project
-        if: steps.create.outputs.issue_node_id != '' && steps.project.outputs.project_id != ''
+        if: steps.create.outputs.created_new == 'true' && steps.create.outputs.issue_node_id != '' && steps.project.outputs.project_id != ''
         continue-on-error: true
         uses: actions/github-script@v8
         with:
@@ -103,7 +152,7 @@ jobs:
             core.notice('Failed-run issue added to project #3');
 
       - name: Add issue to project column
-        if: steps.add_to_project.outcome == 'success'
+        if: steps.create.outputs.created_new == 'true' && steps.add_to_project.outcome == 'success'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
@@ -128,8 +177,9 @@ jobs:
               }
             `);
             const project = result.user.projectV2;
+            const stableTitle = `🚨 Workflow failed: ${context.payload.workflow_run.name}`;
             const issueItem = project.items.nodes.find(item =>
-              item.content?.title === `🚨 Workflow failed: ${context.payload.workflow_run.name} #${context.payload.workflow_run.run_number}`
+              item.content?.title === stableTitle
             );
             if (issueItem) {
               await github.graphql(`
@@ -150,12 +200,18 @@ jobs:
 
       - name: Summary
         run: |
-          echo "Created issue #${{ steps.create.outputs.issue_number }}: ${{ steps.create.outputs.issue_url }}"
+          echo "Issue #${{ steps.create.outputs.issue_number }}: ${{ steps.create.outputs.issue_url }}"
+          echo "Created new issue: ${{ steps.create.outputs.created_new }}"
+          if [ "${{ steps.create.outputs.created_new }}" != "true" ]; then
+            echo "::notice::Appended failure to existing deduped issue (no new issue)."
+          fi
           if [ "${{ steps.add_to_project.outcome }}" = "skipped" ] || [ "${{ steps.add_to_project.outcome }}" = "" ]; then
-            echo "::notice title=Project not updated::Issue was NOT added to project #3."
-            echo "Add repo secret ADD_TO_PROJECT_TOKEN (PAT with project scope)"
-            echo "in Settings → Secrets and variables → Actions so failed-run issues appear"
-            echo "at https://github.com/users/kennetholsenatm-gif/projects/3"
+            if [ "${{ steps.create.outputs.created_new }}" = "true" ]; then
+              echo "::notice title=Project not updated::Issue was NOT added to project #3."
+              echo "Add repo secret ADD_TO_PROJECT_TOKEN (PAT with project scope)"
+              echo "in Settings → Secrets and variables → Actions so failed-run issues appear"
+              echo "at https://github.com/users/kennetholsenatm-gif/projects/3"
+            fi
           else
             echo "Issue was added to project https://github.com/users/kennetholsenatm-gif/projects/3"
           fi

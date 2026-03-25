@@ -20,6 +20,7 @@
 
 ## Failed-run → issue (`failed-run-to-issue.yml`)
 
+- **Deduped:** One **open** issue per failed workflow name (`🚨 Workflow failed: CI`, etc.). Repeat failures **comment** on that issue instead of opening another. Project #3 is updated only when an issue is **newly** created.
 - `workflow_run` lists **exact workflow names**: `CI`, `Security`, `CodeQL Advanced`, `RunPod OpenTofu`, `Security Scans`, `Semgrep`, `GitHub Alerts to Tickets`.
 - Runs when `github.repository_owner == 'kennetholsenatm-gif'` (any repo under that account).
 

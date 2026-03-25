@@ -30,6 +30,11 @@ Link to the full milestone narrative: [`wiki/Roadmap.md`](../wiki/Roadmap.md).
 
 Some **wiki** pages describe optional `containers/`, legacy `wui/`, or full-stack OpenTofu layouts that are not present in every checkout. For **training**, **engine**, and **RunPod**, use the repo [README.md](../README.md), [training-wui/README.md](../training-wui/README.md), and [docs/RUNPOD_QUICKSTART.md](RUNPOD_QUICKSTART.md).
 
+## Issues backlog ([open issues](https://github.com/kennetholsenatm-gif/qminiwasm-core/issues))
+
+- **Workflow failure noise** — Older runs filed a **new** issue per failure (title included the run number). [`.github/workflows/failed-run-to-issue.yml`](../.github/workflows/failed-run-to-issue.yml) now uses a **stable title** per workflow (`🚨 Workflow failed: <name>`): the first failure **opens** one issue; later failures **comment** on that issue only.
+- **One-time triage** — Filter `label:workflow-failure is:open`, **close duplicates** (keep one thread per workflow such as CI vs Security Scans once you confirm the current failure mode). Rename old titles if needed so they match the new stable pattern, or simply close all after `main` is green and let the next failure open a fresh deduped issue.
+
 ## GitHub repository follow-ups
 
 1. **Default branch** — Prefer **`main`** as the GitHub default so new clones and **`origin/HEAD`** match integration. Steps: [`.github/README.md`](../.github/README.md) (section **Default branch (main)**).
