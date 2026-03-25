@@ -84,6 +84,7 @@ def run_edge_cognitive_loop(
         last_result, last_state = execute_one_block(loop_idx)
         num_loops = loop_idx + 1
         certainty = compute_certainty(last_state)
+        last_state["last_certainty"] = float(certainty)
 
         # Check for memory reconstruction opportunity
         if _should_attempt_memory_reconstruction(last_state):

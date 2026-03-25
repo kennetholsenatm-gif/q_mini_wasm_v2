@@ -743,3 +743,39 @@ def integrate_qaoa_with_ternary_network(
     enhanced_model = EnhancedTernaryModel(model, qaoa_optimizer)
 
     return enhanced_model, qaoa_optimizer
+
+
+def formulate_qahr_cost_hamiltonian_spec(escalation_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Classical specification for the QAHR cost Hamilton from a CGE escalation payload.
+
+    Full device execution is backend-specific; this returns a portable struct for logging,
+    tests, and native/orchestrator hooks.
+    """
+    loop_idx = escalation_payload.get("loop_index", -1)
+    thresh = escalation_payload.get("certainty_scalar_threshold")
+    last_c = escalation_payload.get("last_certainty_scalar")
+    return {
+        "qahr_spec_version": 1,
+        "problem": "edge_fog_cloud_routing",
+        "loop_index": loop_idx,
+        "certainty_scalar_threshold": thresh,
+        "last_certainty_scalar": last_c,
+        "hamiltonian_family": "Ising+QUBO_shim",
+    }
+
+
+def qahr_route_after_escalation(
+    quantum_moe: Optional[nn.Module],
+    escalation_payload: Dict[str, Any],
+    hidden_states: torch.Tensor,
+) -> Dict[str, Any]:
+    """QAHR after CGE: Hamiltonian spec plus optional quantum MoE forward pass."""
+    spec = formulate_qahr_cost_hamiltonian_spec(escalation_payload)
+    out: Dict[str, Any] = {"hamiltonian_spec": spec, "routed_hidden": None}
+    if quantum_moe is not None and hidden_states is not None:
+        with torch.no_grad():
+            hs = hidden_states
+            if hs.dim() == 1:
+                hs = hs.unsqueeze(0)
+            out["routed_hidden"] = quantum_moe(hs)
+    return out

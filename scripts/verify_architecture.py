@@ -16,15 +16,10 @@ from qminiwasm.security.crypto import (
     encrypt_vector,
     decrypt_vector,
     generate_symmetric_key,
-    rotate_symmetric_key
+    rotate_symmetric_key,
 )
-from qminiwasm.inference.vec2text import (
-    reconstruct_memory,
-    validate_reconstructed_text
-)
-from qminiwasm.quantum.router import (
-    enhanced_find_k_nearest_neighbors
-)
+from qminiwasm.inference.vec2text import reconstruct_memory, validate_reconstructed_text
+from qminiwasm.quantum.router import enhanced_find_k_nearest_neighbors
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -54,15 +49,14 @@ def verify_dcpe_performance():
     logger.info("  Encryption time: %.6f seconds", encryption_time)
     logger.info("  Decryption time: %.6f seconds", decryption_time)
     logger.info("  Distance preservation error: %.2f%%", distance_error * 100)
-    logger.info("  Security compliance: %s",
-                "PASS" if distance_error <= 0.1 else "FAIL")
+    logger.info("  Security compliance: %s", "PASS" if distance_error <= 0.1 else "FAIL")
     logger.info("  Manifold alignment protection: ENABLED")
 
     return {
         "encryption_time": encryption_time,
         "decryption_time": decryption_time,
         "distance_error": distance_error,
-        "security_compliance": distance_error <= 0.1
+        "security_compliance": distance_error <= 0.1,
     }
 
 
@@ -94,7 +88,7 @@ def verify_vec2text_rag():
     return {
         "reconstruction_time": reconstruction_time,
         "syntax_compliance": is_valid,
-        "reconstruction_valid": is_valid
+        "reconstruction_valid": is_valid,
     }
 
 
@@ -106,9 +100,7 @@ def verify_quantum_router():
 
     # Performance test
     start_time = time.time()
-    neighbors = enhanced_find_k_nearest_neighbors(
-        query_vector, database_vectors, k=5
-    )
+    neighbors = enhanced_find_k_nearest_neighbors(query_vector, database_vectors, k=5)
     routing_time = time.time() - start_time
 
     # Correctness test
@@ -125,7 +117,7 @@ def verify_quantum_router():
     return {
         "routing_time": routing_time,
         "correctness": correct_neighbors,
-        "neighbors_found": neighbors
+        "neighbors_found": neighbors,
     }
 
 
@@ -149,9 +141,7 @@ def verify_end_to_end_pipeline():
 
     # Step 3: Quantum routing
     start_time = time.time()
-    neighbors = enhanced_find_k_nearest_neighbors(
-        query_vector, database_vectors, k=5
-    )
+    neighbors = enhanced_find_k_nearest_neighbors(query_vector, database_vectors, k=5)
     routing_time = time.time() - start_time
 
     # Validate reconstructed text
@@ -159,7 +149,9 @@ def verify_end_to_end_pipeline():
 
     # Performance metrics
     total_time = encryption_time + reconstruction_time + routing_time
-    distance_error = abs(torch.norm(test_vector) - torch.norm(decrypt_vector(encrypted))) / torch.norm(test_vector)
+    distance_error = abs(
+        torch.norm(test_vector) - torch.norm(decrypt_vector(encrypted))
+    ) / torch.norm(test_vector)
 
     logger.info("End-to-End Pipeline Verification:")
     logger.info("  Total pipeline time: %.6f seconds", total_time)
@@ -179,7 +171,7 @@ def verify_end_to_end_pipeline():
         "neighbors_found": len(neighbors),
         "reconstruction_valid": is_valid,
         "distance_error": distance_error,
-        "pipeline_success": is_valid
+        "pipeline_success": is_valid,
     }
 
 
@@ -198,7 +190,7 @@ def verify_security_compliance():
     context = {
         "memory_usage": 50 * 1024 * 1024,
         "cpu_time": 500,
-        "allowed_operations": ["encrypt", "decrypt"]
+        "allowed_operations": ["encrypt", "decrypt"],
     }
 
     # Verify that encryption works with valid context
@@ -211,11 +203,13 @@ def verify_security_compliance():
 
     logger.info("Security Compliance Verification:")
     logger.info("  Key rotation compliance: %s", "PASS" if key_rotation_compliance else "FAIL")
-    logger.info("  Security context compliance: %s", "PASS" if security_context_compliance else "FAIL")
+    logger.info(
+        "  Security context compliance: %s", "PASS" if security_context_compliance else "FAIL"
+    )
 
     return {
         "key_rotation_compliance": key_rotation_compliance,
-        "security_context_compliance": security_context_compliance
+        "security_context_compliance": security_context_compliance,
     }
 
 
@@ -242,31 +236,26 @@ def verify_performance_benchmarks():
     # Benchmark routing
     start_time = time.time()
     for _ in range(10):
-        enhanced_find_k_nearest_neighbors(
-            query_vector, database_vectors, k=5
-        )
+        enhanced_find_k_nearest_neighbors(query_vector, database_vectors, k=5)
     avg_routing_time = (time.time() - start_time) / 10
 
     logger.info("Performance Benchmarks Verification:")
     logger.info("  Average encryption time: %.6f seconds", avg_encryption_time)
     logger.info("  Average reconstruction time: %.6f seconds", avg_reconstruction_time)
     logger.info("  Average routing time: %.6f seconds", avg_routing_time)
-    logger.info("  Performance requirements: %s",
-                "PASS" if avg_encryption_time < 0.1 else "FAIL")
-    logger.info("  Performance requirements: %s",
-                "PASS" if avg_reconstruction_time < 1.0 else "FAIL")
-    logger.info("  Performance requirements: %s",
-                "PASS" if avg_routing_time < 0.5 else "FAIL")
+    logger.info("  Performance requirements: %s", "PASS" if avg_encryption_time < 0.1 else "FAIL")
+    logger.info(
+        "  Performance requirements: %s", "PASS" if avg_reconstruction_time < 1.0 else "FAIL"
+    )
+    logger.info("  Performance requirements: %s", "PASS" if avg_routing_time < 0.5 else "FAIL")
 
     return {
         "avg_encryption_time": avg_encryption_time,
         "avg_reconstruction_time": avg_reconstruction_time,
         "avg_routing_time": avg_routing_time,
         "performance_compliance": (
-            avg_encryption_time < 0.1 and
-            avg_reconstruction_time < 1.0 and
-            avg_routing_time < 0.5
-        )
+            avg_encryption_time < 0.1 and avg_reconstruction_time < 1.0 and avg_routing_time < 0.5
+        ),
     }
 
 
@@ -286,22 +275,40 @@ def main():
 
     # Summary
     logger.info("\n=== Verification Summary ===")
-    logger.info("DCPE Performance: %s", "PASS" if dcpe_results['security_compliance'] else "FAIL")
-    logger.info("Vec2Text-RAG Functionality: %s", "PASS" if vec2text_results['reconstruction_valid'] else "FAIL")
-    logger.info("Quantum Router Correctness: %s", "PASS" if quantum_results['correctness'] else "FAIL")
-    logger.info("End-to-End Pipeline: %s", "PASS" if pipeline_results['pipeline_success'] else "FAIL")
-    logger.info("Security Compliance: %s", "PASS" if security_results['key_rotation_compliance'] and security_results['security_context_compliance'] else "FAIL")
-    logger.info("Performance Benchmarks: %s", "PASS" if performance_results['performance_compliance'] else "FAIL")
+    logger.info("DCPE Performance: %s", "PASS" if dcpe_results["security_compliance"] else "FAIL")
+    logger.info(
+        "Vec2Text-RAG Functionality: %s",
+        "PASS" if vec2text_results["reconstruction_valid"] else "FAIL",
+    )
+    logger.info(
+        "Quantum Router Correctness: %s", "PASS" if quantum_results["correctness"] else "FAIL"
+    )
+    logger.info(
+        "End-to-End Pipeline: %s", "PASS" if pipeline_results["pipeline_success"] else "FAIL"
+    )
+    logger.info(
+        "Security Compliance: %s",
+        (
+            "PASS"
+            if security_results["key_rotation_compliance"]
+            and security_results["security_context_compliance"]
+            else "FAIL"
+        ),
+    )
+    logger.info(
+        "Performance Benchmarks: %s",
+        "PASS" if performance_results["performance_compliance"] else "FAIL",
+    )
 
     # Final verdict
     all_passed = (
-        dcpe_results['security_compliance'] and
-        vec2text_results['reconstruction_valid'] and
-        quantum_results['correctness'] and
-        pipeline_results['pipeline_success'] and
-        security_results['key_rotation_compliance'] and
-        security_results['security_context_compliance'] and
-        performance_results['performance_compliance']
+        dcpe_results["security_compliance"]
+        and vec2text_results["reconstruction_valid"]
+        and quantum_results["correctness"]
+        and pipeline_results["pipeline_success"]
+        and security_results["key_rotation_compliance"]
+        and security_results["security_context_compliance"]
+        and performance_results["performance_compliance"]
     )
 
     logger.info("\n=== Final Verdict ===")
@@ -313,7 +320,9 @@ def main():
         logger.info("✓ Complete end-to-end pipeline - Working correctly")
         logger.info("✓ Security compliance - All requirements met")
         logger.info("✓ Performance benchmarks - All requirements met")
-        logger.info("✓ Architecture achieves zero-degradation autonomous agents with quantum-accelerated privacy-preserving memory")
+        logger.info(
+            "✓ Architecture achieves zero-degradation autonomous agents with quantum-accelerated privacy-preserving memory"
+        )
     else:
         logger.info("✗ SOME TESTS FAILED - Implementation incomplete")
         logger.info("Please review the detailed logs above for specific failures")
@@ -321,5 +330,5 @@ def main():
     logger.info("\n=== Verification Complete ===")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

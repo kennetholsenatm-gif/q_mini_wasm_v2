@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -65,7 +65,7 @@ class DataSection(BaseModel):
 
 
 class HFExtraSpec(BaseModel):
-    """Additional Hugging Face dataset id (+ optional config) mixed with ``data.path`` / ``dataset_config``."""
+    """Additional HF dataset (+ optional config) mixed with ``data.path`` / ``dataset_config``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -109,6 +109,8 @@ class EvalSection(BaseModel):
 
     holdout_fraction: Optional[float] = None
     every_epoch: Optional[bool] = None
+    #: Holdout eval plateau: stop after N epochs without eval MSE improvement.
+    early_stop_patience: Optional[int] = None
     target_mean_mse: Optional[float] = None
     stop_on_target_mse: Optional[bool] = None
 
@@ -144,7 +146,7 @@ class CascadeSection(BaseModel):
 
 
 class WasmSection(BaseModel):
-    """Wasmtime store limits for curriculum WASM (see ``qminiwasm.wasm.engine.WasmRuntimeConfig``)."""
+    """Wasmtime limits; see ``WasmRuntimeConfig`` in ``qminiwasm.wasm.engine``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -171,6 +173,38 @@ class ServeSection(BaseModel):
     cascade_router_hidden: Optional[int] = None
 
 
+class EnclaveSection(BaseModel):
+    """WASM TPEM / EF tiering and CGE threshold (``[enclave]`` in serve TOML)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enclave_footprint_mb: Optional[float] = Field(
+        None,
+        ge=0.0,
+        description="Static Enclave Footprint (EF): TPEM + heap budget in MB",
+    )
+    enclave_tier: Optional[Literal["micro", "meso", "macro"]] = None
+    certainty_scalar_threshold: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Halts ECL locally when certainty >= threshold; mirrors T_conf / CGE policy",
+    )
+    max_linear_memory_pages: Optional[int] = Field(
+        None,
+        ge=1,
+        description="WASM 64KiB pages cap (e.g. 131072 pages ≈ 8GiB for Macro tier)",
+    )
+    wasm_memory64_max_mb: Optional[float] = Field(
+        None,
+        ge=0.0,
+        description="Host/runtime linear memory ceiling for Memory64 Macro enclaves (~8192)",
+    )
+    use_memory64: Optional[bool] = Field(
+        None, description="Prefer Memory64 linear memory when runtime supports it"
+    )
+
+
 class RunpodServerlessSection(BaseModel):
     """Optional WUI / RunPod Serverless hints (ignored by the training engine)."""
 
@@ -194,6 +228,7 @@ class TrainingConfig(BaseModel):
     cascade: CascadeSection = Field(default_factory=CascadeSection)
     wasm: WasmSection = Field(default_factory=WasmSection)
     serve: ServeSection = Field(default_factory=ServeSection)
+    enclave: EnclaveSection = Field(default_factory=EnclaveSection)
     runpod_serverless: Optional[RunpodServerlessSection] = None
 
     def to_engine_kwargs(self) -> dict[str, Any]:
@@ -281,6 +316,7 @@ class TrainingConfig(BaseModel):
         ev_map = {
             "holdout_fraction": "eval_holdout_fraction",
             "every_epoch": "eval_every_epoch",
+            "early_stop_patience": "eval_early_stop_patience",
             "target_mean_mse": "target_mean_mse",
             "stop_on_target_mse": "stop_on_target_mse",
         }
@@ -332,9 +368,18 @@ def load_training_toml(path: str | Path) -> TrainingConfig:
     return TrainingConfig.model_validate(data)
 
 
-def load_serve_toml(path: str | Path) -> ServeSection:
-    """Load only the [serve] table (file may contain training sections too)."""
+def load_serve_document(path: str | Path) -> TrainingConfig:
+    """Parse a TOML file that may contain ``[serve]`` and ``[enclave]`` (and other tables)."""
     p = Path(path)
     data = tomllib.loads(p.read_bytes().decode("utf-8"))
-    root = TrainingConfig.model_validate(data)
-    return root.serve
+    return TrainingConfig.model_validate(data)
+
+
+def load_serve_toml(path: str | Path) -> ServeSection:
+    """Load only the [serve] table (file may contain training sections too)."""
+    return load_serve_document(path).serve
+
+
+def load_enclave_toml(path: str | Path) -> EnclaveSection:
+    """Load only the [enclave] table from a serve/config TOML."""
+    return load_serve_document(path).enclave

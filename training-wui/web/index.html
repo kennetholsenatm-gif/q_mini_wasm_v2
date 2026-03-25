@@ -1643,9 +1643,14 @@
       <section class="log-section dash-card" data-card-id="training-log">
         <h2>Log <span id="logTitle"></span></h2>
         <div class="log-toolbar">
-          <button type="button" class="danger" id="btnStop" disabled>Kill Run / Abort</button>
+          <button type="button" class="danger" id="btnStop" disabled title="SIGINT to the training process: finish current batch, write latest.pt, then exit">Stop (graceful)</button>
+          <button type="button" class="danger ghost" id="btnStopForce" disabled title="Immediate process kill — may lose in-epoch work">Force kill</button>
+          <button type="button" class="primary ghost" id="btnStopAndData" disabled title="Graceful stop, then open Training tab · step 3 (Data source) to swap dataset or mix">Stop → edit data (step 3)</button>
           <button type="button" class="ghost" id="btnClearLog">Clear view</button>
         </div>
+        <p class="log-hint" style="font-size:var(--text-sm);color:var(--text-secondary);margin:6px 0 0 0;">
+          Graceful stop works for local and RunPod SSH runs (serverless uses cancel). Use <strong>Stop → edit data</strong> to jump to the wizard after stopping, keep <strong>Resume latest</strong> if you want the same weights, then launch again. Multi-dataset mix lives in <strong>step 1</strong> (rail).
+        </p>
         <p class="log-legend" id="logLegend" aria-hidden="true">
           <span class="lg lg-better">■ improved</span>
           <span class="lg lg-same">■ flat</span>
@@ -4043,6 +4048,8 @@
       $("log").innerHTML = "";
       $("logTitle").textContent = id ? "· " + (configPath || id) : "";
       $("btnStop").disabled = !id;
+      if ($("btnStopForce")) $("btnStopForce").disabled = !id;
+      if ($("btnStopAndData")) $("btnStopAndData").disabled = !id;
       $("btnAbortSticky").disabled = !id;
       $("stickyRunLabel").textContent = id ? `Active run: ${id.slice(0,8)}` : "No active run";
       if (pollTimer) clearInterval(pollTimer);
@@ -4063,6 +4070,8 @@
         }
         logOffset = data.next_offset || logOffset;
         $("btnStop").disabled = !data.running;
+        if ($("btnStopForce")) $("btnStopForce").disabled = !data.running;
+        if ($("btnStopAndData")) $("btnStopAndData").disabled = !data.running;
         $("btnAbortSticky").disabled = !data.running;
         await loadRuns();
       } catch (e) {
@@ -4140,12 +4149,66 @@
       }
     };
 
-    $("btnStop").onclick = async () => {
-      if (!activeRunId) return;
-      await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/stop", { method: "POST" });
+    async function stopRun(force) {
+      if (!activeRunId) return false;
+      const body = force ? JSON.stringify({ force: true }) : "{}";
+      let ok = false;
+      try {
+        const r = await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        ok = true;
+      } catch (e) {
+        if ($("msg")) {
+          $("msg").textContent = String(e.message || e);
+          $("msg").className = "status error";
+        }
+      }
       await loadRuns();
       pollLog();
+      return ok;
+    }
+
+    function openWizardDataSourceStep() {
+      showAppTab("training");
+      setLegoStep(3);
+      requestAnimationFrame(() => {
+        const el = document.querySelector('[data-card-id="lego-data"]');
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        const pip = $("legoPip3");
+        if (pip) pip.focus({ preventScroll: true });
+      });
+    }
+
+    async function stopRunAndOpenDataWizard() {
+      if (!activeRunId) return;
+      await stopRun(false);
+      openWizardDataSourceStep();
+      addToast("Opening step 3 · Data source — adjust dataset, save, then launch.");
+    }
+
+    $("btnStop").onclick = async () => {
+      await stopRun(false);
     };
+    if ($("btnStopForce")) {
+      $("btnStopForce").onclick = async () => {
+        if (
+          !window.confirm(
+            "Force kill immediately? You may lose work inside the current batch. Prefer Stop (graceful) unless the process is hung.",
+          )
+        ) {
+          return;
+        }
+        await stopRun(true);
+      };
+    }
+    if ($("btnStopAndData")) {
+      $("btnStopAndData").onclick = () => void stopRunAndOpenDataWizard();
+    }
     $("btnAbortSticky").onclick = () => $("btnStop").click();
 
     $("btnReloadSchema").onclick = async () => {

@@ -45,9 +45,11 @@ where \( \eta \sim \mathcal{N}(0, \sigma^2 I) \) is Gaussian noise with variance
 
 The security of Approximate DCPE relies on the hardness of the Learning With Errors (LWE) problem and the difficulty of recovering the original plaintext from the perturbed ciphertext without the key.
 
-## Quantum Approximate Optimization Algorithm (QAOA)
+## Quantum Approximate Optimization Algorithm (QAOA) and QAHR
 
-### Problem Formulation
+**Quantum-Assisted Hierarchical Routing (QAHR)** models Tier-3 escalation after **Certainty-Gated Escalation (CGE)** as combinatorial routing: latency, sensitivity, and topology feed a **cost Hamiltonian** (QUBO), optimized with QAOA layers—not informal mixture-of-experts load balancing alone.
+
+### Problem formulation (QUBO)
 
 The routing problem is formulated as a Quadratic Unconstrained Binary Optimization (QUBO) problem:
 
@@ -121,6 +123,12 @@ The ternary quantization problem can be formulated as:
 \[
 \min_{W_t \in \{-1,0,1\}^{m \times n}} \|W - W_t\|_F^2
 \]
+
+### Ternary-Packed Memory Enclave (TPEM) and Enclave Footprint (EF)
+
+In deployment, weights live in a **TPEM**: a contiguous byte array in WASM linear memory. Five trits \(d \in \{-1,0,1\}\) (mapped to digits \(\{0,1,2\}\)) pack into one byte when \(3^5 < 2^8\), giving **~1.6 bits per weight** (8/5). The **Enclave Footprint (EF)** is the total static bytes required for the compiled module including TPEM, scaling ladders, and initial heap—not a disconnected “parameter count” in FP space.
+
+**Edge Cognitive Looping (ECL)** consumes activations; **Ephemeral State Inversion (ESI)** regenerates textual context from embeddings so linear memory does not accumulate KV-cache-sized tensors. **WASM Linear Execution Snapshots (WLES)** serialize the linear memory image for fast suspend/resume.
 
 ### Grover's Algorithm Application
 

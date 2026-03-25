@@ -20,13 +20,25 @@ class HierarchicalConfig:
     N_max_loops: int = 10
     """Maximum cognitive loops before escalation (N-loop halting)."""
     T_conf: float = 0.85
-    """Confidence threshold; halt when certainty scalar > T_conf."""
+    """Certainty scalar gate ($T_{conf}$); ECL resolves locally when certainty >= T_conf."""
+
+    # TPEM / enclave geometry (EF targets; optional runtime hints)
+    enclave_footprint_mb: Optional[float] = None
+    """Enclave Footprint (EF) in MB: contiguous TPEM + static heap budget."""
+    enclave_tier: Optional[str] = None
+    """Deployment tier label: micro | meso | macro."""
+    max_linear_memory_pages: Optional[int] = None
+    """Max WASM 64KiB pages when enforcing tier caps."""
+    wasm_memory64_max_mb: Optional[float] = None
+    """Memory64 linear memory ceiling (MB), e.g. 8192 for Macro enclave."""
+    use_memory64: bool = False
+    """Prefer Memory64 addressing when the runtime supports it."""
 
     # Tier 2: State migration / delta payload
     delta_format_version: int = 1
     """Delta payload format version for compatibility."""
 
-    # Tier 3: MoE routing (optional overrides)
+    # Tier 3: QAHR topology hints (optional capacity overrides)
     top_k_experts: Optional[int] = None
     expert_capacity: Optional[int] = None
 
@@ -73,14 +85,94 @@ class HierarchicalConfig:
     contradiction_detected_key: str = "contradiction_detected"
     """If ``state[contradiction_detected_key]`` is truthy, escalate to Fog tier."""
 
+    @property
+    def certainty_scalar_threshold(self) -> float:
+        """Alias for ``T_conf`` (Certainty-Gated Escalation / CGE gate)."""
+        return self.T_conf
+
+    def with_enclave_overrides(
+        self,
+        *,
+        enclave_footprint_mb: Optional[float] = None,
+        enclave_tier: Optional[str] = None,
+        certainty_scalar_threshold: Optional[float] = None,
+        max_linear_memory_pages: Optional[int] = None,
+        wasm_memory64_max_mb: Optional[float] = None,
+        use_memory64: Optional[bool] = None,
+    ) -> "HierarchicalConfig":
+        """Return a copy with TOML ``[enclave]`` fields applied (non-None only)."""
+        from dataclasses import replace
+
+        t_conf = (
+            float(certainty_scalar_threshold)
+            if certainty_scalar_threshold is not None
+            else self.T_conf
+        )
+        return replace(
+            self,
+            T_conf=t_conf,
+            enclave_footprint_mb=(
+                enclave_footprint_mb
+                if enclave_footprint_mb is not None
+                else self.enclave_footprint_mb
+            ),
+            enclave_tier=enclave_tier if enclave_tier is not None else self.enclave_tier,
+            max_linear_memory_pages=(
+                max_linear_memory_pages
+                if max_linear_memory_pages is not None
+                else self.max_linear_memory_pages
+            ),
+            wasm_memory64_max_mb=(
+                wasm_memory64_max_mb
+                if wasm_memory64_max_mb is not None
+                else self.wasm_memory64_max_mb
+            ),
+            use_memory64=self.use_memory64 if use_memory64 is None else bool(use_memory64),
+        )
+
     @classmethod
     def from_env(cls) -> "HierarchicalConfig":
         """Build config from environment variables with defaults."""
         n = os.environ.get("N_MAX_LOOPS", "")
-        t = os.environ.get("T_CONF", "")
+        t_raw = (os.environ.get("T_CONF", "") or "").strip()
+        cst_raw = (os.environ.get("CERTAINTY_SCALAR_THRESHOLD", "") or "").strip()
+        if t_raw:
+            t_conf = float(t_raw)
+        elif cst_raw:
+            t_conf = float(cst_raw)
+        else:
+            t_conf = 0.85
+
+        def _opt_float(key: str) -> Optional[float]:
+            s = (os.environ.get(key, "") or "").strip()
+            if not s:
+                return None
+            try:
+                return float(s)
+            except ValueError:
+                return None
+
+        def _opt_int(key: str) -> Optional[int]:
+            s = (os.environ.get(key, "") or "").strip()
+            if not s or not s.isdigit():
+                return None
+            return int(s)
+
+        tier = (os.environ.get("ENCLAVE_TIER", "") or "").strip().lower()
+        if tier not in ("", "micro", "meso", "macro"):
+            tier = ""
+
+        mem64 = (os.environ.get("WASM_USE_MEMORY64", "") or "").strip().lower()
+        use_m64 = mem64 in ("1", "true", "yes", "on")
+
         return cls(
             N_max_loops=int(n) if n.isdigit() else 10,
-            T_conf=float(t) if t else 0.85,
+            T_conf=t_conf,
+            enclave_footprint_mb=_opt_float("ENCLAVE_FOOTPRINT_MB"),
+            enclave_tier=tier or None,
+            max_linear_memory_pages=_opt_int("WASM_MAX_LINEAR_MEMORY_PAGES"),
+            wasm_memory64_max_mb=_opt_float("WASM_MEMORY64_MAX_MB"),
+            use_memory64=use_m64,
             delta_format_version=int(os.environ.get("DELTA_FORMAT_VERSION", "1") or "1") or 1,
             top_k_experts=int(x) if (x := os.environ.get("TOP_K_EXPERTS", "")).isdigit() else None,
             expert_capacity=(

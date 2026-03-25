@@ -52,6 +52,7 @@
 [eval]
 # holdout_fraction = 0.0
 # every_epoch = false
+# early_stop_patience = 0     # holdout eval plateau (overfitting guard); needs every_epoch + holdout
 # target_mean_mse = 1.0e-4
 # stop_on_target_mse = false
 

@@ -803,7 +803,11 @@ class TernaryOptimizer:
 
 
 class EnhancedHybridQuantumMoE(nn.Module):
-    """Torch MoE block; optional QAOA expectations via Qiskit (statevector or IBM), not PennyLane."""
+    """QAHR-facing hybrid block: torch expert path + optional QAOA expectations (Qiskit), not PennyLane.
+
+    After **Certainty-Gated Escalation (CGE)**, :func:`~qminiwasm.quantum.qaoa_integration.qahr_route_after_escalation`
+    consumes escalation metadata while this module supplies the routed hidden states.
+    """
 
     def __init__(
         self,

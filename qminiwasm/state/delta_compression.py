@@ -1,8 +1,9 @@
 """Delta compression: diff linear memory (and optionally stack) at loop N vs baseline.
 
-Produces compact (address, value) or (address_range, bytes) deltas for Tier 2
-state migration. Includes optional payload struct (checksum, length, format version)
-for later encryption/attestation.
+Prefer **Ephemeral State Inversion (ESI)** for unbounded conversational context; this module
+targets **Tier 2** migration of **bounded** linear-memory slices. Produces compact
+(address, value) or (address_range, bytes) deltas. Includes optional payload struct
+(checksum, length, format version) for later encryption/attestation.
 """
 
 from __future__ import annotations

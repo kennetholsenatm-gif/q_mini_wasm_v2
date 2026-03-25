@@ -14,8 +14,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import runpod
-
 
 def _as_str(v: Any) -> str:
     return "" if v is None else str(v).strip()
@@ -57,8 +55,10 @@ def _run_train(config_abs: Path) -> tuple[int, str, str]:
     return proc.returncode, proc.stdout, proc.stderr
 
 
-def handler(job: dict[str, Any]) -> dict[str, Any]:
-    input_payload = job.get("input") if isinstance(job, dict) else {}
+def handle_training_job(
+    input_payload: dict[str, Any],
+    run_train: Any = _run_train,
+) -> dict[str, Any]:
     if not isinstance(input_payload, dict):
         return {"ok": False, "error": "input must be an object"}
 
@@ -68,7 +68,7 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
 
     config_rel = _as_str(input_payload.get("config_rel"))
     if not config_rel:
-        return {"ok": False, "error": 'missing input.config_rel'}
+        return {"ok": False, "error": "missing input.config_rel"}
 
     _apply_extra_env(input_payload)
     repo = _repo_root()
@@ -80,15 +80,31 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
     if not config_abs.exists():
         return {"ok": False, "error": f"config not found: {config_abs}"}
 
-    code, out, err = _run_train(config_abs)
+    code, out, err = run_train(config_abs)
     return {
         "ok": code == 0,
         "exit_code": code,
+        "repo_root": str(repo.resolve()),
         "config_rel": config_rel,
         "stdout": out[-12000:],
         "stderr": err[-12000:],
     }
 
 
-runpod.serverless.start({"handler": handler})
+def handler(job: dict[str, Any]) -> dict[str, Any]:
+    input_payload = job.get("input") if isinstance(job, dict) else {}
+    return handle_training_job(input_payload)
 
+
+def main() -> None:
+    try:
+        import runpod
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "Missing dependency: runpod. Install with `pip install runpod` in the worker image."
+        ) from exc
+    runpod.serverless.start({"handler": handler})
+
+
+if __name__ == "__main__":
+    main()

@@ -2,6 +2,18 @@
 
 This guide provides step-by-step instructions for deploying the Hierarchical Edge-Quantum AI Architecture across different environments.
 
+## Unified edge vocabulary (deployment)
+
+Operators SHOULD size deployments by **Enclave Footprint (EF)** and **Ternary-Packed Memory Enclave (TPEM)** geometry—not informal “tensor” or raw parameter-count estimates alone:
+
+- **Micro-Enclaves:** EF sub-250 MB WASM linear memory (≈1.2B effective at ~1.6 bits/weight).
+- **Meso-Enclaves:** EF ≈2 GB (≈10B effective); fits classic 32-bit WASM bounds.
+- **Macro-Enclaves:** EF ≈8 GB with **Memory64** (≈40B effective); align host **WASM_MAX_MEMORY** / tier caps in `configs/serve/default.toml`.
+
+Runtime behavior uses **Edge Cognitive Looping (ECL)** and **Certainty Scalars** vs **`certainty_scalar_threshold` / $T_{conf}$**; **Certainty-Gated Escalation (CGE)** hands off to Tier 2/3. Context is managed via **Ephemeral State Inversion (ESI)** (not KV-cache growth). Remote path selection uses **Quantum-Assisted Hierarchical Routing (QAHR)**. Suspend/resume favors **WASM Linear Execution Snapshots (WLES)** over ad-hoc tensor-only checkpoints.
+
+See [Concepts Explained](../Concepts-Explained.md) and [Architecture Overview](Architecture-Overview.md) for the full glossary.
+
 ## Prerequisites
 
 ### System Requirements
@@ -148,9 +160,9 @@ helm install security charts/security/
 ## Edge Deployment
 
 ### Edge Device Requirements
-- **Hardware:** ARM64 or x86_64 processor
-- **Memory:** 2GB+ RAM
-- **Storage:** 10GB+ storage
+- **Hardware:** ARM64 or x86_64 (Apple M-series / AMD Strix Halo unified-memory hosts for **Macro-Enclave** tier)
+- **Host RAM:** At least EF + OS headroom; **Meso** ≈2 GB EF class agents commonly need 8 GB+ host RAM
+- **Storage:** 10 GB+ for images; fast NVMe recommended for **WLES** snapshot I/O
 - **Network:** Ethernet or Wi-Fi connectivity
 - **Security:** TPM 2.0 (recommended)
 

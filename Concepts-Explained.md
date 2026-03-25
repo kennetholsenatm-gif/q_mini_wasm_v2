@@ -2,6 +2,32 @@
 
 This document provides simple analogies to help understand the complex technologies behind the Hierarchical Edge-Quantum AI Architecture.
 
+## Unified Edge Vocabulary (glossary)
+
+The framework uses a single production lexicon aligned with [../docs/Q-Mini-WASM_ Edge AI Taxonomy.md](../docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md). Key terms:
+
+| Term | Meaning |
+|------|---------|
+| **Ternary-Packed Memory Enclave (TPEM)** | The contiguous, immutable packed-weight byte array in WASM linear memory (five trits per byte, ~1.6 bits per weight), replacing the informal notion of disconnected “model weights” or floating-point tensors loaded as separate arrays. |
+| **Enclave Footprint (EF)** | The deterministic static size of the deployed enclave (MB/GB): packed TPEM, scaling factors, and initial heap—**not** an abstract “parameter count” in isolation. |
+| **Edge Cognitive Looping (ECL)** | The recursive local reasoning cycle in the WASM agent (evaluate → refine → re-check), replacing the idea of a one-shot “forward pass” or generic auto-regressive generation. |
+| **Certainty Scalars ($T_{conf}$)** | Values in [0, 1] emitted during ECL; the deployment threshold (often denoted $T_{conf}$ or `certainty_scalar_threshold`) gates when the loop may finish locally vs when **Certainty-Gated Escalation (CGE)** applies. |
+| **Certainty-Gated Escalation (CGE)** | Deterministic handoff when local certainty is insufficient—replacing ad-hoc “API fallback” or vague “confidence score” rules alone. |
+| **Ephemeral State Inversion (ESI)** | Context is regenerated from dense embeddings (Vec2Text-style inversion with beam search), replacing **KV-cache**-style growth and unbounded “context window” storage in linear memory. |
+| **Quantum-Assisted Hierarchical Routing (QAHR)** | Escalation routing as a structured optimization problem (QAOA / QUBO on the cost Hamiltonian), replacing informal “MoE routing” or heuristic load-balancing narratives for Tier-3 paths. |
+| **WASM Linear Execution Snapshots (WLES)** | Serialization of WASM linear memory and execution-relevant state to fast storage for suspend/resume—replacing heavyweight “model paging” or tensor-only checkpoints as the primary persistence story. |
+
+**Model classification tiers (WASM deployment)**  
+- **Micro-Enclaves:** sub-250 MB linear memory (~1.2B effective parameters at ternary packing).  
+- **Meso-Enclaves:** ~2 GB (~10B effective).  
+- **Macro-Enclaves:** ~8 GB (Memory64-bound; ~40B effective).
+
+For extended **enterprise-scale** enclave classes (workgroup to multi-100GB EF), see [../docs/UnifedMemory.md](../docs/UnifedMemory.md)—that taxonomy complements, and does not rename, the three tiers above.
+
+**Stateful Operational Autonomy (SOA) metrics** (evaluation, not day-to-day ML ops jargon): Local Containment Index (LCI), Linear Memory Efficiency (LME), snapshot restoration velocity, and Vec2Text/ESI fidelity (e.g. Exact Match recovery, contextual BERTScore).
+
+---
+
 ## Quantum Computing: The Ultimate Search Engine
 
 **Analogy:** Imagine you're in a massive library with billions of books, and you need to find one specific piece of information. A traditional computer would have to check each book one by one. A quantum computer is like having the ability to read all the books simultaneously and instantly find the information you need.
@@ -12,15 +38,15 @@ This document provides simple analogies to help understand the complex technolog
 
 **Why it matters:** This allows the system to search through years of encrypted memories in microseconds, making perfect recall practical.
 
-## Vec2Text-RAG: The Mathematical Translator
+## Ephemeral State Inversion (ESI) and Vec2Text-RAG: The Mathematical Translator
 
-**Analogy:** Think of Vec2Text-RAG like a universal translator that converts thoughts into a mathematical language. When you remember something, your brain doesn't store the exact words - it stores the "essence" or "meaning" of the memory. Vec2Text-RAG does the same thing for AI, converting information into mathematical vectors (lists of numbers) that represent the core meaning.
+**Analogy:** Think of **Ephemeral State Inversion (ESI)** via Vec2Text-RAG like a universal translator that converts thoughts into a mathematical language. When you remember something, your brain doesn't store the exact words—it stores the "essence" or "meaning." ESI stores dense embeddings and, when needed, runs **Edge Cognitive Looping (ECL)**-compatible decoding (beam search, corrector loops) to recover text—without maintaining a growing **ESI**-invisible KV-style cache in linear memory.
 
 **Real-world comparison:**
-- **Traditional storage:** Like writing down every word of a conversation verbatim
-- **Vec2Text-RAG:** Like taking detailed notes that capture the meaning without recording every single word
+- **Unbounded conversational buffers:** Like writing down every word of a conversation verbatim (incompatible with strict WASM linear memory budgets)
+- **ESI + Vec2Text-RAG:** Like detailed notes that capture meaning; you reconstruct verbatim detail only when needed
 
-**Why it matters:** This allows AI to remember the important parts of information without storing unnecessary details, making memory more efficient and secure.
+**Why it matters:** Memory stays predictable; reconstruction is compute-bounded instead of unbounded RAM growth.
 
 ## Approximate DCPE: The Unbreakable Lock
 
@@ -62,15 +88,15 @@ This document provides simple analogies to help understand the complex technolog
 
 **Why it matters:** This ensures that even if one part of the system is compromised, the rest remains secure.
 
-## Quantum Routing: The Ultimate GPS
+## Quantum-Assisted Hierarchical Routing (QAHR): The Ultimate GPS
 
-**Analogy:** Imagine you're in a city with millions of streets and you need to find the fastest route to your destination. Quantum routing is like having a GPS that can instantly calculate the optimal route by considering all possible paths simultaneously.
+**Analogy:** After **Certainty-Gated Escalation (CGE)**, **Quantum-Assisted Hierarchical Routing (QAHR)** is like a GPS over the edge–fog–cloud graph: latency, sensitivity, and topology are folded into a cost Hamiltonian (QUBO), and QAOA-style optimization picks a path—not a naive “API fallback” or hand-wavy **Mixture-of-Experts** load balancer.
 
 **Real-world comparison:**
-- **Traditional routing:** Like checking each possible route one by one
-- **Quantum routing:** Like seeing all possible routes at once and instantly knowing which is best
+- **Heuristic routing:** Like checking each possible route one by one
+- **QAHR:** Like optimizing over the whole multi-hop policy space with a structured quantum/classical routine
 
-**Why it matters:** This allows the system to find the right memory or piece of information instantly, even in massive databases.
+**Why it matters:** Escalation targets the mathematically favored destination under constraints, not the first available server.
 
 ## Conditional Masked Diffusion: The Perfect Reconstruction
 
@@ -85,14 +111,14 @@ This document provides simple analogies to help understand the complex technolog
 ## Putting It All Together
 
 Imagine you have a brilliant personal assistant who:
-1. **Remembers everything perfectly** (Vec2Text-RAG + Quantum Computing)
-2. **Keeps all your secrets safe** (Approximate DCPE + WebAssembly Enclaves)
-3. **Works locally on your device** (Edge Computing)
-4. **Never trusts anything by default** (Zero-Trust Architecture)
-5. **Finds information instantly** (Quantum Routing)
-6. **Reconstructs memories perfectly** (Conditional Masked Diffusion)
+1. **Runs locally inside a WASM enclave** with a fixed **Enclave Footprint (EF)** and **TPEM** packed weights—not a pile of disconnected FP tensors
+2. **Thinks in loops (ECL)** with **Certainty Scalars** and **CGE** when the task exceeds local competence
+3. **Rebuilds context via ESI** (Vec2Text-style inversion) instead of an ever-growing KV-style cache
+4. **Escalates with QAHR** when the cost Hamiltonian says a remote path is optimal
+5. **Suspends via WLES**—linear memory snapshots—instead of only swapping abstract “checkpoints”
+6. **Keeps secrets safe** (Approximate DCPE + WebAssembly enclaves + zero-trust boundaries)
 
-That's what the Hierarchical Edge-Quantum AI Architecture provides - a secure, intelligent memory system that never forgets and never compromises your privacy.
+That's the unified deployment paradigm: sovereign edge cognition with explicit memory geometry and escalation discipline.
 
 ---
 

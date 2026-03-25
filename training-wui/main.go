@@ -623,6 +623,7 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "checkpoint.latest_path", Section: "checkpoint", Key: "latest_path", Type: "string", Default: defaults["checkpoint.latest_path"]},
 		{ID: "eval.holdout_fraction", Section: "eval", Key: "holdout_fraction", Type: "float", Default: defaults["eval.holdout_fraction"]},
 		{ID: "eval.every_epoch", Section: "eval", Key: "every_epoch", Type: "bool", Default: defaults["eval.every_epoch"]},
+		{ID: "eval.early_stop_patience", Section: "eval", Key: "early_stop_patience", Type: "int", Default: defaults["eval.early_stop_patience"], Description: "Holdout eval plateau patience (needs every_epoch + holdout)."},
 		{ID: "eval.target_mean_mse", Section: "eval", Key: "target_mean_mse", Type: "float", Default: defaults["eval.target_mean_mse"]},
 		{ID: "eval.stop_on_target_mse", Section: "eval", Key: "stop_on_target_mse", Type: "bool", Default: defaults["eval.stop_on_target_mse"]},
 		{ID: "adapter.hybrid_adapter", Section: "adapter", Key: "hybrid_adapter", Type: "bool", Default: defaults["adapter.hybrid_adapter"]},
@@ -1871,7 +1872,8 @@ func buildGeneratedTOML(body buildRunRequest, accel, src, srcRaw, modelStem stri
 	if body.LRTrialMode {
 		b.WriteString("[eval]\n")
 		b.WriteString("holdout_fraction = 0.05\n")
-		b.WriteString("every_epoch = true\n\n")
+		b.WriteString("every_epoch = true\n")
+		b.WriteString("early_stop_patience = 3\n\n")
 	}
 	b.WriteString("[cascade]\n")
 	b.WriteString("enabled = true\n")
@@ -2154,13 +2156,24 @@ func handleRunLog(w http.ResponseWriter, r *http.Request, id string) {
 }
 
 func handleRunStop(w http.ResponseWriter, r *http.Request, id string) {
-	err := runManager.stop(id)
+	force := false
+	if r.Body != nil {
+		defer r.Body.Close()
+		var body struct {
+			Force bool `json:"force"`
+		}
+		dec := json.NewDecoder(io.LimitReader(r.Body, 4096))
+		if err := dec.Decode(&body); err == nil {
+			force = body.Force
+		}
+	}
+	err := runManager.stop(id, force)
 	if err != nil {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "force": force})
 }
 
 func jsonErr(w http.ResponseWriter, code int, msg string) {
@@ -2288,6 +2301,7 @@ type runRecord struct {
 	LastMeanLoss         float64
 	LastMeanReturn       float64
 	LastMeanMSE          float64
+	procExited           chan struct{} // closed after cmd.Wait (nil for serverless)
 	XPUFallbackSeen      bool
 	WasmMockSeen         bool
 	PrunedFromNodes      int
@@ -2488,6 +2502,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		return nil, err
 	}
 	rec.cmd = cmd
+	rec.procExited = make(chan struct{})
 	m.byID[id] = rec
 	m.ordered = append([]string{id}, m.ordered...)
 	if len(m.ordered) > 32 {
@@ -2657,6 +2672,7 @@ func (m *manager) wait(id string) {
 		return
 	}
 	cmd := rec.cmd
+	procDone := rec.procExited
 	runTarget := rec.RunTarget
 	destroyPod := rec.RunpodDestroyOnExit
 	runpodVF := rec.RunpodVarFile
@@ -2674,6 +2690,9 @@ func (m *manager) wait(id string) {
 		return
 	}
 	err := cmd.Wait()
+	if procDone != nil {
+		close(procDone)
+	}
 	if configCleanup != "" {
 		_ = os.Remove(configCleanup)
 	}
@@ -2796,7 +2815,7 @@ func (m *manager) activeRunSummary() map[string]any {
 	return nil
 }
 
-func (m *manager) stop(id string) error {
+func (m *manager) stop(id string, force bool) error {
 	m.mu.Lock()
 	rec := m.byID[id]
 	if rec == nil || !rec.Running {
@@ -2812,6 +2831,13 @@ func (m *manager) stop(id string) error {
 		if err := RunpodServerlessCancel(ctx, ep, jobID); err != nil {
 			return err
 		}
+		wsHub.broadcast(id, map[string]any{
+			"type":   "lifecycle",
+			"run_id": id,
+			"state":  "stop_requested",
+			"mode":   map[string]any{"force": force, "serverless_cancel": true},
+			"ts":     time.Now().UTC().Format(time.RFC3339),
+		})
 		return nil
 	}
 	if rec.cmd == nil || rec.cmd.Process == nil {
@@ -2819,6 +2845,62 @@ func (m *manager) stop(id string) error {
 		return errors.New("run not active")
 	}
 	proc := rec.cmd.Process
+	procDone := rec.procExited
 	m.mu.Unlock()
+
+	if force {
+		wsHub.broadcast(id, map[string]any{
+			"type":   "lifecycle",
+			"run_id": id,
+			"state":  "stop_requested",
+			"mode":   map[string]any{"force": true},
+			"ts":     time.Now().UTC().Format(time.RFC3339),
+		})
+		return proc.Kill()
+	}
+
+	wsHub.broadcast(id, map[string]any{
+		"type":   "lifecycle",
+		"run_id": id,
+		"state":  "stop_requested",
+		"mode":   map[string]any{"force": false, "graceful": true},
+		"ts":     time.Now().UTC().Format(time.RFC3339),
+	})
+
+	if err := proc.Signal(os.Interrupt); err != nil {
+		hint := ""
+		if runtime.GOOS == "windows" {
+			hint = " On Windows, graceful SIGINT often fails for detached GUI-spawned children; prefer running the WUI from a console or use Stop after a full epoch."
+		}
+		m.appendLog(
+			id,
+			[]byte(fmt.Sprintf(
+				"\n=== WUI: could not deliver graceful interrupt (%v); hard killing.%s ===\n",
+				err,
+				hint,
+			)),
+			"stderr",
+		)
+		return forceKillAndReturn(proc)
+	}
+	if procDone != nil {
+		go func() {
+			timer := time.NewTimer(2 * time.Minute)
+			defer timer.Stop()
+			select {
+			case <-procDone:
+				return
+			case <-timer.C:
+				_ = proc.Kill()
+			}
+		}()
+	}
+	return nil
+}
+
+func forceKillAndReturn(proc *os.Process) error {
+	if proc == nil {
+		return errors.New("no process")
+	}
 	return proc.Kill()
 }

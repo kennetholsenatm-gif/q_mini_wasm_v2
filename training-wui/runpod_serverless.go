@@ -21,7 +21,7 @@ const runpodServerlessAPIBase = "https://api.runpod.ai/v2"
 // Default Docker image when the training TOML has no [runpod_serverless] worker_image.
 // RunPod publishes this stack on Docker Hub; override per-repo in configs/training/*.toml if needed.
 // See https://docs.runpod.io/serverless/workers/deploy
-const runpodServerlessBuiltinWorkerImage = "docker.io/runpod/pytorch:1.0.3-cu1290-torch291-ubuntu2204"
+const runpodServerlessBuiltinWorkerImage = "docker.io/your-org/qmw-serverless-alma10:latest"
 
 func runpodServerlessEndpointID() string {
 	return strings.TrimSpace(os.Getenv("RUNPOD_SERVERLESS_ENDPOINT_ID"))

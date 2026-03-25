@@ -17,7 +17,9 @@ def main() -> int:
     has_xpu = hasattr(torch, "xpu")
     print("torch has xpu module:", has_xpu)
     if not has_xpu:
-        print("This PyTorch build has no XPU support. Install from https://download.pytorch.org/whl/xpu")
+        print(
+            "This PyTorch build has no XPU support. Install from https://download.pytorch.org/whl/xpu"
+        )
         return 2
 
     ok = bool(torch.xpu.is_available())
@@ -31,7 +33,9 @@ def main() -> int:
         except Exception as e:
             print("Could not enumerate devices:", e)
     else:
-        print("XPU not available: update Intel GPU drivers and ensure XPU wheels are installed (not CPU-only torch).")
+        print(
+            "XPU not available: update Intel GPU drivers and ensure XPU wheels are installed (not CPU-only torch)."
+        )
         return 3
     return 0
 

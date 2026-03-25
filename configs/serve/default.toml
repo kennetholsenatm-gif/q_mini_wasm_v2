@@ -8,3 +8,13 @@ use_cascade_router = false
 cascade_state_dim = 8
 cascade_num_actions = 4
 cascade_router_hidden = 32
+
+# TPEM / Macro-Enclave defaults: ~8 GiB linear memory bound (Memory64), ~40B effective @ 1.6 bit/weight.
+[enclave]
+enclave_tier = "macro"
+enclave_footprint_mb = 8192.0
+certainty_scalar_threshold = 0.85
+wasm_memory64_max_mb = 8192.0
+use_memory64 = true
+# 8192 MiB / 64 KiB per page = 131072 pages
+max_linear_memory_pages = 131072
