@@ -132,8 +132,11 @@ def get_model():
             hierarchical_config=hier,
         )
         ckpt = ""
-        if s is not None and s.checkpoint:
-            ckpt = str(s.checkpoint).strip()
+        if s is not None:
+            if getattr(s, "tpem", None) and str(s.tpem).strip():
+                ckpt = str(s.tpem).strip()
+            elif s.checkpoint:
+                ckpt = str(s.checkpoint).strip()
         if not ckpt:
             ckpt = (
                 os.environ.get("QMINIWASM_CHECKPOINT", "").strip()
@@ -155,7 +158,7 @@ class InferResponse(BaseModel):
     cascade_logits: Optional[List[List[float]]] = Field(
         default=None,
         description=(
-            "Per-row router logits when USE_CASCADE_ROUTER=1 and checkpoint contains weights."
+            "Per-row router logits when USE_CASCADE_ROUTER=1 and the loaded TPEM artifact has router weights."
         ),
     )
 

@@ -8,8 +8,8 @@ This file tracks the **Q-Mini-WASM Master Realignment** prompt against what is *
 |------|--------|
 | Vendor-neutral identity docs (OIDC IdP + internal X.509 CA wording) | **In progress** — canonical doc: [`IDENTITY_STACK_REFERENCE.md`](IDENTITY_STACK_REFERENCE.md); taxonomy linter blocks named vendor lock-in in gated paths |
 | PKI script refactor | **Done** — [`scripts/security/internal_ca_pki_provisioning.py`](../scripts/security/internal_ca_pki_provisioning.py); legacy shim [`scripts/security/freeipa_pki_provisioning.py`](../scripts/security/freeipa_pki_provisioning.py) |
-| Repo-wide legacy ML lexicon (`checkpoint`, etc.) | **Partial** — `qminiwasm/training/` uses **trainable TPEM** APIs + scoped taxonomy rule; engine/TOML keys remain ``checkpoint_*`` for compatibility |
-| Flatten `engine/`, `qminiwasm/`, etc. into top-level domains | **Not started** — high churn; requires import graph and release plan |
+| Repo-wide legacy ML lexicon (`checkpoint`, etc.) | **Partial** — `qminiwasm/training/` uses **trainable TPEM** APIs + scoped taxonomy rule; engine kwargs remain ``checkpoint_*``; **TOML** may use preferred ``[tpem]`` (+ ``[serve].tpem``) per [LAYOUT_REALIGNMENT_RFC.md](LAYOUT_REALIGNMENT_RFC.md) |
+| Flatten `engine/`, `qminiwasm/`, etc. into top-level domains | **RFC** — [LAYOUT_REALIGNMENT_RFC.md](LAYOUT_REALIGNMENT_RFC.md); mechanical pilots not yet executed beyond TOML |
 
 ## Phase 2 — Wiki / docs paradigm narrative
 
@@ -31,4 +31,4 @@ This file tracks the **Q-Mini-WASM Master Realignment** prompt against what is *
 |------|--------|
 | Roadmap / TODO pivot to implementation tooling | **Done** — [`wiki/Roadmap.md`](../wiki/Roadmap.md), [`docs/TODO.md`](TODO.md), [`CPL_INTEGRATION_SPIKE.md`](CPL_INTEGRATION_SPIKE.md) |
 
-**Last updated:** execution batch (Phase 1 vendor-neutral identity + gates).
+**Last updated:** TOML `[tpem]` / `[serve].tpem` pilot + layout RFC.

@@ -121,7 +121,39 @@ def test_load_serve_toml_default_section(tmp_path):
     )
     s = load_serve_toml(f)
     assert s.checkpoint == "ck.pt"
+    assert s.tpem is None
     assert s.hybrid_adapter is True
+
+
+def test_load_serve_toml_tpem_field(tmp_path):
+    from engine.training_schema import load_serve_toml
+
+    f = tmp_path / "serve_tpem.toml"
+    f.write_text(
+        '[serve]\ntpem = "weights.pt"\nhybrid_adapter = false\n',
+        encoding="utf-8",
+    )
+    s = load_serve_toml(f)
+    assert s.tpem == "weights.pt"
+    assert s.checkpoint is None
+
+
+def test_tpem_table_overrides_checkpoint_in_engine_kwargs(tmp_path):
+    from engine.config import EngineConfig
+    from engine.training_schema import load_training_toml
+
+    f = tmp_path / "merge.toml"
+    f.write_text(
+        '[data]\nsource = "mesh"\n[training]\nepochs = 1\n'
+        '[checkpoint]\nload_path = "legacy.pt"\n'
+        '[tpem]\nload_path = "preferred.pt"\n',
+        encoding="utf-8",
+    )
+    doc = load_training_toml(f)
+    assert doc.checkpoint.load_path == "legacy.pt"
+    assert doc.tpem.load_path == "preferred.pt"
+    c = EngineConfig.from_training_toml(f)
+    assert c.checkpoint_load_path == "preferred.pt"
 
 
 def test_load_serve_document_enclave_section(tmp_path):

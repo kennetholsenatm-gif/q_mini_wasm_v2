@@ -104,6 +104,20 @@ class CheckpointSection(BaseModel):
     latest_path: Optional[str] = None
 
 
+class TpemSection(BaseModel):
+    """Trainable TPEM artifact paths (``load_path`` / ``save_path`` / ``best`` / ``latest``).
+
+    When the legacy persistence table and ``[tpem]`` both set a field, **``[tpem]`` wins** for that field.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    load_path: Optional[str] = None
+    save_path: Optional[str] = None
+    best_path: Optional[str] = None
+    latest_path: Optional[str] = None
+
+
 class EvalSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -164,7 +178,11 @@ class ServeSection(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    checkpoint: Optional[str] = Field(None, description="QMINIWASM_CHECKPOINT")
+    checkpoint: Optional[str] = Field(None, description="QMINIWASM_CHECKPOINT (legacy TOML key)")
+    tpem: Optional[str] = Field(
+        None,
+        description="Trainable TPEM .pt path; preferred over the legacy weight path when both are set",
+    )
     hybrid_adapter: Optional[bool] = None
     hybrid_adapter_hidden: Optional[int] = None
     use_cascade_router: Optional[bool] = None
@@ -223,6 +241,7 @@ class TrainingConfig(BaseModel):
     data: DataSection = Field(default_factory=DataSection)
     huggingface: HuggingFaceSection = Field(default_factory=HuggingFaceSection)
     checkpoint: CheckpointSection = Field(default_factory=CheckpointSection)
+    tpem: TpemSection = Field(default_factory=TpemSection)
     eval: EvalSection = Field(default_factory=EvalSection)
     adapter: AdapterSection = Field(default_factory=AdapterSection)
     cascade: CascadeSection = Field(default_factory=CascadeSection)
@@ -303,6 +322,10 @@ class TrainingConfig(BaseModel):
                 out[k] = v
 
         ck = self.checkpoint.model_dump(exclude_none=True)
+        tp = self.tpem.model_dump(exclude_none=True)
+        for k, v in tp.items():
+            if v is not None:
+                ck[k] = v
         ck_map = {
             "load_path": "checkpoint_load_path",
             "save_path": "checkpoint_save_path",

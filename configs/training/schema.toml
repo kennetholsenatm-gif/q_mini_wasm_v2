@@ -51,6 +51,11 @@
 # best_path = "artifacts/models/my-run/best.pt"
 # latest_path = "artifacts/models/my-run/latest.pt"
 
+[tpem]
+# Preferred name for the same keys as [checkpoint] (trainable TPEM artifact paths).
+# Per-field: when both tables set a key, [tpem] wins.
+# load_path = "artifacts/models/my-run/latest.pt"
+
 [eval]
 # holdout_fraction = 0.0
 # every_epoch = false
