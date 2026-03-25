@@ -26,6 +26,14 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 | P3 | Top-level `wasm_runtime/` or `edge/` for enclave + WASM (vs nested `qminiwasm/enclave/`) | High |
 | P4 | Retire `engine/` vs `qminiwasm/` split after boundary doc | High |
 
+### P3 proposal (when ready)
+
+1. Inventory **import edges**: `grep -r "qminiwasm.enclave"` and `from .enclave` across `qminiwasm/`, `tests/`, `engine/`, `scripts/`.
+2. Choose target package name (`edge`, `wasm_host`, or keep `qminiwasm.enclave` but add `qminiwasm.edge` facade).
+3. Move in **one PR**: `git mv qminiwasm/enclave qminiwasm/<target>`, add `qminiwasm/enclave/__init__.py` shim that re-exports from `<target>` for one release cycle.
+4. Update **mypy** / **pytest** paths and any **dynamic imports** (WASM loaders, training-wui if any).
+5. Remove shim in a **follow-up** after downstream repos pin the new path.
+
 ## References
 
 - Status: [MASTER_REALIGNMENT_STATUS.md](MASTER_REALIGNMENT_STATUS.md)
