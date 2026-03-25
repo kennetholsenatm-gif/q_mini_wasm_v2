@@ -69,7 +69,8 @@ grafana-server --version
 
 # Security tools
 vault --version
-keycloak --version
+# OIDC-compliant IdP CLI (replace with your vendor binary, e.g. idpctl --version)
+your-oidc-idp --version
 ```
 
 ## Quick Start Deployment
@@ -260,7 +261,7 @@ tls:
 # security/auth-config.yaml
 authentication:
   type: oidc
-  provider: keycloak
+  provider: oidc_idp
   client_id: qminiwasm-client
   client_secret: <secret>
   issuer_url: https://auth.example.com/auth/realms/qminiwasm

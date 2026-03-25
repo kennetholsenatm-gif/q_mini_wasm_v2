@@ -47,10 +47,10 @@ if ($PackerValidate) {
 Write-Host "--- Step 2: Security stack ---"
 $SecurityDir = Join-Path $RepoRoot "containers\security-stack"
 Test-Env $SecurityDir ".env.example"
-if (-not (Prompt-Step "Start security stack (Keycloak, Vault, Envoy)?")) { exit 0 }
+if (-not (Prompt-Step "Start security stack (OIDC IdP, Vault, Envoy)?")) { exit 0 }
 Push-Location $SecurityDir
 try { docker compose up -d } finally { Pop-Location }
-Write-Host "Security stack started. Keycloak :8080, Vault :8200, Envoy :8081."
+Write-Host "Security stack started. OIDC IdP :8080, Vault :8200, Envoy :8081."
 
 # Step 3: Data stack
 Write-Host "--- Step 3: Data stack ---"

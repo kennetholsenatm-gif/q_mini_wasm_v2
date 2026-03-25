@@ -1,6 +1,6 @@
 # Tooling and ops backlog (`qminiwasm-core`)
 
-Use this file for **Phase 4 implementation tooling** tracking and **maintainer hygiene**. Prefer **GitHub Issues** for owned work items, execution order, and assignees.
+Use this file for **Phase 4 implementation tooling** tracking and **maintainer hygiene**. Prefer **GitHub Issues** for owned work items, execution order, and assignees. **Master realignment vs `main`:** [MASTER_REALIGNMENT_STATUS.md](MASTER_REALIGNMENT_STATUS.md).
 
 ## Phase 4 tooling (checklist)
 

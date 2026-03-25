@@ -32,7 +32,7 @@ For each workflow, Cline will analyze nodes to identify smart proxy usage:
 
 #### Step 3: Compliance Verification
 Each workflow is validated against DoD compliance requirements:
-- Keycloak authentication headers
+- OIDC-compliant IdP authentication headers
 - Role-based authorization checks
 - Encryption in transit verification
 - Audit trail generation
@@ -129,7 +129,7 @@ workflow_execution = wrapper.execute_workflow(
 
 ### 1. Authentication Flow
 All API calls include:
-- Keycloak JWT tokens
+- OIDC IdP JWT tokens
 - Role-based access control headers
 - CSRF protection tokens
 - Audit logging for all operations

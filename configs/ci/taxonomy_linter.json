@@ -12,7 +12,9 @@
     {"regex": "(?i)floating[- ]point", "hint": "Prefer trit/TPEM or scalar certainty language unless an external IEEE-754 API is unavoidable."},
     {"regex": "(?i)\\bfloat16\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
     {"regex": "(?i)\\bfloat32\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
-    {"regex": "(?i)\\bfloat64\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."}
+    {"regex": "(?i)\\bfloat64\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
+    {"regex": "(?i)\\bkeycloak\\b", "hint": "Prefer OIDC-compliant identity provider (IdP)."},
+    {"regex": "(?i)\\bfreeipa\\b", "hint": "Prefer internal X.509 Certificate Authority (CA) or neutral CA wording."}
   ],
   "scan_extensions": [".md", ".toml", ".py", ".rs", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".c", ".go"],
   "path_prefixes": ["docs/", "wiki/", "configs/", "qminiwasm/", "engine/", "cpp/", "ternary_packed/", "scripts/", "tests/", "training-wui/"],
