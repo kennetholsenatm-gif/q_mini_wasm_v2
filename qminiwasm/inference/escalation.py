@@ -46,6 +46,7 @@ def prepare_escalation_payload(
     if instruction_pointer is None:
         instruction_pointer = captured_deltas.get("instruction_pointer")
 
+    last_cert = captured_deltas.get("last_certainty")
     payload = {
         "format_version": cfg.delta_format_version,
         "loop_index": captured_deltas.get("loop_idx", -1),
@@ -54,6 +55,10 @@ def prepare_escalation_payload(
         "instruction_pointer": instruction_pointer,
         "execution_state": execution_state,
         "semantic_blob": captured_deltas.get("semantic_blob"),
+        # Certainty-Gated Escalation (CGE) metadata for QAHR / Tier 3
+        "certainty_scalar_threshold": cfg.certainty_scalar_threshold,
+        "T_conf": cfg.T_conf,
+        "last_certainty_scalar": float(last_cert) if last_cert is not None else None,
     }
     for k in (
         "cascade_action_id",

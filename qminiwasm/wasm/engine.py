@@ -1,10 +1,13 @@
 """WASM Engine for Q-Mini-WASM
 
 This module provides the core WASM compilation and execution engine for the
-Q-Mini-WASM architecture. It handles:
+Q-Mini-WASM architecture. Static ternary weights loaded into the guest are treated as a contiguous
+**Ternary-Packed Memory Enclave (TPEM)** byte array (see :mod:`qminiwasm.wasm.trit_pack` for the
+on-wire 5-trits-per-byte layout). It handles:
+
 - C source compilation to WASM modules
 - WASM module instantiation and execution
-- Stack and memory state capture
+- Stack and linear memory state capture for **WLES** / escalation payloads
 - Error handling and validation
 """
 
@@ -22,12 +25,11 @@ import wasmtime
 from .memory_encode import D_MODEL, encode_linear_memory
 from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
 
-# Wasmtime Store maximum linear memory (bytes). Sized for ~1e6 training rows × d_model
-# byte budget (same width as encode_linear_memory output); override via TOML [wasm] store_memory_limit_mb
-# or env QMW_WASM_STORE_MEMORY_LIMIT_BYTES / QMW_WASM_STORE_MEMORY_LIMIT_MB (see engine.config).
+# Wasmtime Store max linear memory (bytes): ~1e6 rows × d_model (encode_linear_memory width).
+# Override: TOML [wasm] store_memory_limit_mb or env QMW_WASM_STORE_MEMORY_LIMIT_*.
 DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES = 1_000_000 * D_MODEL
-# Wasmtime applies a ~10k default instance cap if only memory_size is set; mesh data gen can exceed it.
-# Override via [wasm] store_instance_limit / store_memories_limit in training TOML.
+# Wasmtime default instance cap is ~10k if only memory_size is set; mesh ingest may exceed it.
+# Override: [wasm] store_instance_limit / store_memories_limit in training TOML.
 DEFAULT_WASM_STORE_INSTANCE_LIMIT = 16_777_216
 DEFAULT_WASM_STORE_MEMORIES_LIMIT = 16_777_216
 
@@ -88,7 +90,7 @@ class WasmEngine:
         # Keep store for last compile_wasm so Instance can use same engine (no cross-Engine)
         self._compiled_store: Optional[Any] = None
         self._compiled_module: Optional[Any] = None
-        # One wasmtime.Instance per (store id, module id); mesh execute_wasm reused same module many times.
+        # One Instance per (store id, module id); mesh may reuse the same module many times.
         self._instance_cache: Dict[Tuple[int, int], Any] = {}
 
         if cfg.force_mock:

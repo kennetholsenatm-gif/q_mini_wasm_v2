@@ -22,7 +22,13 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from qminiwasm.wasm import MESH_EXPORT_NAMES, WasmCompiler, WasmEngine, MESH_ALGORITHMS, WasmRuntimeConfig
+from qminiwasm.wasm import (
+    MESH_EXPORT_NAMES,
+    WasmCompiler,
+    WasmEngine,
+    MESH_ALGORITHMS,
+    WasmRuntimeConfig,
+)
 
 BytesLike = Union[bytes, bytearray, memoryview]
 

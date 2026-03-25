@@ -1,4 +1,8 @@
-"""Save/load trainable weights for ``QMiniWASM`` (quantum_router + ternary_expert + optional hybrid_adapter)."""
+"""Save/load trainable weights for QMiniWASM (router, ternary expert, optional hybrid_adapter).
+
+**WLES note:** PyTorch checkpoints store **trainable** subtensors. Full **WLES** dumps serialize
+guest linear memory (:mod:`qminiwasm.wasm.memory_encode` + native hooks); both may coexist.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 CHECKPOINT_FORMAT_VERSION = 1
 D_MODEL = 4096
+# Training artifact compatibility tag for docs/tooling aligned with WLES versioning stories.
+WLES_TRAINING_SIDE_VERSION = CHECKPOINT_FORMAT_VERSION
 
 
 def build_checkpoint_payload(

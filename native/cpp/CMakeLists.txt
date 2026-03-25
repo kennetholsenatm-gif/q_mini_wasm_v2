@@ -28,7 +28,7 @@ add_library(qminiwasm_core STATIC
     grammar/json_subset_pda.cpp
     grammar/grammar_mask_scalar.cpp
     grammar/grammar_dispatch.cpp
-    kv/residual_kv_cache.cpp
+    wasm/wles_hooks.cpp
     qubo/qaoa_small_n.cpp
 )
 set_target_properties(qminiwasm_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -44,6 +44,12 @@ if(MSVC)
     target_compile_options(qminiwasm_core PRIVATE /W4 /permissive-)
 else()
     target_compile_options(qminiwasm_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(MSVC)
+    set_source_files_properties(kernels/ternary_forward_avx2.cpp PROPERTIES COMPILE_OPTIONS /arch:AVX2)
+else()
+    set_source_files_properties(kernels/ternary_forward_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2")
 endif()
 
 # AVX-512 object library (separate flags)
@@ -151,7 +157,7 @@ add_executable(qminiwasm_cpp_tests
     tests/test_w158_pack.cpp
     tests/test_ternary_matvec.cpp
     tests/test_grammar_mask.cpp
-    tests/test_kv_residual.cpp
+    tests/test_wles_hooks.cpp
     tests/test_qaoa.cpp
 )
 target_link_libraries(qminiwasm_cpp_tests PRIVATE qminiwasm_core)

@@ -8,17 +8,26 @@ This document provides a comprehensive overview of the infrastructure architectu
 
 The architecture follows a strict three-tier hierarchy that separates concerns while maintaining security and performance:
 
-#### Tier 1: Edge Environment (Sub-100MB Footprint)
-**Purpose:** Local processing and memory reconstruction
+#### Tier 1: Edge Environment (WASM enclave / ECL)
+**Purpose:** Local **Edge Cognitive Looping (ECL)**, **Ephemeral State Inversion (ESI)** for context regeneration, and optional suspension via **WASM Linear Execution Snapshots (WLES)**.
+
+**Model classification tiers (packed TPEM / EF—not legacy “parameter count” alone):**
+
+| Tier | Enclave Footprint (EF) | Effective scale (ternary packing) | Typical role |
+|------|------------------------|-----------------------------------|----------------|
+| **Micro-Enclaves** | Sub-250 MB | ~1.2B | Ultra-constrained edge; fast cold paths; initial QAHR problem formulation |
+| **Meso-Enclaves** | ~2 GB | ~10B | Laptops / gateways; ESI decode; baseline ECL without Memory64 |
+| **Macro-Enclaves** | ~8 GB (Memory64 bound) | ~40B | M-series / Strix Halo class; full ECL, CGE, QAHR |
+
 **Components:**
-- **WebAssembly Enclaves:** Secure execution environments using WasmEdge or QMiniWasm
-- **Memory Management:** Local storage of encrypted vector manifolds
-- **Cryptographic Operations:** All plaintext operations occur here
-- **Resource Constraints:** Optimized for devices with limited computational resources
+- **WebAssembly Enclaves:** Secure execution (WasmEdge / QMiniWasm); static graph + **Ternary-Packed Memory Enclave (TPEM)** in linear memory
+- **Memory management:** Encrypted embeddings + **ESI** regeneration—not unbounded KV-cache-style growth in linear memory
+- **Cryptographic operations:** Sensitive transforms at the edge where policy requires
+- **Certainty-Gated Escalation (CGE):** When certainty scalars fail to reach $T_{conf}$, halt ECL and package state for Tier 2/3
 
 **Key Technologies:**
-- WebAssembly runtime for secure sandboxing
-- Local vector databases for encrypted memory storage
+- WebAssembly runtime (32-bit or **Memory64** for Macro tier)
+- Local stores for embeddings and **WLES** snapshots
 - Hardware-accelerated cryptography (Intel ARC/XPU when available)
 - Zero-trust boundary enforcement
 
@@ -37,10 +46,10 @@ The architecture follows a strict three-tier hierarchy that separates concerns w
 - Network segmentation and micro-segmentation
 
 #### Tier 3: Cloud Infrastructure
-**Purpose:** Centralized storage and quantum processing
+**Purpose:** Centralized storage and **Quantum-Assisted Hierarchical Routing (QAHR)** backends
 **Components:**
 - **Vector Database:** Chronological storage of encrypted states
-- **Quantum Cluster:** QAOA-based routing optimization
+- **Quantum cluster / simulators:** Cost Hamiltonian / QUBO evaluation for QAHR (not informal “MoE-only” routing)
 - **Management Services:** Orchestration and monitoring
 - **Backup & Recovery:** Disaster recovery and data protection
 
@@ -52,17 +61,17 @@ The architecture follows a strict three-tier hierarchy that separates concerns w
 
 ## Horizontal scale and clustering (qminiwasm-core)
 
-The **training** stack in this repository (`qminiwasm-core`) has properties that often make **horizontal scaling and cluster operations easier to reason about** than for typical large autoregressive LLM agents:
+The **training** stack in this repository (`qminiwasm-core`) has properties that often make **horizontal scaling and cluster operations easier to reason about** than for typical large autoregressive agents that rely on giant **Ephemeral State Inversion (ESI)**-hostile KV-style caches:
 
 **Why it tends to cluster cleanly**
 
-- **Fixed tensor geometry** — Core supervision uses **fixed-width** vectors (e.g. 4096-d **hidden** / **target**). Batch shapes and per-step memory are **predictable** compared to variable-length token streams and very large **KV caches** in decoder-only models.
+- **Fixed activation geometry** — Core supervision uses **fixed-width** vectors (e.g. 4096-d **hidden** / **target**). Batch shapes and per-step memory are **predictable** compared to variable-length streams and unbounded context buffers.
 - **Embarrassingly parallel data paths** — **Mesh** and **HF tabular** workloads shard naturally by **sample**; workers can encode, batch, and feed the trainer independently (subject to dataset partitioning and reproducibility choices).
-- **Detached quantum execution** — When the QAOA MoE uses **IBM Quantum Runtime**, device execution is **outside** the autograd graph; ⟨Z⟩ expectations are mixed in as a **classical signal** in the loop, avoiding “train the whole network through the QPU” coupling.
+- **Detached quantum execution** — When **Quantum-Assisted Hierarchical Routing (QAHR)** training hooks use **IBM Quantum Runtime**, device execution is **outside** the autograd graph; ⟨Z⟩ expectations are mixed in as a **classical signal** in the loop, avoiding “train the whole network through the QPU” coupling.
 
 **What still requires normal distributed ML discipline**
 
-- **PyTorch** multi-GPU / multi-node (**DDP**, etc.) has the same **engineering** surface as other models: process groups, checkpointing, stragglers, and failure recovery.
+- **PyTorch** multi-GPU / multi-node (**DDP**, etc.) has the same **engineering** surface as other models: process groups, **WLES**/checkpoint serializations, stragglers, and failure recovery.
 - **WASM / mesh** encoding can be **CPU-heavy** per sample—scale often means **more data-loader workers**, **partitioned corpora**, or **pipelined** ingest, not only larger GPUs.
 - **IBM Quantum** is **queue- and quota-bound**; “parallelism” is mostly **fan-out of independent jobs**, not linear speedup on a single training step.
 
@@ -108,8 +117,8 @@ The system is built on a container-first architecture using Docker and Kubernete
 
 #### Edge Deployment
 - **Container Orchestration:** Lightweight Kubernetes or container runtime
-- **Resource Optimization:** Sub-100MB memory footprint requirement
-- **Offline Capabilities:** Operation without constant cloud connectivity
+- **Resource Optimization:** Match **Micro- / Meso- / Macro-Enclave** EF targets (see Tier 1 table); Micro tier targets **&lt;180 ms** class cold starts with WLES/Wizer-style snapshots where configured
+- **Offline Capabilities:** Operation without constant cloud connectivity; **CGE** only when certainty or policy demands
 - **Secure Boot:** Hardware-based security for edge devices
 
 ## DevSecOps Pipeline
@@ -217,10 +226,10 @@ The monitoring architecture provides complete visibility into system health and 
 ## Edge Computing Considerations
 
 ### Resource Optimization
-- **Memory Footprint:** Sub-100MB memory requirement for edge devices
-- **CPU Optimization:** Efficient CPU usage for resource-constrained environments
-- **Storage Efficiency:** Minimal storage requirements with efficient data compression
-- **Network Optimization:** Bandwidth-efficient communication protocols
+- **Enclave Footprint (EF):** Size the WASM linear memory + **TPEM** to **Micro-** (sub-250 MB), **Meso-** (~2 GB), or **Macro-** (~8 GB Memory64) tiers
+- **CPU Optimization:** Efficient CPU usage; ternary forward paths favor add/subtract-dominant math
+- **Storage Efficiency:** **WLES** to NVMe for suspend; avoid fragmenting linear memory with ad-hoc paging
+- **Network Optimization:** Bandwidth-efficient protocols; **QAHR** selects paths under policy
 
 ### Offline Capabilities
 - **Local Processing:** Full functionality without constant cloud connectivity
@@ -242,11 +251,11 @@ The monitoring architecture provides complete visibility into system health and 
 - **Quantum Security:** Post-quantum cryptographic algorithms
 - **Quantum Optimization:** Quantum algorithms for optimization problems
 
-### AI/ML Operations
-- **Model Management:** Automated model deployment and versioning
-- **Training Pipelines:** Automated training and validation pipelines
-- **Inference Optimization:** Optimized inference for edge and cloud environments
-- **Model Monitoring:** Continuous model performance monitoring
+### Stateful edge operations (SOA)
+- **TPEM / EF governance:** Deploy by enclave tier and packed footprint, not FP “tensor count” alone
+- **Training pipelines:** Automated training and validation; **WLES**-style artifacts where applicable
+- **ECL tuning:** Certainty scalars, $T_{conf}$, and **CGE** policies per environment
+- **SOA monitoring:** LCI, LME, WLES restore latency, ESI fidelity—not only classical GPU throughput metrics
 
 ### Edge-to-Cloud Continuum
 - **Fog Computing:** Intermediate processing between edge and cloud

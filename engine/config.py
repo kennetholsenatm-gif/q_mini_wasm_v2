@@ -84,6 +84,7 @@ class EngineConfig:
         checkpoint_latest_path: Optional[str] = None,
         eval_holdout_fraction: Optional[float] = None,
         eval_every_epoch: Optional[bool] = None,
+        eval_early_stop_patience: Optional[int] = None,
         target_mean_mse: Optional[float] = None,
         stop_on_target_mse: Optional[bool] = None,
         hybrid_adapter: Optional[bool] = None,
@@ -122,9 +123,7 @@ class EngineConfig:
     ):
         self.accelerator = accelerator
         self.device_index = int(device_index) if device_index is not None else 0
-        self.quantum_backend = (
-            quantum_backend if quantum_backend is not None else "penny_lane"
-        )
+        self.quantum_backend = quantum_backend if quantum_backend is not None else "penny_lane"
         self.num_qubits = int(num_qubits) if num_qubits is not None else 8
         self.qaoa_layers = int(qaoa_layers) if qaoa_layers is not None else 3
         _qem = qaoa_execution_mode if qaoa_execution_mode is not None else "pennylane"
@@ -155,9 +154,7 @@ class EngineConfig:
             self.qaoa_warm_start_cache_ttl = max(1, int(qaoa_warm_start_cache_ttl))
         else:
             self.qaoa_warm_start_cache_ttl = 128
-        self.quantum_execution_policy = (
-            (quantum_execution_policy or "").strip().lower()
-        )
+        self.quantum_execution_policy = (quantum_execution_policy or "").strip().lower()
         if (
             self.quantum_execution_policy == "hardware_only"
             and self.qaoa_execution_mode == "pennylane"
@@ -168,9 +165,7 @@ class EngineConfig:
                 "(pennylane would skip real QAOA in HybridQuantumMoE)"
             )
             self.qaoa_execution_mode = "qiskit_ibm"
-        self.diff_method = (
-            diff_method if diff_method is not None else "parameter-shift"
-        )
+        self.diff_method = diff_method if diff_method is not None else "parameter-shift"
         self.epochs = int(epochs) if epochs is not None else 25
         self.batch_size = int(batch_size) if batch_size is not None else 32
         if learning_rate is not None:
@@ -247,12 +242,8 @@ class EngineConfig:
         else:
             self.lr_plateau_patience = None
 
-        self.lr_plateau_factor = (
-            float(lr_plateau_factor) if lr_plateau_factor is not None else 0.5
-        )
-        self.lr_plateau_min_lr = (
-            float(lr_plateau_min_lr) if lr_plateau_min_lr is not None else 1e-7
-        )
+        self.lr_plateau_factor = float(lr_plateau_factor) if lr_plateau_factor is not None else 0.5
+        self.lr_plateau_min_lr = float(lr_plateau_min_lr) if lr_plateau_min_lr is not None else 1e-7
 
         if early_stop_patience is not None:
             self.early_stop_patience = early_stop_patience
@@ -273,6 +264,11 @@ class EngineConfig:
             self.eval_every_epoch = eval_every_epoch
         else:
             self.eval_every_epoch = False
+
+        if eval_early_stop_patience is not None and eval_early_stop_patience > 0:
+            self.eval_early_stop_patience = int(eval_early_stop_patience)
+        else:
+            self.eval_early_stop_patience = None
 
         if target_mean_mse is not None:
             self.target_mean_mse = target_mean_mse

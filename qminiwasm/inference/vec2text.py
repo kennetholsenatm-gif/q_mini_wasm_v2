@@ -1154,6 +1154,51 @@ def reconstruct_memory(
     return vec2text_rag.reconstruct_memory(query_vector, candidate_vectors)
 
 
+def esi_beam_search_reconstruct(
+    query_vector: torch.Tensor,
+    candidate_vectors: List[torch.Tensor],
+    *,
+    beam_width: int = 4,
+    noise_scale: float = 0.01,
+) -> Optional[str]:
+    """Ephemeral State Inversion (ESI): beam-widen latents, then re-rank.
+
+    Keeps reconstruction compute-bound (no KV-cache growth in linear memory).
+    """
+    if beam_width < 1:
+        beam_width = 1
+    expanded: List[torch.Tensor] = []
+    for v in candidate_vectors:
+        vv = v.detach().float()
+        if vv.dim() > 2:
+            continue
+        batched = vv.unsqueeze(0) if vv.dim() == 1 else vv
+        expanded.append(batched)
+        for _ in range(1, beam_width):
+            expanded.append((batched + torch.randn_like(batched) * noise_scale).clamp(-1e6, 1e6))
+    flat_candidates: List[torch.Tensor] = []
+    for t in expanded:
+        if t.dim() == 2:
+            for row in range(t.shape[0]):
+                flat_candidates.append(t[row])
+        else:
+            flat_candidates.append(t.reshape(-1))
+    return vec2text_rag.reconstruct_memory(query_vector, flat_candidates)
+
+
+def ephemeral_state_inversion_decode(
+    query_vector: torch.Tensor,
+    candidate_vectors: List[torch.Tensor],
+    *,
+    use_beam: bool = True,
+    beam_width: int = 4,
+) -> Optional[str]:
+    """Stable ESI façade: optional beam search then Vec2Text-RAG inversion."""
+    if use_beam and beam_width > 1:
+        return esi_beam_search_reconstruct(query_vector, candidate_vectors, beam_width=beam_width)
+    return reconstruct_memory(query_vector, candidate_vectors)
+
+
 def validate_reconstructed_text(text: str) -> Tuple[bool, Optional[str]]:
     """Validate reconstructed text syntax
 

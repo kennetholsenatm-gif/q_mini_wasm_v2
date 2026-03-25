@@ -64,6 +64,11 @@ def main(config: EngineConfig | None = None) -> dict:
         checkpoint_latest_path=getattr(config, "checkpoint_latest_path", None),
         eval_holdout_fraction=float(getattr(config, "eval_holdout_fraction", 0.0) or 0.0),
         eval_every_epoch=bool(getattr(config, "eval_every_epoch", False)),
+        eval_early_stop_patience=(
+            int(p)
+            if (p := getattr(config, "eval_early_stop_patience", None)) is not None and p > 0
+            else None
+        ),
         target_mean_mse=(
             float(_tm) if (_tm := getattr(config, "target_mean_mse", None)) is not None else None
         ),

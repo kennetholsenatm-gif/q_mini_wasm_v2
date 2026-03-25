@@ -145,6 +145,7 @@ def _run_trial(config_path: Path, timeout_s: int) -> tuple[int, str, str, float]
         )
         return (cp.returncode, cp.stdout, cp.stderr, time.perf_counter() - t0)
     except subprocess.TimeoutExpired as e:
+
         def _as_text(v: Any) -> str:
             if v is None:
                 return ""
@@ -167,7 +168,9 @@ def main() -> int:
     ap.add_argument("--base-config", required=True, help="Path to base training TOML")
     ap.add_argument("--candidate-lrs", default="3e-5,1e-4,3e-4", help="Comma-separated LR list")
     ap.add_argument("--trial-epochs", type=int, default=3, help="Epochs per trial")
-    ap.add_argument("--max-runtime-seconds", type=int, default=180, help="Per-trial timeout seconds")
+    ap.add_argument(
+        "--max-runtime-seconds", type=int, default=180, help="Per-trial timeout seconds"
+    )
     ap.add_argument(
         "--metadata-out",
         default="",

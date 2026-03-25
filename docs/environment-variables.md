@@ -47,8 +47,16 @@ This document provides a comprehensive reference for all environment variables u
 | Variable | Type | Default | Required | Description |
 |----------|------|---------|----------|-------------|
 | `WASM_CACHE_DIR`  | string | `None` | Yes | Directory for WASM cache files |
-| `WASM_MAX_MEMORY`  | string | `None` | Yes | Maximum memory allocation for WASM runtime in MB |
+| `WASM_MAX_MEMORY`  | string | `None` | Yes | Host-visible cap hint (MB); align with **Enclave Footprint (EF)** / Macro tier (~8192 for ~8GiB TPEM class) |
 | `WASM_RUNTIME`  | string | `None` | Yes | WASM runtime to use (e.g., wasmtime) |
+| `QMINIWASM_SERVE_CONFIG` | string | `None` | No | Path to TOML with `[serve]` and optional `[enclave]` (see `configs/serve/default.toml`) |
+| `ENCLAVE_FOOTPRINT_MB` | float | `None` | No | Target **EF** in MB (TPEM + static heap); may cap wasmtime store limits when used from serve TOML |
+| `ENCLAVE_TIER` | string | `None` | No | `micro` \| `meso` \| `macro` (taxonomy tiers) |
+| `CERTAINTY_SCALAR_THRESHOLD` | float | `None` | No | CGE / ECL gate in [0, 1]; alias for `T_conf` when `T_CONF` unset |
+| `T_CONF` | float | `0.85` | No | Same as certainty scalar threshold ($T_{conf}$); local resolution when certainty >= value |
+| `WASM_MEMORY64_MAX_MB` | float | `None` | No | Memory64 linear memory ceiling (MB); Macro enclave ~8192 |
+| `WASM_MAX_LINEAR_MEMORY_PAGES` | int | `None` | No | Max 64KiB WASM pages (e.g. 131072 for 8GiB) |
+| `WASM_USE_MEMORY64` | bool | `false` | No | Set `1`/`true` to prefer Memory64 addressing when supported |
 
 ## Intel ARC/GPU
 

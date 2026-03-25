@@ -124,6 +124,25 @@ def test_load_serve_toml_default_section(tmp_path):
     assert s.hybrid_adapter is True
 
 
+def test_load_serve_document_enclave_section(tmp_path):
+    from engine.training_schema import load_serve_document
+
+    f = tmp_path / "serve2.toml"
+    f.write_text(
+        '[serve]\ncheckpoint = "c.pt"\n\n'
+        "[enclave]\n"
+        'enclave_tier = "macro"\n'
+        "certainty_scalar_threshold = 0.9\n"
+        "wasm_memory64_max_mb = 8192.0\n",
+        encoding="utf-8",
+    )
+    doc = load_serve_document(f)
+    assert doc.serve.checkpoint == "c.pt"
+    assert doc.enclave.enclave_tier == "macro"
+    assert doc.enclave.certainty_scalar_threshold == 0.9
+    assert doc.enclave.wasm_memory64_max_mb == 8192.0
+
+
 def test_hf_extra_specs_toml_and_engine_config(tmp_path):
     f = tmp_path / "multi_hf.toml"
     f.write_text(
@@ -191,6 +210,28 @@ def test_hf_multi_without_extra_specs_raises(tmp_path):
 
     with pytest.raises(ValueError, match="extra_specs"):
         EngineConfig.from_training_toml(f)
+
+
+def test_eval_early_stop_patience_from_toml(tmp_path):
+    f = tmp_path / "eval_es.toml"
+    f.write_text(
+        '[data]\nsource = "mesh"\n\n'
+        "[eval]\n"
+        "holdout_fraction = 0.1\n"
+        "every_epoch = true\n"
+        "early_stop_patience = 4\n",
+        encoding="utf-8",
+    )
+    from engine.config import EngineConfig
+    from engine.training_schema import load_training_toml
+
+    root = load_training_toml(f)
+    assert root.eval.every_epoch is True
+    assert root.eval.early_stop_patience == 4
+
+    c = EngineConfig.from_training_toml(f)
+    assert c.eval_early_stop_patience == 4
+    assert c.eval_every_epoch is True
 
 
 def test_edge_hf_streaming_knobs_from_toml(tmp_path):

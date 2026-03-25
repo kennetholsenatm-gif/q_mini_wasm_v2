@@ -3,7 +3,7 @@
 bool test_w158_pack();
 bool test_ternary_matvec();
 bool test_grammar_mask();
-bool test_kv_residual();
+bool test_wles_hooks();
 bool test_qaoa();
 
 int main() {
@@ -17,7 +17,7 @@ int main() {
   if (!test_grammar_mask()) {
     ++fails;
   }
-  if (!test_kv_residual()) {
+  if (!test_wles_hooks()) {
     ++fails;
   }
   if (!test_qaoa()) {

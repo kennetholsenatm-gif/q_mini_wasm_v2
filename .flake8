@@ -15,3 +15,17 @@ per-file-ignores =
     qminiwasm/quantum/qaoa_integration.py: F401
     qminiwasm/quantum/qubo.py: E501
     qminiwasm/quantum/router.py: E501
+    qminiwasm/hardware/device.py: E501
+    qminiwasm/hardware/sycl/sycl_hardware.py: E501
+    qminiwasm/training/__init__.py: E501
+    qminiwasm/training/cascade_mopd_teacher.py: E501
+    qminiwasm/training/cascade_rl.py: E501
+    qminiwasm/training/hf_loader.py: E501, F401
+    qminiwasm/training/loop.py: E501
+    qminiwasm/quantum/qiskit_qaoa.py: E501
+    qminiwasm/wasm/trit_wasm_runtime.py: F401
+    tests/test_qaoa_optimization_rollout.py: F401
+    tests/test_qiskit_qaoa_smoke.py: E501
+    tests/test_ternary_quantization.py: F401, F841
+    tests/test_wasm_memory_corpus.py: E501
+    tests/test_white_paper_integration.py: F401

@@ -29,7 +29,9 @@ def classical_greedy_select(q_linear: torch.Tensor, q_quad: torch.Tensor, k: int
                 continue
             trial = x.clone()
             trial[i] = 1.0
-            energy = float((trial * q_linear).sum() + (trial.unsqueeze(0) @ q_quad @ trial.unsqueeze(1)).item())
+            energy = float(
+                (trial * q_linear).sum() + (trial.unsqueeze(0) @ q_quad @ trial.unsqueeze(1)).item()
+            )
             if energy < best_delta:
                 best_delta = energy
                 best_i = i
@@ -47,7 +49,9 @@ def main() -> None:
     args = p.parse_args()
     torch.manual_seed(int(args.seed))
     costs = torch.rand(int(args.m), dtype=torch.float64)
-    ql, qq = mesh_edge_selection_qubo(costs, int(args.k), lambda_cardinality=float(args.lambda_card))
+    ql, qq = mesh_edge_selection_qubo(
+        costs, int(args.k), lambda_cardinality=float(args.lambda_card)
+    )
     x = classical_greedy_select(ql, qq, int(args.k))
     out = {
         "m": int(args.m),

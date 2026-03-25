@@ -24,7 +24,7 @@ import torch.nn as nn
 from .config import DEFAULT_HIERARCHICAL_CONFIG, HierarchicalConfig
 from .inference.edge import EdgeOutcome, default_certainty_heuristic, run_edge_cognitive_loop
 from .inference.escalation import prepare_escalation_payload
-from .quantum.qaoa_integration import QAOAConfig
+from .quantum.qaoa_integration import QAOAConfig, qahr_route_after_escalation
 from .quantum.router import HybridQuantumMoE
 from .quantum.interconnect import StateMigrationInterconnect
 from .layers.ternary import TernaryWASMExpert
@@ -79,6 +79,7 @@ class QMiniWASM:
         qaoa_prune_min_nodes: int = 4,
         qaoa_warm_start_cache_ttl: int = 128,
         wasm_runtime: Optional[WasmRuntimeConfig] = None,
+        hierarchical_config: Optional[HierarchicalConfig] = None,
     ):
         """Initialize the QMiniWASM model.
 
@@ -89,19 +90,20 @@ class QMiniWASM:
             hybrid_adapter_hidden: Bottleneck width for the adapter (default 1024).
             tequila_deadzone: Tequila deadzone fraction for ``TernaryWASMExpert`` (0 disables).
             lota_rank: If > 0, add a LoRA side branch on the ternary expert path (LoTA-QAF).
-            use_cascade_router: If True, attach a :class:`CascadeRouter` (4096→latent→logits) for
-                cascade RL / escalation hints; trained via the loop's cascade optimizer, not main MSE Adam.
+            use_cascade_router: If True, attach :class:`CascadeRouter` (4096→latent→logits) for
+                cascade RL / escalation hints; trained via cascade optimizer, not main MSE Adam.
             cascade_state_dim / cascade_num_actions / cascade_router_hidden: Router shape.
-            qaoa_execution_mode: ``pennylane`` (identity MoE), ``qiskit_statevector`` (exact Qiskit),
-                or ``qiskit_ibm`` (IBM Quantum via Runtime Estimator; no grad through device).
+            qaoa_execution_mode: ``pennylane`` (identity path), ``qiskit_statevector`` (exact),
+                or ``qiskit_ibm`` (IBM Runtime Estimator; no grad through device).
             num_qubits / qaoa_layers: QAOA shape when using Qiskit modes.
             ibm_qaoa_shots: Shot budget hint for IBM Estimator (precision).
-            quantum_backend: Engine / TOML logical backend; for ``qiskit_ibm``, an ``ibm_*`` name
-                selects the IBM device when env vars are not set in the worker process.
+            quantum_backend: Engine / TOML logical backend; ``ibm_*`` picks IBM device if env unset.
+            hierarchical_config: Tier-1 ECL/CGE/TPEM; default ``DEFAULT_HIERARCHICAL_CONFIG``.
         """
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         self.device = device if device is not None else get_device()
+        self.hierarchical_config = hierarchical_config or DEFAULT_HIERARCHICAL_CONFIG
         qaoa_cfg: Optional[QAOAConfig] = None
         mode = (qaoa_execution_mode or "pennylane").strip().lower()
         if mode in ("qiskit_statevector", "qiskit_ibm"):
@@ -174,7 +176,7 @@ class QMiniWASM:
         self.logger.info("QMiniWASM model initialized on %s", self.device)
 
     def _build_hybrid_adapter(self, hidden: int) -> None:
-        """Residual branch: Linear → GELU → Linear; last layer zero-init so base path starts as ternary-only."""
+        """Residual branch: Linear → GELU → Linear; last layer zero-init (ternary-only start)."""
         m = nn.Sequential(
             nn.Linear(4096, hidden),
             nn.GELU(),
@@ -225,7 +227,7 @@ class QMiniWASM:
         return out
 
     def cascade_logits(self, hidden: torch.Tensor) -> Optional[torch.Tensor]:
-        """If ``cascade_router`` is set, return logits ``[num_actions]`` from hidden ``[d_model]`` or ``[B,d_model]`` (mean-pooled)."""
+        """Return logits ``[num_actions]`` from hidden ``[d_model]`` or mean-pooled batch."""
         if self.cascade_router is None:
             return None
         if hidden.dim() == 2:
@@ -236,7 +238,7 @@ class QMiniWASM:
         return self.cascade_router(s)
 
     def cascade_logits_rows(self, hidden_batch: torch.Tensor) -> Optional[torch.Tensor]:
-        """Per-row cascade logits ``[B, num_actions]`` when ``cascade_router`` is set; else ``None``."""
+        """Per-row logits ``[B, num_actions]`` if ``cascade_router`` is set; else ``None``."""
         if self.cascade_router is None:
             return None
         if hidden_batch.dim() != 2 or hidden_batch.shape[1] != 4096:
@@ -267,7 +269,7 @@ class QMiniWASM:
     def load_trainable_checkpoint(
         self, path: str, map_location: Optional[Union[str, torch.device]] = None
     ) -> Dict:
-        """Load trainable weights from a file saved during training (router, ternary, optional adapter).
+        """Load trainable weights from training checkpoint (router, ternary, optional adapter).
 
         Args:
             path: Filesystem path to checkpoint.
@@ -343,7 +345,7 @@ class QMiniWASM:
             (result, outcome, num_loops, last_state).
         """
         module = self.wasm_executor.compile_wasm(wasm_code)
-        cfg = config or DEFAULT_HIERARCHICAL_CONFIG
+        cfg = config or self.hierarchical_config
 
         def execute_one_block(loop_idx: int) -> Tuple[Any, Dict]:
             result, execution_state = self.wasm_executor.execute(module, func_name, args)
@@ -412,9 +414,8 @@ class QMiniWASM:
     ) -> torch.Tensor:
         """Re-hydrate from Tier 2 escalation payload and resume at step N+1 (cloud).
 
-        Ingests delta payload into HullKVCache (TropicalAttention), then runs
-        hybrid inference on continuation_hidden_states so the cloud path is
-        exercised with the migrated state in context.
+        Ingests delta payload into tropical attention (legacy **ESI** migration path), then runs
+        **Quantum-Assisted Hierarchical Routing (QAHR)** cost shaping and hybrid inference.
 
         Args:
             payload: From prepare_escalation_payload or last_state['escalation_payload'].
@@ -424,6 +425,8 @@ class QMiniWASM:
         Returns:
             Output tensor from hybrid inference (batch_size, d_model).
         """
+        qahr = qahr_route_after_escalation(self.quantum_router, payload, continuation_hidden_states)
+        self.logger.debug("QAHR Hamiltonian spec: %s", qahr.get("hamiltonian_spec"))
         deltas = self.state_migration.accept(payload)
         if deltas and hasattr(self, "tropical_attention") and self.tropical_attention is not None:
             self.tropical_attention.ingest_deltas(deltas, device=self.device)
@@ -446,7 +449,7 @@ class QMiniWASM:
         """
         try:
             hidden_states = hidden_states.to(self.device)
-            # Perform quantum routing
+            # QAHR / neural QAOA mix (Ternary expert path)
             routed_output = self.quantum_router(hidden_states)
 
             if self._use_ptqtp_inference and self._ptqtp_linear is not None:

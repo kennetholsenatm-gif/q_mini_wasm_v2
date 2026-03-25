@@ -66,11 +66,11 @@ Your worker must implement this input (or a superset). The repository does **not
 | GET | `/api/runpod/serverless/templates` | Proxies **`GET https://rest.runpod.io/v1/templates`**; optional query `includeEndpointBoundTemplates=true`, `includePublicTemplates=true`, `includeRunpodTemplates=true`; JSON `{ "ok", "templates": [...] }` ([list templates](https://docs.runpod.io/api-reference/templates/GET/templates)) |
 | POST | `/api/runpod/serverless/templates` | Creates a Serverless template via **GraphQL `saveTemplate`** on **`https://api.runpod.io/graphql`** (same account key as management REST). JSON body must include **`name`** and **`imageName`**; optional **`dockerArgs`** (default `python /app/serverless/handler.py`), **`containerDiskInGb`** (default 50), **`env`**, **`readme`**, **`containerRegistryAuthId`**. Returns `{ "ok", "template": { "id", … } }` — use **`id`** as **`templateId`** for endpoints. REST **`POST https://rest.runpod.io/v1/templates`** is not used for Serverless (RunPod rejects **`volumeInGb`** there). See [GraphQL manage templates](https://docs.runpod.io/sdks/graphql/manage-pod-templates). |
 | GET | `/api/runpod/serverless/health` | Proxies RunPod `GET …/health` |
-| GET | `/api/runpod/serverless/worker-image?config=…` | Resolves the Docker image for template creation: non-empty **`[runpod_serverless] worker_image`** in the given training TOML, else the built-in RunPod stack image; JSON `{ "ok", "image", "source": "toml" \| "builtin" }` |
+| GET | `/api/runpod/serverless/worker-image?config=…` | Resolves the Docker image for template creation: non-empty **`[runpod_serverless] worker_image`** in the given training TOML, else the built-in AlmaLinux 10 worker image; JSON `{ "ok", "image", "source": "toml" \| "builtin" }` |
 | POST | `/api/runpod/serverless/run` | Proxies `/run` or `/runsync` (body must include `input`; optional `mode`: `"sync"`, `wait_ms`) |
 | GET | `/api/runpod/serverless/job?id=JOB_ID` | Proxies `GET …/status/JOB_ID` |
 
-`GET /api/meta` includes a **`runpod_serverless`** summary for the UI, including **`default_worker_image`** (built-in RunPod-published image on Docker Hub, same as the **`builtin`** path above). **`default_container_disk_gb`** remains in **`/api/meta`** for older UI bits but is **not** sent on Serverless template create (RunPod rejects disk/volume fields there).
+`GET /api/meta` includes a **`runpod_serverless`** summary for the UI, including **`default_worker_image`** (built-in AlmaLinux 10 worker image default, same as the **`builtin`** path above). **`default_container_disk_gb`** remains in **`/api/meta`** for older UI bits but is **not** sent on Serverless template create (RunPod rejects disk/volume fields there).
 
 **Training TOML:** Optional section **`[runpod_serverless]`** with **`worker_image`** (string) overrides that default for **Launch** / **Provision** when the Advanced “override worker image” field is empty. The training engine ignores this table; it exists for WUI and documentation.
 
@@ -96,7 +96,7 @@ Optional: **`env`** (object of string → string, converted to GraphQL env pairs
 This repo now includes:
 
 - `serverless/handler.py` — RunPod handler that executes `python -m engine --config <config_rel>`
-- `serverless/Dockerfile` — base image + editable install + runpod worker runtime
+- `serverless/Dockerfile` — AlmaLinux 10 base image + editable install + runpod worker runtime
 
 Example:
 
@@ -105,11 +105,33 @@ docker build -f serverless/Dockerfile -t docker.io/<you>/qmw-serverless:latest .
 docker push docker.io/<you>/qmw-serverless:latest
 ```
 
+### Provision a template and endpoint with your image
+
+1. Build/push your image.
+2. In the wizard, pick execution target **RunPod Serverless**.
+3. Set image either by:
+   - Advanced Serverless image override, or
+   - Training TOML:
+
+```toml
+[runpod_serverless]
+worker_image = "docker.io/<you>/qmw-serverless:latest"
+```
+
+4. Use **Provision template and endpoint only** (or Launch with no endpoint configured) so the WUI creates template + endpoint and then submits training jobs.
+
 ## Launch training
 
 `POST /api/runs` accepts `run_target`: `"local"` | `"runpod"` | `"runpod_serverless"`. Optional `runpod_serverless_endpoint_id` overrides `RUNPOD_SERVERLESS_ENDPOINT_ID` for that request.
 
 The WUI polls **`/status`** until the job reaches a terminal state and appends the JSON result to the run log. **Stop** calls RunPod **`/cancel/{jobId}`** when possible.
+
+## Troubleshooting
+
+- Queue auth errors: set `RUNPOD_TOKEN_END` (or fallback `RUNPOD_API_KEY` / `RUNPOD_TOKEN`) and restart `training-wui`.
+- `config not found` in worker result: ensure `config_rel` points to a file that exists under `/app` (or your `QMW_REPO_ROOT`).
+- `Missing dependency: runpod`: ensure image installs `runpod` and starts with `python /app/serverless/handler.py`.
+- Management API auth failures: template/endpoint operations require account-wide key (`RUNPOD_API_KEY` or `RUNPOD_TOKEN`).
 
 ## When to prefer Pods vs Serverless
 

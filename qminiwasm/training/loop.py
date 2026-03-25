@@ -11,6 +11,8 @@ import inspect
 import logging
 import math
 import random
+import signal
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
@@ -276,6 +278,7 @@ def run_training_loop(
     checkpoint_latest_path: str | None = None,
     eval_holdout_fraction: float = 0.0,
     eval_every_epoch: bool = False,
+    eval_early_stop_patience: int | None = None,
     target_mean_mse: float | None = None,
     stop_on_target_mse: bool = False,
     hybrid_adapter: bool = False,
@@ -364,6 +367,8 @@ def run_training_loop(
             (crash recovery; does not include optimizer state).
         eval_holdout_fraction: Fraction in ``(0,1)`` for holdout eval; ``0`` disables.
         eval_every_epoch: If True and holdout is non-empty, log eval MSE each epoch.
+        eval_early_stop_patience: If > 0, use with ``eval_every_epoch`` and holdout: stop after
+            this many epochs without improvement on holdout ``eval_mean_mse`` (overfitting guard).
         target_mean_mse: Optional success threshold on mean ``F.mse_loss`` (same definition as
             logged ``mean_mse`` / holdout ``eval_mean_mse``). Example: ``1e-4`` for 0.0001.
         stop_on_target_mse: If True (env ``STOP_ON_TARGET_MSE``), end training early when the
@@ -403,6 +408,25 @@ def run_training_loop(
     """
     if seed is not None:
         set_training_seed(int(seed))
+
+    stop_requested = threading.Event()
+
+    def _on_train_stop_signal(signum: int, _frame: object) -> None:
+        logger.warning(
+            "Signal %s: graceful stop (finish current batch; save latest if configured).",
+            signum,
+        )
+        stop_requested.set()
+
+    try:
+        signal.signal(signal.SIGINT, _on_train_stop_signal)
+    except (AttributeError, ValueError):
+        pass
+    if hasattr(signal, "SIGTERM"):
+        try:
+            signal.signal(signal.SIGTERM, _on_train_stop_signal)
+        except (AttributeError, ValueError):
+            pass
 
     device = get_device(
         accelerator=cast(AcceleratorType | None, accelerator),
@@ -629,8 +653,11 @@ def run_training_loop(
     skipped_nonfinite_batches = 0
     best_mse = float("inf")
     epochs_without_improvement = 0
+    best_eval_mse_tracker: Optional[float] = None
+    epochs_without_eval_improvement = 0
     epochs_completed = 0
     stopped_early = False
+    stopped_on_eval_plateau = False
     stopped_on_target_mse = False
     target_mse_stop_train_metric_warned = False
 
@@ -678,6 +705,10 @@ def run_training_loop(
         return cascade_policy if (use_cascade_rl and cascade_policy is not None) else None
 
     for epoch in range(epochs):
+        if stop_requested.is_set():
+            stopped_early = True
+            logger.info("Graceful stop before epoch %s/%s.", epoch + 1, epochs)
+            break
         if use_cascade_rl and int(cascade_steps_per_epoch) > 0:
             assert cascade_policy is not None and cascade_optimizer is not None
             if cascade_seed_from_hidden and train_samples:
@@ -721,7 +752,10 @@ def run_training_loop(
                 )
 
             _student_h, _teacher_h = build_noise_state_mopd_fns(noise_std=0.05)
+            cascade_steps_done = 0
             for _ in range(int(cascade_steps_per_epoch)):
+                if stop_requested.is_set():
+                    break
                 if mopd_mod is not None:
                     cm = cascade_rl_train_step(
                         cascade_policy,
@@ -744,9 +778,10 @@ def run_training_loop(
                     )
                 c_loss_acc += float(cm.get("loss", 0.0))
                 c_ret_acc += float(cm.get("return_mean", 0.0))
+                cascade_steps_done += 1
 
-            c_loss_acc /= max(1, int(cascade_steps_per_epoch))
-            c_ret_acc /= max(1, int(cascade_steps_per_epoch))
+            c_loss_acc /= max(1, cascade_steps_done)
+            c_ret_acc /= max(1, cascade_steps_done)
             epoch_cascade_loss.append(c_loss_acc)
             epoch_cascade_return.append(c_ret_acc)
             logger.info(
@@ -759,9 +794,28 @@ def run_training_loop(
                 int(cascade_group_size),
             )
 
+        if stop_requested.is_set():
+            stopped_early = True
+            logger.info(
+                "Graceful stop after cascade phase (epoch %s/%s); skipping supervised steps.",
+                epoch + 1,
+                epochs,
+            )
+            break
+
         epoch_loss = 0.0
         n_batches = 0
+        user_stop_mid_epoch = False
         for i in range(0, len(train_samples), batch_size):
+            if stop_requested.is_set():
+                user_stop_mid_epoch = True
+                logger.info(
+                    "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
+                    epoch + 1,
+                    epochs,
+                    n_batches,
+                )
+                break
             batch = train_samples[i : i + batch_size]
             if not batch:
                 continue
@@ -805,6 +859,53 @@ def run_training_loop(
 
             epoch_loss += loss.item()
             n_batches += 1
+
+        if user_stop_mid_epoch:
+            if n_batches > 0:
+                partial_mse = epoch_loss / n_batches
+                final_loss = float(partial_mse)
+                epochs_completed = epoch + 1
+                current_lr = float(optimizer.param_groups[0]["lr"])
+                epoch_losses.append(final_loss)
+                epoch_lrs.append(current_lr)
+                logger.info(
+                    "epoch=%s/%s mean_mse=%.6f lr=%.2e batches=%s (partial epoch; graceful stop)",
+                    epoch + 1,
+                    epochs,
+                    final_loss,
+                    current_lr,
+                    n_batches,
+                )
+                if checkpoint_latest_path:
+                    try:
+                        save_checkpoint(
+                            checkpoint_latest_path,
+                            model,
+                            meta={
+                                "training_data_source": source,
+                                "seed": seed,
+                                "epoch": epoch + 1,
+                                "epochs_requested": epochs,
+                                "epoch_mean_mse": final_loss,
+                                "best_epoch_mean_mse": (
+                                    best_mse if best_mse < float("inf") else None
+                                ),
+                                "learning_rate": current_lr,
+                                "graceful_stop": True,
+                                "partial_epoch": True,
+                                "batches_this_epoch": n_batches,
+                            },
+                            cascade_policy=_cascade_ckpt_module(),
+                        )
+                        checkpoint_latest_saved = checkpoint_latest_path
+                    except Exception as e:
+                        logger.error(
+                            "Graceful-stop checkpoint write failed %s: %s",
+                            checkpoint_latest_path,
+                            e,
+                        )
+            stopped_early = True
+            break
 
         last_n_batches = n_batches
         if n_batches > 0:
@@ -878,6 +979,29 @@ def run_training_loop(
                 ev_this = _mean_mse_on_batches(model, eval_samples, batch_size, device, _as_d_model)
                 epoch_eval_mean_mse.append(ev_this)
                 logger.info("epoch=%s eval_mean_mse=%.6f", epoch + 1, ev_this)
+            if (
+                eval_early_stop_patience is not None
+                and eval_early_stop_patience > 0
+                and eval_every_epoch
+                and eval_samples
+                and ev_this is not None
+                and math.isfinite(ev_this)
+            ):
+                if best_eval_mse_tracker is None or ev_this < best_eval_mse_tracker - 1e-12:
+                    best_eval_mse_tracker = float(ev_this)
+                    epochs_without_eval_improvement = 0
+                else:
+                    epochs_without_eval_improvement += 1
+                if epochs_without_eval_improvement >= eval_early_stop_patience:
+                    stopped_on_eval_plateau = True
+                    stopped_early = True
+                    logger.info(
+                        "Early stop on holdout eval: no improvement for %s epochs "
+                        "(best eval_mean_mse=%.6f).",
+                        eval_early_stop_patience,
+                        best_eval_mse_tracker,
+                    )
+                    break
             if (
                 target_mean_mse is not None
                 and target_mean_mse > 0.0
@@ -975,6 +1099,8 @@ def run_training_loop(
         "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
         "stopped_early": stopped_early,
         "stopped_on_target_mse": stopped_on_target_mse,
+        "stopped_on_eval_plateau": stopped_on_eval_plateau,
+        "graceful_stop_requested": stop_requested.is_set(),
     }
     if seed is not None:
         metrics["seed"] = int(seed)
@@ -1017,6 +1143,10 @@ def run_training_loop(
         metrics["lr_plateau_factor"] = float(lr_plateau_factor)
     if early_stop_patience is not None and early_stop_patience > 0:
         metrics["early_stop_patience"] = int(early_stop_patience)
+    if eval_early_stop_patience is not None and eval_early_stop_patience > 0:
+        metrics["eval_early_stop_patience"] = int(eval_early_stop_patience)
+        if best_eval_mse_tracker is not None and math.isfinite(best_eval_mse_tracker):
+            metrics["best_eval_mean_mse"] = float(best_eval_mse_tracker)
 
     if eval_holdout_fraction > 0:
         metrics["eval_holdout_fraction"] = float(eval_holdout_fraction)

@@ -126,7 +126,9 @@ def test_execute_wasm_reuses_instance_no_10k_cap_per_sample():
       (export "run" (func $run))
     )
     """
-    eng = WasmEngine(use_mock=False, runtime=WasmRuntimeConfig(store_memory_limit_bytes=32 * 1024 * 1024))
+    eng = WasmEngine(
+        use_mock=False, runtime=WasmRuntimeConfig(store_memory_limit_bytes=32 * 1024 * 1024)
+    )
     if eng.use_mock:
         pytest.skip("WASM runtime unavailable")
     mod = eng.compile_wasm(wasmtime.wat2wasm(wat))

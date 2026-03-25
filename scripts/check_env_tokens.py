@@ -1,4 +1,5 @@
 """Print whether common API tokens are present (never print values). Run from repo root."""
+
 from __future__ import annotations
 
 import os

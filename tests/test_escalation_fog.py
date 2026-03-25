@@ -7,10 +7,7 @@ import torch
 from qminiwasm.config import HierarchicalConfig
 from qminiwasm.inference.edge import EdgeOutcome, fog_escalation_triggered, run_edge_cognitive_loop
 from qminiwasm.inference.escalation import prepare_escalation_payload
-from qminiwasm.inference.semantic_abstraction import (
-    attach_semantic_blob_to_state,
-    build_semantic_blob,
-)
+from qminiwasm.inference.semantic_abstraction import attach_semantic_blob_to_state
 
 
 class TestFogEscalation(unittest.TestCase):
@@ -24,11 +21,14 @@ class TestFogEscalation(unittest.TestCase):
         self.assertTrue(fog_escalation_triggered({"sequence_length_proxy": 11}, cfg))
 
     def test_semantic_blob_in_payload(self):
-        st = {"loop_idx": 0, "execution_state": {}}
+        st = {"loop_idx": 0, "execution_state": {}, "last_certainty": 0.1}
         attach_semantic_blob_to_state(st, device=torch.device("cpu"))
         p = prepare_escalation_payload(st)
         self.assertIn("semantic_blob", p)
         self.assertIsNotNone(p["semantic_blob"])
+        self.assertIn("certainty_scalar_threshold", p)
+        self.assertIn("last_certainty_scalar", p)
+        self.assertEqual(p["last_certainty_scalar"], 0.1)
 
     def test_fog_outcome_in_loop(self):
         cfg = HierarchicalConfig(N_max_loops=5, max_sequence_length_proxy=1)

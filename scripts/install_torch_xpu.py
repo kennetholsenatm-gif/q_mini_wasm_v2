@@ -25,7 +25,9 @@ def _run(cmd: list[str], dry_run: bool) -> None:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Install torch/torchvision/torchaudio from PyTorch XPU index.")
+    p = argparse.ArgumentParser(
+        description="Install torch/torchvision/torchaudio from PyTorch XPU index."
+    )
     p.add_argument("--nightly", action="store_true", help="Use nightly/xpu index and --pre.")
     p.add_argument("--dry-run", action="store_true", help="Print commands only.")
     args = p.parse_args()
