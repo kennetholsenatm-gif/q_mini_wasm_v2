@@ -189,7 +189,7 @@ class QMiniWASM:
         self.hybrid_adapter = m
 
     def attach_hybrid_adapter_matching_state(self, state_dict: Dict[str, Any]) -> None:
-        """If no adapter yet, allocate one matching ``state_dict`` (e.g. first checkpoint load)."""
+        """If no adapter yet, allocate one matching ``state_dict`` (e.g. first TPEM load)."""
         if self.hybrid_adapter is not None:
             return
         w0 = state_dict.get("0.weight")
@@ -197,7 +197,7 @@ class QMiniWASM:
             return
         hidden = int(w0.shape[0])
         self._build_hybrid_adapter(hidden)
-        self.logger.info("Built hybrid_adapter (hidden=%s) to match checkpoint.", hidden)
+        self.logger.info("Built hybrid_adapter (hidden=%s) to match trainable TPEM shape.", hidden)
 
     def trainable_hybrid_backbone_parameters(self) -> List[torch.nn.Parameter]:
         """Parameters stepped by the engine training loop (router + ternary + optional adapter)."""
@@ -269,20 +269,20 @@ class QMiniWASM:
     def load_trainable_checkpoint(
         self, path: str, map_location: Optional[Union[str, torch.device]] = None
     ) -> Dict:
-        """Load trainable weights from training checkpoint (router, ternary, optional adapter).
+        """Load trainable weights from a trainable TPEM artifact (router, ternary, optional adapter).
 
         Args:
-            path: Filesystem path to checkpoint.
+            path: Filesystem path to ``.pt`` trainable TPEM payload.
             map_location: Passed to ``torch.load``; defaults to ``self.device``.
 
         Returns:
-            Checkpoint ``meta`` dict (may be empty).
+            Serialized ``meta`` dict from the artifact (may be empty).
         """
-        from qminiwasm.training.checkpoint import load_checkpoint_into_model
+        from qminiwasm.training.trainable_tpem import load_trainable_tpem_into_model
 
         loc = map_location if map_location is not None else self.device
-        meta = load_checkpoint_into_model(self, path, map_location=loc)
-        self.logger.info("Loaded trainable checkpoint from %s", path)
+        meta = load_trainable_tpem_into_model(self, path, map_location=loc)
+        self.logger.info("Loaded trainable TPEM from %s", path)
         return meta
 
     def execute_wasm(self, wasm_code: bytes, func_name: str, args: List[int]) -> Tuple[int, Dict]:

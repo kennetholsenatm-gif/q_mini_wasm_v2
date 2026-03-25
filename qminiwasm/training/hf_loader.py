@@ -169,10 +169,10 @@ def encoded_blob_references_wasi(blob: bytes) -> bool:
 
 
 def validate_hf_hub_dataset_id_not_checkpoint(dataset_id: str) -> None:
-    """Raise if ``dataset_id`` looks like a local checkpoint/weights path, not a Hub dataset id.
+    """Raise if ``dataset_id`` looks like a local trainable-artifact path, not a Hub dataset id.
 
-    Users sometimes put ``[checkpoint].load_path``-style paths into ``[data].path``; Hugging Face
-    then tries to resolve ``artifacts/.../model.pt`` as a Hub repo and fails with a cryptic error.
+    Users sometimes put TOML ``load_path`` (trainable TPEM / ``.pt``) values into ``[data].path``;
+    Hugging Face then tries to resolve ``artifacts/.../model.pt`` as a Hub repo and fails.
     """
     s = (dataset_id or "").strip()
     if not s:
@@ -181,11 +181,11 @@ def validate_hf_hub_dataset_id_not_checkpoint(dataset_id: str) -> None:
     for ext in (".pt", ".pth", ".pkl", ".safetensors", ".onnx", ".bin"):
         if low.endswith(ext):
             raise ValueError(
-                f"data.path={dataset_id!r} looks like a model checkpoint or weights file, not a "
+                f"data.path={dataset_id!r} looks like a trainable TPEM / weights file, not a "
                 "Hugging Face dataset id. For hf_tabular training, set [data].path to a Hub id "
                 '(e.g. "code-search-net/code_search_net") or "qminiwasm/hf-multi" with '
-                "[huggingface].extra_specs. Put resume weights in [checkpoint].load_path, not "
-                "[data].path."
+                "[huggingface].extra_specs. Put resume trainable tensors in the TOML load_path "
+                "mapped to ``checkpoint_load_path`` by the engine, not in [data].path."
             )
 
 

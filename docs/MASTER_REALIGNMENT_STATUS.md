@@ -8,7 +8,7 @@ This file tracks the **Q-Mini-WASM Master Realignment** prompt against what is *
 |------|--------|
 | Vendor-neutral identity docs (OIDC IdP + internal X.509 CA wording) | **In progress** — canonical doc: [`IDENTITY_STACK_REFERENCE.md`](IDENTITY_STACK_REFERENCE.md); taxonomy linter blocks named vendor lock-in in gated paths |
 | PKI script refactor | **Done** — [`scripts/security/internal_ca_pki_provisioning.py`](../scripts/security/internal_ca_pki_provisioning.py); legacy shim [`scripts/security/freeipa_pki_provisioning.py`](../scripts/security/freeipa_pki_provisioning.py) |
-| Repo-wide legacy ML lexicon (`checkpoint`, etc.) | **Partial** — incremental; taxonomy covers diff-based gates for selected terms |
+| Repo-wide legacy ML lexicon (`checkpoint`, etc.) | **Partial** — `qminiwasm/training/` uses **trainable TPEM** APIs + scoped taxonomy rule; engine/TOML keys remain ``checkpoint_*`` for compatibility |
 | Flatten `engine/`, `qminiwasm/`, etc. into top-level domains | **Not started** — high churn; requires import graph and release plan |
 
 ## Phase 2 — Wiki / docs paradigm narrative

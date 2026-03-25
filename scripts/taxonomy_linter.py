@@ -129,13 +129,19 @@ def git_diff_added_lines(
     return results
 
 
-def compile_rules(cfg: Dict[str, Any]) -> List[Tuple[re.Pattern[str], str]]:
-    out: List[Tuple[re.Pattern[str], str]] = []
+def compile_rules(cfg: Dict[str, Any]) -> List[Tuple[re.Pattern[str], str, str | None]]:
+    """Return (pattern, hint, path_prefix_or_none). path_prefix limits rule to matching repo-relative paths."""
+    out: List[Tuple[re.Pattern[str], str, str | None]] = []
     for item in cfg.get("patterns", []):
         rx = item.get("regex", "")
         hint = item.get("hint", "")
+        path_prefix = item.get("path_prefix")
+        if path_prefix is not None:
+            path_prefix = str(path_prefix).replace("\\", "/")
+            if not path_prefix.endswith("/"):
+                path_prefix += "/"
         try:
-            out.append((re.compile(rx), hint))
+            out.append((re.compile(rx), hint, path_prefix))
         except re.error as e:
             print(f"taxonomy_linter: bad regex {rx!r}: {e}", file=sys.stderr)
     return out
@@ -151,14 +157,17 @@ def _is_skipped_authority_doc(rel_path: str, cfg: Dict[str, Any]) -> bool:
 
 def scan_entries(
     entries: List[Tuple[str, int, str]],
-    rules: List[Tuple[re.Pattern[str], str]],
+    rules: List[Tuple[re.Pattern[str], str, str | None]],
     cfg: Dict[str, Any],
 ) -> List[str]:
     violations: List[str] = []
     for path, lineno, text in entries:
         if _is_skipped_authority_doc(path, cfg):
             continue
-        for pat, hint in rules:
+        path_norm = path.replace("\\", "/")
+        for pat, hint, only_prefix in rules:
+            if only_prefix is not None and not path_norm.startswith(only_prefix):
+                continue
             if pat.search(text):
                 violations.append(f"{path}:{lineno}: {text.strip()!r}  [{pat.pattern}]  {hint}")
     return violations

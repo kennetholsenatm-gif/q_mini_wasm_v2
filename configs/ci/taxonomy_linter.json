@@ -14,7 +14,12 @@
     {"regex": "(?i)\\bfloat32\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
     {"regex": "(?i)\\bfloat64\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
     {"regex": "(?i)\\bkeycloak\\b", "hint": "Prefer OIDC-compliant identity provider (IdP)."},
-    {"regex": "(?i)\\bfreeipa\\b", "hint": "Prefer internal X.509 Certificate Authority (CA) or neutral CA wording."}
+    {"regex": "(?i)\\bfreeipa\\b", "hint": "Prefer internal X.509 Certificate Authority (CA) or neutral CA wording."},
+    {
+      "regex": "(?i)\\bcheckpoint\\b",
+      "hint": "Prefer trainable TPEM / TPEM artifact for persisted weights (WLES for full linear memory).",
+      "path_prefix": "qminiwasm/training/"
+    }
   ],
   "scan_extensions": [".md", ".toml", ".py", ".rs", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".c", ".go"],
   "path_prefixes": ["docs/", "wiki/", "configs/", "qminiwasm/", "engine/", "cpp/", "ternary_packed/", "scripts/", "tests/", "training-wui/"],

@@ -32,10 +32,10 @@ from .cascade_rl import (
     cascade_rl_train_step,
     hidden_digest_for_cascade,
 )
-from .checkpoint import (
-    load_cascade_policy_from_checkpoint,
-    load_checkpoint_into_model,
-    save_checkpoint,
+from .trainable_tpem import (
+    load_cascade_policy_from_trainable_tpem,
+    load_trainable_tpem_into_model,
+    save_trainable_tpem_artifact,
 )
 from .distillation import MOPDLoss, MOPDLossConfig
 from .lota_qaf import TSignSGD
@@ -358,10 +358,11 @@ def run_training_loop(
         lr_plateau_factor: LR multiplicative factor when plateau triggers.
         lr_plateau_min_lr: Minimum LR for the scheduler.
         early_stop_patience: If > 0, stop after this many epochs without improvement on best epoch MSE.
-        checkpoint_load_path: If set and the path exists, load trainable weights before training.
-            If the path is missing, log a warning and train from scratch (template TOMLs often
-            point at a future ``latest.pt``).
-        checkpoint_save_path: If set, save weights after training completes.
+        checkpoint_load_path: If set and the path exists, load **trainable TPEM** weights before
+            training. If the path is missing, log a warning and train from scratch (template TOMLs
+            often point at a future ``latest.pt``). (Parameter name retains ``checkpoint_`` for schema
+            compatibility with ``engine.training_schema``.)
+        checkpoint_save_path: If set, save trainable TPEM after training completes.
         checkpoint_best_path: If set, save when epoch mean MSE improves.
         checkpoint_latest_path: If set, overwrite this file after each epoch that ran batches
             (crash recovery; does not include optimizer state).
@@ -404,7 +405,8 @@ def run_training_loop(
             ``seed`` is set (0 disables).
 
     Returns:
-        Dict with ``epochs_run``, ``final_loss``, ``metrics``, checkpoint path fields.
+        Dict with ``epochs_run``, ``final_loss``, ``metrics``, and TPEM artifact path fields
+        (``checkpoint_*`` keys unchanged for engine compatibility).
     """
     if seed is not None:
         set_training_seed(int(seed))
@@ -470,15 +472,15 @@ def run_training_loop(
         ck = Path(checkpoint_load_path)
         if not ck.is_file():
             logger.warning(
-                "Checkpoint load_path %s does not exist (or is not a file); training from scratch.",
+                "Trainable TPEM load_path %s does not exist (or is not a file); training from scratch.",
                 checkpoint_load_path,
             )
         else:
             try:
-                load_checkpoint_into_model(model, checkpoint_load_path, map_location=device)
-                logger.info("Loaded checkpoint from %s", checkpoint_load_path)
+                load_trainable_tpem_into_model(model, checkpoint_load_path, map_location=device)
+                logger.info("Loaded trainable TPEM from %s", checkpoint_load_path)
             except Exception as e:
-                logger.error("Failed to load checkpoint %s: %s", checkpoint_load_path, e)
+                logger.error("Failed to load trainable TPEM %s: %s", checkpoint_load_path, e)
                 raise
 
     use_tsign = bool(use_tsign_ternary)
@@ -693,7 +695,7 @@ def run_training_loop(
             cascade_policy.parameters(), lr=float(cascade_policy_lr)
         )
         if checkpoint_load_path:
-            if load_cascade_policy_from_checkpoint(
+            if load_cascade_policy_from_trainable_tpem(
                 cascade_policy, checkpoint_load_path, map_location=device
             ):
                 logger.info(
@@ -878,7 +880,7 @@ def run_training_loop(
                 )
                 if checkpoint_latest_path:
                     try:
-                        save_checkpoint(
+                        save_trainable_tpem_artifact(
                             checkpoint_latest_path,
                             model,
                             meta={
@@ -900,7 +902,7 @@ def run_training_loop(
                         checkpoint_latest_saved = checkpoint_latest_path
                     except Exception as e:
                         logger.error(
-                            "Graceful-stop checkpoint write failed %s: %s",
+                            "Graceful-stop TPEM artifact write failed %s: %s",
                             checkpoint_latest_path,
                             e,
                         )
@@ -924,7 +926,7 @@ def run_training_loop(
                 epochs_without_improvement = 0
                 if checkpoint_best_path:
                     try:
-                        save_checkpoint(
+                        save_trainable_tpem_artifact(
                             checkpoint_best_path,
                             model,
                             meta={
@@ -938,7 +940,7 @@ def run_training_loop(
                         checkpoint_best_saved = checkpoint_best_path
                     except Exception as e:
                         logger.error(
-                            "Failed to write best checkpoint %s: %s", checkpoint_best_path, e
+                            "Failed to write best TPEM artifact %s: %s", checkpoint_best_path, e
                         )
             else:
                 epochs_without_improvement += 1
@@ -953,7 +955,7 @@ def run_training_loop(
             )
             if checkpoint_latest_path:
                 try:
-                    save_checkpoint(
+                    save_trainable_tpem_artifact(
                         checkpoint_latest_path,
                         model,
                         meta={
@@ -970,7 +972,7 @@ def run_training_loop(
                     checkpoint_latest_saved = checkpoint_latest_path
                 except Exception as e:
                     logger.error(
-                        "Failed to write latest checkpoint %s: %s",
+                        "Failed to write latest TPEM artifact %s: %s",
                         checkpoint_latest_path,
                         e,
                     )
@@ -1064,7 +1066,7 @@ def run_training_loop(
 
     if checkpoint_save_path:
         try:
-            save_checkpoint(
+            save_trainable_tpem_artifact(
                 checkpoint_save_path,
                 model,
                 meta={
@@ -1078,7 +1080,7 @@ def run_training_loop(
             )
             checkpoint_saved = checkpoint_save_path
         except Exception as e:
-            logger.error("Failed to save checkpoint %s: %s", checkpoint_save_path, e)
+            logger.error("Failed to save trainable TPEM %s: %s", checkpoint_save_path, e)
             raise
 
     metrics: dict[str, Any] = {
