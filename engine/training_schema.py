@@ -160,7 +160,7 @@ class CascadeSection(BaseModel):
 
 
 class WasmSection(BaseModel):
-    """Wasmtime limits; see ``WasmRuntimeConfig`` in ``qminiwasm.enclave.engine``."""
+    """Wasmtime limits; see ``WasmRuntimeConfig`` in ``qminiwasm.wasm_host.engine``."""
 
     model_config = ConfigDict(extra="forbid")
 

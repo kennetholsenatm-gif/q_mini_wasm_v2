@@ -19,20 +19,17 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 - **What:** Canonical implementation in [`qminiwasm/tpem/trainable_tpem.py`](../qminiwasm/tpem/trainable_tpem.py); [`qminiwasm/tpem/__init__.py`](../qminiwasm/tpem/__init__.py) re-exports the public API.
 - **Compatibility:** [`qminiwasm/training/trainable_tpem.py`](../qminiwasm/training/trainable_tpem.py) and [`qminiwasm/training/checkpoint.py`](../qminiwasm/training/checkpoint.py) remain thin re-exports.
 
+## Pilot 3 (landed): `qminiwasm.wasm_host` + `qminiwasm.enclave` shim
+
+- **What:** Implementation moved to [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/); [`qminiwasm/enclave/`](../qminiwasm/enclave/) is a **compatibility shim** (package + per-module `import *` forwarders). `qminiwasm.wasm` / `qminiwasm.state` shims now target `wasm_host` directly (one hop).
+- **CI:** `python -m qminiwasm.wasm_host.tpem_bundle verify …` (legacy `-m qminiwasm.enclave.tpem_bundle` still works via shim `__main__` delegation on `tpem_bundle`).
+
 ## Next pilots (not started)
 
 | Pilot | Idea | Risk |
 |-------|------|------|
-| P3 | Top-level `wasm_runtime/` or `edge/` for enclave + WASM (vs nested `qminiwasm/enclave/`) | High |
 | P4 | Retire `engine/` vs `qminiwasm/` split after boundary doc | High |
-
-### P3 proposal (when ready)
-
-1. Inventory **import edges**: `grep -r "qminiwasm.enclave"` and `from .enclave` across `qminiwasm/`, `tests/`, `engine/`, `scripts/`.
-2. Choose target package name (`edge`, `wasm_host`, or keep `qminiwasm.enclave` but add `qminiwasm.edge` facade).
-3. Move in **one PR**: `git mv qminiwasm/enclave qminiwasm/<target>`, add `qminiwasm/enclave/__init__.py` shim that re-exports from `<target>` for one release cycle.
-4. Update **mypy** / **pytest** paths and any **dynamic imports** (WASM loaders, training-wui if any).
-5. Remove shim in a **follow-up** after downstream repos pin the new path.
+| P5 | Remove `qminiwasm.enclave` shim after downstream migration | Medium |
 
 ## References
 

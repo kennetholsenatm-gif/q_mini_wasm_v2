@@ -69,7 +69,7 @@ jobs:
         run: python scripts/build_tpem_wasm_artifacts.py --out-dir dist/edge-artifacts
 
       - name: Verify TPEM bundle header + digest
-        run: python -m qminiwasm.enclave.tpem_bundle verify dist/edge-artifacts/qminiwasm-weights.tpem
+        run: python -m qminiwasm.wasm_host.tpem_bundle verify dist/edge-artifacts/qminiwasm-weights.tpem
 
       - name: Upload edge artifacts
         uses: actions/upload-artifact@v7

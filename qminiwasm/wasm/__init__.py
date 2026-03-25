@@ -1,8 +1,8 @@
-"""Shim: public imports live in :mod:`qminiwasm.enclave`."""
+"""Shim: public imports live in :mod:`qminiwasm.wasm_host`."""
 
-from qminiwasm.enclave import *  # noqa: F403
+from qminiwasm.wasm_host import *  # noqa: F403
 
-__all__ = [  # keep in sync with qminiwasm.enclave
+__all__ = [  # keep in sync with qminiwasm.wasm_host
     "WasmRuntimeConfig",
     "WasmEngine",
     "WasmCompiler",

@@ -1,3 +1,3 @@
-"""Shim for :mod:`qminiwasm.enclave.engine`."""
+"""Shim for :mod:`qminiwasm.wasm_host.engine`."""
 
-from qminiwasm.enclave.engine import *  # noqa: F403
+from qminiwasm.wasm_host.engine import *  # noqa: F403

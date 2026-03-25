@@ -1,7 +1,7 @@
 """Save/load **trainable TPEM** (ternary-packed memory enclave) partitions for QMiniWASM.
 
 Canonical location for trainable PyTorch artifacts. Full **WLES** dumps live under
-:mod:`qminiwasm.enclave.memory_encode` and native hooks; both may coexist.
+:mod:`qminiwasm.wasm_host.memory_encode` and native hooks; both may coexist.
 
 ``qminiwasm.training.trainable_tpem`` re-exports this module for backward compatibility.
 """

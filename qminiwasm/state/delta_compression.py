@@ -1,3 +1,3 @@
-"""Shim for :mod:`qminiwasm.enclave.delta_compression`."""
+"""Shim for :mod:`qminiwasm.wasm_host.delta_compression`."""
 
-from qminiwasm.enclave.delta_compression import *  # noqa: F403
+from qminiwasm.wasm_host.delta_compression import *  # noqa: F403

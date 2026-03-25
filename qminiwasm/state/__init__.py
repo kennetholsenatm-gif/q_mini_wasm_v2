@@ -1,5 +1,5 @@
-"""Shim: state migration helpers live in :mod:`qminiwasm.enclave`."""
+"""Shim: state migration helpers live in :mod:`qminiwasm.wasm_host`."""
 
-from qminiwasm.enclave.delta_compression import compress_deltas, delta_payload_struct
+from qminiwasm.wasm_host.delta_compression import compress_deltas, delta_payload_struct
 
 __all__ = ["compress_deltas", "delta_payload_struct"]

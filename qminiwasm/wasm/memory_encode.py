@@ -1,3 +1,3 @@
-"""Shim for :mod:`qminiwasm.enclave.memory_encode`."""
+"""Shim for :mod:`qminiwasm.wasm_host.memory_encode`."""
 
-from qminiwasm.enclave.memory_encode import *  # noqa: F403
+from qminiwasm.wasm_host.memory_encode import *  # noqa: F403

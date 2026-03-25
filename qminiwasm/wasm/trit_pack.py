@@ -1,3 +1,3 @@
-"""Shim for :mod:`qminiwasm.enclave.trit_pack`."""
+"""Shim for :mod:`qminiwasm.wasm_host.trit_pack`."""
 
-from qminiwasm.enclave.trit_pack import *  # noqa: F403
+from qminiwasm.wasm_host.trit_pack import *  # noqa: F403
