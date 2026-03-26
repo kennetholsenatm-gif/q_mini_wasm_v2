@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from qminiwasm.enclave import (
+from qminiwasm.wasm_host import (
     MESH_EXPORT_NAMES,
     WasmCompiler,
     WasmEngine,

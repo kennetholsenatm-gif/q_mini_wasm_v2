@@ -10,12 +10,12 @@ import torch
 import wasmtime
 
 from qminiwasm.data.pipeline import DataPipeline
-from qminiwasm.enclave.engine import (
+from qminiwasm.wasm_host.engine import (
     DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES,
     WasmEngine,
     WasmRuntimeConfig,
 )
-from qminiwasm.enclave.memory_encode import D_MODEL, encode_linear_memory
+from qminiwasm.wasm_host.memory_encode import D_MODEL, encode_linear_memory
 
 
 def test_encode_linear_memory_shape_and_stable_meta():

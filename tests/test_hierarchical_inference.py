@@ -7,7 +7,7 @@ import torch
 from qminiwasm.config import HierarchicalConfig
 from qminiwasm.cognitive.edge import EdgeOutcome, run_edge_cognitive_loop
 from qminiwasm.cognitive.escalation import prepare_escalation_payload
-from qminiwasm.enclave.delta_compression import compress_deltas, delta_payload_struct
+from qminiwasm.wasm_host.delta_compression import compress_deltas, delta_payload_struct
 from qminiwasm.layers.attention import TropicalAttention
 from qminiwasm.fabric.interconnect import StateMigrationInterconnect
 from qminiwasm.data.pipeline import DataPipeline

@@ -32,7 +32,7 @@ pip install -e ".[serve]"
 ## Step 3: Start the local API on port 8080
 
 ```bash
-uvicorn engine.serve:app --host 127.0.0.1 --port 8080
+uvicorn qminiwasm.engine.serve:app --host 127.0.0.1 --port 8080
 ```
 
 Keep this terminal running.

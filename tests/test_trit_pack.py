@@ -1,8 +1,8 @@
-"""Tests for MSB-first 5-trit packing (``qminiwasm.enclave.trit_pack``)."""
+"""Tests for MSB-first 5-trit packing (``qminiwasm.wasm_host.trit_pack``)."""
 
 import unittest
 
-from qminiwasm.enclave.trit_pack import (
+from qminiwasm.wasm_host.trit_pack import (
     TRITS_PER_BYTE,
     pack_ternary_list,
     unpack_ternary_list,

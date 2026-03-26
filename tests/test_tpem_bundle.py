@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from qminiwasm.enclave.trit_pack import PACK_ENCODING_VERSION, pack_ternary_list
-from qminiwasm.enclave.tpem_bundle import read_tpem_bundle, write_tpem_bundle
+from qminiwasm.wasm_host.trit_pack import PACK_ENCODING_VERSION, pack_ternary_list
+from qminiwasm.wasm_host.tpem_bundle import read_tpem_bundle, write_tpem_bundle
 
 
 class TestTpemBundle(unittest.TestCase):

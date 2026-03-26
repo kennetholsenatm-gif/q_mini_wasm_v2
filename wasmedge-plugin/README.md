@@ -12,5 +12,5 @@ via WasmEdge’s WASI-NN plugin interface.
 ## Primary path in this repo
 
 The Python training stack uses **wasmtime** with host imports
-(``qminiwasm.enclave.host_tensor``) first; this crate is for production WasmEdge
+(``qminiwasm.wasm_host.host_tensor``) first; this crate is for production WasmEdge
 deployments without PyTorch on the edge host.

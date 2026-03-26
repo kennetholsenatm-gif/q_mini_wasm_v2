@@ -131,7 +131,7 @@ def _metric_from_logs(text: str) -> tuple[str, float | None]:
 
 
 def _run_trial(config_path: Path, timeout_s: int) -> tuple[int, str, str, float]:
-    cmd = [sys.executable, "-m", "engine", "--config", str(config_path)]
+    cmd = [sys.executable, "-m", "qminiwasm.engine", "--config", str(config_path)]
     t0 = time.perf_counter()
     try:
         cp = subprocess.run(

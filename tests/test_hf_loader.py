@@ -14,7 +14,7 @@ from qminiwasm.training.hf_loader import (
     load_hf_tabular_samples,
     validate_hf_hub_dataset_id_not_checkpoint,
 )
-from qminiwasm.enclave.memory_encode import BODY_SLOTS, encode_linear_memory
+from qminiwasm.wasm_host.memory_encode import BODY_SLOTS, encode_linear_memory
 
 
 def test_validate_hf_hub_dataset_id_rejects_checkpoint_paths():
@@ -105,7 +105,7 @@ def test_row_to_encoded_blob_legacy_fallback():
 
 def test_engine_config_hf_context_fields_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("HF_CONTEXT_FIELDS", raising=False)
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     f = tmp_path / "c.toml"
     f.write_text("", encoding="utf-8")
@@ -121,7 +121,7 @@ def test_engine_config_hf_context_fields_toml(tmp_path, monkeypatch):
 def test_engine_config_hybrid_adapter_from_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("HYBRID_ADAPTER", raising=False)
     monkeypatch.delenv("HYBRID_ADAPTER_HIDDEN", raising=False)
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     f = tmp_path / "c.toml"
     f.write_text("", encoding="utf-8")
@@ -141,7 +141,7 @@ def test_engine_config_hybrid_adapter_from_toml(tmp_path, monkeypatch):
 def test_engine_config_target_mean_mse_from_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("TARGET_MEAN_MSE", raising=False)
     monkeypatch.delenv("STOP_ON_TARGET_MSE", raising=False)
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     f = tmp_path / "c.toml"
     f.write_text("", encoding="utf-8")
@@ -160,7 +160,7 @@ def test_engine_config_target_mean_mse_from_toml(tmp_path, monkeypatch):
 def test_engine_config_hf_wasi_from_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("HF_WASI_SLICE_ONLY", raising=False)
     monkeypatch.delenv("HF_WASI_MAX_SCAN", raising=False)
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     f = tmp_path / "c.toml"
     f.write_text("", encoding="utf-8")
@@ -180,7 +180,7 @@ def test_engine_config_hf_token_from_env(monkeypatch):
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.setenv("HF_TOKEN", "hf_from_env")
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     assert EngineConfig().hf_token == "hf_from_env"
 

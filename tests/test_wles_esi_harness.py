@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from qminiwasm.config import HierarchicalConfig
 from qminiwasm.cognitive.escalation import prepare_escalation_payload
 from qminiwasm.cognitive.vec2text import validate_reconstructed_text
-from qminiwasm.enclave.memory_encode import WLES_PAYLOAD_VERSION, build_wles_envelope
+from qminiwasm.wasm_host.memory_encode import WLES_PAYLOAD_VERSION, build_wles_envelope
 
 
 class TestWlesEsiHarness(unittest.TestCase):

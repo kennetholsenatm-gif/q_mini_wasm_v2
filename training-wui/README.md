@@ -1,6 +1,6 @@
 # Training WUI (Go)
 
-Small web UI to pick a `configs/training/*.toml` file and run `python -m engine --config …` from the **repository root** (so `engine` and `qminiwasm` resolve and `.env` is found by the Python loader).
+Small web UI to pick a `configs/training/*.toml` file and run `python -m qminiwasm.engine --config …` from the **repository root** (editable `qminiwasm` package and `.env` on `PYTHONPATH`).
 
 ## Requirements
 
@@ -32,12 +32,12 @@ Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `-addr` | `:8765` | Listen address (`host:port`) |
-| `-root` | `.` | **Repo root** (directory that contains `configs/` and `engine/`) |
+| `-root` | `.` | **Repo root** (directory that contains `configs/` and `qminiwasm/`) |
 | `-python` | `python` | Python executable name or path on `PATH` |
 
 ### Tabs (workflow)
 
-- **Training** — Single **LEGO-style wizard** (five steps on one tab): (1) dataset mix, (2) model & runtime, (3) data source, (4) training knobs + full **schema** form, (5) review/save, **Launch training** (only control that starts `python -m engine`), preflight, runs, artifacts. All saves target **`configs/training/wui_working.toml`** unless you pick another file in the dropdown.
+- **Training** — Single **LEGO-style wizard** (five steps on one tab): (1) dataset mix, (2) model & runtime, (3) data source, (4) training knobs + full **schema** form, (5) review/save, **Launch training** (only control that starts `python -m qminiwasm.engine`), preflight, runs, artifacts. All saves target **`configs/training/wui_working.toml`** unless you pick another file in the dropdown.
 - **Mission Control**, **Infra & RunPod** (node health, `terraform.tfvars`, RunPod status, OpenTofu), **Quantum Topology**, **Artifact Registry** — Mission Control holds quick metrics, live telemetry, and the training log moved off the wizard for headroom.
 
 `POST /api/runs/build` and `POST /api/runs/custom` only write `wui_working.toml`; **`POST /api/runs`** starts training. Optional JSON field **`allow_missing_checkpoint`**: when `true` and the config’s `checkpoint.load_path` file is missing, the server runs from a temp copy of the TOML with that line removed (fresh weights). The UI sets this only after you confirm in the resume-without-file dialog.
@@ -52,8 +52,8 @@ The dashboard can target **RunPod** so OpenTofu runs **`apply`** before training
 
 - Set **`RUNPOD_TOKEN`** (or `RUNPOD_API_KEY`) in the repo **`.env`**; the WUI loads it on startup (`loadDotenvFromRepo`).
 - Stack lives in **`infra/runpod`**. **`tofu` or `terraform` must be on `PATH`** on the **WUI host**.
-- **Train on the pod (default):** In step 2, choose **RunPod** and leave **Train on RunPod GPU** checked. **Launch training** will: `tofu apply` (unless you check **Skip OpenTofu apply**), wait for **`public_ip`**, **tar-sync** the repo to the pod over **SSH**, then run **`python -m engine`** on the pod (venv + `pip install -e ".[training]"` on each run). The WUI host must have **`ssh`**, **`tar`**, and **`scp`** (scp only needed when the server uses a generated temp config) on **`PATH`**. Optional **`RUNPOD_SSH_USER`**, **`RUNPOD_REMOTE_DIR`**, **`RUNPOD_SSH_KEY`** in `.env` (see [`.env.example`](../.env.example)). Your repo **`.env`** is included in the sync so Hub / IBM tokens work remotely.
-- **Train on the WUI host:** Uncheck **Train on RunPod GPU** — the pod is still provisioned, but **`python -m engine`** runs locally (legacy / CPU testing).
+- **Train on the pod (default):** In step 2, choose **RunPod** and leave **Train on RunPod GPU** checked. **Launch training** will: `tofu apply` (unless you check **Skip OpenTofu apply**), wait for **`public_ip`**, **tar-sync** the repo to the pod over **SSH**, then run **`python -m qminiwasm.engine`** on the pod (venv + `pip install -e ".[training]"` on each run). The WUI host must have **`ssh`**, **`tar`**, and **`scp`** (scp only needed when the server uses a generated temp config) on **`PATH`**. Optional **`RUNPOD_SSH_USER`**, **`RUNPOD_REMOTE_DIR`**, **`RUNPOD_SSH_KEY`** in `.env` (see [`.env.example`](../.env.example)). Your repo **`.env`** is included in the sync so Hub / IBM tokens work remotely.
+- **Train on the WUI host:** Uncheck **Train on RunPod GPU** — the pod is still provisioned, but **`python -m qminiwasm.engine`** runs locally (legacy / CPU testing).
 - **Artifacts:** Checkpoints are written on the **pod** under the synced repo (e.g. `artifacts/models/...`). Copy them back with **scp**/**rsync** if you need them on your laptop. **Stop** terminates the local **ssh** process; the remote Python process may keep running until the pod is destroyed or you SSH in manually.
 
 **Cloud GPU (CUDA):** Pods default to **`ACCELERATOR=cuda`** in container env (`infra/runpod/variables.tf`). See **`infra/runpod/CLOUD_ACCELERATOR.md`**.
@@ -72,9 +72,9 @@ Each training run writes checkpoints under **`artifacts/models/<model-slug>/`** 
 | `best.pt` | Best training MSE so far (`CHECKPOINT_BEST_PATH`) — **default for serving** |
 | `latest.pt` | Last epoch (`CHECKPOINT_LATEST_PATH`) — used for **resume** |
 | `serve.toml` | Minimal `[serve]` table; load with **`QMINIWASM_SERVE_CONFIG=artifacts/models/<slug>/serve.toml`** |
-| `agent_bundle.json` | Machine-readable paths + **`uvicorn engine.serve:app`** hint + HTTP API summary |
+| `agent_bundle.json` | Machine-readable paths + **`uvicorn qminiwasm.engine.serve:app`** hint + HTTP API summary |
 
-After training, point tools or agents at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn engine.serve:app`** (see repo **`engine/serve.py`**, **`pip install -e ".[serve]"`**). Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle JSON for the exact contract.
+After training, point tools or agents at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn qminiwasm.engine.serve:app`** (**`pip install -e ".[serve]"`**). Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle JSON for the exact contract.
 
 `GET /api/runpod/status` — token, binary, `tofu output` (when state exists), plus **`remote_ssh`**, **`remote_scp`**, **`remote_tar`**, **`remote_ssh_user`**, **`remote_dir`**, **`remote_ssh_key_set`**. `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional).
 

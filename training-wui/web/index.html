@@ -1170,7 +1170,7 @@
     <div class="topbar">
       <div>
         <h1>QMiniWASM training dashboard</h1>
-        <p class="sub">Runs <code>python -m engine --config …</code> from repo root with preflight checks and live logs.</p>
+        <p class="sub">Runs <code>python -m qminiwasm.engine --config …</code> from repo root with preflight checks and live logs.</p>
         <p class="sub" id="serverBindBanner" style="cursor:pointer;text-decoration:underline dotted;" title="Click to copy bind address">Server bind: detecting...</p>
         <p class="sub" id="serverBindCopyStatus"></p>
       </div>
@@ -1359,7 +1359,7 @@
           <div id="bRunpodRemoteWrap" style="display:none" class="stack-sm">
             <label class="checkline stack-sm">
               <input id="bRunpodTrainOnPod" type="checkbox" checked />
-              Train on RunPod GPU (sync repo via SSH, run <code>python -m engine</code> on the pod)
+              Train on RunPod GPU (sync repo via SSH, run <code>python -m qminiwasm.engine</code> on the pod)
             </label>
             <label class="checkline stack-sm">
               <input id="bRunpodSkipApply" type="checkbox" />
@@ -1707,7 +1707,7 @@
         <div class="infra-dash-wrap">
         <div class="infra-section dash-card" data-card-id="infra-tfvars">
           <h2>terraform.tfvars</h2>
-          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (default), the engine runs on the GPU pod after SSH sync; turn that off in step 2 to run <code>python -m engine</code> on the WUI host.</p>
+          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (default), the engine runs on the GPU pod after SSH sync; turn that off in step 2 to run <code>python -m qminiwasm.engine</code> on the WUI host.</p>
           <label for="tfvarsEditor" class="sr-only">terraform.tfvars contents</label>
           <textarea id="tfvarsEditor" spellcheck="false" wrap="off" placeholder="# Load example or paste HCL variable assignments…"></textarea>
           <div class="row stack-md align-center">
@@ -3951,7 +3951,7 @@
             "# rsync repo to pod\n" +
             "rsync -avz --exclude .git --exclude .venv ./ root@" + ip + ":/workspace/qminiwasm-core/\n\n" +
             "# ssh and train with CUDA\n" +
-            "ssh root@" + ip + " 'cd /workspace/qminiwasm-core && source .venv/bin/activate 2>/dev/null; export ACCELERATOR=cuda && python -m engine --config configs/training/mesh_cuda.toml'\n\n" +
+            "ssh root@" + ip + " 'cd /workspace/qminiwasm-core && source .venv/bin/activate 2>/dev/null; export ACCELERATOR=cuda && python -m qminiwasm.engine --config configs/training/mesh_cuda.toml'\n\n" +
             "# or: ./scripts/runpod_sync_and_train.example.sh configs/training/mesh_cuda.toml";
           lastInfraRemoteCmd = block;
           pre.style.display = "block";

@@ -1,6 +1,6 @@
 # Training data and ML engine results
 
-This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics** from `python -m engine`.
+This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics** from `python -m qminiwasm.engine`.
 
 ## Structured config (TOML)
 
@@ -13,7 +13,7 @@ Hyperparameters and non-secret options should live in **TOML** under [`configs/t
 Run training:
 
 ```bash
-python -m engine --config configs/training/mesh_cpu.toml
+python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 ```
 
 **Precedence:** values set in the TOML file override environment variables for those keys. **`ACCELERATOR`** is still applied from the environment when set (after loading the file), so containers can pin the device without editing the file. **`HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`** are always read from the environment when not passed explicitly — **never commit tokens in TOML**.
@@ -28,11 +28,11 @@ Cascade + MOPD helper: [`scripts/run_training_cascade_mopd.py`](../scripts/run_t
 |--------|-------------|-------------------------------------|
 | `mesh` | Embedded C snippets compiled to bare wasm32 (`hash`, `encrypt`, `network`, `routing`, `consensus`). Uses `WasmEngine` + linear memory snapshots encoded to 4096-dim vectors. | Yes (synthetic but real wasmtime execution). |
 | `corpus` | JSON manifest listing paths to **bare wasm32** modules and export names. See [`corpus/manifest.json`](../corpus/manifest.json) and [`corpus/build_scratch_wasm.py`](../corpus/build_scratch_wasm.py). | Yes. |
-| `hf_tabular` | Hugging Face `datasets`: each row is turned into UTF-8 text, then [`encode_linear_memory`](../qminiwasm/enclave/memory_encode.py) produces **hidden**; **target = hidden** (identity MSE). | No — trains the hybrid stack on encoded text, not wasm linear memory. |
+| `hf_tabular` | Hugging Face `datasets`: each row is turned into UTF-8 text, then [`encode_linear_memory`](../qminiwasm/wasm_host/memory_encode.py) produces **hidden**; **target = hidden** (identity MSE). | No — trains the hybrid stack on encoded text, not wasm linear memory. |
 
 **Deployment-aligned data:** For behavior that should track **real WASM linear memory**, prefer **`mesh`** or **`corpus`**. Use **`hf_tabular`** for cheap scale and diversity (e.g. CodeSearchNet) as **pretraining** or auxiliary signal; it does not substitute for wasmtime-backed encodings at the edge.
 
-Install Hugging Face support (includes **`python-dotenv`** so a repo-root **`.env`** is loaded automatically by `python -m engine` and `engine.train.main`; put `HUGGING_FACE_HUB_TOKEN` or `HF_TOKEN` there—do not commit `.env`):
+Install Hugging Face support (includes **`python-dotenv`** so a repo-root **`.env`** is loaded automatically by `python -m qminiwasm.engine` and `qminiwasm.engine.train.main`; put `HUGGING_FACE_HUB_TOKEN` or `HF_TOKEN` there—do not commit `.env`):
 
 ```bash
 pip install -e ".[training]"
@@ -72,7 +72,7 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 
 ## WASM linear memory encoding
 
-[`qminiwasm/enclave/memory_encode.py`](../qminiwasm/enclave/memory_encode.py) maps bytes + scalars to a **4096-float** vector (stable layout: metadata slots + byte-derived floats). Training expects **hidden** and **target** each shaped `(4096,)`.
+[`qminiwasm/wasm_host/memory_encode.py`](../qminiwasm/wasm_host/memory_encode.py) maps bytes + scalars to a **4096-float** vector (stable layout: metadata slots + byte-derived floats). Training expects **hidden** and **target** each shaped `(4096,)`.
 
 **Important:** only the first **~4088 UTF-8 bytes** of each row’s blob affect the embedding (the rest is unused). In **auto** HF mode (no `HF_TEXT_FIELDS`), the loader prepends a short labeled **`[context]`** block (`language`, `func_name`, `repo`, `path` when present) so that window mixes repository metadata with the **start** of the function body. Disable with `HF_CONTEXT_FIELDS=0`, or set `HF_CONTEXT_FIELDS=key1,key2` to override.
 
@@ -132,8 +132,8 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 Run:
 
 ```bash
-python -m engine --config configs/training/edge_fast_iter.toml
-python -m engine --config configs/training/edge_full_curriculum_streaming.toml
+python -m qminiwasm.engine --config configs/training/edge_fast_iter.toml
+python -m qminiwasm.engine --config configs/training/edge_full_curriculum_streaming.toml
 python scripts/benchmark_edge_curriculum.py
 ```
 | `QAOA_SIMULATOR_BACKEND` | `auto`, `statevector`, or `mps` for `qiskit_statevector` execution mode |
@@ -167,12 +167,12 @@ Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_M
 
 ```bash
 export SEED=42   # optional; or set [training].seed in TOML
-python -m engine --config configs/training/mesh_cpu.toml
+python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 # with checkpoints only in env:
 export CHECKPOINT_SAVE_PATH=./artifacts/models/qminiwasm/final.pt
 export CHECKPOINT_BEST_PATH=./artifacts/models/qminiwasm/best.pt
 export CHECKPOINT_LATEST_PATH=./artifacts/models/qminiwasm/latest.pt
-python -m engine --config configs/training/mesh_cpu.toml
+python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 ```
 
 2. Optional holdout metric (same forward as training, data not seen in the train split): set `[eval]` in your TOML (`holdout_fraction`, `every_epoch`) or use `EVAL_HOLDOUT_FRACTION` / `EVAL_EVERY_EPOCH` when those keys are omitted from the file.
@@ -184,7 +184,7 @@ Checkpoint files include `format_version`, `d_model`, `quantum_router`, `ternary
 Run from repo root:
 
 ```bash
-python -m engine --config configs/training/mesh_cpu.toml
+python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 ```
 
 Logs go to **stdout** (friendlier for PowerShell). Third-party HTTP loggers are quieted to WARNING.
@@ -205,7 +205,7 @@ Runs depend on **hardware**, **seed**, **sample count**, and **epochs**. The fol
 
 ### Returned metrics
 
-`python -m engine` prints a dict including:
+`python -m qminiwasm.engine` prints a dict including:
 
 - `epochs_run`: epochs **actually completed** (early stop may stop sooner than `EPOCHS`)
 - `final_loss`: last epoch’s mean MSE (on the **train** split when holdout is used)
@@ -224,7 +224,7 @@ Use these series to compare runs with the same `SEED`, `HF_NUM_SAMPLES`, and `BA
 
 ## When you need “real” WASM traces
 
-For architecture-aligned supervision, prefer **`corpus`** or **`mesh`** (wasmtime + linear memory), not `hf_tabular`. **WASI-linked** modules (imports `wasi_snapshot_preview1`, etc.) are instantiated via wasmtime’s **`Linker` + `WasiConfig`** (`qminiwasm.enclave.wasi_link.instantiate_wasmtime_module`). To compile C as **wasm32-wasip1** with wasi-sdk, set **`WASI_SDK_PATH`** and **`QMINIWASM_WASM_C_LINK=wasip1`** (default remains bare `wasm32` for embedded mesh snippets).
+For architecture-aligned supervision, prefer **`corpus`** or **`mesh`** (wasmtime + linear memory), not `hf_tabular`. **WASI-linked** modules (imports `wasi_snapshot_preview1`, etc.) are instantiated via wasmtime’s **`Linker` + `WasiConfig`** (`qminiwasm.wasm_host.wasi_link.instantiate_wasmtime_module`). To compile C as **wasm32-wasip1** with wasi-sdk, set **`WASI_SDK_PATH`** and **`QMINIWASM_WASM_C_LINK=wasip1`** (default remains bare `wasm32` for embedded mesh snippets).
 
 ## License notes
 

@@ -79,9 +79,9 @@ Or use the WUI **Infrastructure** tab: OpenTofu actions (`init` / `plan` / `appl
 
 1. **Infra & RunPod** tab: save **`terraform.tfvars`**, run **tofu init** / **plan** / **apply** (or let **Launch training** run **apply** for you).
 2. Ensure the WUI machine has **`ssh`**, **`tar`**, and **`scp`** on **`PATH`** (Windows: optional OpenSSH Client). Set **`RUNPOD_SSH_USER`**, **`RUNPOD_REMOTE_DIR`**, **`RUNPOD_SSH_KEY`** in `.env` if defaults (`root`, `/workspace/qminiwasm-core`, agent default key) are wrong.
-3. **Training** tab → step 2: **Execution target** = **RunPod**. Leave **Train on RunPod GPU** checked (default). **Launch training** runs **apply** (unless **Skip OpenTofu apply**), waits for **`public_ip`**, **syncs the repo** over SSH, then runs **`python -m engine`** on the pod. Logs stream in **Mission Control** like a local run.
+3. **Training** tab → step 2: **Execution target** = **RunPod**. Leave **Train on RunPod GPU** checked (default). **Launch training** runs **apply** (unless **Skip OpenTofu apply**), waits for **`public_ip`**, **syncs the repo** over SSH, then runs **`python -m qminiwasm.engine`** on the pod. Logs stream in **Mission Control** like a local run.
 
-Uncheck **Train on RunPod GPU** only if you want **`python -m engine` on the WUI host** while still provisioning a pod (unusual).
+Uncheck **Train on RunPod GPU** only if you want **`python -m qminiwasm.engine` on the WUI host** while still provisioning a pod (unusual).
 
 **Manual CLI alternative:** [CLOUD_ACCELERATOR.md](../infra/runpod/CLOUD_ACCELERATOR.md) and **`scripts/runpod_sync_and_train.example.sh`** — same idea without the WUI automation.
 
@@ -91,7 +91,7 @@ Uncheck **Train on RunPod GPU** only if you want **`python -m engine` on the WUI
 
 ## 6. Secrets on the pod
 
-Copy or recreate **`.env`** on the pod (or export vars) for `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`, IBM Quantum tokens, etc., before remote `python -m engine`.
+Copy or recreate **`.env`** on the pod (or export vars) for `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`, IBM Quantum tokens, etc., before remote `python -m qminiwasm.engine`.
 
 ## 7. Destroy when done
 

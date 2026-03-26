@@ -18,11 +18,11 @@
     {
       "regex": "(?i)\\bcheckpoint\\b",
       "hint": "Prefer trainable TPEM / TPEM artifact for persisted weights (WLES for full linear memory).",
-      "path_prefixes": ["qminiwasm/training/", "qminiwasm/tpem/", "qminiwasm/wasm_host/", "qminiwasm/enclave/"]
+      "path_prefixes": ["qminiwasm/training/", "qminiwasm/tpem/", "qminiwasm/wasm_host/", "qminiwasm/engine/"]
     }
   ],
   "scan_extensions": [".md", ".toml", ".py", ".rs", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".c", ".go"],
-  "path_prefixes": ["docs/", "wiki/", "configs/", "qminiwasm/", "engine/", "cpp/", "ternary_packed/", "scripts/", "tests/", "training-wui/"],
+  "path_prefixes": ["docs/", "wiki/", "configs/", "qminiwasm/", "cpp/", "ternary_packed/", "scripts/", "tests/", "training-wui/"],
   "ignore_path_substrings": ["/vendor/", "node_modules/", ".git/", "__pycache__/", ".cursor/", "mcps/"],
   "skip_all_patterns_for_paths": [
     "docs/Q-Mini-WASM_ Edge AI Taxonomy.md",

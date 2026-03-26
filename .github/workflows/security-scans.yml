@@ -38,7 +38,7 @@ jobs:
       - name: Run Bandit
         run: |
           set -e
-          PATHS="qminiwasm/ engine/"
+          PATHS="qminiwasm/"
           if [ -d wui/backend ]; then PATHS="$PATHS wui/backend/"; fi
           .venv/bin/bandit -r $PATHS -c pyproject.toml -f json -o bandit-report.json
 

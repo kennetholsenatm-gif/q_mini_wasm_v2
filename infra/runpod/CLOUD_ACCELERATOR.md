@@ -2,7 +2,7 @@
 
 Setup checklist: [docs/RUNPOD_QUICKSTART.md](../../docs/RUNPOD_QUICKSTART.md).
 
-The **training WUI** can perform this flow for you: **Infra & RunPod** for OpenTofu, then **Launch training** with **RunPod** + **Train on RunPod GPU** (default) to sync over SSH and run `python -m engine` on the pod.
+The **training WUI** can perform this flow for you: **Infra & RunPod** for OpenTofu, then **Launch training** with **RunPod** + **Train on RunPod GPU** (default) to sync over SSH and run `python -m qminiwasm.engine` on the pod.
 
 The Runpod pod uses a **CUDA PyTorch** image by default (`image_name` in `variables.tf`) and injects:
 
@@ -39,14 +39,14 @@ Training still **defaults to CPU** if you override `env` and drop `ACCELERATOR`,
    pip install -e ".[training]"
    export ACCELERATOR=cuda
    python -c "import torch; print('cuda:', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
-   python -m engine --config configs/training/mesh_cuda.toml
+   python -m qminiwasm.engine --config configs/training/mesh_cuda.toml
    ```
 
-   Use a config whose `[hardware]` section sets `accelerator = "cuda"` **or** rely on `ACCELERATOR` in the environment (see `engine/config.py`).
+   Use a config whose `[hardware]` section sets `accelerator = "cuda"` **or** rely on `ACCELERATOR` in the environment (see `qminiwasm/engine/config.py`).
 
 ## Training WUI
 
-The dashboard can **provision** the pod (`run_target: runpod`) but still runs `python -m engine` on the **machine hosting the WUI**. For GPU training, run the WUI on your laptop and execute the engine **on the pod** via SSH/rsync as above, or run the WUI **inside** the same pod (then local training uses that pod’s GPU).
+The dashboard can **provision** the pod (`run_target: runpod`) but still runs `python -m qminiwasm.engine` on the **machine hosting the WUI**. For GPU training, run the WUI on your laptop and execute the engine **on the pod** via SSH/rsync as above, or run the WUI **inside** the same pod (then local training uses that pod’s GPU).
 
 ## See also
 

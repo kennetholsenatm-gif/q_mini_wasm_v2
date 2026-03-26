@@ -44,7 +44,7 @@ def _repo_root() -> Path:
 
 def _run_train(config_abs: Path) -> tuple[int, str, str]:
     py = _as_str(os.getenv("PYTHON_BIN")) or sys.executable
-    cmd = [py, "-m", "engine", "--config", str(config_abs)]
+    cmd = [py, "-m", "qminiwasm.engine", "--config", str(config_abs)]
     proc = subprocess.run(
         cmd,
         cwd=str(_repo_root()),

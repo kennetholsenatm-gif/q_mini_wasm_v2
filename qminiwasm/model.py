@@ -32,7 +32,7 @@ from .layers.lota import LoRALinearSide, merge_lora_into_linear_weight
 from .layers.ptqtp import PTQTPLinear
 from .training.cascade_rl import CascadeRouter
 from .layers.attention import TropicalAttention
-from .enclave.engine import WasmEngine as WasmExecutor, WasmRuntimeConfig
+from .wasm_host.engine import WasmEngine as WasmExecutor, WasmRuntimeConfig
 from .hardware import SYCLHardware
 from .hardware.device import get_device
 from .data.pipeline import DataPipeline

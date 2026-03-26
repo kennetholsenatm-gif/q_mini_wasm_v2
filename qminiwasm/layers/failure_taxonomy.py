@@ -20,7 +20,7 @@ from scipy.spatial import ConvexHull
 from scipy.spatial.distance import cdist
 
 from ..config import HierarchicalConfig
-from ..enclave.engine import WasmEngine
+from ..wasm_host.engine import WasmEngine
 from ..fabric.router import HybridQuantumMoE
 
 

@@ -111,8 +111,7 @@ This trace explains how a vector moves from Wasm-edge execution into the Python 
 
 ```text
 qminiwasm-core/
-|- qminiwasm/                  # core model, wasm engine, quantum router
-|- engine/                     # training/serving orchestration entrypoints
+|- qminiwasm/                  # core model, wasm host, quantum router, training/serve (`qminiwasm.engine`)
 |- docs/                       # canonical repository documentation
 |- wiki/                       # extended strategic/research documentation
 |- infra/runpod/               # OpenTofu stack for RunPod workflows

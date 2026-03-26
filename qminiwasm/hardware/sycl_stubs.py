@@ -8,7 +8,7 @@ import logging
 import os
 from typing import List, Optional
 
-from qminiwasm.enclave.trit_pack import pack_ternary_list, unpack_ternary_list
+from qminiwasm.wasm_host.trit_pack import pack_ternary_list, unpack_ternary_list
 
 # Try to import the real SYCL implementation
 try:
@@ -77,7 +77,7 @@ class SYCLHardware:
         return [[sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix]
 
     def pack_ternary_weights(self, weights: List[int]) -> bytes:
-        """Pack ternary weights (MSB-first groups; see ``qminiwasm.enclave.trit_pack``)."""
+        """Pack ternary weights (MSB-first groups; see ``qminiwasm.wasm_host.trit_pack``)."""
         if self._backend:
             return self._backend.pack_ternary_weights(weights)
         out = pack_ternary_list(weights)

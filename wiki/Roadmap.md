@@ -6,7 +6,7 @@ This roadmap prioritizes **concrete implementation tooling** for the **Stateful 
 
 Normative protocol text for ZTEE remains [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md); this page tracks *engineering milestones* only.
 
-**Layout pilots:** Trainable TPEM I/O — [`qminiwasm/tpem/`](../qminiwasm/tpem/); WASM host runtime — [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/) (legacy import path `qminiwasm.enclave`). See [`docs/LAYOUT_REALIGNMENT_RFC.md`](../docs/LAYOUT_REALIGNMENT_RFC.md).
+**Layout pilots:** Trainable TPEM I/O — [`qminiwasm/tpem/`](../qminiwasm/tpem/); WASM host — [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/) (`qminiwasm.wasm` = package-level alias only); training / serve — [`qminiwasm/engine/`](../qminiwasm/engine/) (`python -m qminiwasm.engine`). Optional `python -m qminiwasm.cli train`. See [`docs/LAYOUT_REALIGNMENT_RFC.md`](../docs/LAYOUT_REALIGNMENT_RFC.md).
 
 ```mermaid
 flowchart LR
@@ -29,9 +29,9 @@ flowchart LR
 
 | Area | Current repo state |
 |------|-------------------|
-| Envelope / metadata | [`qminiwasm/enclave/memory_encode.py`](../qminiwasm/enclave/memory_encode.py) (`build_wles_envelope`) |
+| Envelope / metadata | [`qminiwasm/wasm_host/memory_encode.py`](../qminiwasm/wasm_host/memory_encode.py) (`build_wles_envelope`) |
 | Smoke tests | [`tests/test_wles_esi_harness.py`](../tests/test_wles_esi_harness.py) (JSON envelope invariants, CGE payload metadata—not full instance restore) |
-| Kernels / compile | [`qminiwasm/enclave/trit_wasm_runtime.py`](../qminiwasm/enclave/trit_wasm_runtime.py), [`qminiwasm/enclave/engine.py`](../qminiwasm/enclave/engine.py) |
+| Kernels / compile | [`qminiwasm/wasm_host/trit_wasm_runtime.py`](../qminiwasm/wasm_host/trit_wasm_runtime.py), [`qminiwasm/wasm_host/engine.py`](../qminiwasm/wasm_host/engine.py) |
 
 **Next milestones**
 

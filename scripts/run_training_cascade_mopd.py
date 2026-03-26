@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inject env for the Cascade RL + MOPD continuation run, then start ``python -m engine``.
+"""Inject env for the Cascade RL + MOPD continuation run, then start ``python -m qminiwasm.engine``.
 
 Loads repo-root ``.env`` first (if present and python-dotenv is installed), then sets
 Cascade/MOPD and checkpoint variables so they override ``.env`` for this process.
@@ -198,7 +198,7 @@ def main() -> int:
         "--config",
         default=str(REPO_ROOT / "configs" / "training" / "cascade_mopd.toml"),
         metavar="PATH",
-        help="Training TOML passed to python -m engine --config (default: configs/training/cascade_mopd.toml).",
+        help="Training TOML passed to python -m qminiwasm.engine --config (default: configs/training/cascade_mopd.toml).",
     )
     args = parser.parse_args()
 
@@ -264,7 +264,7 @@ def main() -> int:
         return 0
 
     return subprocess.run(
-        [sys.executable, "-m", "engine", "--config", str(cfg_path)],
+        [sys.executable, "-m", "qminiwasm.engine", "--config", str(cfg_path)],
         cwd=str(REPO_ROOT),
         env=env,
         check=False,

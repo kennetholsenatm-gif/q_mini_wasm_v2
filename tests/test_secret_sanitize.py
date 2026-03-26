@@ -1,10 +1,10 @@
-"""Tests for engine.secret_sanitize."""
+"""Tests for qminiwasm.engine.secret_sanitize."""
 
 from __future__ import annotations
 
 import os
 
-from engine.secret_sanitize import sanitize_api_key_like, sanitize_secret_environ
+from qminiwasm.engine.secret_sanitize import sanitize_api_key_like, sanitize_secret_environ
 
 
 def test_sanitize_api_key_like_strips_quotes_and_braces() -> None:

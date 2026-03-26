@@ -14,7 +14,7 @@ Welcome. This track summarizes what the **qminiwasm-core** / Q-Mini-WASM effort 
 
 1. **Edge-oriented execution** — WASM-backed runtimes and encodings so ML pipelines can align with **linear memory** and deployment shapes you actually ship.
 2. **Hybrid classical–quantum-style routing** — Quantum-inspired or backend-driven routing (for example **QAOA**-style layers in the stack) to explore structured search over internal state. With **`qiskit_ibm`** and IBM credentials, training has **successfully used real IBM Quantum hardware** for the MoE QAOA path (March 2026); otherwise behavior may use simulators or a no-op `pennylane` mode depending on configuration.
-3. **Modern ML training and inference** — Supervised training (`python -m engine`), optional cascade reinforcement-learning warm-up, checkpoints, and HTTP inference. For design rationale, see **[AI Training Pipeline](AI-Training-Pipeline.md)**.
+3. **Modern ML training and inference** — Supervised training (`python -m qminiwasm.engine`), optional cascade reinforcement-learning warm-up, checkpoints, and HTTP inference. For design rationale, see **[AI Training Pipeline](AI-Training-Pipeline.md)**.
 
 ### Read first: Stateful WASM Agents + ZTEE
 

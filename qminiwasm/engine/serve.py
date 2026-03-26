@@ -1,7 +1,7 @@
 """Minimal inference API for the serving container.
 
 Loads QMiniWASM and exposes POST /infer and GET /health.
-Run: uvicorn engine.serve:app --host 0.0.0.0 --port 8001
+Run: ``uvicorn qminiwasm.engine.serve:app``.
 
 Optional: set ``QMINIWASM_CHECKPOINT`` to a file saved during training (same format as
 ``CHECKPOINT_SAVE_PATH`` / ``CHECKPOINT_BEST_PATH``). Or set ``QMINIWASM_SERVE_CONFIG`` to a TOML

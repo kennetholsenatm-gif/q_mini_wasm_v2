@@ -19,7 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Tuple, Callable
 
-from qminiwasm.enclave.trit_pack import pack_ternary_tensor, unpack_ternary_tensor
+from qminiwasm.wasm_host.trit_pack import pack_ternary_tensor, unpack_ternary_tensor
 
 
 class EnhancedTernaryQuantizer(nn.Module):
@@ -168,7 +168,7 @@ class EnhancedTernaryQuantizer(nn.Module):
         return (weight_ternary - weight).detach() + weight
 
     def pack_ternary_weights(self, weights: torch.Tensor) -> torch.Tensor:
-        """Pack ternary weights: MSB-first base-3 groups (see ``qminiwasm.enclave.trit_pack``)."""
+        """Pack ternary weights: MSB-first base-3 groups (see ``qminiwasm.wasm_host.trit_pack``)."""
         return pack_ternary_tensor(weights)
 
     def unpack_ternary_weights(

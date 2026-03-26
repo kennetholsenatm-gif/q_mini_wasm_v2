@@ -23,7 +23,7 @@ DEFAULT_PHASE1_LATEST = (
 
 
 def _run_engine(config_path: Path, *, dry_run: bool) -> int:
-    cmd = [sys.executable, "-m", "engine", "--config", str(config_path)]
+    cmd = [sys.executable, "-m", "qminiwasm.engine", "--config", str(config_path)]
     print(" ".join(cmd))
     if dry_run:
         return 0

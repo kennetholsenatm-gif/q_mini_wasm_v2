@@ -32,5 +32,5 @@ source .venv/bin/activate
 pip install -q -U pip
 pip install -q -e ".[training]"
 export ACCELERATOR=cuda
-python -m engine --config ${CONFIG_REL}
+python -m qminiwasm.engine --config ${CONFIG_REL}
 EOF

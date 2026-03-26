@@ -103,17 +103,17 @@ jobs:
             pip install black flake8 mypy pytest pytest-cov pypatch==1.0.2
             pip install -r requirements/ci.txt 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true
             # Only pass wui/backend when it has .py files (Dockerfile-only tree is skipped; avoids black "path does not exist").
-            BLACK_TARGETS=(qminiwasm/ tests/ engine/)
-            FLAKE_TARGETS=(qminiwasm/ tests/ engine/)
+            BLACK_TARGETS=(qminiwasm/ tests/)
+            FLAKE_TARGETS=(qminiwasm/ tests/)
             if [ -d wui/backend ] && [ -n "$(find wui/backend -type f -name "*.py" -print -quit 2>/dev/null)" ]; then
               BLACK_TARGETS+=(wui/backend/)
               FLAKE_TARGETS+=(wui/backend/)
             fi
             black --check "${BLACK_TARGETS[@]}"
             flake8 "${FLAKE_TARGETS[@]}" --max-line-length=100 --extend-ignore=E203,W503
-            # qminiwasm/: full mypy. engine/: black/flake8 above; engine mypy deferred (config typing gaps).
+            # qminiwasm/: full mypy (includes qminiwasm/engine/).
             mypy qminiwasm/ --ignore-missing-imports
-            pytest tests/ -v --cov=qminiwasm --cov=engine --cov-report=xml --cov-report=term
+            pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term
             '
 
       - name: Ensure coverage.xml exists
@@ -151,7 +151,7 @@ jobs:
             . .venv/bin/activate
             pip install --upgrade pip
             pip install bandit pip-audit pypatch==1.0.2
-            PATHS="qminiwasm/ engine/"
+            PATHS="qminiwasm/"
             if [ -d wui/backend ]; then PATHS="$PATHS wui/backend/"; fi
             set +e
             bandit -r $PATHS -c pyproject.toml -f json -o bandit-report.json

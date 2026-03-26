@@ -23,7 +23,7 @@ import torch.nn.functional as F
 from ..data.pipeline import DataPipeline
 from ..hardware.device import AcceleratorType, get_device
 from ..model import QMiniWASM
-from ..enclave.engine import WasmRuntimeConfig
+from ..wasm_host.engine import WasmRuntimeConfig
 from .cascade_mopd_teacher import build_noise_state_mopd_fns
 from .cascade_rl import (
     CascadeRouter,
@@ -361,7 +361,7 @@ def run_training_loop(
         checkpoint_load_path: If set and the path exists, load **trainable TPEM** weights before
             training. If the path is missing, log a warning and train from scratch (template TOMLs
             often point at a future ``latest.pt``). (Parameter name retains ``checkpoint_`` for schema
-            compatibility with ``engine.training_schema``.)
+            compatibility with ``qminiwasm.engine.training_schema``.)
         checkpoint_save_path: If set, save trainable TPEM after training completes.
         checkpoint_best_path: If set, save when epoch mean MSE improves.
         checkpoint_latest_path: If set, overwrite this file after each epoch that ran batches
@@ -385,7 +385,7 @@ def run_training_loop(
         lota_merge_every_epoch: If True, merge LoRA into ternary base after each epoch.
         use_cascade_rl: If True (default), run on-policy cascade (GRPO) micro-steps on a toy
             routing MDP before each epoch's supervised MSE batches (escalation policy warm-up).
-        cascade_policy_lr: Adam LR for the cascade policy (defaults to ``learning_rate`` from engine).
+        cascade_policy_lr: Adam LR for the cascade policy (defaults to ``learning_rate`` from :class:`~qminiwasm.engine.config.EngineConfig`).
         cascade_steps_per_epoch: Number of ``cascade_rl_train_step`` calls per epoch.
         cascade_group_size: Trajectories per GRPO step (>=2 recommended for normalized advantages).
         cascade_state_dim / cascade_num_actions: Toy MDP shape.

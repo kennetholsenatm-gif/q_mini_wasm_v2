@@ -12,7 +12,7 @@ from typing import Any, List, Optional
 import numpy as np
 import warnings
 
-from qminiwasm.enclave.trit_pack import pack_ternary_list, unpack_ternary_list
+from qminiwasm.wasm_host.trit_pack import pack_ternary_list, unpack_ternary_list
 
 _log = logging.getLogger(__name__)
 

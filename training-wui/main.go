@@ -1,5 +1,5 @@
 // Command training-wui is a small web UI to list training TOML configs and run
-// `python -m engine --config <path>` from the repository root.
+// `python -m qminiwasm.engine --config <path>` from the repository root.
 package main
 
 import (
@@ -194,7 +194,7 @@ func buildAgentBundleJSON(stem, trainingConfigRel, finalRel, bestRel, latestRel 
 		"inference": map[string]any{
 			"recommended_checkpoint": "best",
 			"serve": map[string]string{
-				"command":                    "uvicorn engine.serve:app --host 0.0.0.0 --port 8001",
+				"command":                    "uvicorn qminiwasm.engine.serve:app --host 0.0.0.0 --port 8001",
 				"env_qminiwasm_serve_config": "QMINIWASM_SERVE_CONFIG=" + serveRel,
 				"env_qminiwasm_checkpoint":   "QMINIWASM_CHECKPOINT=" + bestRel,
 			},
@@ -238,7 +238,7 @@ func main() {
 	repoRoot = filepath.Clean(abs)
 
 	// Load repo .env (e.g. /opt/qmw/.env from bind mount) so IBM/HF tokens are visible
-	// to this process and subprocesses (python -m engine).
+	// to this process and subprocesses (python -m qminiwasm.engine).
 	loadDotenvFromRepo(repoRoot)
 
 	pythonExe = resolvePythonExecutable(*py)
@@ -1472,7 +1472,7 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
-from engine.config import EngineConfig
+from qminiwasm.engine.config import EngineConfig
 from qminiwasm.model import QMiniWASM
 
 cfg_path = os.environ["QMW_FACTS_CONFIG"]
@@ -1910,8 +1910,8 @@ import json
 import os
 import sys
 
-from engine.config import EngineConfig
-from engine._dotenv import load_dotenv_if_available
+from qminiwasm.engine.config import EngineConfig
+from qminiwasm.engine._dotenv import load_dotenv_if_available
 from qminiwasm.hardware.device import get_device
 from qminiwasm.hardware.sycl_hardware import SYCLHardware
 
@@ -2482,10 +2482,10 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 			return nil, rCmdErr
 		}
 		cmd = rTrainCmd
-		rec.logBuf.WriteString(fmt.Sprintf("=== training: remote python -m engine (ssh %s@%s) ===\n", user, ip))
+		rec.logBuf.WriteString(fmt.Sprintf("=== training: remote python -m qminiwasm.engine (ssh %s@%s) ===\n", user, ip))
 	} else {
-		rec.logBuf.WriteString("=== training: python -m engine (local WUI host) ===\n")
-		cmd = exec.Command(pythonExe, "-m", "engine", "--config", absConfig)
+		rec.logBuf.WriteString("=== training: python -m qminiwasm.engine (local WUI host) ===\n")
+		cmd = exec.Command(pythonExe, "-m", "qminiwasm.engine", "--config", absConfig)
 		cmd.Dir = repoRoot
 		cmd.Env = append(os.Environ(), extraEnv...)
 	}

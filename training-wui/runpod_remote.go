@@ -1,4 +1,4 @@
-// RunPod remote training: sync repo over SSH + run python -m engine on the pod.
+// RunPod remote training: sync repo over SSH + run python -m qminiwasm.engine on the pod.
 // Requires OpenSSH client (ssh, scp) and tar on PATH. Configure via RUNPOD_SSH_* env vars.
 package main
 
@@ -183,7 +183,7 @@ func runpodRemoteEngineScript(remoteDir, configRel string, extraEnv []string) st
 		k, v := line[:i], line[i+1:]
 		b.WriteString(fmt.Sprintf("export %s=%s\n", k, shellQuoteSingle(v)))
 	}
-	b.WriteString(fmt.Sprintf("python -m engine --config %s\n", shellQuoteSingle(configRel)))
+	b.WriteString(fmt.Sprintf("python -m qminiwasm.engine --config %s\n", shellQuoteSingle(configRel)))
 	return b.String()
 }
 

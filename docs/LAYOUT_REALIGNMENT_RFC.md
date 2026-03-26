@@ -11,27 +11,43 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 ## Pilot 1 (landed): `[tpem]` training table
 
 - **What:** Optional `[tpem]` table in training TOML, same keys as the legacy persistence table (`load_path`, `save_path`, `best_path`, `latest_path`).
-- **Merge rule:** For each key, if `[tpem]` sets a non-null value, it **overrides** the legacy table for that key when building `EngineConfig` (see `engine.training_schema.TrainingConfig.to_engine_kwargs`).
-- **Serve:** `[serve]` accepts optional `tpem = "path.pt"`; it is preferred over the legacy weight path when both are present (`engine.serve.get_model`).
+- **Merge rule:** For each key, if `[tpem]` sets a non-null value, it **overrides** the legacy table for that key when building `EngineConfig` (see `qminiwasm.engine.training_schema.TrainingConfig.to_engine_kwargs`).
+- **Serve:** `[serve]` accepts optional `tpem = "path.pt"`; it is preferred over the legacy weight path when both are present (`qminiwasm.engine.serve.get_model`).
 
 ## Pilot 2 (landed): `qminiwasm.tpem` package
 
 - **What:** Canonical implementation in [`qminiwasm/tpem/trainable_tpem.py`](../qminiwasm/tpem/trainable_tpem.py); [`qminiwasm/tpem/__init__.py`](../qminiwasm/tpem/__init__.py) re-exports the public API.
 - **Compatibility:** [`qminiwasm/training/trainable_tpem.py`](../qminiwasm/training/trainable_tpem.py) and [`qminiwasm/training/checkpoint.py`](../qminiwasm/training/checkpoint.py) remain thin re-exports.
 
-## Pilot 3 (landed): `qminiwasm.wasm_host` + `qminiwasm.enclave` shim
+## Pilot 3 (landed): `qminiwasm.wasm_host`
 
-- **What:** Implementation moved to [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/); [`qminiwasm/enclave/`](../qminiwasm/enclave/) is a **compatibility shim** (package + per-module `import *` forwarders). `qminiwasm.wasm` / `qminiwasm.state` shims now target `wasm_host` directly (one hop).
-- **CI:** `python -m qminiwasm.wasm_host.tpem_bundle verify …` (legacy `-m qminiwasm.enclave.tpem_bundle` still works via shim `__main__` delegation on `tpem_bundle`).
+- **What:** Canonical WASM host runtime lives in [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/). Older **`qminiwasm.enclave`** import paths were removed from the tree after an in-repo migration and deprecation window; use **`qminiwasm.wasm_host`** only.
+- **`qminiwasm.wasm`:** Package-level alias only (re-exports `wasm_host`); submodule shims were removed — import **`qminiwasm.wasm_host.<submodule>`** when you need a submodule path.
+- **CI:** `python -m qminiwasm.wasm_host.tpem_bundle verify …`
 
-## Next pilots (not started)
+## Pilot 4 (landed): `qminiwasm.engine` only
+
+- **What:** Training TOML, `EngineConfig`, `train` / `serve`, and helpers live in [`qminiwasm/engine/`](../qminiwasm/engine/). Run **`python -m qminiwasm.engine`** or **`python -m qminiwasm.cli train`**; serve with **`uvicorn qminiwasm.engine.serve:app`**. The old top-level **`engine/`** package was **removed**.
+- **Boundary:** [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md): **`qminiwasm.engine` → library** only; library modules must not import `qminiwasm.engine`.
+
+## Pilot 5 (landed): removed `qminiwasm.enclave`
+
+- **What:** The compatibility package **`qminiwasm.enclave`** was deleted from this repository. Downstream code must import **`qminiwasm.wasm_host`** (or submodules such as `qminiwasm.wasm_host.memory_encode`).
+- **Tests:** [`tests/test_wasm_host_layout.py`](../tests/test_wasm_host_layout.py) checks `wasm_host` + `tpem` layout only.
+
+## Pilot 6 (landed): `qminiwasm.cli` training alias
+
+- **What:** [`qminiwasm/cli/__main__.py`](../qminiwasm/cli/__main__.py) — `python -m qminiwasm.cli train …` delegates to **`qminiwasm.engine.__main__`** (same flags after `train`).
+
+## Next pilots
 
 | Pilot | Idea | Risk |
 |-------|------|------|
-| P4 | Retire `engine/` vs `qminiwasm/` split after boundary doc | High |
-| P5 | Remove `qminiwasm.enclave` shim after downstream migration | Medium |
+| — | Optional removal of **`qminiwasm.wasm`** / **`qminiwasm.state`** package aliases after downstream uses only **`wasm_host`** | Low |
 
 ## References
 
 - Status: [MASTER_REALIGNMENT_STATUS.md](MASTER_REALIGNMENT_STATUS.md)
+- `qminiwasm.engine` / library boundary: [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md); implementation: [`qminiwasm/engine/`](../qminiwasm/engine/)
+- CLI alias: [`qminiwasm/cli/`](../qminiwasm/cli/) (`python -m qminiwasm.cli train …`)
 - Schema sample: [configs/training/schema.toml](../configs/training/schema.toml)

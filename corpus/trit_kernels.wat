@@ -1,5 +1,5 @@
 ;; Ternary pack (MSB-first) and call_indirect dispatch helpers for tests / embedding.
-;; Matches qminiwasm.enclave.trit_pack: d' = w + 1 in {0,1,2}, P = sum_j d'_j * 3^(4-j).
+;; Matches qminiwasm.wasm_host.trit_pack: d' = w + 1 in {0,1,2}, P = sum_j d'_j * 3^(4-j).
 
 (module
   (type $v_v (func (result i32)))

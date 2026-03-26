@@ -1,4 +1,4 @@
-"""Allow running the engine with python -m engine."""
+"""CLI for ``python -m qminiwasm.engine``."""
 
 import argparse
 import logging

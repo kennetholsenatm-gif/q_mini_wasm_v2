@@ -18,7 +18,7 @@ from pathlib import Path
 def _soa_smoke_metrics() -> dict:
     from qminiwasm.cognitive.edge import EdgeOutcome, run_edge_cognitive_loop
     from qminiwasm.fabric.qaoa_integration import formulate_qahr_cost_hamiltonian_spec
-    from qminiwasm.enclave.memory_encode import build_wles_envelope
+    from qminiwasm.wasm_host.memory_encode import build_wles_envelope
 
     n = 30
     local = 0
@@ -63,7 +63,7 @@ def _soa_smoke_metrics() -> dict:
 def run_one(cfg: Path) -> dict:
     t0 = time.perf_counter()
     p = subprocess.run(
-        [sys.executable, "-m", "engine", "--config", str(cfg)],
+        [sys.executable, "-m", "qminiwasm.engine", "--config", str(cfg)],
         capture_output=True,
         text=True,
         check=False,

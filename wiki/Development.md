@@ -58,7 +58,7 @@ All commits must pass the following pre-commit hooks:
 
 ### Training web UI (optional)
 
-A small **Go** UI under [`training-wui/`](../training-wui) lists `configs/training/*.toml` and runs `python -m engine --config …` from the repo root. To provision an Incus guest with deps + mount + built WUI, use the ops runbook in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus` (`setup-instance.sh`). See [`training-wui/README.md`](../training-wui/README.md).
+A small **Go** UI under [`training-wui/`](../training-wui) lists `configs/training/*.toml` and runs `python -m qminiwasm.engine --config …` from the repo root. To provision an Incus guest with deps + mount + built WUI, use the ops runbook in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus` (`setup-instance.sh`). See [`training-wui/README.md`](../training-wui/README.md).
 
 ### IBM Quantum (optional, training MoE)
 
@@ -154,7 +154,7 @@ Training runs from the **qminiwasm-core** repository:
 
 ```bash
 pip install -e ".[training]"
-python -m engine
+python -m qminiwasm.engine
 ```
 
 **Canonical reference:** [docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md) (data sources, env table, checkpoints, metrics).
@@ -165,7 +165,7 @@ python -m engine
 - **`HF_MESH_BLEND_FRACTION`** — Appends mesh-generated samples (fraction × HF row count) to Hugging Face tabular data, then shuffles when `SEED` is set, so training mixes WASM curriculum with Hub rows.
 - **Cascade RL** — GRPO toy routing runs before each epoch’s supervised MSE phase by default. **`CASCADE_COUPLE_FORWARD`** (default on) blends mean **input hidden** and mean **`hybrid_inference` output** for the cascade digest (tighter coupling to the live model). Disable with `CASCADE_COUPLE_FORWARD=0`.
 - **Checkpoints** — `cascade_policy` weights load into **`model.cascade_router`** when present and the model was constructed with **`USE_CASCADE_ROUTER=1`**.
-- **Serving** — `uvicorn engine.serve:app` with **`QMINIWASM_CHECKPOINT`**, optional **`HYBRID_ADAPTER`**, **`USE_CASCADE_ROUTER`**, and matching **`CASCADE_*`** dims. **`POST /infer`** returns **`cascade_logits`** per row when the router is attached.
+- **Serving** — `uvicorn qminiwasm.engine.serve:app` with **`QMINIWASM_CHECKPOINT`**, optional **`HYBRID_ADAPTER`**, **`USE_CASCADE_ROUTER`**, and matching **`CASCADE_*`** dims. **`POST /infer`** returns **`cascade_logits`** per row when the router is attached.
 
 ## Pull Request Process
 

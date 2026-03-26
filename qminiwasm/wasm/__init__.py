@@ -1,4 +1,7 @@
-"""Shim: public imports live in :mod:`qminiwasm.wasm_host`."""
+"""Legacy package alias: re-exports :mod:`qminiwasm.wasm_host` at the top level only.
+
+For submodule imports (e.g. ``trit_pack``), use :mod:`qminiwasm.wasm_host` directly.
+"""
 
 from qminiwasm.wasm_host import *  # noqa: F403
 

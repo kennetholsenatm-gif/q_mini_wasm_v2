@@ -58,7 +58,7 @@ Typical flow:
 
 1. sync repository contents to the remote workspace
 2. propagate `.env` and required secrets on the remote host
-3. run `python -m engine` remotely
+3. run `python -m qminiwasm.engine` remotely
 4. pull artifacts/logs back to local if needed
 
 For WUI-assisted automation and helper scripts, see:

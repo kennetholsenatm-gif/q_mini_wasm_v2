@@ -109,7 +109,7 @@ Also: [.env.example](../.env.example), [TRAINING_DATA.md](TRAINING_DATA.md) § C
 
 ### Metrics to compare after each run
 
-From the dict returned by **`python -m engine`** (and logs):
+From the dict returned by **`python -m qminiwasm.engine`** (and logs):
 
 | Metric | Use |
 |--------|-----|

@@ -1,5 +1,6 @@
 """Test the complete DevSecOps workflow script (PowerShell)."""
 
+import os
 import shutil
 import subprocess
 import time
@@ -97,7 +98,17 @@ def test_script_help_runs():
 
 @pytest.mark.integration
 def test_complete_workflow_run():
-    """Run the full workflow (slow; use -m integration to run)."""
+    """Run the full PowerShell workflow (slow; can exceed 10 minutes).
+
+    Opt-in only: set ``RUN_DEVSECOPS_WORKFLOW_INTEGRATION=1`` (or ``true`` / ``yes``).
+    Example: ``RUN_DEVSECOPS_WORKFLOW_INTEGRATION=1 pytest tests/test_workflow.py -m integration``
+    """
+    if os.environ.get("RUN_DEVSECOPS_WORKFLOW_INTEGRATION", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
+        pytest.skip("Set RUN_DEVSECOPS_WORKFLOW_INTEGRATION=1 to run the full workflow (slow).")
     if not SCRIPT_PATH.exists():
         pytest.skip("Workflow script not found")
     pwsh = shutil.which("pwsh") or shutil.which("powershell")

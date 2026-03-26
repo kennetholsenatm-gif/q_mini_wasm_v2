@@ -6,7 +6,7 @@ import os
 import time
 import unittest
 
-from qminiwasm.enclave.memory_encode import build_wles_envelope
+from qminiwasm.wasm_host.memory_encode import build_wles_envelope
 
 
 class TestStateMigrationLatency(unittest.TestCase):

@@ -8,7 +8,7 @@ Link to the full milestone narrative: [`wiki/Roadmap.md`](../wiki/Roadmap.md).
 
 1. **WLES test harness**
    - Extend beyond envelope JSON tests toward **Wasmtime** snapshot / restore with **linear memory** identity checks.
-   - Entrypoints: [`memory_encode.py`](../qminiwasm/enclave/memory_encode.py) (`build_wles_envelope`), [`test_wles_esi_harness.py`](../tests/test_wles_esi_harness.py), [`engine.py`](../qminiwasm/enclave/engine.py), [`trit_wasm_runtime.py`](../qminiwasm/enclave/trit_wasm_runtime.py).
+   - Entrypoints: [`memory_encode.py`](../qminiwasm/wasm_host/memory_encode.py) (`build_wles_envelope`), [`test_wles_esi_harness.py`](../tests/test_wles_esi_harness.py), [`engine.py`](../qminiwasm/wasm_host/engine.py), [`trit_wasm_runtime.py`](../qminiwasm/wasm_host/trit_wasm_runtime.py).
 
 2. **ZTEE local simulator**
    - **Done:** in-process CA, JWT/JWKS RS256, `jti` revocation, AES-256-GCM — [`ztee_local_simulator.py`](../qminiwasm/security/ztee_local_simulator.py), [`test_ztee_handshake_simulator.py`](../tests/test_ztee_handshake_simulator.py).

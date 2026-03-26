@@ -1,5 +1,5 @@
 # Reference: training TOML layout (all tables/keys optional unless noted).
-# Validated by engine.training_schema.TrainingConfig (Pydantic).
+# Validated by qminiwasm.engine.training_schema.TrainingConfig (Pydantic).
 # Do not put secrets here — use HUGGING_FACE_HUB_TOKEN / HF_TOKEN in the environment.
 #
 # Operational sizing uses Enclave Footprint (EF) tiers (see Concepts-Explained.md), not informal “model size” alone.

@@ -4,7 +4,7 @@ This repo supports two RunPod integration modes:
 
 | Mode | Use case | How the WUI uses it |
 |------|----------|---------------------|
-| **Pods** | Long-lived GPU VMs, full repo sync, multi-hour training | OpenTofu under `infra/runpod`, optional SSH + `python -m engine` on the pod |
+| **Pods** | Long-lived GPU VMs, full repo sync, multi-hour training | OpenTofu under `infra/runpod`, optional SSH + `python -m qminiwasm.engine` on the pod |
 | **Serverless** | Queue-based GPU **jobs** (handler in your worker image) | HTTP API to `https://api.runpod.ai/v2/{ENDPOINT_ID}/…` — no OpenTofu |
 
 **Two HTTP bases:** [Management REST API](https://docs.runpod.io/api-reference/overview) at **`https://rest.runpod.io/v1`** (Bearer auth; account **`RUNPOD_API_KEY`** / **`RUNPOD_TOKEN`**) manages **templates** and **Serverless endpoints**. The WUI proxies **Infra → RunPod Serverless** for:
@@ -54,7 +54,7 @@ When you **Launch training** with execution target **RunPod Serverless**, the WU
 - **`config_rel`**: path relative to the **worker’s** checkout of the repo (your handler must know where the repo root is).
 - **`extra_env`**: quantum-related overrides from the WUI (`buildQuantumEnvOverrides`), same idea as local runs.
 
-Your worker must implement this input (or a superset). The repository does **not** ship a production Serverless worker image; you build a container with `qminiwasm-core`, dependencies, and a RunPod handler that runs `python -m engine --config <path>`.
+Your worker must implement this input (or a superset). The repository does **not** ship a production Serverless worker image; you build a container with `qminiwasm-core`, dependencies, and a RunPod handler that runs `python -m qminiwasm.engine --config <path>`.
 
 ## HTTP API (training-wui)
 
@@ -95,7 +95,7 @@ Optional: **`env`** (object of string → string, converted to GraphQL env pairs
 
 This repo now includes:
 
-- `serverless/handler.py` — RunPod handler that executes `python -m engine --config <config_rel>`
+- `serverless/handler.py` — RunPod handler that executes `python -m qminiwasm.engine --config <config_rel>`
 - `serverless/Dockerfile` — AlmaLinux 10 base image + editable install + runpod worker runtime
 
 Example:

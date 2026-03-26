@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_load_training_toml_mesh_cpu():
-    from engine.training_schema import load_training_toml
+    from qminiwasm.engine.training_schema import load_training_toml
 
     p = REPO_ROOT / "configs" / "training" / "mesh_cpu.toml"
     cfg = load_training_toml(p)
@@ -21,14 +21,14 @@ def test_load_training_toml_mesh_cpu():
 
 
 def test_load_training_toml_missing_file():
-    from engine.training_schema import load_training_toml
+    from qminiwasm.engine.training_schema import load_training_toml
 
     with pytest.raises(OSError):
         load_training_toml(REPO_ROOT / "configs" / "training" / "nonexistent_abc123.toml")
 
 
 def test_load_training_toml_invalid_type(tmp_path):
-    from engine.training_schema import load_training_toml
+    from qminiwasm.engine.training_schema import load_training_toml
 
     f = tmp_path / "bad.toml"
     f.write_text("[training]\nepochs = 'not_an_int'\n", encoding="utf-8")
@@ -46,8 +46,8 @@ def test_runpod_serverless_section_parses(tmp_path):
         'worker_image = "docker.io/example/worker:v1"\n',
         encoding="utf-8",
     )
-    from engine.config import EngineConfig
-    from engine.training_schema import load_training_toml
+    from qminiwasm.engine.config import EngineConfig
+    from qminiwasm.engine.training_schema import load_training_toml
 
     cfg = load_training_toml(f)
     assert cfg.runpod_serverless is not None
@@ -66,7 +66,7 @@ def test_engine_config_from_toml_merges_hf_token_from_env(monkeypatch, tmp_path)
         '[data]\nsource = "mesh"\n[training]\nepochs = 3\n',
         encoding="utf-8",
     )
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     c = EngineConfig.from_training_toml(f)
     assert c.epochs == 3
@@ -76,7 +76,7 @@ def test_engine_config_from_toml_merges_hf_token_from_env(monkeypatch, tmp_path)
 
 def test_engine_config_hardware_only_sets_qiskit_ibm_when_default_pennylane():
     """WUI hardware_only + default MoE mode must use IBM QAOA path, not identity pennylane."""
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     c = EngineConfig(quantum_execution_policy="hardware_only")
     assert c.qaoa_execution_mode == "qiskit_ibm"
@@ -84,7 +84,7 @@ def test_engine_config_hardware_only_sets_qiskit_ibm_when_default_pennylane():
 
 
 def test_engine_config_explicit_qaoa_mode_not_overridden_by_hardware_only_policy():
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     c = EngineConfig(
         quantum_execution_policy="hardware_only",
@@ -97,14 +97,14 @@ def test_engine_config_toml_overrides_env_for_epochs(monkeypatch, tmp_path):
     monkeypatch.setenv("EPOCHS", "99")
     f = tmp_path / "t.toml"
     f.write_text("[training]\nepochs = 5\n", encoding="utf-8")
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     c = EngineConfig.from_training_toml(f)
     assert c.epochs == 5
 
 
 def test_load_training_config_alias():
-    from engine.config import load_training_config
+    from qminiwasm.engine.config import load_training_config
 
     p = REPO_ROOT / "configs" / "training" / "mesh_cpu.toml"
     root = load_training_config(p)
@@ -112,7 +112,7 @@ def test_load_training_config_alias():
 
 
 def test_load_serve_toml_default_section(tmp_path):
-    from engine.training_schema import load_serve_toml
+    from qminiwasm.engine.training_schema import load_serve_toml
 
     f = tmp_path / "serve.toml"
     f.write_text(
@@ -126,7 +126,7 @@ def test_load_serve_toml_default_section(tmp_path):
 
 
 def test_load_serve_toml_tpem_field(tmp_path):
-    from engine.training_schema import load_serve_toml
+    from qminiwasm.engine.training_schema import load_serve_toml
 
     f = tmp_path / "serve_tpem.toml"
     f.write_text(
@@ -139,8 +139,8 @@ def test_load_serve_toml_tpem_field(tmp_path):
 
 
 def test_tpem_table_overrides_checkpoint_in_engine_kwargs(tmp_path):
-    from engine.config import EngineConfig
-    from engine.training_schema import load_training_toml
+    from qminiwasm.engine.config import EngineConfig
+    from qminiwasm.engine.training_schema import load_training_toml
 
     f = tmp_path / "merge.toml"
     f.write_text(
@@ -157,7 +157,7 @@ def test_tpem_table_overrides_checkpoint_in_engine_kwargs(tmp_path):
 
 
 def test_load_serve_document_enclave_section(tmp_path):
-    from engine.training_schema import load_serve_document
+    from qminiwasm.engine.training_schema import load_serve_document
 
     f = tmp_path / "serve2.toml"
     f.write_text(
@@ -186,8 +186,8 @@ def test_hf_extra_specs_toml_and_engine_config(tmp_path):
         "]\n",
         encoding="utf-8",
     )
-    from engine.config import EngineConfig
-    from engine.training_schema import load_training_toml
+    from qminiwasm.engine.config import EngineConfig
+    from qminiwasm.engine.training_schema import load_training_toml
 
     cfg = load_training_toml(f)
     assert cfg.data.path == "openai/gsm8k"
@@ -238,7 +238,7 @@ def test_hf_multi_without_extra_specs_raises(tmp_path):
         'split = "train"\n',
         encoding="utf-8",
     )
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     with pytest.raises(ValueError, match="extra_specs"):
         EngineConfig.from_training_toml(f)
@@ -254,8 +254,8 @@ def test_eval_early_stop_patience_from_toml(tmp_path):
         "early_stop_patience = 4\n",
         encoding="utf-8",
     )
-    from engine.config import EngineConfig
-    from engine.training_schema import load_training_toml
+    from qminiwasm.engine.config import EngineConfig
+    from qminiwasm.engine.training_schema import load_training_toml
 
     root = load_training_toml(f)
     assert root.eval.every_epoch is True
@@ -278,7 +278,7 @@ def test_edge_hf_streaming_knobs_from_toml(tmp_path):
         "deterministic_keep_every_n = 3\n",
         encoding="utf-8",
     )
-    from engine.config import EngineConfig
+    from qminiwasm.engine.config import EngineConfig
 
     c = EngineConfig.from_training_toml(f)
     assert c.hf_streaming is True

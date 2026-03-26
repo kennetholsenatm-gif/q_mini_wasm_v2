@@ -6,9 +6,9 @@ This page explains **how** the Q-Mini-WASM / **qminiwasm-core** training path wo
 
 ## Goal
 
-Train the hybrid stack around `QMiniWASM` so **`hybrid_inference`** improves under a **supervised signal**: mean **MSE** between model output and a **4096-dimensional target**, built from [`memory_encode`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/enclave/memory_encode.py) (metadata slots plus byte-derived floats).
+Train the hybrid stack around `QMiniWASM` so **`hybrid_inference`** improves under a **supervised signal**: mean **MSE** between model output and a **4096-dimensional target**, built from [`memory_encode`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/wasm_host/memory_encode.py) (metadata slots plus byte-derived floats).
 
-The entrypoint is **`python -m engine`**, which loads env-driven [`EngineConfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/engine/config.py) and calls [`run_training_loop`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/training/loop.py) in [`engine/train.py`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/engine/train.py).
+The entrypoint is **`python -m qminiwasm.engine`** (or **`python -m qminiwasm.cli train`**), which loads env-driven [`EngineConfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/config.py) and calls [`run_training_loop`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/training/loop.py) from [`qminiwasm/engine/train.py`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/train.py).
 
 **Why MSE on a fixed vector?** It keeps the objective simple and comparable across batches: same shape, same reduction (`mean` over all elements including the full 4096 dims). It is **not** full next-token language modeling; plateaus and residual error are expected on diverse encodings.
 
@@ -80,7 +80,7 @@ Canonical technical reference: **[docs/QUANTUM_QISKIT.md](https://github.com/ken
 ## Checkpoints and serving
 
 - **`CHECKPOINT_SAVE_PATH` / `CHECKPOINT_BEST_PATH` / `CHECKPOINT_LOAD_PATH`:** Single `.pt` with `quantum_router`, `ternary_expert`, optional **`hybrid_adapter`**, optional **`cascade_policy`** (maps to `model.cascade_router` when **`USE_CASCADE_ROUTER=1`**).
-- **Why strict naming matters:** Serving with `uvicorn engine.serve:app` and **`QMINIWASM_CHECKPOINT`** must use the same **adapter** and **cascade** flags as training or weights will not load as expected (`strict=False` still logs missing keys).
+- **Why strict naming matters:** Serving with `uvicorn qminiwasm.engine.serve:app` and **`QMINIWASM_CHECKPOINT`** must use the same **adapter** and **cascade** flags as training or weights will not load as expected (`strict=False` still logs missing keys).
 
 See the **Serving** and **Checkpoints** sections in [docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md).
 

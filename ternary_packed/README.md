@@ -4,7 +4,7 @@ Build with Intel oneAPI (``icpx -fsycl``) when targeting Intel Arc / Xe.
 
 - ``ternary_dot_stub.cpp`` — placeholder queue and USM buffers; extend with
   ``sycl::ext::intel::experimental::matrix`` or manual VNNI-friendly packing
-  matching ``qminiwasm.enclave.trit_pack`` (MSB-first, five trits per byte).
+  matching ``qminiwasm.wasm_host.trit_pack`` (MSB-first, five trits per byte).
 
 ### Python integration (optional CPU extension)
 

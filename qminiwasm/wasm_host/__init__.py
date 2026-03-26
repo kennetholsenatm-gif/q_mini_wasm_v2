@@ -1,4 +1,4 @@
-"""WASM host runtime (canonical). Legacy import path: :mod:`qminiwasm.enclave`.
+"""WASM host runtime (canonical).
 
 This package provides the core WASM compilation and execution engine for the
 Q-Mini-WASM architecture. It handles:

@@ -65,7 +65,7 @@ ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 Run training:
 
 ```bash
-python -m engine
+python -m qminiwasm.engine
 ```
 
 Logs should show **Intel XPU** (not “XPU requested but … using CPU”).
