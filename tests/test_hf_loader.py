@@ -194,49 +194,47 @@ def test_encoded_blob_references_wasi():
     assert encoded_blob_references_wasi(b"wasm32-wasip1-unknown-unknown")
 
 
-@patch("datasets.load_dataset", autospec=True)
-def test_load_hf_tabular_samples_passes_token_to_load_dataset(mock_load):
+def test_load_hf_tabular_samples_passes_token_to_load_dataset():
     pytest.importorskip("datasets")
-    mock_load.return_value = [{"func_code_string": "def f():\n    pass\n"}]
+    with patch("datasets.load_dataset", autospec=True) as mock_load:
+        mock_load.return_value = [{"func_code_string": "def f():\n    pass\n"}]
+        from qminiwasm.training.hf_loader import load_hf_tabular_samples
 
-    from qminiwasm.training.hf_loader import load_hf_tabular_samples
-
-    out = load_hf_tabular_samples(
-        "org/dataset",
-        1,
-        split="train",
-        config_name="python",
-        token="hf_test_token",
-    )
-    mock_load.assert_called_once()
-    assert mock_load.call_args.kwargs.get("token") == "hf_test_token"
-    assert mock_load.call_args.kwargs.get("revision") == "main"
+        out = load_hf_tabular_samples(
+            "org/dataset",
+            1,
+            split="train",
+            config_name="python",
+            token="hf_test_token",
+        )
+        mock_load.assert_called_once()
+        assert mock_load.call_args.kwargs.get("token") == "hf_test_token"
+        assert mock_load.call_args.kwargs.get("revision") == "main"
     assert len(out) == 1
     assert out[0]["hidden"].shape == (4096,)
 
 
-@patch("datasets.load_dataset", autospec=True)
-def test_load_hf_wasi_slice_streams_and_filters(mock_load):
+def test_load_hf_wasi_slice_streams_and_filters():
     pytest.importorskip("datasets")
-    rows = [
-        {"whole_func_string": "def f():\n    return 1\n"},
-        {"whole_func_string": "fn x() { use wasi::snapshots::preview_1; }\n"},
-    ]
-    mock_load.return_value = iter(rows)
+    with patch("datasets.load_dataset", autospec=True) as mock_load:
+        rows = [
+            {"whole_func_string": "def f():\n    return 1\n"},
+            {"whole_func_string": "fn x() { use wasi::snapshots::preview_1; }\n"},
+        ]
+        mock_load.return_value = iter(rows)
+        from qminiwasm.training.hf_loader import load_hf_tabular_samples
 
-    from qminiwasm.training.hf_loader import load_hf_tabular_samples
-
-    out = load_hf_tabular_samples(
-        "org/dataset",
-        10,
-        split="train",
-        config_name="python",
-        wasi_slice_only=True,
-        max_scan_rows=1000,
-    )
-    mock_load.assert_called_once()
-    assert mock_load.call_args.kwargs.get("streaming") is True
-    assert mock_load.call_args.kwargs.get("revision") == "main"
+        out = load_hf_tabular_samples(
+            "org/dataset",
+            10,
+            split="train",
+            config_name="python",
+            wasi_slice_only=True,
+            max_scan_rows=1000,
+        )
+        mock_load.assert_called_once()
+        assert mock_load.call_args.kwargs.get("streaming") is True
+        assert mock_load.call_args.kwargs.get("revision") == "main"
     assert len(out) == 1
     assert out[0]["algorithm"] == "hf_tabular_wasi"
     assert out[0]["execution_state"].get("wasi_slice_only") is True
@@ -253,20 +251,20 @@ def test_whole_func_string_wins_over_func_code_string():
     assert b"return 0" not in blob
 
 
-@patch("datasets.load_dataset", autospec=True)
-def test_load_hf_streaming_general_caps_and_deterministic_keep(mock_load):
+def test_load_hf_streaming_general_caps_and_deterministic_keep():
     pytest.importorskip("datasets")
-    rows = [{"whole_func_string": f"row {i}"} for i in range(20)]
-    mock_load.return_value = iter(rows)
-    out = load_hf_tabular_samples(
-        "org/dataset",
-        8,
-        split="train",
-        streaming=True,
-        max_scan_rows_general=12,
-        deterministic_keep_every_n=2,
-        text_truncate_bytes=64,
-    )
+    with patch("datasets.load_dataset", autospec=True) as mock_load:
+        rows = [{"whole_func_string": f"row {i}"} for i in range(20)]
+        mock_load.return_value = iter(rows)
+        out = load_hf_tabular_samples(
+            "org/dataset",
+            8,
+            split="train",
+            streaming=True,
+            max_scan_rows_general=12,
+            deterministic_keep_every_n=2,
+            text_truncate_bytes=64,
+        )
     # i in [0..11], keep even => 6 rows max.
     assert len(out) == 6
     assert mock_load.call_args.kwargs.get("streaming") is True

@@ -3,6 +3,7 @@
 import math
 
 import numpy as np
+import pytest
 
 
 def test_ibm_error_suggests_quota_or_capacity_fallback_heuristic():
@@ -51,6 +52,7 @@ def test_resolve_ibm_backend_name_prefers_explicit_then_ibm_env_then_quantum_bac
 
 def test_ibm_isa_transpile_and_apply_layout_smoke():
     """Regression: EstimatorV2 requires ISA circuits; transpile + apply_layout on Pauli Z list."""
+    pytest.importorskip("qiskit")
     from qiskit import QuantumCircuit
     from qiskit.providers.fake_provider import GenericBackendV2
     from qiskit.quantum_info import SparsePauliOp
@@ -75,6 +77,7 @@ def test_ibm_isa_transpile_and_apply_layout_smoke():
 
 
 def test_run_z_expectations_statevector_shape():
+    pytest.importorskip("qiskit")
     from qminiwasm.fabric.qiskit_qaoa import run_z_expectations_statevector
 
     n, L = 4, 3
@@ -91,6 +94,7 @@ def test_run_z_expectations_statevector_shape():
 
 def test_neural_qaoa_qiskit_branch_runs():
     """NeuralQAOA.quantum_circuit uses Qiskit statevector path."""
+    pytest.importorskip("qiskit")
     import torch
 
     from qminiwasm.fabric.qaoa_integration import NeuralQAOA, QAOAConfig
