@@ -1,4 +1,8 @@
-# GitHub Actions (drift notes)
+# GitHub Actions and workflows (maintainer reference)
+
+**Not the project overview** — see the repository root [README.md](../README.md).
+
+This file documents CI jobs and automation drift notes. Browsing the `.github/` folder on GitHub will not show a folder-level README anymore (this file is named `WORKFLOWS.md` on purpose).
 
 ## CI (`ci.yml`)
 

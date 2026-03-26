@@ -2,6 +2,18 @@
 
 `qminiwasm-core` bridges WebAssembly execution, edge-oriented ternary ML, and optional quantum routing in one runtime stack.
 
+## At a glance
+
+**Stateful WASM agents on discrete trits** (`{-1,0,1}`): TPEM-backed linear memory, Edge Cognitive Looping (ECL), optional quantum-assisted routing, and zero-trust enrollment (ZTEE) patterns—see [wiki/Home.md](wiki/Home.md) for the full paradigm.
+
+| Start here | |
+|------------|--|
+| Run something quickly | [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md) |
+| Strategic / wiki index | [wiki/README.md](wiki/README.md) |
+| Enclave lifecycle (boot → ZTEE → ECL → CGE → WLES) | [docs/ENCLAVE_LIFECYCLE.md](docs/ENCLAVE_LIFECYCLE.md) |
+
+**Developers:** editable install with lint/test extras: `pip install -e ".[dev]"` (see [pyproject.toml](pyproject.toml) for `serve`, `wasm`, and `training` extras).
+
 ## Choose Your Path
 
 ### Door A: Strategic and Executive
