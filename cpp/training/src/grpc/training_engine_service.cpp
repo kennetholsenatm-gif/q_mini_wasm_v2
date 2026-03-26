@@ -112,6 +112,11 @@ class TrainingEngineService final : public qminiwasm::trainingrpc::TrainingEngin
       msg.set_stage(event.stage);
       msg.set_event_type(event.event_type);
       msg.set_message(event.message);
+      msg.set_graph_id(event.graph_id);
+      msg.set_node_id(event.node_id);
+      msg.set_enclave_state(event.enclave_state);
+      msg.set_attestation_state(event.attestation_state);
+      msg.set_decoherence_score(event.decoherence_score);
       if (!writer->Write(msg)) {
         break;
       }

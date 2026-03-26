@@ -42,6 +42,19 @@ Enclave-as-Code groundwork adds a manifest contract gate for edge artifacts:
 - Build integration: `scripts/build_tpem_wasm_artifacts.py` runs contract verification after writing artifacts.
 - CI integration: `.github/workflows/ci.yml` runs contract verification as a fail-fast check.
 
+### Graph sidecar manifest (EaC)
+
+For graph-aware orchestration, qminiwasm-core now accepts a JSON sidecar graph manifest
+that references an `artifacts_dir` containing `artifact_manifest.json`.
+
+- Schema reference: `qminiwasm/engine/schemas/graph_manifest.schema.json`
+- Validator: `python -m qminiwasm.engine.graph_manifest validate <graph_manifest.json>`
+- CLI integration:
+  - `python -m qminiwasm.cli graph validate <graph_manifest.json>`
+  - `python -m qminiwasm.cli graph apply <graph_manifest.json>`
+
+This keeps TPEM bundle bytes backward-compatible while adding graph metadata for control-plane dispatch.
+
 ## Reference implementation
 
 Python: [`qminiwasm/enclave/tpem_bundle.py`](../qminiwasm/enclave/tpem_bundle.py) — `write_tpem_bundle`, `read_tpem_bundle`, CLI `python -m qminiwasm.enclave.tpem_bundle verify <path>`.

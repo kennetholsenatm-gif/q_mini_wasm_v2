@@ -16,7 +16,27 @@ message DeltaAck {
   string status = 2;
 }
 
+message GraphTopologyUpdate {
+  string graph_id = 1;
+  string node_id = 2;
+  string artifact_manifest_path = 3;
+  repeated string inputs = 4;
+  repeated string outputs = 5;
+  string routing_policy_ref = 6;
+  bool require_encryption = 7;
+  string backend_constraints_json = 8;
+}
+
+message GraphApplyAck {
+  bool accepted = 1;
+  string status = 2;
+  string graph_id = 3;
+  string node_id = 4;
+  string message = 5;
+}
+
 service DeltaSync {
   rpc PushDelta(DeltaTensor) returns (DeltaAck);
   rpc StreamDeltas(stream DeltaTensor) returns (stream DeltaTensor);
+  rpc ApplyGraph(GraphTopologyUpdate) returns (GraphApplyAck);
 }

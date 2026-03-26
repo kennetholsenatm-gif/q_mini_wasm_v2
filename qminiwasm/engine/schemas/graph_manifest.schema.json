@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qminiwasm.dev/schemas/graph-manifest.schema.json",
+  "title": "QMiniWASM Graph Manifest",
+  "description": "Sidecar Enclave-as-Code graph node contract bound to local TPEM artifact contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "graph_id",
+    "node_id",
+    "artifacts_dir",
+    "inputs",
+    "outputs",
+    "backend_constraints",
+    "routing_policy",
+    "control_plane"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "graph_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "node_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifacts_dir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "backend_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accelerator": {
+          "type": "string"
+        },
+        "quantum_backend": {
+          "type": "string"
+        },
+        "sycl_required": {
+          "type": "boolean"
+        },
+        "ternary_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "routing_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_ref"
+      ],
+      "properties": {
+        "policy_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "require_encryption": {
+          "type": "boolean"
+        }
+      }
+    },
+    "control_plane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grpc_target"
+      ],
+      "properties": {
+        "grpc_target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

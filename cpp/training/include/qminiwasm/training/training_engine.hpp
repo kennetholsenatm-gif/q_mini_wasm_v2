@@ -56,6 +56,11 @@ struct TelemetryEvent {
   std::string stage;
   std::string event_type;
   std::string message;
+  std::string graph_id;
+  std::string node_id;
+  std::string enclave_state;
+  std::string attestation_state;
+  double decoherence_score = 0.0;
 };
 
 struct EngineStatus {
