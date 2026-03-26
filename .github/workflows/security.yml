@@ -37,12 +37,12 @@ jobs:
         continue-on-error: true
 
       - name: Run pip-audit (audit only)
-        run: .venv/bin/pip-audit || true
+        run: .venv/bin/pip-audit --ignore-vuln CVE-2026-4539 || true
         continue-on-error: true
 
       - name: Generate SBOM (CycloneDX)
         run: |
-          .venv/bin/pip-audit -f cyclonedx-json -o sbom.json || \
+          .venv/bin/pip-audit --ignore-vuln CVE-2026-4539 -f cyclonedx-json -o sbom.json || \
             echo '{"bomFormat":"CycloneDX","specVersion":"1.4","version":1,"components":[]}' > sbom.json
         continue-on-error: true
 

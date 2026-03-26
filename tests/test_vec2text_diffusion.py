@@ -107,7 +107,9 @@ class TestVec2TextExactMatchShortCorpus(unittest.TestCase):
             )
             if out == golden:
                 matches += 1
-        self.assertEqual(matches, len(goldens), "EM recovery should be exact for static golden mock")
+        self.assertEqual(
+            matches, len(goldens), "EM recovery should be exact for static golden mock"
+        )
 
 
 def torch_zeros_like_query(q):
