@@ -26,6 +26,7 @@ typedef struct qmw_training_config {
   uint64_t seed;
   double learning_rate;
   qmw_taxonomy_tier_t taxonomy_tier;
+  bool enable_enclave_adapter;
 } qmw_training_config_t;
 
 typedef struct qmw_engine_status {

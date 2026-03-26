@@ -174,6 +174,26 @@ class TrainingEngine::Impl {
         .learning_rate = config_.learning_rate,
         .message = "running",
     });
+    if (config_.enable_enclave_adapter) {
+      emit(TelemetryEvent{
+          .run_id = config_.run_id,
+          .unix_ms = now_unix_ms(),
+          .epoch = 0,
+          .step = 0,
+          .train_loss = 0.0,
+          .val_loss = 0.0,
+          .learning_rate = config_.learning_rate,
+          .samples_per_second = 0.0,
+          .sampler_queue_depth = 0,
+          .prefetch_queue_depth = 0,
+          .compute_queue_depth = 0,
+          .taxonomy_tier = policy_.tier,
+          .precision_mode = policy_.precision,
+          .stage = "adapter",
+          .event_type = "enclave_adapter_fallback",
+          .message = "enclave adapter requested; using default adapter dispatch (foundation no-op)",
+      });
+    }
     for (std::size_t epoch = 0; epoch < config_.epochs && !token.stop_requested(); ++epoch) {
       sampler.reseed_for_epoch(epoch);
       for (std::size_t step = 0; step < steps_per_epoch && !token.stop_requested(); ++step) {

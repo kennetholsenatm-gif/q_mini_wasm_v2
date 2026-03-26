@@ -412,6 +412,17 @@ def run_training_loop(
     """
     if seed is not None:
         set_training_seed(int(seed))
+    if wasm_runtime is not None and getattr(wasm_runtime, "backend", "") == "enclave_adapter":
+        enabled = os.getenv("QMINIWASM_ENCLAVE_ADAPTER", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if not enabled:
+            logger.info(
+                "wasm backend=enclave_adapter requested but feature flag is disabled; runtime will fall back."
+            )
 
     stop_requested = threading.Event()
 

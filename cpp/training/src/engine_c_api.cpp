@@ -78,6 +78,7 @@ bool qmw_engine_start(qmw_engine_handle_t* handle, const qmw_training_config_t* 
   native.seed = config->seed;
   native.learning_rate = config->learning_rate;
   native.taxonomy_tier = qminiwasm::training::from_c_tier(config->taxonomy_tier);
+  native.enable_enclave_adapter = config->enable_enclave_adapter;
 
   std::string err;
   const bool ok = handle->engine.start(native, &err);

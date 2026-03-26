@@ -175,6 +175,28 @@ def test_load_serve_document_enclave_section(tmp_path):
     assert doc.enclave.wasm_memory64_max_mb == 8192.0
 
 
+def test_enclave_fields_map_to_engine_kwargs(tmp_path):
+    from qminiwasm.engine.training_schema import load_training_toml
+
+    f = tmp_path / "enclave_train.toml"
+    f.write_text(
+        "[training]\n"
+        "epochs = 1\n\n"
+        "[enclave]\n"
+        'enclave_tier = "meso"\n'
+        "enclave_footprint_mb = 2048.0\n"
+        "use_memory64 = false\n"
+        "certainty_scalar_threshold = 0.77\n",
+        encoding="utf-8",
+    )
+    cfg = load_training_toml(f)
+    kwargs = cfg.to_engine_kwargs()
+    assert kwargs["enclave_tier"] == "meso"
+    assert kwargs["enclave_footprint_mb"] == 2048.0
+    assert kwargs["use_memory64"] is False
+    assert kwargs["certainty_scalar_threshold"] == 0.77
+
+
 def test_hf_extra_specs_toml_and_engine_config(tmp_path):
     f = tmp_path / "multi_hf.toml"
     f.write_text(

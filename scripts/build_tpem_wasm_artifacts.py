@@ -34,6 +34,7 @@ def main() -> int:
 
     from qminiwasm.wasm_host.trit_pack import PACK_ENCODING_VERSION, pack_ternary_list
     from qminiwasm.wasm_host.trit_wasm_runtime import compile_trit_kernels_wasm
+    from qminiwasm.wasm_host.artifact_contract import verify_artifact_contract
     from qminiwasm.wasm_host.tpem_bundle import BUNDLE_FORMAT_VERSION, write_tpem_bundle
 
     wasm_path = out / "qminiwasm-kernels.wasm"
@@ -67,6 +68,7 @@ def main() -> int:
     }
     manifest_path = out / "artifact_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    verify_artifact_contract(out)
 
     print(f"Wrote {wasm_path} ({len(wasm_bytes)} bytes, sha256={wasm_digest})")
     print(f"Wrote {tpem_path} (payload {len(payload)} bytes, sha256={payload_sha256})")

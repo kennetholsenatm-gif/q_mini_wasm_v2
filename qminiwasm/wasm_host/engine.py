@@ -60,6 +60,9 @@ class WasmRuntimeConfig:
     force_mock: bool = False
     store_instance_limit: Optional[int] = None
     store_memories_limit: Optional[int] = None
+    use_memory64: bool = False
+    memory64_max_mb: Optional[float] = None
+    enclave_tier: Optional[str] = None
 
 
 class WasmEngine:
@@ -84,6 +87,9 @@ class WasmEngine:
         self.logger = logging.getLogger(__name__)
         self._fallback_policy = fp
         self._backend = (cfg.backend or "wasmtime").strip().lower()
+        self._enclave_tier = (cfg.enclave_tier or "").strip().lower() or None
+        self._use_memory64 = bool(cfg.use_memory64)
+        self._memory64_max_mb = cfg.memory64_max_mb
         self._store_memory_limit_bytes = int(cfg.store_memory_limit_bytes)
         self._store_instance_limit = cfg.store_instance_limit
         self._store_memories_limit = cfg.store_memories_limit
@@ -168,11 +174,16 @@ class WasmEngine:
             else DEFAULT_WASM_STORE_MEMORIES_LIMIT
         )
         self.logger.info(
-            "WASM store limits memory=%s bytes instances=%s memories=%s fallback_policy=%s",
+            "WASM runtime backend=%s memory=%s bytes instances=%s memories=%s fallback_policy=%s "
+            "memory64=%s memory64_max_mb=%s enclave_tier=%s",
+            self._backend,
             int(self._store_memory_limit_bytes),
             inst_cap,
             mem_cap,
             self._fallback_policy,
+            self._use_memory64,
+            self._memory64_max_mb,
+            self._enclave_tier,
         )
 
     def _test_wasm_compilation(self):
@@ -337,6 +348,10 @@ class WasmEngine:
         Returns:
             (output, hidden_state, target_state, pre_memory_bytes, post_memory_bytes)
         """
+        if self._backend == "enclave_adapter":
+            native = self._execute_enclave_adapter(module, func_name, args)
+            if native is not None:
+                return native
         if self._backend == "wasmedge_native":
             native = self._execute_wasmedge_native(module, func_name, args)
             if native is not None:
@@ -349,6 +364,20 @@ class WasmEngine:
                 "Module store missing; compile via compile_wasm or compile_c_to_wasm."
             )
             return 0, None, None, b"", b""
+
+    def _execute_enclave_adapter(
+        self, module: Optional[Any], func_name: str, args: List[int]
+    ) -> Optional[Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]]:
+        enabled = os.getenv("QMINIWASM_ENCLAVE_ADAPTER", "0").strip().lower()
+        if enabled not in {"1", "true", "yes", "on"}:
+            self.logger.info(
+                "enclave_adapter backend selected but adapter feature flag is off; falling back to wasmtime."
+            )
+            return None
+        self.logger.warning(
+            "enclave_adapter backend selected but native enclave adapter is unavailable; falling back to wasmtime."
+        )
+        return None
         try:
             ic_key = (id(store), id(module))
             instance = self._instance_cache.get(ic_key)
