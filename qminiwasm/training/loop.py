@@ -11,6 +11,7 @@ from __future__ import annotations
 import inspect
 import logging
 import math
+import os
 import random
 import signal
 import threading
@@ -755,6 +756,10 @@ def run_training_loop(
                 )
 
             _student_h, _teacher_h = build_noise_state_mopd_fns(noise_std=0.05)
+            use_native_rollout = (
+                os.getenv("QMINIWASM_NATIVE_RL_RUNTIME", "0").strip().lower()
+                not in {"", "0", "false", "off", "no"}
+            )
             cascade_steps_done = 0
             for _ in range(int(cascade_steps_per_epoch)):
                 if stop_requested.is_set():
@@ -765,7 +770,7 @@ def run_training_loop(
                         cascade_optimizer,
                         grpo_trainer,
                         group_size=int(cascade_group_size),
-                        env_factory=_env_factory,
+                        env_factory=None if use_native_rollout else _env_factory,
                         mopd=mopd_mod,
                         student_hidden_fn=_student_h,
                         teacher_hidden_fn=_teacher_h,
@@ -777,7 +782,7 @@ def run_training_loop(
                         cascade_optimizer,
                         grpo_trainer,
                         group_size=int(cascade_group_size),
-                        env_factory=_env_factory,
+                        env_factory=None if use_native_rollout else _env_factory,
                     )
                 c_loss_acc += float(cm.get("loss", 0.0))
                 c_ret_acc += float(cm.get("return_mean", 0.0))

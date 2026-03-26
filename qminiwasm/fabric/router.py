@@ -13,11 +13,14 @@ hierarchical inference can run without quantum dependencies.
 """
 
 import logging
+import ctypes
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
+from qminiwasm.native_bridge import load_native_lib
 
 try:
     import pennylane as qml
@@ -50,6 +53,7 @@ class _RouterConfig:
 
     def __init__(self):
         self.quantum_enabled = True
+        self.taxonomy_tier = (os.getenv("QMINIWASM_TAXONOMY_TIER", "edge_constrained") or "edge_constrained").strip().lower()
 
 
 class QuantumRouter:
@@ -68,6 +72,40 @@ class QuantumRouter:
         """Fallback: return k nearest by L2 distance."""
         if not database_vectors or k <= 0:
             return []
+        use_native = (
+            os.getenv("QMINIWASM_NATIVE_DQAOA_ROUTING", "0").strip().lower()
+            not in {"", "0", "false", "off", "no"}
+        )
+        if use_native:
+            lib = load_native_lib()
+            if lib is not None and hasattr(lib, "qmw_route_topk_l2_f64"):
+                arr = np.asarray(database_vectors, dtype=np.float64)
+                q = np.asarray(query_vector, dtype=np.float64).reshape(-1)
+                if arr.ndim == 2 and arr.shape[1] == q.shape[0]:
+                    out_n = min(int(k), int(arr.shape[0]))
+                    out = (ctypes.c_size_t * out_n)()
+                    fn = lib.qmw_route_topk_l2_f64
+                    fn.argtypes = [
+                        ctypes.POINTER(ctypes.c_double),
+                        ctypes.POINTER(ctypes.c_double),
+                        ctypes.c_size_t,
+                        ctypes.c_size_t,
+                        ctypes.c_size_t,
+                        ctypes.POINTER(ctypes.c_size_t),
+                    ]
+                    fn.restype = ctypes.c_size_t
+                    used = int(
+                        fn(
+                            ctypes.cast(q.ctypes.data, ctypes.POINTER(ctypes.c_double)),
+                            ctypes.cast(arr.ctypes.data, ctypes.POINTER(ctypes.c_double)),
+                            ctypes.c_size_t(arr.shape[0]),
+                            ctypes.c_size_t(arr.shape[1]),
+                            ctypes.c_size_t(out_n),
+                            ctypes.cast(out, ctypes.POINTER(ctypes.c_size_t)),
+                        )
+                    )
+                    if used > 0:
+                        return [int(out[i]) for i in range(used)]
         dists = np.array([np.linalg.norm(query_vector - v) for v in database_vectors])
         return np.argsort(dists)[:k].tolist()
 

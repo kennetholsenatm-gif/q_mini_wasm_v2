@@ -16,6 +16,7 @@ import os
 import struct
 import subprocess
 import tempfile
+import ctypes
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,6 +24,7 @@ import torch
 import wasmtime
 
 from .memory_encode import D_MODEL, encode_linear_memory
+from ..native_bridge import load_native_lib
 from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
 
 # Wasmtime Store max linear memory (bytes): ~1e6 rows × d_model (encode_linear_memory width).
@@ -54,6 +56,7 @@ class WasmRuntimeConfig:
 
     store_memory_limit_bytes: int = DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES
     fallback_policy: str = "mock"
+    backend: str = "wasmtime"
     force_mock: bool = False
     store_instance_limit: Optional[int] = None
     store_memories_limit: Optional[int] = None
@@ -80,6 +83,7 @@ class WasmEngine:
         self.use_mock = bool(use_mock or cfg.force_mock)
         self.logger = logging.getLogger(__name__)
         self._fallback_policy = fp
+        self._backend = (cfg.backend or "wasmtime").strip().lower()
         self._store_memory_limit_bytes = int(cfg.store_memory_limit_bytes)
         self._store_instance_limit = cfg.store_instance_limit
         self._store_memories_limit = cfg.store_memories_limit
@@ -333,6 +337,10 @@ class WasmEngine:
         Returns:
             (output, hidden_state, target_state, pre_memory_bytes, post_memory_bytes)
         """
+        if self._backend == "wasmedge_native":
+            native = self._execute_wasmedge_native(module, func_name, args)
+            if native is not None:
+                return native
         if self.use_mock or module is None:
             return self._execute_mock(func_name, args)
         store = self._store_for_module(module)
@@ -376,6 +384,54 @@ class WasmEngine:
                 return self._execute_mock(func_name, args)
             self.logger.error("WASM execution error: %s", msg)
             return 0, None, None, b"", b""
+
+    def _execute_wasmedge_native(
+        self, module: Optional[Any], func_name: str, args: List[int]
+    ) -> Optional[Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]]:
+        lib = load_native_lib()
+        if lib is None or not hasattr(lib, "qmw_wasmedge_execute_mock"):
+            return None
+        fn = lib.qmw_wasmedge_execute_mock
+        fn.argtypes = [
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_size_t,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_int32),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_int32),
+        ]
+        fn.restype = ctypes.c_int
+        wasm_bytes = b""
+        if module is not None:
+            try:
+                wasm_bytes = bytes(module.serialize())  # type: ignore[attr-defined]
+            except Exception:
+                wasm_bytes = b""
+        args_arr = (ctypes.c_int32 * max(1, len(args)))()
+        for i, v in enumerate(args):
+            args_arr[i] = int(v)
+        out = ctypes.c_int32(0)
+        wasm_arr = (ctypes.c_uint8 * len(wasm_bytes)).from_buffer_copy(wasm_bytes) if wasm_bytes else None
+        rc = fn(
+            ctypes.cast(wasm_arr, ctypes.POINTER(ctypes.c_uint8)) if wasm_arr is not None else None,
+            ctypes.c_size_t(len(wasm_bytes)),
+            func_name.encode("utf-8"),
+            ctypes.cast(args_arr, ctypes.POINTER(ctypes.c_int32)),
+            ctypes.c_size_t(len(args)),
+            ctypes.byref(out),
+        )
+        if int(rc) != 0:
+            return None
+        result = int(out.value)
+        first_arg = args[0] if args else 0
+        pre_b = struct.pack("<6I", 0, first_arg, 0, len(args), 0, 0) + b"\x00" * 512
+        post_b = (
+            struct.pack("<6I", 1, first_arg, 0, len(args), result & 0xFFFFFFFF, (result ^ 0xFFFFFFFF) & 0xFFFFFFFF)
+            + b"\x00" * 512
+        )
+        hidden = encode_linear_memory(pre_b, result_i32=0, first_arg=first_arg)
+        target = encode_linear_memory(post_b, result_i32=result, first_arg=first_arg)
+        return result, hidden, target, pre_b, post_b
 
     def _execute_mock(
         self, func_name: str, args: List[int]

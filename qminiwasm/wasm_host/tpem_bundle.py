@@ -6,6 +6,7 @@ Specification: ``docs/TPEM_ARTIFACT_FORMAT.md`` in the repository root.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import struct
 import sys
@@ -13,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
 
+from qminiwasm.native_bridge import load_native_lib
 from .trit_pack import PACK_ENCODING_VERSION
 
 MAGIC = b"QMWTPEM1"
@@ -47,6 +49,47 @@ def write_tpem_bundle(
     p.parent.mkdir(parents=True, exist_ok=True)
     pe = int(PACK_ENCODING_VERSION if pack_encoding_version is None else pack_encoding_version)
     digest = hashlib.sha256(payload).digest()
+    lib = load_native_lib()
+    if lib is not None and hasattr(lib, "qmw_tpem_build_bundle"):
+        fn = lib.qmw_tpem_build_bundle
+        fn.argtypes = [
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_size_t,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_size_t,
+        ]
+        fn.restype = ctypes.c_size_t
+        payload_arr = (ctypes.c_uint8 * len(payload)).from_buffer_copy(payload)
+        needed = int(
+            fn(
+                ctypes.cast(payload_arr, ctypes.POINTER(ctypes.c_uint8)),
+                ctypes.c_size_t(len(payload)),
+                ctypes.c_uint32(int(bundle_format_version)),
+                ctypes.c_uint32(pe),
+                None,
+                ctypes.c_size_t(0),
+            )
+        )
+        if needed >= HEADER_SIZE:
+            out_arr = (ctypes.c_uint8 * needed)()
+            written = int(
+                fn(
+                    ctypes.cast(payload_arr, ctypes.POINTER(ctypes.c_uint8)),
+                    ctypes.c_size_t(len(payload)),
+                    ctypes.c_uint32(int(bundle_format_version)),
+                    ctypes.c_uint32(pe),
+                    ctypes.cast(out_arr, ctypes.POINTER(ctypes.c_uint8)),
+                    ctypes.c_size_t(needed),
+                )
+            )
+            if written == needed:
+                bundle = bytearray(bytes(out_arr[:written]))
+                # Enforce canonical digest semantics regardless of native placeholder implementation.
+                bundle[24:56] = digest
+                p.write_bytes(bytes(bundle))
+                return
     header = HEADER_STRUCT.pack(
         MAGIC,
         int(bundle_format_version),
