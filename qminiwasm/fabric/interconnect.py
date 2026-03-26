@@ -20,7 +20,8 @@ class StateMigrationInterconnect:
 
     Accepts delta payload from prepare_escalation_payload; optionally runs
     delta compression when baseline is available. Produces a list of (address, value)
-    pairs for geometric hull / WLES-oriented ingestion. Encrypt/attest and streaming are left for later.
+    pairs for geometric hull / WLES-oriented ingestion. Encrypt/attest and
+    streaming are left for later.
     """
 
     def __init__(

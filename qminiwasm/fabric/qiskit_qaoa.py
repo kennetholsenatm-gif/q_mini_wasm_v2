@@ -251,8 +251,8 @@ def run_z_expectations_ibm(
 
     try:
         backend = service.backend(name)
-        # IBM Runtime requires ISA circuits (native basis + routing) since March 2024; logical H/RX/RZZ
-        # must be transpiled to the backend target before EstimatorV2.
+        # IBM Runtime requires ISA circuits (native basis + routing) since March
+        # 2024; logical H/RX/RZZ must be transpiled before EstimatorV2.
         from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
         pm = generate_preset_pass_manager(optimization_level=1, backend=backend)

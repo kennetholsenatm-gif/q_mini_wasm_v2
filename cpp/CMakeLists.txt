@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(QMINIWASM_WITH_AVX512 "Compile AVX-512 translation units" ON)
 option(QMINIWASM_WITH_GRPC "Build gRPC delta sync service (needs Protobuf + gRPC + plugins)" OFF)
+option(QMINIWASM_WITH_TRAINING_ENGINE "Build C++20 training engine foundation (needs Protobuf + gRPC + threads)" OFF)
 option(QMINIWASM_WITH_SYCL "Build SYCL host stub shared library (use Intel oneAPI for real kernels)" OFF)
 option(QMINIWASM_WITH_WASMEDGE "Build WasmEdge C++ host helpers (needs WasmEdge SDK)" OFF)
 option(QMINIWASM_WITH_NLOPT "Link NLopt for COBYLA QUBO solver" ON)
@@ -149,6 +150,66 @@ if(QMINIWASM_WITH_GRPC)
     )
     target_include_directories(qminiwasm_grpc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${PROTO_GEN_DIR})
     target_link_libraries(qminiwasm_grpc PUBLIC gRPC::grpc++ protobuf::libprotobuf)
+endif()
+
+# Optional C++20 training engine foundation with gRPC telemetry service
+if(QMINIWASM_WITH_TRAINING_ENGINE)
+    find_package(Protobuf CONFIG REQUIRED)
+    find_package(gRPC CONFIG REQUIRED)
+    find_package(Threads REQUIRED)
+    if(NOT TARGET protobuf::protoc OR NOT TARGET gRPC::grpc_cpp_plugin)
+        message(FATAL_ERROR "QMINIWASM_WITH_TRAINING_ENGINE requires protobuf::protoc and gRPC::grpc_cpp_plugin targets.")
+    endif()
+    set(TRAINING_PROTO_FILE "${REPO_ROOT}/proto/training_engine.proto")
+    set(TRAINING_PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/training_proto_gen")
+    file(MAKE_DIRECTORY ${TRAINING_PROTO_GEN_DIR})
+    set(TRAINING_PB_CC "${TRAINING_PROTO_GEN_DIR}/training_engine.pb.cc")
+    set(TRAINING_PB_H "${TRAINING_PROTO_GEN_DIR}/training_engine.pb.h")
+    set(TRAINING_GRPC_CC "${TRAINING_PROTO_GEN_DIR}/training_engine.grpc.pb.cc")
+    set(TRAINING_GRPC_H "${TRAINING_PROTO_GEN_DIR}/training_engine.grpc.pb.h")
+    add_custom_command(
+        OUTPUT ${TRAINING_PB_CC} ${TRAINING_PB_H} ${TRAINING_GRPC_CC} ${TRAINING_GRPC_H}
+        COMMAND protobuf::protoc
+        ARGS
+            --cpp_out=${TRAINING_PROTO_GEN_DIR}
+            --grpc_out=${TRAINING_PROTO_GEN_DIR}
+            --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+            -I ${REPO_ROOT}/proto
+            ${TRAINING_PROTO_FILE}
+        DEPENDS ${TRAINING_PROTO_FILE}
+        VERBATIM
+    )
+
+    add_library(qminiwasm_training_engine STATIC
+        training/src/training_engine.cpp
+        training/src/training_tracker.cpp
+        training/src/balanced_sampler.cpp
+        training/src/taxonomy_policy.cpp
+        training/src/telemetry_bus.cpp
+        training/src/engine_c_api.cpp
+        training/src/adapters/sycl_adapter.cpp
+        training/src/adapters/avx512_adapter.cpp
+        training/src/adapters/wasmedge_adapter.cpp
+        training/src/grpc/training_engine_service.cpp
+        ${TRAINING_PB_CC}
+        ${TRAINING_GRPC_CC}
+    )
+    target_include_directories(qminiwasm_training_engine PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/training/include
+        ${TRAINING_PROTO_GEN_DIR}
+    )
+    target_link_libraries(qminiwasm_training_engine PUBLIC gRPC::grpc++ protobuf::libprotobuf Threads::Threads)
+    if(MSVC)
+        target_compile_options(qminiwasm_training_engine PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(qminiwasm_training_engine PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_executable(qminiwasm_training_engine_server
+        training/src/grpc/training_engine_server_main.cpp
+    )
+    target_link_libraries(qminiwasm_training_engine_server PRIVATE qminiwasm_training_engine)
 endif()
 
 # Tests executable

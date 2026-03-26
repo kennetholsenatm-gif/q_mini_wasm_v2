@@ -10,13 +10,11 @@ import asyncio
 import logging
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
-from functools import lru_cache
 import numpy as np
 import torch
-import torch.nn as nn
 
 from qminiwasm.fabric.router import EnhancedQuantumRouter
-from qminiwasm.fabric.qubo import encrypted_qubo_hamiltonian, encrypted_qubo_to_ising
+from qminiwasm.fabric.qubo import encrypted_qubo_hamiltonian
 from qminiwasm.fabric.dqaoa_cluster import (
     adjacency_from_edge_list,
     build_overlapping_cluster_mesh_jobs,
@@ -371,14 +369,11 @@ class ContinuousLoopOptimizer:
     ) -> List[int]:
         """Perform optimized routing with all enhancements."""
 
-        # Create encrypted distance matrix
-        encrypted_distance_matrix = self._create_optimized_distance_matrix(
-            query_vector, database_vectors
-        )
+        self._create_optimized_distance_matrix(query_vector, database_vectors)
 
         # Create optimized affinity matrix
         T, E = 1, len(database_vectors)
-        affinity = self.micro_optimizer.optimize_qubo_execution(torch.ones(T, E), k, 1, "ultra")[0]
+        self.micro_optimizer.optimize_qubo_execution(torch.ones(T, E), k, 1, "ultra")[0]
 
         # Use router's encrypted routing
         result = self.router.find_k_nearest_neighbors_encrypted(query_vector, database_vectors, k)
@@ -473,9 +468,8 @@ class EncryptedRoutingOptimizer:
         # Generate performance report
         report = self.continuous_optimizer.get_performance_report()
 
-        self.logger.info(
-            f"Optimization completed. Average latency: {report['performance_stats']['avg_latency_us']:.2f}μs"
-        )
+        alt = report["performance_stats"]["avg_latency_us"]
+        self.logger.info("Optimization completed. Average latency: %.2fμs", alt)
 
         return {
             "results": results,
@@ -507,7 +501,7 @@ class EncryptedRoutingOptimizer:
             start_time = time.perf_counter()
 
             # Perform routing with specific optimization level
-            results = asyncio.run(
+            asyncio.run(
                 temp_optimizer.optimize_continuous_routing(
                     query_vectors[:10], database_vectors, k, batch_size=5
                 )

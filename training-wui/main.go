@@ -2309,6 +2309,7 @@ type runRecord struct {
 	QAOASimMS            float64
 	QPUEstMS             float64
 	maxRuns              int // ring of finished ids for list
+	grpcBridgeCancel     context.CancelFunc
 }
 
 type manager struct {
@@ -2511,6 +2512,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 
 	go m.pump(id, stdout, "stdout")
 	go m.pump(id, stderr, "stderr")
+	m.maybeStartGRPCTelemetryBridge(id, rec, opts)
 	go m.wait(id)
 	wsHub.broadcast(id, map[string]any{
 		"type":   "lifecycle",
@@ -2677,8 +2679,13 @@ func (m *manager) wait(id string) {
 	destroyPod := rec.RunpodDestroyOnExit
 	runpodVF := rec.RunpodVarFile
 	configCleanup := rec.configCleanup
+	grpcBridgeCancel := rec.grpcBridgeCancel
+	rec.grpcBridgeCancel = nil
 	rec.configCleanup = ""
 	m.mu.Unlock()
+	if grpcBridgeCancel != nil {
+		grpcBridgeCancel()
+	}
 	wsHub.broadcast(id, map[string]any{
 		"type":      "lifecycle",
 		"run_id":    id,
@@ -2846,7 +2853,12 @@ func (m *manager) stop(id string, force bool) error {
 	}
 	proc := rec.cmd.Process
 	procDone := rec.procExited
+	grpcBridgeCancel := rec.grpcBridgeCancel
+	rec.grpcBridgeCancel = nil
 	m.mu.Unlock()
+	if grpcBridgeCancel != nil {
+		grpcBridgeCancel()
+	}
 
 	if force {
 		wsHub.broadcast(id, map[string]any{

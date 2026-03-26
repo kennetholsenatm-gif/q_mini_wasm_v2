@@ -4,6 +4,8 @@
 
 Welcome. This track summarizes what the **qminiwasm-core** / Q-Mini-WASM effort is aiming for and why it matters, without assuming a technical background.
 
+**Repository onboarding** (clone, install, repo layout, and “journey of a vector” map): [README Getting started](../README.md#getting-started) in the repo root.
+
 ### What problem does this address?
 
 **Stateful AI at the edge.** Many assistants lose context over long sessions or depend on a large cloud footprint. Teams also want models and tooling that can run closer to data—on laptops, servers, or constrained devices—while still using cloud services when appropriate.

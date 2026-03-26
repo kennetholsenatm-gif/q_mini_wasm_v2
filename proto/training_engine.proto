@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package qminiwasm.trainingrpc;
+
+message TrainingConfig {
+  string run_id = 1;
+  string dataset_uri = 2;
+  string model_uri = 3;
+  uint32 epochs = 4;
+  uint32 batch_size = 5;
+  uint32 micro_batch_size = 6;
+  uint32 prefetch_depth = 7;
+  uint32 compute_slots = 8;
+  uint32 worker_threads = 9;
+  double learning_rate = 10;
+  uint64 seed = 11;
+  string taxonomy_tier = 12;
+  string precision_policy = 13;
+}
+
+message StartTrainingRequest {
+  TrainingConfig config = 1;
+}
+
+message StartTrainingResponse {
+  bool accepted = 1;
+  string message = 2;
+  string run_id = 3;
+}
+
+message StopTrainingRequest {
+  string run_id = 1;
+}
+
+message StopTrainingResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+message StatusRequest {
+  string run_id = 1;
+}
+
+message StatusResponse {
+  enum EngineState {
+    ENGINE_STATE_UNSPECIFIED = 0;
+    ENGINE_STATE_IDLE = 1;
+    ENGINE_STATE_STARTING = 2;
+    ENGINE_STATE_RUNNING = 3;
+    ENGINE_STATE_STOPPING = 4;
+    ENGINE_STATE_STOPPED = 5;
+    ENGINE_STATE_FAILED = 6;
+  }
+  EngineState state = 1;
+  string run_id = 2;
+  uint32 epoch = 3;
+  uint32 step = 4;
+  double train_loss = 5;
+  double val_loss = 6;
+  double learning_rate = 7;
+  string message = 8;
+}
+
+message TelemetryRequest {
+  string run_id = 1;
+  bool include_debug = 2;
+}
+
+message TelemetryEvent {
+  string run_id = 1;
+  uint64 unix_ms = 2;
+  uint32 epoch = 3;
+  uint32 step = 4;
+  double train_loss = 5;
+  double val_loss = 6;
+  double learning_rate = 7;
+  double samples_per_second = 8;
+  uint32 sampler_queue_depth = 9;
+  uint32 prefetch_queue_depth = 10;
+  uint32 compute_queue_depth = 11;
+  string taxonomy_tier = 12;
+  string precision_mode = 13;
+  string stage = 14;
+  string event_type = 15;
+  string message = 16;
+}
+
+service TrainingEngineService {
+  rpc StartTraining(StartTrainingRequest) returns (StartTrainingResponse);
+  rpc StopTraining(StopTrainingRequest) returns (StopTrainingResponse);
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+  rpc StreamTelemetry(TelemetryRequest) returns (stream TelemetryEvent);
+}

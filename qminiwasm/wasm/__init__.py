@@ -3,9 +3,9 @@
 For submodule imports (e.g. ``trit_pack``), use :mod:`qminiwasm.wasm_host` directly.
 """
 
-from qminiwasm.wasm_host import *  # noqa: F403
+from qminiwasm.wasm_host import *  # noqa: F403, F401
 
-__all__ = [  # keep in sync with qminiwasm.wasm_host
+__all__ = [  # noqa: F405  # keep in sync with qminiwasm.wasm_host
     "WasmRuntimeConfig",
     "WasmEngine",
     "WasmCompiler",

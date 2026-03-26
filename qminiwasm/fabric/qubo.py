@@ -259,7 +259,7 @@ def encrypted_qubo_hamiltonian(
             q_linear[i] += 2.0 * lambda1 * (-K) * (1.0 + quantum_noise_factor)
             q_quad[i, i] += 2.0 * lambda1 * (1.0 + quantum_noise_factor)
 
-            # Enhanced capacity constraint penalty with quantum noise consideration for encrypted data
+            # Capacity constraint penalty (quantum noise) for encrypted data
             for t2 in range(T):
                 j = t2 * E + e
                 if i != j:
@@ -305,8 +305,9 @@ def encrypted_affinity_from_compressed(
     """Compute quantum-aware token-expert affinity from encrypted vectors
 
     Args:
-        encrypted_compressed_states: Encrypted compressed states (batch, num_tokens, dim) or (num_tokens, dim)
-        encrypted_expert_signatures: Encrypted expert signatures (num_experts, dim)
+        encrypted_compressed_states: Encrypted compressed states; shape
+            ``(batch, num_tokens, dim)`` or ``(num_tokens, dim)``.
+        encrypted_expert_signatures: Encrypted expert signatures ``(num_experts, dim)``.
         quantum_aware: Whether to apply quantum-aware optimizations
 
     Returns:

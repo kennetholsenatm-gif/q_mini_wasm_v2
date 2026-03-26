@@ -9,27 +9,16 @@ import time
 import asyncio
 import logging
 import json
-from typing import List, Dict, Tuple, Any, Optional
-from dataclasses import asdict
+from typing import List, Dict, Tuple, Any
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from qminiwasm.fabric.router import EnhancedQuantumRouter
-from qminiwasm.fabric.qubo import (
-    encrypted_qubo_hamiltonian,
-    encrypted_qubo_to_ising,
-    encrypted_affinity_from_compressed,
-    encrypted_distance_matrix_to_affinity,
-    encrypted_qubo_optimization,
-)
 from qminiwasm.fabric.performance_optimizer import (
     EncryptedRoutingOptimizer,
-    PerformanceMetrics,
     EncryptedRoutingCache,
 )
-from qminiwasm.security.crypto import encrypt_vector, decrypt_vector
+from qminiwasm.security.crypto import encrypt_vector
 from test_encrypted_quantum_routing import EncryptedQuantumRoutingTester
 
 logger = logging.getLogger(__name__)
@@ -60,7 +49,10 @@ class IntegrationTestSuite:
             (query_vectors, database_vectors) for testing
         """
         logger.info(
-            f"Generating large-scale test data: {num_queries} queries, {num_database_vectors} database vectors, dim={vector_dim}"
+            "Generating large-scale test data: %s queries, %s database vectors, dim=%s",
+            num_queries,
+            num_database_vectors,
+            vector_dim,
         )
 
         # Generate query vectors
@@ -116,9 +108,6 @@ class IntegrationTestSuite:
             regular_times.append((end_time - start_time) * 1e6)  # Convert to microseconds
 
         # Test encrypted routing
-        encrypted_results = []
-        encrypted_times = []
-
         start_time = time.perf_counter()
         encrypted_results = await self.optimizer.optimize_for_microsecond_performance(
             encrypted_queries[:10], encrypted_database, k
@@ -149,7 +138,9 @@ class IntegrationTestSuite:
 
         self.test_results["end_to_end_routing"] = results
         logger.info(
-            f"End-to-end test completed. Accuracy: {accuracy:.4f}, Encrypted avg time: {avg_encrypted_time:.2f}μs"
+            "End-to-end test completed. Accuracy: %.4f, Encrypted avg time: %.2fμs",
+            accuracy,
+            avg_encrypted_time,
         )
 
         return results
@@ -508,9 +499,9 @@ class IntegrationTestSuite:
         logger.info(f"Total Tests: {report['test_summary']['total_tests']}")
         logger.info(f"Passed: {report['test_summary']['passed_tests']}")
         logger.info(f"Failed: {report['test_summary']['failed_tests']}")
-        logger.info(
-            f"Success Rate: {report['test_summary']['passed_tests']/report['test_summary']['total_tests']*100:.1f}%"
-        )
+        ts = report["test_summary"]
+        rate = ts["passed_tests"] / ts["total_tests"] * 100
+        logger.info("Success Rate: %.1f%%", rate)
 
         if report["recommendations"]:
             logger.info("\nRecommendations:")

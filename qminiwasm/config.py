@@ -26,7 +26,10 @@ class HierarchicalConfig:
     enclave_footprint_mb: Optional[float] = None
     """Enclave Footprint (EF) in MB: contiguous TPEM + static heap budget."""
     enclave_tier: Optional[str] = None
-    """Deployment tier label: micro | meso | macro | workgroup | enterprise_core (Tiers 1–5 EF taxonomy)."""
+    """Deployment tier: micro | meso | macro | workgroup | enterprise_core.
+
+    Matches Tiers 1–5 EF taxonomy.
+    """
     max_linear_memory_pages: Optional[int] = None
     """Max WASM 64KiB pages when enforcing tier caps."""
     wasm_memory64_max_mb: Optional[float] = None

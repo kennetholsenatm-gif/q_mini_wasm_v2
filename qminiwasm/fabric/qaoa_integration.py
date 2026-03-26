@@ -14,14 +14,13 @@ white paper, including problem Hamiltonian construction and angle prediction.
 """
 
 import logging
-import os
 import hashlib
 
 import numpy as np
 import torch
 import torch.nn as nn
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from .mesh_qubo import prune_topology_from_edge_scores
 
