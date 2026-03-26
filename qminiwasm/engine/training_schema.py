@@ -183,8 +183,7 @@ class ServeSection(BaseModel):
     tpem: Optional[str] = Field(
         None,
         description=(
-            "Trainable TPEM .pt path; preferred over the legacy weight path when "
-            "both are set"
+            "Trainable TPEM .pt path; preferred over the legacy weight path when " "both are set"
         ),
     )
     hybrid_adapter: Optional[bool] = None

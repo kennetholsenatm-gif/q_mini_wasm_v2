@@ -42,8 +42,8 @@ variable "cloud_type" {
 }
 
 variable "support_public_ip" {
-  type        = bool
-  default     = true
+  type    = bool
+  default = true
 }
 
 variable "volume_in_gb" {
@@ -71,7 +71,7 @@ variable "env" {
     uses the Runpod GPU once PyTorch sees CUDA inside the container. Override in terraform.tfvars if needed.
   EOT
   default = {
-    ACCELERATOR              = "cuda"
-    NVIDIA_VISIBLE_DEVICES   = "all"
+    ACCELERATOR            = "cuda"
+    NVIDIA_VISIBLE_DEVICES = "all"
   }
 }

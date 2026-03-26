@@ -29,12 +29,22 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            const alerts = await github.paginate(github.rest.dependabot.listAlertsForRepo, {
-              owner,
-              repo,
-              state: 'open',
-              per_page: 100,
-            });
+            let alerts = [];
+            try {
+              alerts = await github.paginate(github.rest.dependabot.listAlertsForRepo, {
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+              });
+            } catch (error) {
+              const message = String(error?.message || '');
+              if (error?.status === 403 && message.includes('Dependabot alerts are disabled')) {
+                core.notice('Dependabot alerts are disabled for this repository; skipping ticket creation.');
+                return;
+              }
+              throw error;
+            }
 
             const critical = alerts.filter((a) => {
               const sev = (a.security_advisory?.severity || '').toLowerCase();
