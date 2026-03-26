@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 from qminiwasm.config import DEFAULT_HIERARCHICAL_CONFIG, HierarchicalConfig  # noqa: E402
 from qminiwasm.wasm_host.engine import WasmRuntimeConfig  # noqa: E402
+from qminiwasm.engine.graph_apply import dispatch_graph_manifest  # noqa: E402
 
 app = FastAPI(title="QMiniWASM Inference", version="0.1.0")
 

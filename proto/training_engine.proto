@@ -83,6 +83,11 @@ message TelemetryEvent {
   string stage = 14;
   string event_type = 15;
   string message = 16;
+  string graph_id = 17;
+  string node_id = 18;
+  string enclave_state = 19;
+  string attestation_state = 20;
+  double decoherence_score = 21;
 }
 
 service TrainingEngineService {
