@@ -126,8 +126,8 @@ class WasmEngine:
         # Keep explicit defaults in one place for future per-runtime tuning.
         try:
             cfg.debug_info = False
-        except Exception:
-            pass
+        except Exception as exc:
+            self.logger.debug("wasmtime.Config.debug_info not set (%s)", exc)
         return wasmtime.Engine(cfg)
 
     def _new_store(self) -> wasmtime.Store:

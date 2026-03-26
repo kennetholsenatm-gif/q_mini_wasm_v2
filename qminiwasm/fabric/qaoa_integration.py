@@ -286,7 +286,8 @@ class NeuralQAOA(nn.Module):
     def _topology_fingerprint(weights: torch.Tensor) -> str:
         w = weights.detach().to(dtype=torch.float32).reshape(-1).cpu().numpy()
         sign = np.sign(w).astype(np.int8).tobytes()
-        return hashlib.sha1(sign).hexdigest()
+        # Non-crypto topology cache key (not authentication); SHA-256 avoids weak-hash lint noise.
+        return hashlib.sha256(sign).hexdigest()
 
     def _maybe_prune_weights(self, weights: torch.Tensor) -> torch.Tensor:
         if not bool(getattr(self.config, "qaoa_prune_enabled", False)):
