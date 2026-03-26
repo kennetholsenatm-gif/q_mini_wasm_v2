@@ -1,3 +1,3 @@
 """Shim for :mod:`qminiwasm.cognitive.escalation`."""
 
-from qminiwasm.cognitive.escalation import *  # noqa: F403
+from qminiwasm.cognitive.escalation import *  # noqa: F403, F401

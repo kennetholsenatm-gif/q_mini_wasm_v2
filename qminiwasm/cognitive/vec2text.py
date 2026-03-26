@@ -956,8 +956,9 @@ class Vec2TextRAG:
         """Initialize Vec2Text-RAG module.
 
         Args:
-            diffusion_model: Optional backend implementing ``invert_embedding(embedding, seq_len=...)``.
-                When omitted, uses :class:`ConditionalMaskedDiffusion` (full model).
+            diffusion_model: Optional backend implementing
+                ``invert_embedding(embedding, seq_len=...)``. When omitted, uses
+                :class:`ConditionalMaskedDiffusion` (full model).
         """
         self.diffusion_model = (
             diffusion_model if diffusion_model is not None else ConditionalMaskedDiffusion()

@@ -105,9 +105,10 @@ class CheckpointSection(BaseModel):
 
 
 class TpemSection(BaseModel):
-    """Trainable TPEM artifact paths (``load_path`` / ``save_path`` / ``best`` / ``latest``).
+    """Trainable TPEM artifact paths (load/save/best/latest).
 
-    When the legacy persistence table and ``[tpem]`` both set a field, **``[tpem]`` wins** for that field.
+    When the legacy persistence table and ``[tpem]`` both set a field, **``[tpem]``
+    wins** for that field.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -181,7 +182,10 @@ class ServeSection(BaseModel):
     checkpoint: Optional[str] = Field(None, description="QMINIWASM_CHECKPOINT (legacy TOML key)")
     tpem: Optional[str] = Field(
         None,
-        description="Trainable TPEM .pt path; preferred over the legacy weight path when both are set",
+        description=(
+            "Trainable TPEM .pt path; preferred over the legacy weight path when "
+            "both are set"
+        ),
     )
     hybrid_adapter: Optional[bool] = None
     hybrid_adapter_hidden: Optional[int] = None

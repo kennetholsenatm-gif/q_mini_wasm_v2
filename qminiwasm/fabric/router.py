@@ -102,7 +102,7 @@ class EnhancedQuantumRouter(QuantumRouter):
     def formulate_qubo(
         self, distance_matrix: np.ndarray, k: int, T: int, E: int, C: int
     ) -> Tuple[Optional[PauliSumOp], np.ndarray]:
-        """Formulate complete QUBO problem for QAHR (Tier-3) routing with exact white paper specifications
+        """Formulate QAHR (Tier-3) QUBO routing per white paper specs.
 
         Args:
             distance_matrix: Symmetric matrix of distances between vectors
@@ -641,7 +641,7 @@ class BarrenPlateauMitigator:
         return initial_params
 
     def generate_encrypted_initial_params(self, n_qubits: int) -> np.ndarray:
-        """Generate initial parameters optimized for encrypted data with enhanced barren plateau mitigation"""
+        """Encrypted-data initial parameters with barren-plateau mitigation."""
         # Enhanced initial parameter generation for encrypted data
         # Use quantum-aware parameter initialization with encryption-specific considerations
         initial_params = np.random.uniform(0, np.pi, size=n_qubits)
@@ -714,7 +714,7 @@ class BarrenPlateauMitigator:
         pass
 
     def _apply_encrypted_lie_subspaces(self, device, params: np.ndarray, n_qubits: int):
-        """Apply enhanced Lie algebraic subspaces for encrypted data non-zero gradient expectations"""
+        """Lie subspaces for encrypted data: non-zero gradient expectations path."""
         # Enhanced implementation for encrypted data
         # Use encryption-aware Lie algebra constraints with improved gradient expectations
         pass
@@ -803,12 +803,13 @@ class TernaryOptimizer:
 
 
 class QAHRRouter(nn.Module):
-    """Quantum-Assisted Hierarchical Routing (QAHR): optional QAOA expectations (Qiskit), not PennyLane.
+    """QAHR: optional QAOA expectations (Qiskit), not PennyLane.
 
-    After **Certainty-Gated Escalation (CGE)**, :func:`~qminiwasm.fabric.qaoa_integration.qahr_route_after_escalation`
-    consumes escalation metadata while this module supplies the routed hidden states.
+    After **Certainty-Gated Escalation (CGE)**, see
+    :func:`qminiwasm.fabric.qaoa_integration.qahr_route_after_escalation` for
+    escalation metadata; this module supplies routed hidden states.
 
-    Legacy public name: ``HybridQuantumMoE`` (informal MoE wording retired for routing).
+    Legacy public name: ``HybridQuantumMoE``.
     """
 
     def __init__(

@@ -68,7 +68,8 @@ def read_tpem_bundle(path: Union[str, Path]) -> TpemBundle:
     payload = raw[HEADER_SIZE:]
     if len(payload) != declared_len:
         raise ValueError(
-            f"payload length mismatch: file has {len(payload)} bytes, header declares {declared_len}"
+            f"payload length mismatch: file has {len(payload)} bytes, "
+            f"header declares {declared_len}"
         )
     calc = hashlib.sha256(payload).digest()
     if calc != digest:

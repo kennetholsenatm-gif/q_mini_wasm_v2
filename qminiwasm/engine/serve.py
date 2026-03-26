@@ -158,7 +158,8 @@ class InferResponse(BaseModel):
     cascade_logits: Optional[List[List[float]]] = Field(
         default=None,
         description=(
-            "Per-row router logits when USE_CASCADE_ROUTER=1 and the loaded TPEM artifact has router weights."
+            "Per-row router logits when USE_CASCADE_ROUTER=1 and the loaded "
+            "TPEM artifact has router weights."
         ),
     )
 

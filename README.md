@@ -1,134 +1,74 @@
 # qminiwasm-core
 
-`qminiwasm-core` bridges WebAssembly execution, edge-oriented ternary ML, and optional quantum routing in one runtime stack.
+Hybrid classical–quantum machine learning runtime: deterministic WebAssembly execution, ternary-weight inference, and optional quantum-assisted routing in one stack.
 
-## At a glance
+## Why this stack
 
-**Stateful WASM agents on discrete trits** (`{-1,0,1}`): TPEM-backed linear memory, Edge Cognitive Looping (ECL), optional quantum-assisted routing, and zero-trust enrollment (ZTEE) patterns—see [wiki/Home.md](wiki/Home.md) for the full paradigm.
+Remote edge nodes rarely fail because the math is exotic—they fail because **memory, bandwidth, and thermal budgets** are fixed while models grow, because **routing and capacity decisions** get expensive when experts and paths change under load, and because **trust boundaries** at the edge require isolation you can reason about operationally.
 
-| Start here | |
-|------------|--|
-| Run something quickly | [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md) |
-| Strategic / wiki index | [wiki/README.md](wiki/README.md) |
-| Enclave lifecycle (boot → ZTEE → ECL → CGE → WLES) | [docs/ENCLAVE_LIFECYCLE.md](docs/ENCLAVE_LIFECYCLE.md) |
+**Ternary weights and TPEM-style packing** answer the footprint problem: representing parameters in `{-1, 0, 1}` with dense packing (Ternary-Packed Memory Enclave, **TPEM**) keeps more capacity in the same bytes and memory traffic than full-precision tensors at the same width. **Optional QAOA-style quantum routing** is for when classical assignment over experts and paths becomes the combinatorial bottleneck—not for every forward pass, but for the tier where routing is itself a hard search problem.
 
-**Developers:** editable install with lint/test extras: `pip install -e ".[dev]"` (see [pyproject.toml](pyproject.toml) for `serve`, `wasm`, and `training` extras).
+Patterns for **edge cognitive looping (ECL)** and **zero-trust enclave enrollment (ZTEE)** matter once those constraints are clear; start with operations and the vector journey, then read [docs/ENCLAVE_LIFECYCLE.md](docs/ENCLAVE_LIFECYCLE.md) when wiring trust and lifecycle.
 
-## Choose Your Path
+Execution stays in a **sandboxed WebAssembly module** with bounded linear memory; **packed ternary state** flows through native helpers where available; **routing logic in `qminiwasm`** can delegate to IBM Qiskit Runtime or local simulators when configured. **Inference and training orchestration stay in Python** while the edge contract stays explicit between host runtimes (`wasmtime` in development, WasmEdge-oriented paths in-tree for production-shaped deployments).
 
-### Door A: Strategic and Executive
+## Getting started
 
-Start here if you need the why, architecture, and strategic value without operational commands.
+Clone the repository, create a Python 3.8+ environment, and install in editable mode with development tooling:
 
-- Strategic overview: [docs/Project-Goals.md](docs/Project-Goals.md)
-- Architecture narrative: [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md)
-- Research and theory: [wiki/README.md](wiki/README.md)
-
-### Door B: Tactical and Operator
-
-Start here if you need to run the system, deploy infrastructure, or operate training workloads.
-
-- Happy-path onboarding: [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
-- Operations and infrastructure: [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
-- Hardware and advanced runtime config: [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
-
-## Door A: Strategic View
-
-### Problem Framing
-
-Modern edge AI has three recurring constraints:
-
-- constrained compute and memory budgets
-- trust and isolation requirements at the edge boundary
-- routing and optimization overhead when model choices become dynamic
-
-`qminiwasm-core` addresses those constraints by combining deterministic WebAssembly execution with ternary-weight modeling and optional quantum-assisted routing.
-
-### Core Architecture (Conceptual)
-
-- **WebAssembly sandbox** for deterministic execution and stronger workload isolation
-- **Ternary model representation** (`{-1,0,1}`) for smaller state and predictable inference math
-- **Python orchestration layer** that coordinates training and routing decisions
-- **Quantum routing path (optional)** through Qiskit/IBM Runtime for QAOA-style expectation signals
-
-```text
-Edge Input -> Wasm Runtime -> Python Orchestrator -> Quantum Router (optional) -> Routed Output
+```bash
+pip install -e ".[dev]"
 ```
 
-### Value Proposition
-
-- Smaller model footprint and deterministic execution characteristics
-- Composable runtime where classical and quantum paths can coexist
-- Clear separation between concept-level architecture and operational workflows
-
-### Read Next (Strategic)
-
-- [docs/Project-Goals.md](docs/Project-Goals.md)
-- [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md)
-- [wiki/Business-Value.md](wiki/Business-Value.md)
-- [wiki/Mathematical-Formulation.md](wiki/Mathematical-Formulation.md)
-
-## Door B: Tactical View
-
-### 0 to 1 Quickstart
-
-Use the guided happy path here:
+Optional extras are defined in [pyproject.toml](pyproject.toml): `serve` (HTTP inference), `wasm`, `training`, and `security`. Use the guided happy path next—local baseline, localhost endpoint, and a known-good validation command:
 
 - [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
 
-What you get:
-
-- a local baseline run
-- a local HTTP endpoint on `localhost:8080`
-- one known-good validation command
-
-### Operator Workflows
-
-All deep operational procedures are consolidated here:
+For production-style operations (RunPod/OpenTofu, serverless workers, SSH sync, environment controls):
 
 - [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
 
-Includes:
+Strategic context, research notes, and extended wiki index:
 
-- RunPod and OpenTofu workflows
-- serverless endpoint and worker patterns
-- SSH sync and remote execution patterns
-- advanced CLI and environment controls
+- [wiki/README.md](wiki/README.md)
 
-### Advanced Technical References
+Architecture goals and the narrative “journey of a vector”:
 
-- Training data and metrics: [docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)
-- Quantum execution modes: [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)
-- Cascade RL and MOPD: [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
-- Environment variables: [docs/environment-variables.md](docs/environment-variables.md)
-
-## Journey of a Vector
-
-The core innovation is documented as a literal data-path walkthrough:
-
+- [docs/Project-Goals.md](docs/Project-Goals.md)
 - [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md)
 
-This trace explains how a vector moves from Wasm-edge execution into the Python router, through optional IBM Qiskit execution, and back into the classical result path.
+Hardware and accelerated runtime configuration (when you outgrow CPU defaults):
 
-## Documentation Map
+- [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
+
+## From input to decision: where the code lives
+
+The following follows **one logical path** through the repository (not an alphabetical tree). For the full tensor-level trace, see [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md).
+
+### Step 1 — Input enters the execution sandbox
+
+Edge and server hosts load a **WebAssembly module** with deterministic execution and bounded linear memory. In this tree, the WasmEdge-oriented integration and host-side glue live under [`wasmedge-plugin/`](wasmedge-plugin/README.md) (Rust plugin stub for WASI-NN–style delegation) and [`cpp/wasmedge/`](cpp/wasmedge/) / [`cpp/wasm/`](cpp/wasm/) (orchestration, host memory, and WLES-oriented hooks). For the path most developers run first, the Python **wasmtime** host and trit packing are in [`qminiwasm/wasm_host/`](qminiwasm/wasm_host/)—same contract, different host.
+
+### Step 2 — Ternary math at the edge
+
+To shrink working set and memory traffic, weights and activations are handled in **packed ternary** form (three-valued logic with dense packing). The SYCL-oriented stub and packing notes live in [`ternary_packed/`](ternary_packed/README.md); high-throughput CPU kernels and dispatch are under [`cpp/kernels/`](cpp/kernels/) and related [`cpp/pack/`](cpp/pack/) helpers, aligned with the on-wire layout described alongside `qminiwasm.wasm_host.trit_pack`.
+
+### Step 3 — Orchestration and quantum routing evaluation
+
+Once hidden states exist as tensors, [`qminiwasm/`](qminiwasm/) owns the hybrid model, training and serve entrypoints (`qminiwasm.engine`), and routing fabric (including optional Qiskit/IBM Runtime paths documented in [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)). For **serverless-style deployment** surfaces (handler, container), use [`serverless/`](serverless/) alongside the operations runbook.
+
+See also top-level `docs/`, `wiki/`, and `infra/` for documentation and infrastructure automation.
+
+## Documentation map
 
 - Getting started: [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
 - Operations: [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
+- Enclave lifecycle: [docs/ENCLAVE_LIFECYCLE.md](docs/ENCLAVE_LIFECYCLE.md)
 - Training and data: [docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)
-- Quantum integration: [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)
-- Hardware acceleration: [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
-- Wiki index: [wiki/README.md](wiki/README.md)
-
-## Project Structure (Condensed)
-
-```text
-qminiwasm-core/
-|- qminiwasm/                  # core model, wasm host, quantum router, training/serve (`qminiwasm.engine`)
-|- docs/                       # canonical repository documentation
-|- wiki/                       # extended strategic/research documentation
-|- infra/runpod/               # OpenTofu stack for RunPod workflows
-`- training-wui/               # operator UI and automation layer
-```
+- Quantum: [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)
+- Cascade RL / MOPD: [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
+- Environment variables: [docs/environment-variables.md](docs/environment-variables.md)
+- Wiki: [wiki/README.md](wiki/README.md)
 
 ## License
 

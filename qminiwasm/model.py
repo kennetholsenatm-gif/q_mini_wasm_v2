@@ -269,7 +269,7 @@ class QMiniWASM:
     def load_trainable_checkpoint(
         self, path: str, map_location: Optional[Union[str, torch.device]] = None
     ) -> Dict:
-        """Load trainable weights from a trainable TPEM artifact (router, ternary, optional adapter).
+        """Load trainable TPEM weights (router, ternary, optional adapter).
 
         Args:
             path: Filesystem path to ``.pt`` trainable TPEM payload.

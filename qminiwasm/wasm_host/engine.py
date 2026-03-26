@@ -1,9 +1,9 @@
 """WASM Engine for Q-Mini-WASM
 
 This module provides the core WASM compilation and execution engine for the
-Q-Mini-WASM architecture. Static ternary weights loaded into the guest are treated as a contiguous
-**Ternary-Packed Memory Enclave (TPEM)** byte array (see :mod:`qminiwasm.wasm_host.trit_pack` for the
-on-wire 5-trits-per-byte layout). It handles:
+Q-Mini-WASM architecture. Static ternary weights loaded into the guest are a
+contiguous **TPEM** byte array (see :mod:`qminiwasm.wasm_host.trit_pack` for the
+5-trits-per-byte layout). It handles:
 
 - C source compilation to WASM modules
 - WASM module instantiation and execution

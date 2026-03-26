@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional
 
 _CORPUS = Path(__file__).resolve().parents[2] / "corpus"
 _TRIT_WAT = _CORPUS / "trit_kernels.wat"

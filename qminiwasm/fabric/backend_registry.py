@@ -59,7 +59,6 @@ class QuantumBackendRegistry:
 
         backend_info = self.backends[name]
         backend_type = backend_info["type"]
-        api_key = backend_info["api_key"]
 
         try:
             if backend_type == "local":

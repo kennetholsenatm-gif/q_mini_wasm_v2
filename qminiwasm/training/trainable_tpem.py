@@ -1,4 +1,4 @@
-"""Backward-compatible import path; canonical implementation: :mod:`qminiwasm.tpem.trainable_tpem`."""
+"""Shim: re-exports :mod:`qminiwasm.tpem.trainable_tpem` (canonical implementation)."""
 
 from __future__ import annotations
 

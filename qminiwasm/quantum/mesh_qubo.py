@@ -1,3 +1,3 @@
 """Shim for :mod:`qminiwasm.fabric.mesh_qubo`."""
 
-from qminiwasm.fabric.mesh_qubo import *  # noqa: F403
+from qminiwasm.fabric.mesh_qubo import *  # noqa: F403, F401

@@ -35,6 +35,16 @@ Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 | `-root` | `.` | **Repo root** (directory that contains `configs/` and `qminiwasm/`) |
 | `-python` | `python` | Python executable name or path on `PATH` |
 
+### Optional C++ gRPC telemetry bridge
+
+To consume native C++ training telemetry (`StreamTelemetry`) while keeping the current browser WebSocket payload contract unchanged:
+
+- Set `QMINIWASM_WUI_GRPC_BRIDGE=1`
+- Optionally set `QMINIWASM_TRAINING_GRPC_ADDR` (default `127.0.0.1:50061`)
+- Install `grpcurl` on `PATH`
+
+When enabled, `training-wui` reads gRPC stream events and re-broadcasts them as existing `metric`/`alert` WebSocket messages, so frontend code does not need changes.
+
 ### Tabs (workflow)
 
 - **Training** — Single **LEGO-style wizard** (five steps on one tab): (1) dataset mix, (2) model & runtime, (3) data source, (4) training knobs + full **schema** form, (5) review/save, **Launch training** (only control that starts `python -m qminiwasm.engine`), preflight, runs, artifacts. All saves target **`configs/training/wui_working.toml`** unless you pick another file in the dropdown.
