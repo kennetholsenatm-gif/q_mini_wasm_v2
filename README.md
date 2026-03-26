@@ -31,6 +31,7 @@ For production-style operations (RunPod/OpenTofu, serverless workers, SSH sync, 
 Strategic context, research notes, and extended wiki index:
 
 - [wiki/README.md](wiki/README.md)
+- [docs/GLOSSARY.md](docs/GLOSSARY.md)
 
 Architecture goals and the narrative “journey of a vector”:
 
@@ -69,6 +70,8 @@ See also top-level `docs/`, `wiki/`, and `infra/` for documentation and infrastr
 - Cascade RL / MOPD: [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
 - Environment variables: [docs/environment-variables.md](docs/environment-variables.md)
 - Wiki: [wiki/README.md](wiki/README.md)
+- Hardware acceleration: [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
+- Project taxonomy glossary: [docs/GLOSSARY.md](docs/GLOSSARY.md)
 
 ## License
 

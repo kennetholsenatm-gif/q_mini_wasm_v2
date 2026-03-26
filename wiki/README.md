@@ -5,6 +5,7 @@ This wiki is the extended knowledge layer for `qminiwasm-core`. The canonical on
 Start here:
 
 - Main entrypoint: [../README.md](../README.md)
+- Project taxonomy glossary: [../docs/GLOSSARY.md](../docs/GLOSSARY.md)
 - 0-to-1 happy path: [../docs/getting-started/QUICKSTART_0_TO_1.md](../docs/getting-started/QUICKSTART_0_TO_1.md)
 - Operator runbook: [../docs/operations/OPERATIONS_RUNBOOK.md](../docs/operations/OPERATIONS_RUNBOOK.md)
 - Vector dataflow walkthrough: [../docs/architecture/JOURNEY_OF_A_VECTOR.md](../docs/architecture/JOURNEY_OF_A_VECTOR.md)
