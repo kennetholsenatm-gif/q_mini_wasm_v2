@@ -170,6 +170,9 @@ class WasmSection(BaseModel):
     fallback_policy: Optional[str] = Field(
         None, description="mock: fall back to mock WASM on init/exec failure; error: raise"
     )
+    backend: Optional[str] = Field(
+        None, description="wasmtime (default) or wasmedge_native (experimental native bridge)"
+    )
     force_mock: Optional[bool] = None
     store_instance_limit: Optional[int] = None
     store_memories_limit: Optional[int] = None
@@ -377,6 +380,7 @@ class TrainingConfig(BaseModel):
         wmap = {
             "store_memory_limit_mb": "wasm_store_memory_limit_mb",
             "fallback_policy": "wasm_fallback_policy",
+            "backend": "wasm_backend",
             "force_mock": "wasm_force_mock",
             "store_instance_limit": "wasm_store_instance_limit",
             "store_memories_limit": "wasm_store_memories_limit",

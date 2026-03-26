@@ -7,6 +7,8 @@ for on-policy cascade experiments and unit tests.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
+import os
 from typing import Any, Callable, Protocol
 
 import torch
@@ -14,6 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..rl.cascade_grpo import CascadeGRPO
+from ..native_bridge import load_native_lib
 from .distillation import MOPDLoss
 
 
@@ -114,6 +117,68 @@ def cascade_rl_train_step(
         raise ValueError("group_size >= 2 required when normalize_advantage is True")
 
     dev = _policy_device(policy_logits_fn)
+
+    use_native_rollout = (
+        os.getenv("QMINIWASM_NATIVE_RL_RUNTIME", "0").strip().lower()
+        not in {"", "0", "false", "off", "no"}
+    )
+    if use_native_rollout and env_factory is None:
+        lib = load_native_lib()
+        if lib is not None and hasattr(lib, "qmw_rl_rollout_returns"):
+            try:
+                fn = lib.qmw_rl_rollout_returns
+                fn.argtypes = [
+                    ctypes.c_uint64,
+                    ctypes.c_size_t,
+                    ctypes.c_size_t,
+                    ctypes.c_size_t,
+                    ctypes.c_size_t,
+                    ctypes.POINTER(ctypes.c_float),
+                    ctypes.POINTER(ctypes.c_float),
+                ]
+                fn.restype = None
+                state_dim = 8
+                max_steps = 16
+                returns_buf = (ctypes.c_float * group_size)()
+                states_buf = (ctypes.c_float * (group_size * state_dim))()
+                fn(
+                    ctypes.c_uint64(int(os.getenv("SEED", "0"))),
+                    ctypes.c_size_t(group_size),
+                    ctypes.c_size_t(max_steps),
+                    ctypes.c_size_t(state_dim),
+                    ctypes.c_size_t(4),
+                    ctypes.cast(returns_buf, ctypes.POINTER(ctypes.c_float)),
+                    ctypes.cast(states_buf, ctypes.POINTER(ctypes.c_float)),
+                )
+                # Keep gradient-safe assembly in Torch by evaluating policy on emitted final states.
+                final_states = torch.tensor(
+                    [states_buf[i] for i in range(group_size * state_dim)],
+                    device=dev,
+                    dtype=torch.float32,
+                ).reshape(group_size, state_dim)
+                logprob_tensor = []
+                for i in range(group_size):
+                    logits = policy_logits_fn(final_states[i])
+                    logp = torch.log_softmax(logits, dim=-1).mean() * float(max_steps)
+                    logprob_tensor.append(logp)
+                logprob_tensor = torch.stack(logprob_tensor)
+                returns_tensor = torch.tensor(
+                    [returns_buf[i] for i in range(group_size)],
+                    device=dev,
+                    dtype=logprob_tensor.dtype,
+                )
+                l_grpo, m_grpo = grpo(logprob_tensor, returns_tensor)
+                loss = lambda_grpo * l_grpo
+                metrics = {k: float(v.detach()) for k, v in m_grpo.items()}
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+                metrics["loss"] = float(loss.detach())
+                metrics["native_rollout"] = 1.0
+                return metrics
+            except Exception:
+                pass
+
     logprob_sums: list[torch.Tensor] = []
     returns: list[torch.Tensor] = []
     stud_rows: dict[str, list[torch.Tensor]] = {}

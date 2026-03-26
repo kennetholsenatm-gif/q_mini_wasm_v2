@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
+import os
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
+from qminiwasm.native_bridge import load_native_lib
 
 
 @dataclass
@@ -39,6 +42,30 @@ def spectral_partition(
     """Partition nodes via spectral clustering (``sklearn`` if available, else degree fallback)."""
     n = adjacency.shape[0]
     k = max(2, min(int(num_clusters), n))
+    use_native = (
+        os.getenv("QMINIWASM_NATIVE_DQAOA_ROUTING", "0").strip().lower()
+        not in {"", "0", "false", "off", "no"}
+    )
+    if use_native:
+        lib = load_native_lib()
+        if lib is not None and hasattr(lib, "qmw_route_assign_clusters"):
+            fn = lib.qmw_route_assign_clusters
+            fn.argtypes = [
+                ctypes.POINTER(ctypes.c_double),
+                ctypes.c_size_t,
+                ctypes.c_size_t,
+                ctypes.POINTER(ctypes.c_size_t),
+            ]
+            fn.restype = None
+            labels = (ctypes.c_size_t * n)()
+            adj = adjacency.astype(np.float64, copy=False)
+            fn(
+                ctypes.cast(adj.ctypes.data, ctypes.POINTER(ctypes.c_double)),
+                ctypes.c_size_t(n),
+                ctypes.c_size_t(k),
+                ctypes.cast(labels, ctypes.POINTER(ctypes.c_size_t)),
+            )
+            return np.array([int(labels[i]) for i in range(n)], dtype=np.int64)
     try:
         from sklearn.cluster import SpectralClustering  # type: ignore
 

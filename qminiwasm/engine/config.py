@@ -118,6 +118,7 @@ class EngineConfig:
         hf_dataset_revision: Optional[str] = None,
         wasm_store_memory_limit_mb: Optional[int] = None,
         wasm_fallback_policy: Optional[str] = None,
+        wasm_backend: Optional[str] = None,
         wasm_force_mock: Optional[bool] = None,
         wasm_store_instance_limit: Optional[int] = None,
         wasm_store_memories_limit: Optional[int] = None,
@@ -427,6 +428,7 @@ class EngineConfig:
 
         self.wasm_store_memory_limit_mb = wasm_store_memory_limit_mb
         self.wasm_fallback_policy = wasm_fallback_policy
+        self.wasm_backend = wasm_backend
         self.wasm_force_mock = wasm_force_mock
         self.wasm_store_instance_limit = wasm_store_instance_limit
         self.wasm_store_memories_limit = wasm_store_memories_limit
@@ -464,10 +466,14 @@ class EngineConfig:
         else:
             fp = "mock"
         fm = bool(self.wasm_force_mock) if self.wasm_force_mock is not None else False
+        backend = (self.wasm_backend or "wasmtime").strip().lower()
+        if backend not in ("wasmtime", "wasmedge_native"):
+            backend = "wasmtime"
         return {
             "runtime": WasmRuntimeConfig(
                 store_memory_limit_bytes=lim_b,
                 fallback_policy=fp,
+                backend=backend,
                 force_mock=fm,
                 store_instance_limit=self.wasm_store_instance_limit,
                 store_memories_limit=self.wasm_store_memories_limit,
