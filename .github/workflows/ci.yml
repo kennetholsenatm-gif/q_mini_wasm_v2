@@ -71,6 +71,9 @@ jobs:
       - name: Verify TPEM bundle header + digest
         run: python -m qminiwasm.wasm_host.tpem_bundle verify dist/edge-artifacts/qminiwasm-weights.tpem
 
+      - name: Verify artifact contract manifest + checksums
+        run: python -m qminiwasm.wasm_host.artifact_contract verify dist/edge-artifacts
+
       - name: Upload edge artifacts
         uses: actions/upload-artifact@v7
         with:

@@ -33,6 +33,15 @@ Readers **must**:
 3. Recompute SHA-256 over the payload and compare to `payload_sha256`.
 4. Refuse load if `pack_encoding_version` is unknown to the reader.
 
+## Artifact Contract Gate
+
+Enclave-as-Code groundwork adds a manifest contract gate for edge artifacts:
+
+- Schema: `configs/artifacts/artifact_contract.schema.json`
+- Verifier: `python -m qminiwasm.wasm_host.artifact_contract verify dist/edge-artifacts`
+- Build integration: `scripts/build_tpem_wasm_artifacts.py` runs contract verification after writing artifacts.
+- CI integration: `.github/workflows/ci.yml` runs contract verification as a fail-fast check.
+
 ## Reference implementation
 
 Python: [`qminiwasm/enclave/tpem_bundle.py`](../qminiwasm/enclave/tpem_bundle.py) — `write_tpem_bundle`, `read_tpem_bundle`, CLI `python -m qminiwasm.enclave.tpem_bundle verify <path>`.

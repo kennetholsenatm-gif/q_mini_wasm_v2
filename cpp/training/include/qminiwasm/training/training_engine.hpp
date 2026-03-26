@@ -27,6 +27,7 @@ struct TrainingConfig {
   std::uint64_t seed = 42;
   double learning_rate = 1e-3;
   TaxonomyTier taxonomy_tier = TaxonomyTier::kEdgeConstrained;
+  bool enable_enclave_adapter = false;
 };
 
 enum class EngineState {

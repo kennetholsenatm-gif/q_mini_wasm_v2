@@ -91,10 +91,20 @@
 # Wasmtime curriculum WASM limits (see qminiwasm.wasm_host.engine.WasmRuntimeConfig).
 # Omit store_memory_limit_mb to use engine default (1e6 × d_model bytes, ~4 GiB cap).
 # store_instance_limit / store_memories_limit default high in code (mesh data gen); lower on tiny hosts if needed.
+# backend = "wasmtime"              # wasmtime | wasmedge_native | enclave_adapter (feature-flagged)
 # fallback_policy = "mock"
 # force_mock = false
 # store_instance_limit =
 # store_memories_limit =
+
+[enclave]
+# Enclave-as-Code runtime policy knobs (optional; defaults preserve existing behavior).
+# enclave_tier = "micro"            # micro | meso | macro | workgroup | enterprise_core
+# enclave_footprint_mb = 256.0
+# certainty_scalar_threshold = 0.85
+# max_linear_memory_pages = 131072
+# wasm_memory64_max_mb = 8192.0
+# use_memory64 = true
 
 [serve]
 # Used when loading configs/serve/*.toml (inference). Optional in training files.

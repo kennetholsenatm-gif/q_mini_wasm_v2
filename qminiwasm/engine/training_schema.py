@@ -171,7 +171,11 @@ class WasmSection(BaseModel):
         None, description="mock: fall back to mock WASM on init/exec failure; error: raise"
     )
     backend: Optional[str] = Field(
-        None, description="wasmtime (default) or wasmedge_native (experimental native bridge)"
+        None,
+        description=(
+            "wasmtime (default), wasmedge_native (experimental native bridge), "
+            "or enclave_adapter (feature-flagged Enclave-as-Code dispatch seam)"
+        ),
     )
     force_mock: Optional[bool] = None
     store_instance_limit: Optional[int] = None
@@ -387,6 +391,18 @@ class TrainingConfig(BaseModel):
         }
         for k, v in w.items():
             out[wmap[k]] = v
+
+        e = self.enclave.model_dump(exclude_none=True)
+        emap = {
+            "enclave_footprint_mb": "enclave_footprint_mb",
+            "enclave_tier": "enclave_tier",
+            "certainty_scalar_threshold": "certainty_scalar_threshold",
+            "max_linear_memory_pages": "max_linear_memory_pages",
+            "wasm_memory64_max_mb": "wasm_memory64_max_mb",
+            "use_memory64": "use_memory64",
+        }
+        for k, v in e.items():
+            out[emap[k]] = v
 
         return out
 

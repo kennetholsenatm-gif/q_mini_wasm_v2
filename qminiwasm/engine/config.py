@@ -122,6 +122,12 @@ class EngineConfig:
         wasm_force_mock: Optional[bool] = None,
         wasm_store_instance_limit: Optional[int] = None,
         wasm_store_memories_limit: Optional[int] = None,
+        enclave_footprint_mb: Optional[float] = None,
+        enclave_tier: Optional[str] = None,
+        certainty_scalar_threshold: Optional[float] = None,
+        max_linear_memory_pages: Optional[int] = None,
+        wasm_memory64_max_mb: Optional[float] = None,
+        use_memory64: Optional[bool] = None,
     ):
         self.accelerator = accelerator
         self.device_index = int(device_index) if device_index is not None else 0
@@ -432,6 +438,20 @@ class EngineConfig:
         self.wasm_force_mock = wasm_force_mock
         self.wasm_store_instance_limit = wasm_store_instance_limit
         self.wasm_store_memories_limit = wasm_store_memories_limit
+        self.enclave_footprint_mb = (
+            float(enclave_footprint_mb) if enclave_footprint_mb is not None else None
+        )
+        self.enclave_tier = str(enclave_tier).strip().lower() if enclave_tier is not None else None
+        self.certainty_scalar_threshold = (
+            float(certainty_scalar_threshold) if certainty_scalar_threshold is not None else None
+        )
+        self.max_linear_memory_pages = (
+            int(max_linear_memory_pages) if max_linear_memory_pages is not None else None
+        )
+        self.wasm_memory64_max_mb = (
+            float(wasm_memory64_max_mb) if wasm_memory64_max_mb is not None else None
+        )
+        self.use_memory64 = bool(use_memory64) if use_memory64 is not None else None
 
     def wasm_runtime_kwargs(self) -> Dict[str, Any]:
         """Build kwargs for :class:`qminiwasm.wasm_host.engine.WasmRuntimeConfig`."""
@@ -467,8 +487,24 @@ class EngineConfig:
             fp = "mock"
         fm = bool(self.wasm_force_mock) if self.wasm_force_mock is not None else False
         backend = (self.wasm_backend or "wasmtime").strip().lower()
-        if backend not in ("wasmtime", "wasmedge_native"):
+        env_backend = os.environ.get("QMINIWASM_WASM_BACKEND", "").strip().lower()
+        if env_backend:
+            backend = env_backend
+        if backend not in ("wasmtime", "wasmedge_native", "enclave_adapter"):
             backend = "wasmtime"
+        env_use_memory64 = os.environ.get("QMINIWASM_USE_MEMORY64", "").strip().lower()
+        use_memory64 = self.use_memory64
+        if env_use_memory64 in {"1", "true", "yes", "on"}:
+            use_memory64 = True
+        elif env_use_memory64 in {"0", "false", "no", "off"}:
+            use_memory64 = False
+        memory64_max_mb = self.wasm_memory64_max_mb
+        env_memory64_max_mb = os.environ.get("QMINIWASM_WASM_MEMORY64_MAX_MB", "").strip()
+        if env_memory64_max_mb:
+            try:
+                memory64_max_mb = float(env_memory64_max_mb)
+            except ValueError:
+                pass
         return {
             "runtime": WasmRuntimeConfig(
                 store_memory_limit_bytes=lim_b,
@@ -477,6 +513,9 @@ class EngineConfig:
                 force_mock=fm,
                 store_instance_limit=self.wasm_store_instance_limit,
                 store_memories_limit=self.wasm_store_memories_limit,
+                use_memory64=bool(use_memory64) if use_memory64 is not None else False,
+                memory64_max_mb=memory64_max_mb,
+                enclave_tier=self.enclave_tier,
             )
         }
 
