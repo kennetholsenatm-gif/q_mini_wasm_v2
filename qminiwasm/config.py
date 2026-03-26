@@ -9,7 +9,89 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional, Tuple
+
+WASM_PAGE_SIZE_BYTES = 64 * 1024
+_MIB = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class EnclaveTierPreset:
+    """Tier preset for EF and linear-memory policy."""
+
+    tier: str
+    tier_number: str
+    enclave_class: str
+    ef_target_mb: float
+    default_linear_memory_pages: int
+    memory64_required: bool
+    default_memory64_max_mb: Optional[float]
+    boundary_band_mb: Tuple[float, float]
+
+    @property
+    def default_linear_memory_mb(self) -> float:
+        return (self.default_linear_memory_pages * WASM_PAGE_SIZE_BYTES) / _MIB
+
+
+ENCLAVE_TIER_PRESETS: Dict[str, EnclaveTierPreset] = {
+    "micro": EnclaveTierPreset(
+        tier="micro",
+        tier_number="1",
+        enclave_class="Micro-Enclaves",
+        ef_target_mb=250.0,
+        default_linear_memory_pages=4_096,  # 256 MiB
+        memory64_required=False,
+        default_memory64_max_mb=None,
+        boundary_band_mb=(128.0, 256.0),
+    ),
+    "meso": EnclaveTierPreset(
+        tier="meso",
+        tier_number="2",
+        enclave_class="Meso-Enclaves",
+        ef_target_mb=2_048.0,
+        default_linear_memory_pages=32_768,  # 2 GiB
+        memory64_required=False,
+        default_memory64_max_mb=None,
+        boundary_band_mb=(1_024.0, 2_048.0),
+    ),
+    "macro": EnclaveTierPreset(
+        tier="macro",
+        tier_number="3",
+        enclave_class="Macro-Enclaves",
+        ef_target_mb=8_192.0,
+        default_linear_memory_pages=131_072,  # 8 GiB
+        memory64_required=True,
+        default_memory64_max_mb=8_192.0,
+        boundary_band_mb=(4_096.0, 8_192.0),
+    ),
+    "workgroup": EnclaveTierPreset(
+        tier="workgroup",
+        tier_number="4",
+        enclave_class="Workgroup Enclaves",
+        ef_target_mb=16_384.0,
+        default_linear_memory_pages=262_144,  # 16 GiB
+        memory64_required=True,
+        default_memory64_max_mb=16_384.0,
+        boundary_band_mb=(8_192.0, 65_536.0),
+    ),
+    "enterprise_core": EnclaveTierPreset(
+        tier="enterprise_core",
+        tier_number="5",
+        enclave_class="Enterprise Core Enclaves",
+        ef_target_mb=262_144.0,  # 256 GiB
+        default_linear_memory_pages=4_194_304,  # 256 GiB
+        memory64_required=True,
+        default_memory64_max_mb=262_144.0,
+        boundary_band_mb=(65_536.0, 262_144.0),
+    ),
+}
+
+
+def get_enclave_tier_preset(enclave_tier: Optional[str]) -> Optional[EnclaveTierPreset]:
+    """Return normalized tier preset or None."""
+    if not enclave_tier:
+        return None
+    return ENCLAVE_TIER_PRESETS.get(str(enclave_tier).strip().lower())
 
 
 @dataclass

@@ -9,7 +9,7 @@ name = "llm-pract"
 version = "0.1.0"
 description = "Q-Mini-WASM: ternary-quantized models with local WASM execution"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "torch>=2.0.0",
     "pennylane>=0.28",

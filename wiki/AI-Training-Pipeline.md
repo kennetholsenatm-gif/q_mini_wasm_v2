@@ -8,7 +8,7 @@ This page explains **how** the Q-Mini-WASM / **qminiwasm-core** training path wo
 
 Train the hybrid stack around `QMiniWASM` so **`hybrid_inference`** improves under a **supervised signal**: mean **MSE** between model output and a **4096-dimensional target**, built from [`memory_encode`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/wasm_host/memory_encode.py) (metadata slots plus byte-derived floats).
 
-The entrypoint is **`python -m qminiwasm.engine`** (or **`python -m qminiwasm.cli train`**), which loads env-driven [`EngineConfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/config.py) and calls [`run_training_loop`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/training/loop.py) from [`qminiwasm/engine/train.py`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/train.py).
+The entrypoint is **`python -m qminiwasm.engine --config configs/training/<profile>.toml`** (or **`python -m qminiwasm.cli train`**), which loads TOML + env-driven [`EngineConfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/config.py) and calls [`run_training_loop`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/training/loop.py) from [`qminiwasm/engine/train.py`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/train.py).
 
 **Why MSE on a fixed vector?** It keeps the objective simple and comparable across batches: same shape, same reduction (`mean` over all elements including the full 4096 dims). It is **not** full next-token language modeling; plateaus and residual error are expected on diverse encodings.
 

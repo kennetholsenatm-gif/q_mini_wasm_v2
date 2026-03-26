@@ -9,7 +9,7 @@ This document provides a comprehensive overview of the infrastructure architectu
 The architecture follows a strict three-tier hierarchy that separates concerns while maintaining security and performance:
 
 #### Tier 1: Edge Environment (WASM enclave / ECL)
-**Purpose:** Local **Edge Cognitive Looping (ECL)**, **Ephemeral State Inversion (ESI)** for context regeneration, and optional suspension via **WASM Linear Execution Snapshots (WLES)**.
+**Purpose:** Local **Edge Cognitive Looping (ECL)**, the continuous edge-to-host feedback mechanism for hard examples, plus **Ephemeral State Inversion (ESI)** for context regeneration and suspension/resume via **WASM Linear Execution Snapshots (WLES)**.
 
 **Model classification tiers (packed TPEM / EF—not legacy “parameter count” alone):**
 
@@ -77,6 +77,29 @@ The **training** stack in this repository (`qminiwasm-core`) has properties that
 - **IBM Quantum** is **queue- and quota-bound**; “parallelism” is mostly **fan-out of independent jobs**, not linear speedup on a single training step.
 
 For the concrete training loop and IBM path, see **[AI Training Pipeline](AI-Training-Pipeline.md)** and **[QUANTUM_QISKIT.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/QUANTUM_QISKIT.md)**.
+
+## Runtime state matrix (routing)
+
+| State | Name | Runtime boundary | Trigger |
+|------|------|------------------|---------|
+| **State 1 (Always-On)** | **Ternary WASM Inference** | Local CPU + bounded WASM linear memory | Default operation |
+| **State 2 (Triggered)** | **QAOA Routing (Quantum Approximate Optimization Algorithm)** | Python orchestrator + Qiskit backend | Enter when classical routing/search exceeds configured latency or compute budget |
+
+### When to use Quantum Routing
+
+Use State 2 only at the explicit operational wall. Example policy (control-plane configured): when classical assignment over 64 or more experts exceeds a 50ms latency budget, local execution is paused, combinatorial search is delegated to the Qiskit backend, and the returned routing assignment is written back to continue State 1 execution.
+
+### Enclave tier boundary matrix (enforced runtime defaults)
+
+| Tier | Enclave class | Typical EF / linear memory | Default pages | Memory64 policy |
+|------|----------------|----------------------------|---------------|-----------------|
+| **1** | **Micro-Enclaves** | Sub-250 MB | `4096` (~256 MiB) | Off |
+| **2** | **Meso-Enclaves** | ~2 GB | `32768` (~2 GiB) | Off |
+| **3** | **Macro-Enclaves** | ~8 GB | `131072` (~8 GiB) | On, default max `8192 MB` |
+| **4** | **Workgroup Enclaves** | ~16 GB | `262144` (~16 GiB) | On, default max `16384 MB` |
+| **5** | **Enterprise Core Enclaves** | ~256 GB+ | `4194304` (~256 GiB) | On, default max `262144 MB` |
+
+Resolution rule: explicit enclave overrides (`max_linear_memory_pages`, `wasm_memory64_max_mb`, `use_memory64`) take precedence over tier presets; tier presets then override baseline runtime defaults.
 
 ## Infrastructure Components
 
@@ -149,7 +172,7 @@ The DevSecOps pipeline integrates security at every stage of development:
 ### Security Controls
 
 #### Zero-Trust Architecture
-- **Identity Verification:** Every request authenticated and authorized
+- **Identity Verification:** Every request authenticated and authorized under **Zero-Trust Ephemeral Enrollment (ZTEE)**, the cryptographic handshake and identity bootstrap required for secure node startup
 - **Least Privilege:** Minimal permissions for all components
 - **Micro-segmentation:** Network isolation between services
 - **Continuous Monitoring:** Real-time security event detection

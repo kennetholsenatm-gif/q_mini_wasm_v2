@@ -18,7 +18,7 @@ See [Concepts Explained](../Concepts-Explained.md) and [Architecture Overview](A
 
 For the canonical operator lifecycle flow—**boot → ZTEE enrollment → ECL → CGE → WLES packaging → quantum-routed delivery**—see:
 
-- [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md)
+- [`docs/architecture/JOURNEY_OF_A_VECTOR.md`](../docs/architecture/JOURNEY_OF_A_VECTOR.md)
 
 Use this guide for environment setup; use the lifecycle page for the step-by-step semantics and trust boundaries.
 

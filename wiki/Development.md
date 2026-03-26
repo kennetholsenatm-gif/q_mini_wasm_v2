@@ -154,7 +154,7 @@ Training runs from the **qminiwasm-core** repository:
 
 ```bash
 pip install -e ".[training]"
-python -m qminiwasm.engine
+python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 ```
 
 **Canonical reference:** [docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md) (data sources, env table, checkpoints, metrics).

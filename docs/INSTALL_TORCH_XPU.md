@@ -65,7 +65,7 @@ ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 Run training:
 
 ```bash
-python -m qminiwasm.engine
+python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 ```
 
 Logs should show **Intel XPU** (not “XPU requested but … using CPU”).

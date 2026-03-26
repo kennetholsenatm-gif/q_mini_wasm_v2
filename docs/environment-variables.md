@@ -51,12 +51,14 @@ This document provides a comprehensive reference for all environment variables u
 | `WASM_RUNTIME`  | string | `None` | Yes | WASM runtime to use (e.g., wasmtime) |
 | `QMINIWASM_SERVE_CONFIG` | string | `None` | No | Path to TOML with `[serve]` and optional `[enclave]` (see `configs/serve/default.toml`) |
 | `ENCLAVE_FOOTPRINT_MB` | float | `None` | No | Target **EF** in MB (TPEM + static heap); may cap wasmtime store limits when used from serve TOML |
-| `ENCLAVE_TIER` | string | `None` | No | `micro` \| `meso` \| `macro` \| `workgroup` \| `enterprise_core` (EF Tiers 1–5) |
+| `ENCLAVE_TIER` | string | `None` | No | `micro` \| `meso` \| `macro` \| `workgroup` \| `enterprise_core` (EF Tiers 1–5 with enforced runtime defaults) |
 | `CERTAINTY_SCALAR_THRESHOLD` | float | `None` | No | CGE / ECL gate in [0, 1]; alias for `T_conf` when `T_CONF` unset |
 | `T_CONF` | float | `0.85` | No | Same as certainty scalar threshold ($T_{conf}$); local resolution when certainty >= value |
-| `WASM_MEMORY64_MAX_MB` | float | `None` | No | Memory64 linear memory ceiling (MB); Macro enclave ~8192 |
-| `WASM_MAX_LINEAR_MEMORY_PAGES` | int | `None` | No | Max 64KiB WASM pages (e.g. 131072 for 8GiB) |
+| `WASM_MEMORY64_MAX_MB` | float | `None` | No | Memory64 linear memory ceiling override (MB); tier defaults: Macro 8192, Workgroup 16384, Enterprise Core 262144 |
+| `WASM_MAX_LINEAR_MEMORY_PAGES` | int | `None` | No | Max 64KiB WASM pages override; tier defaults: Micro 4096, Meso 32768, Macro 131072, Workgroup 262144, Enterprise Core 4194304 |
 | `WASM_USE_MEMORY64` | bool | `false` | No | Set `1`/`true` to prefer Memory64 addressing when supported |
+
+**Enclave precedence rule:** explicit overrides (`WASM_MAX_LINEAR_MEMORY_PAGES`, `WASM_MEMORY64_MAX_MB`, `WASM_USE_MEMORY64`) take priority over `ENCLAVE_TIER` defaults; tier defaults then override baseline runtime defaults.
 
 ## Intel ARC/GPU
 

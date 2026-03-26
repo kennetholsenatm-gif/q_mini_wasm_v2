@@ -378,12 +378,12 @@ Custom rules are in [infra/falco/](infra/falco/). Falco output is structured (JS
 
 ## Security Roadmap
 
-Security engineering for this repository aligns with **Stateful WASM agent** tooling: verifiable **WLES** lifecycle, **ZTEE** enrollment and migration tests, and an append-only **CPL** audit path. Authoritative ZTEE protocol text: [`docs/ZTEE_FRAMEWORK.md`](docs/ZTEE_FRAMEWORK.md). Milestones: [`wiki/Roadmap.md`](wiki/Roadmap.md). CPL architecture spike: [`docs/CPL_INTEGRATION_SPIKE.md`](docs/CPL_INTEGRATION_SPIKE.md).
+Security engineering for this repository aligns with **Stateful WASM agent** tooling: verifiable **WLES** lifecycle, **ZTEE** enrollment and migration tests, and an append-only **CPL** audit path. Authoritative ZTEE identity/trust reference: [`docs/IDENTITY_STACK_REFERENCE.md`](docs/IDENTITY_STACK_REFERENCE.md). Milestones: [`wiki/Roadmap.md`](wiki/Roadmap.md). CPL implementation details are tracked in [`docs/TODO.md`](docs/TODO.md).
 
 ### Short-term (1–6 months)
 - **WLES harness:** Harden snapshot and restore around Wasmtime **linear memory**; reduce risk of undeclared state drift after suspend/resume (see [`docs/TODO.md`](docs/TODO.md)).
 - **ZTEE local stack:** Extend beyond in-process crypto tests toward **OIDC** HTTP stub and **gRPC**-shaped encrypted payload exercises (see [`qminiwasm/security/ztee_local_simulator.py`](qminiwasm/security/ztee_local_simulator.py)).
-- **CPL spike:** Socialize event schema and backend choice (Trillian vs Rekor) from [`docs/CPL_INTEGRATION_SPIKE.md`](docs/CPL_INTEGRATION_SPIKE.md).
+- **CPL spike:** Socialize event schema and backend choice (Trillian vs Rekor) via roadmap milestones and [`docs/TODO.md`](docs/TODO.md).
 
 ### Medium-term (6–18 months)
 - **Staging transparency log:** Operate a non-production CPL feed with inclusion-proof verification in release or staging pipelines.

@@ -20,6 +20,34 @@ python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 
 If you omit `--config`, the engine falls back to environment variables only and logs a **deprecation warning**.
 
+## Enclave tiers and memory boundaries (preset + override)
+
+Use `[enclave]` in TOML (or matching env vars) to express runtime memory policy by tier.
+
+| Tier | `enclave_tier` | Default pages | Approx linear memory | Memory64 default |
+|------|----------------|---------------|----------------------|------------------|
+| 1 | `micro` | `4096` | ~256 MiB | Off |
+| 2 | `meso` | `32768` | ~2 GiB | Off |
+| 3 | `macro` | `131072` | ~8 GiB | On (`wasm_memory64_max_mb=8192`) |
+| 4 | `workgroup` | `262144` | ~16 GiB | On (`wasm_memory64_max_mb=16384`) |
+| 5 | `enterprise_core` | `4194304` | ~256 GiB | On (`wasm_memory64_max_mb=262144`) |
+
+Resolution order is deterministic:
+1. explicit overrides (`max_linear_memory_pages`, `wasm_memory64_max_mb`, `use_memory64`)
+2. tier defaults (`enclave_tier`)
+3. generic runtime defaults
+
+Example:
+
+```toml
+[enclave]
+enclave_tier = "macro"
+# explicit override wins over macro defaults:
+max_linear_memory_pages = 196608
+wasm_memory64_max_mb = 12288.0
+use_memory64 = true
+```
+
 Cascade + MOPD helper: [`scripts/run_training_cascade_mopd.py`](../scripts/run_training_cascade_mopd.py) defaults to `--config configs/training/cascade_mopd.toml` and still injects `CASCADE_MOPD_*` / checkpoint paths via env for one-off overrides.
 
 ## Data sources (`TRAINING_DATA_SOURCE`)

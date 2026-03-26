@@ -98,7 +98,7 @@ ZTEE separates identity into two layers so trust cannot be satisfied by only one
 
 During enrollment, the QAHR controller validates JWT signatures against **JWKS**, then injects the node’s approved topology into its cost model and authorizes only the event topics permitted by the JWT scopes.
 
-Authoritative protocol text: [`docs/ZTEE_FRAMEWORK.md`](docs/ZTEE_FRAMEWORK.md) (single source of truth).
+Authoritative identity/trust reference: [`docs/IDENTITY_STACK_REFERENCE.md`](docs/IDENTITY_STACK_REFERENCE.md).
 
 ## **Part 3: Deployment Methodology and Evaluative Metrics**
 

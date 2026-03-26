@@ -5,7 +5,7 @@ This wiki is the extended knowledge layer for `qminiwasm-core`. The canonical on
 Start here:
 
 - Main entrypoint: [../README.md](../README.md)
-- Project taxonomy glossary: [../docs/GLOSSARY.md](../docs/GLOSSARY.md)
+- Project taxonomy glossary: [../docs/Q-Mini-WASM_ Edge AI Taxonomy.md](../docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md)
 - 0-to-1 happy path: [../docs/getting-started/QUICKSTART_0_TO_1.md](../docs/getting-started/QUICKSTART_0_TO_1.md)
 - Operator runbook: [../docs/operations/OPERATIONS_RUNBOOK.md](../docs/operations/OPERATIONS_RUNBOOK.md)
 - Vector dataflow walkthrough: [../docs/architecture/JOURNEY_OF_A_VECTOR.md](../docs/architecture/JOURNEY_OF_A_VECTOR.md)
@@ -37,8 +37,8 @@ Start here:
 - [Security-and-Compliance](Security-and-Compliance.md)
 - [Security](Security.md)
 - [Compliance](Compliance.md)
-- Zero-Trust Ephemeral Enrollment: [ZTEE Framework](../docs/ZTEE_FRAMEWORK.md)
-- Enclave lifecycle (boot → ZTEE → ECL → CGE): [ENCLAVE_LIFECYCLE](../docs/ENCLAVE_LIFECYCLE.md)
+- Zero-Trust Ephemeral Enrollment reference: [Identity Stack Reference](../docs/IDENTITY_STACK_REFERENCE.md)
+- Enclave runtime flow (boot → ECL → CGE): [Journey of a Vector](../docs/architecture/JOURNEY_OF_A_VECTOR.md)
 - [DevSecOps](DevSecOps.md)
 - [Performance](Performance.md)
 - [Testing](Testing.md)
@@ -54,4 +54,4 @@ Start here:
 - Use `docs/getting-started` for the first successful run.
 - Use `docs/operations/OPERATIONS_RUNBOOK.md` for deployment and infra commands.
 - Use wiki pages for deeper context, analysis, and research narratives.
-- Use `docs/ZTEE_FRAMEWORK.md` as the single source of truth for ZTEE protocol text; other pages should link rather than duplicate.
+- Use `docs/IDENTITY_STACK_REFERENCE.md` as the source of truth for ZTEE-aligned identity protocol text; other pages should link rather than duplicate.

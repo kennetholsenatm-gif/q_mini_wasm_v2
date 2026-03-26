@@ -4,7 +4,7 @@ This roadmap prioritizes **concrete implementation tooling** for the **Stateful 
 
 **North star:** Ship deterministic **Edge Cognitive Looping (ECL)**, **Certainty-Gated Escalation (CGE)**, **WASM Linear Execution Snapshots (WLES)**, and **Zero-Trust Ephemeral Enrollment (ZTEE)** *as testable, automatable artifacts* in this repository.
 
-Normative protocol text for ZTEE remains [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md); this page tracks *engineering milestones* only.
+Normative identity/trust reference for ZTEE remains [`docs/IDENTITY_STACK_REFERENCE.md`](../docs/IDENTITY_STACK_REFERENCE.md); this page tracks *engineering milestones* only.
 
 **Layout pilots:** Trainable TPEM I/O — [`qminiwasm/tpem/`](../qminiwasm/tpem/); WASM host — [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/) (`qminiwasm.wasm` = package-level alias only); training / serve — [`qminiwasm/engine/`](../qminiwasm/engine/) (`python -m qminiwasm.engine`). Optional `python -m qminiwasm.cli train`. See [`docs/LAYOUT_REALIGNMENT_RFC.md`](../docs/LAYOUT_REALIGNMENT_RFC.md).
 
@@ -40,7 +40,7 @@ flowchart LR
 2. **Cooperative suspend** — Guest exports a host-visible “yield” or uses a deterministic trap boundary so the harness can snapshot **mid** guest loop (not only at exit).
 3. **Restore + resume** — New instance (or reset path), write linear memory from envelope, resume execution; compare memory to a golden post-resume state or document tolerated deltas (globals, stack snapshot policy).
 
-**Docs:** [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md), [`docs/PIPELINE_STATEFUL_WASM_OPS.md`](../docs/PIPELINE_STATEFUL_WASM_OPS.md).
+**Docs:** [`docs/architecture/JOURNEY_OF_A_VECTOR.md`](../docs/architecture/JOURNEY_OF_A_VECTOR.md), [`docs/operations/OPERATIONS_RUNBOOK.md`](../docs/operations/OPERATIONS_RUNBOOK.md).
 
 ---
 
@@ -58,7 +58,7 @@ flowchart LR
 **Next milestones**
 
 2. **HTTP OIDC stub** — Minimal `localhost` server: `/.well-known/openid-configuration`, token endpoint, static JWKS document; enclave client flow against stub (or curl contract tests). *Schema helper:* :func:`qminiwasm.security.ztee_local_simulator.build_oidc_provider_metadata` (unit-tested).
-3. **gRPC delta-sync harness** — Small `.proto` + in-process or test-scoped server that carries **encrypted WLES** chunks consistent with [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md) (no claim of full QAHR or broker semantics).
+3. **gRPC delta-sync harness** — Small `.proto` + in-process or test-scoped server that carries **encrypted WLES** chunks consistent with [`docs/IDENTITY_STACK_REFERENCE.md`](../docs/IDENTITY_STACK_REFERENCE.md) (no claim of full QAHR or broker semantics).
 
 ---
 
@@ -68,8 +68,8 @@ flowchart LR
 
 | Area | Current repo state |
 |------|-------------------|
-| Spike (this phase) | [`docs/CPL_INTEGRATION_SPIKE.md`](../docs/CPL_INTEGRATION_SPIKE.md) |
-| Protocol context | [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md) (CPL as external audit consumer) |
+| Spike (this phase) | Track in [`docs/TODO.md`](../docs/TODO.md) + roadmap milestones |
+| Protocol context | [`docs/IDENTITY_STACK_REFERENCE.md`](../docs/IDENTITY_STACK_REFERENCE.md) (CPL as external audit consumer) |
 
 **Milestones**
 

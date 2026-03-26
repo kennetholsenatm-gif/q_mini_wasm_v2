@@ -203,7 +203,11 @@ class ServeSection(BaseModel):
 
 
 class EnclaveSection(BaseModel):
-    """WASM TPEM / EF tiering and CGE threshold (``[enclave]`` in serve TOML)."""
+    """WASM TPEM / EF tiering and CGE threshold (``[enclave]`` in serve TOML).
+
+    Runtime policy uses preset+override precedence:
+    explicit overrides > tier presets > runtime defaults.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -222,12 +226,19 @@ class EnclaveSection(BaseModel):
     max_linear_memory_pages: Optional[int] = Field(
         None,
         ge=1,
-        description="WASM 64KiB pages cap (e.g. 131072 pages ≈ 8GiB for Macro tier)",
+        description=(
+            "WASM 64KiB pages cap override (explicit override wins tier defaults). "
+            "Examples: micro=4096 (~256MiB), meso=32768 (~2GiB), macro=131072 (~8GiB), "
+            "workgroup=262144 (~16GiB), enterprise_core=4194304 (~256GiB)."
+        ),
     )
     wasm_memory64_max_mb: Optional[float] = Field(
         None,
         ge=0.0,
-        description="Host/runtime linear memory ceiling for Memory64 Macro enclaves (~8192)",
+        description=(
+            "Host/runtime linear memory ceiling for Memory64 tiers. "
+            "Defaults by tier when unset: macro~8192, workgroup~16384, enterprise_core~262144."
+        ),
     )
     use_memory64: Optional[bool] = Field(
         None, description="Prefer Memory64 linear memory when runtime supports it"
