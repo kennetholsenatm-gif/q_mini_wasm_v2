@@ -93,7 +93,7 @@ class CrossAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
-        """Forward pass with cross-attention
+        """ECL step with cross-attention
 
         Args:
             x: Input tensor (batch, seq_len, embed_dim)
@@ -162,7 +162,7 @@ class DiffusionBlock(nn.Module):
     def forward(
         self, x: torch.Tensor, condition: torch.Tensor, timestep_emb: torch.Tensor
     ) -> torch.Tensor:
-        """Forward pass with timestep embedding
+        """ECL step with timestep embedding
 
         Args:
             x: Input tensor (batch, seq_len, embed_dim)
@@ -206,7 +206,7 @@ class TimestepEmbedding(nn.Module):
         self.linear2 = nn.Linear(embed_dim * 4, embed_dim)
 
     def forward(self, timesteps: torch.Tensor) -> torch.Tensor:
-        """Forward pass
+        """ECL step: timestep embedding.
 
         Args:
             timesteps: Timestep tensor (batch,)
@@ -307,7 +307,7 @@ class ConditionalMaskedDiffusion(nn.Module):
     def forward(
         self, x: torch.Tensor, condition: torch.Tensor, timesteps: torch.Tensor
     ) -> torch.Tensor:
-        """Forward pass with adaptive normalization and timestep embedding
+        """ECL step with adaptive normalization and timestep embedding
 
         Args:
             x: Input tensor (batch, seq_len, embedding_dim)

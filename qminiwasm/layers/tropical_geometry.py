@@ -157,7 +157,7 @@ class TropicalAttention:
         value: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Forward pass using tropical attention operations
+        """ECL step using tropical attention operations
 
         Args:
             query: Query tensor of shape (batch_size, seq_len, d_model)

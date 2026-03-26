@@ -158,7 +158,7 @@ class TropicalAttention(nn.Module):
         self._delta_v = torch.zeros(0, self.num_heads, self.d_value, device=dev, dtype=dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Forward pass of TropicalAttention.
+        """ECL step for TropicalAttention.
 
         Args:
             hidden_states: Input tensor of shape (batch_size, seq_len, d_model).

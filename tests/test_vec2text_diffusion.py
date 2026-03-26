@@ -72,6 +72,44 @@ class TestVec2TextExactMatchGolden(unittest.TestCase):
         self.assertGreaterEqual(em_pct, 92.0)
 
 
+class TestVec2TextExactMatchShortCorpus(unittest.TestCase):
+    """Tighter EM check on a small deterministic corpus (ESI decode path)."""
+
+    def test_em_recovery_short_corpus_hundred_percent(self):
+        from qminiwasm.cognitive.vec2text import Vec2TextRAG, ephemeral_state_inversion_decode
+
+        fixed_ts = "2026-03-25T12:00:00+00:00"
+        goldens = []
+        for i in range(5):
+            goldens.append(
+                json.dumps(
+                    {
+                        "state_id": f"short{i}",
+                        "timestamp": fixed_ts,
+                        "execution_state": {
+                            "memory": {"k": i},
+                            "stack": [],
+                            "return_value": "0",
+                        },
+                    }
+                )
+            )
+        matches = 0
+        for golden in goldens:
+            rag = Vec2TextRAG(diffusion_model=_StaticGoldenDiffusionMock(golden))
+            q = rag._embed_text(golden)
+            cand = torch_zeros_like_query(q)
+            out = ephemeral_state_inversion_decode(
+                q,
+                [cand],
+                use_beam=False,
+                rag=rag,
+            )
+            if out == golden:
+                matches += 1
+        self.assertEqual(matches, len(goldens), "EM recovery should be exact for static golden mock")
+
+
 def torch_zeros_like_query(q):
     import torch
 

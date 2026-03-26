@@ -126,7 +126,7 @@ The ternary quantization problem can be formulated as:
 
 ### Ternary-Packed Memory Enclave (TPEM) and Enclave Footprint (EF)
 
-In deployment, weights live in a **TPEM**: a contiguous byte array in WASM linear memory. Five trits \(d \in \{-1,0,1\}\) (mapped to digits \(\{0,1,2\}\)) pack into one byte when \(3^5 < 2^8\), giving **~1.6 bits per weight** (8/5). The **Enclave Footprint (EF)** is the total static bytes required for the compiled module including TPEM, scaling ladders, and initial heap—not a disconnected “parameter count” in floating-point space.
+In deployment, weights live in a **TPEM**: a contiguous byte array in WASM linear memory. Five trits \(d \in \{-1,0,1\}\) (mapped to digits \(\{0,1,2\}\)) pack into one byte when \(3^5 < 2^8\), giving **~1.6 bits per weight** (8/5). The **Enclave Footprint (EF)** is the total static bytes required for the compiled module including TPEM, scaling ladders, and initial heap—not a disconnected “parameter count” framed in legacy dense-parameter space.
 
 **Edge Cognitive Looping (ECL)** consumes activations; **Ephemeral State Inversion (ESI)** regenerates textual context from embeddings so linear memory does not accumulate autoregressive-cache-sized tensors. **WASM Linear Execution Snapshots (WLES)** serialize the linear memory image for fast suspend/resume.
 

@@ -30,6 +30,7 @@ flowchart LR
 | Area | Current repo state |
 |------|-------------------|
 | Envelope / metadata | [`qminiwasm/wasm_host/memory_encode.py`](../qminiwasm/wasm_host/memory_encode.py) (`build_wles_envelope`) |
+| Wasmtime snapshot / restore | [`qminiwasm/wasm_host/wles_wasmtime_harness.py`](../qminiwasm/wasm_host/wles_wasmtime_harness.py); tests [`tests/test_wles_wasmtime_harness.py`](../tests/test_wles_wasmtime_harness.py) |
 | Smoke tests | [`tests/test_wles_esi_harness.py`](../tests/test_wles_esi_harness.py) (JSON envelope invariants, CGE payload metadata—not full instance restore) |
 | Kernels / compile | [`qminiwasm/wasm_host/trit_wasm_runtime.py`](../qminiwasm/wasm_host/trit_wasm_runtime.py), [`qminiwasm/wasm_host/engine.py`](../qminiwasm/wasm_host/engine.py) |
 
@@ -56,7 +57,7 @@ flowchart LR
 
 **Next milestones**
 
-2. **HTTP OIDC stub** — Minimal `localhost` server: `/.well-known/openid-configuration`, token endpoint, static JWKS document; enclave client flow against stub (or curl contract tests).
+2. **HTTP OIDC stub** — Minimal `localhost` server: `/.well-known/openid-configuration`, token endpoint, static JWKS document; enclave client flow against stub (or curl contract tests). *Schema helper:* :func:`qminiwasm.security.ztee_local_simulator.build_oidc_provider_metadata` (unit-tested).
 3. **gRPC delta-sync harness** — Small `.proto` + in-process or test-scoped server that carries **encrypted WLES** chunks consistent with [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md) (no claim of full QAHR or broker semantics).
 
 ---

@@ -59,7 +59,7 @@ def build_wles_envelope(
 ) -> Dict[str, Any]:
     """Assemble a versioned WLES dict for NVMe/native snapshot hooks.
 
-    PyTorch checkpoints may embed tensors; this envelope is **linear memory** only.
+    Trainable TPEM / tensor bundles may embed tensors; this envelope is **linear memory** only.
     """
     env: Dict[str, Any] = {
         "wles_payload_version": WLES_PAYLOAD_VERSION,

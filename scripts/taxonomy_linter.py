@@ -146,17 +146,38 @@ def _normalize_prefix_list(raw: Any) -> tuple[str, ...] | None:
     return tuple(out)
 
 
-def compile_rules(cfg: Dict[str, Any]) -> List[Tuple[re.Pattern[str], str, tuple[str, ...] | None]]:
-    """Return (pattern, hint, path_prefixes_or_none). Prefixes limit rule to matching repo-relative paths."""
-    out: List[Tuple[re.Pattern[str], str, tuple[str, ...] | None]] = []
+def _normalize_extension_list(raw: Any) -> tuple[str, ...] | None:
+    """Lowercase suffixes including leading dot, e.g. '.md'. None = apply to all scanned extensions."""
+    if raw is None:
+        return None
+    seq = [raw] if isinstance(raw, str) else list(raw)
+    out: list[str] = []
+    for x in seq:
+        s = str(x).strip().lower()
+        if not s.startswith("."):
+            s = "." + s
+        out.append(s)
+    return tuple(out)
+
+
+def compile_rules(
+    cfg: Dict[str, Any],
+) -> List[Tuple[re.Pattern[str], str, tuple[str, ...] | None, tuple[str, ...] | None]]:
+    """Return (pattern, hint, path_prefixes_or_none, apply_extensions_or_none).
+
+    If ``apply_extensions`` is set on a pattern, the rule runs only for files whose suffix
+    is in that list (e.g. prose-only gates for float dtype jargon in ``.md`` / ``.toml``).
+    """
+    out: List[Tuple[re.Pattern[str], str, tuple[str, ...] | None, tuple[str, ...] | None]] = []
     for item in cfg.get("patterns", []):
         rx = item.get("regex", "")
         hint = item.get("hint", "")
         prefixes = _normalize_prefix_list(item.get("path_prefixes"))
         if prefixes is None and item.get("path_prefix") is not None:
             prefixes = _normalize_prefix_list([item["path_prefix"]])
+        apply_ext = _normalize_extension_list(item.get("apply_extensions"))
         try:
-            out.append((re.compile(rx), hint, prefixes))
+            out.append((re.compile(rx), hint, prefixes, apply_ext))
         except re.error as e:
             print(f"taxonomy_linter: bad regex {rx!r}: {e}", file=sys.stderr)
     return out
@@ -172,7 +193,9 @@ def _is_skipped_authority_doc(rel_path: str, cfg: Dict[str, Any]) -> bool:
 
 def scan_entries(
     entries: List[Tuple[str, int, str]],
-    rules: List[Tuple[re.Pattern[str], str, tuple[str, ...] | None]],
+    rules: List[
+        Tuple[re.Pattern[str], str, tuple[str, ...] | None, tuple[str, ...] | None]
+    ],
     cfg: Dict[str, Any],
 ) -> List[str]:
     violations: List[str] = []
@@ -180,10 +203,13 @@ def scan_entries(
         if _is_skipped_authority_doc(path, cfg):
             continue
         path_norm = path.replace("\\", "/")
-        for pat, hint, only_prefixes in rules:
+        suffix = Path(path_norm).suffix.lower()
+        for pat, hint, only_prefixes, apply_ext in rules:
             if only_prefixes is not None and not any(
                 path_norm.startswith(pfx) for pfx in only_prefixes
             ):
+                continue
+            if apply_ext is not None and suffix not in apply_ext:
                 continue
             if pat.search(text):
                 violations.append(f"{path}:{lineno}: {text.strip()!r}  [{pat.pattern}]  {hint}")

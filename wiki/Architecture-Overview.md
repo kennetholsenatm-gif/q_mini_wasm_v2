@@ -253,7 +253,7 @@ The monitoring architecture provides complete visibility into system health and 
 - **Quantum Optimization:** Quantum algorithms for optimization problems
 
 ### Stateful edge operations (SOA)
-- **TPEM / EF governance:** Deploy by enclave tier and packed footprint, not floating-point “tensor count” alone
+- **TPEM / EF governance:** Deploy by enclave tier and packed footprint, not legacy dense “tensor count” alone
 - **Training pipelines:** Automated training and validation; **WLES**-style artifacts where applicable
 - **ECL tuning:** Certainty scalars, $T_{conf}$, and **CGE** policies per environment
 - **SOA monitoring:** LCI, LME, WLES restore latency, ESI fidelity—not only classical GPU throughput metrics

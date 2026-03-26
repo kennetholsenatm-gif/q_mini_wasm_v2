@@ -43,6 +43,19 @@ class TestZteeHandshakeSimulator(unittest.TestCase):
         out = aes_gcm_decrypt_wles(key, nonce, ct)
         self.assertEqual(out, plaintext)
 
+    def test_oidc_provider_metadata_shape(self):
+        from qminiwasm.security.ztee_local_simulator import build_oidc_provider_metadata
+
+        meta = build_oidc_provider_metadata(
+            issuer="https://ztee.local/idp",
+            jwks_uri="https://ztee.local/idp/jwks.json",
+            token_endpoint="https://ztee.local/idp/token",
+        )
+        self.assertEqual(meta["issuer"], "https://ztee.local/idp")
+        self.assertIn("jwks_uri", meta)
+        self.assertIn("token_endpoint", meta)
+        self.assertIn("RS256", meta["id_token_signing_alg_values_supported"])
+
     def test_aes_gcm_rejects_tampering(self):
         from qminiwasm.security.ztee_local_simulator import (
             aes_gcm_decrypt_wles,

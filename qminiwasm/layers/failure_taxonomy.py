@@ -147,11 +147,11 @@ class DeterministicVerifier:
         return state
 
     def _check_determinism_violations(self, verification_result: Dict[str, Any]) -> bool:
-        """Check for floating-point non-associativity and reduction order violations"""
+        """Check for IEEE-754 non-associativity and reduction order violations."""
         # Check for mathematical divergence that compounds over execution traces
         final_state = verification_result["final_state"]
 
-        # Verify that floating-point operations maintain deterministic properties
+        # Verify that scalar numeric ops maintain deterministic properties
         # This would include checking for NaN values, infinite values, etc.
 
         return True  # Placeholder - actual implementation would be more complex

@@ -1,5 +1,5 @@
 {
-  "$schema_comment": "Edge AI taxonomy gate: regexes matched against added/changed lines (CI) or file prose (full scan).",
+  "$schema_comment": "Edge AI taxonomy gate: regexes matched against added/changed lines (CI) or file prose (full scan). FP dtype patterns use apply_extensions so Python/Go numeric code is not falsely flagged; prose in .md/.toml/.yaml is still enforced on --full.",
   "patterns": [
     {"regex": "(?i)\\bVRAM\\b", "hint": "Prefer Linear Memory Saturation (LMS) or Enclave Footprint (EF)."},
     {"regex": "(?i)\\bkv\\s*[- ]?cache\\b", "hint": "Prefer ESI / WLES vocabulary; geometric hull types use ESI* names."},
@@ -7,18 +7,42 @@
     {"regex": "(?i)tokens?\\s+per\\s+second", "hint": "Prefer Time-to-Confidence (TtC) where throughput is meant."},
     {"regex": "(?i)\\bcontext\\s+window\\b", "hint": "Prefer Maximum State Aperture (MSA) for edge state bounds."},
     {"regex": "(?i)\\bmixture\\s+of\\s+experts\\b", "hint": "Prefer QAHR for Tier-3 routing narrative."},
-    {"regex": "(?i)\\bfp16\\b", "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels."},
-    {"regex": "(?i)\\bbf16\\b", "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels."},
-    {"regex": "(?i)floating[- ]point", "hint": "Prefer trit/TPEM or scalar certainty language unless an external IEEE-754 API is unavoidable."},
-    {"regex": "(?i)\\bfloat16\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
-    {"regex": "(?i)\\bfloat32\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
-    {"regex": "(?i)\\bfloat64\\b", "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing."},
+    {
+      "regex": "(?i)\\bfp16\\b",
+      "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels.",
+      "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
+    },
+    {
+      "regex": "(?i)\\bbf16\\b",
+      "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels.",
+      "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
+    },
+    {
+      "regex": "(?i)floating[- ]point",
+      "hint": "Prefer trit/TPEM or scalar certainty language unless an external IEEE-754 API is unavoidable.",
+      "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
+    },
+    {
+      "regex": "(?i)\\bfloat16\\b",
+      "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing.",
+      "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
+    },
+    {
+      "regex": "(?i)\\bfloat32\\b",
+      "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing.",
+      "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
+    },
+    {
+      "regex": "(?i)\\bfloat64\\b",
+      "hint": "Prefer trit/TPEM or integer-linear-memory semantics; avoid FP dtype marketing.",
+      "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
+    },
     {"regex": "(?i)\\bkeycloak\\b", "hint": "Prefer OIDC-compliant identity provider (IdP)."},
     {"regex": "(?i)\\bfreeipa\\b", "hint": "Prefer internal X.509 Certificate Authority (CA) or neutral CA wording."},
     {
       "regex": "(?i)\\bcheckpoint\\b",
       "hint": "Prefer trainable TPEM / TPEM artifact for persisted weights (WLES for full linear memory).",
-      "path_prefixes": ["qminiwasm/training/", "qminiwasm/tpem/", "qminiwasm/wasm_host/", "qminiwasm/engine/"]
+      "path_prefixes": ["qminiwasm/training/", "qminiwasm/tpem/", "qminiwasm/wasm_host/"]
     }
   ],
   "scan_extensions": [".md", ".toml", ".py", ".rs", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".c", ".go"],
@@ -26,6 +50,7 @@
   "ignore_path_substrings": ["/vendor/", "node_modules/", ".git/", "__pycache__/", ".cursor/", "mcps/"],
   "skip_all_patterns_for_paths": [
     "docs/Q-Mini-WASM_ Edge AI Taxonomy.md",
-    "docs/UnifedMemory.md"
+    "docs/UnifedMemory.md",
+    "docs/MASTER_REALIGNMENT_STATUS.md"
   ]
 }

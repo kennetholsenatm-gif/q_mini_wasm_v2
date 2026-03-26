@@ -76,7 +76,7 @@ class TestHullKVIngest(unittest.TestCase):
     """Tier 2: HullKV ingestion of (addr, value) deltas."""
 
     def test_ingest_deltas_and_forward(self):
-        """Ingest (addr, value) pairs then forward pass uses them."""
+        """Ingest (addr, value) pairs then the ECL step uses them."""
         att = TropicalAttention(d_model=8, num_heads=2)
         pairs = [(0, b"\x01\x02"), (8, b"\x03\x04")]
         att.ingest_deltas(pairs)

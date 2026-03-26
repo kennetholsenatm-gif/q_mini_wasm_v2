@@ -37,6 +37,24 @@ def _int_to_b64url(value: int) -> str:
     return _b64url_encode(value.to_bytes(length, "big"))
 
 
+def build_oidc_provider_metadata(
+    *,
+    issuer: str,
+    jwks_uri: str,
+    token_endpoint: str,
+) -> Dict[str, Any]:
+    """Minimal OpenID Provider Metadata for local stubs (``/.well-known/openid-configuration``)."""
+    issuer_norm = issuer.rstrip("/")
+    return {
+        "issuer": issuer_norm,
+        "jwks_uri": jwks_uri,
+        "token_endpoint": token_endpoint,
+        "response_types_supported": ["token"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+    }
+
+
 def rsa_private_to_jwk(private_key: rsa.RSAPrivateKey, kid: str = "ztee-local-kid") -> dict:
     """Single-key JWKS document fragment for local verification."""
     nums = private_key.public_key().public_numbers()

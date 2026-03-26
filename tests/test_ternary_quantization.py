@@ -146,17 +146,17 @@ class TestTernaryLinear(unittest.TestCase):
         self.assertIsInstance(layer.quantizer, EnhancedTernaryQuantizer)
 
     def test_linear_forward_pass(self):
-        """Test forward pass through TernaryLinear layer."""
+        """Test ECL step through TernaryLinear layer."""
         layer = TernaryLinear(10, 5, bias=True)
         input_tensor = torch.randn(3, 10)
 
-        # Forward pass
+        # ECL step
         output = layer(input_tensor)
 
         # Check output shape
         self.assertEqual(output.shape, (3, 5))
 
-        # Check that weights are quantized during forward pass
+        # Check that weights are quantized during ECL step
         quantized_weight = layer.quantizer(layer.weight)
         is_ternary = torch.all(
             (torch.abs(quantized_weight - (-1)) < 1e-6)
@@ -170,7 +170,7 @@ class TestTernaryLinear(unittest.TestCase):
         layer = TernaryLinear(10, 5, bias=True)
         input_tensor = torch.randn(3, 10, requires_grad=True)
 
-        # Forward pass
+        # ECL step
         output = layer(input_tensor)
         loss = output.sum()
 
@@ -199,11 +199,11 @@ class TestTernaryConv2d(unittest.TestCase):
         self.assertEqual(layer.kernel_size, (3, 3))
 
     def test_conv2d_forward_pass(self):
-        """Test forward pass through TernaryConv2d layer."""
+        """Test ECL step through TernaryConv2d layer."""
         layer = TernaryConv2d(3, 16, kernel_size=3, stride=1, padding=1)
         input_tensor = torch.randn(2, 3, 32, 32)
 
-        # Forward pass
+        # ECL step
         output = layer(input_tensor)
 
         # Check output shape
@@ -227,7 +227,7 @@ class TestTernaryAttention(unittest.TestCase):
         self.assertEqual(attention.head_dim, 8)
 
     def test_attention_forward_pass(self):
-        """Test forward pass through TernaryAttention layer."""
+        """Test ECL step through TernaryAttention layer."""
         attention = TernaryAttention(d_model=64, num_heads=8, dropout=0.1, bias=True)
 
         batch_size = 2
@@ -236,7 +236,7 @@ class TestTernaryAttention(unittest.TestCase):
         key = torch.randn(batch_size, seq_len, 64)
         value = torch.randn(batch_size, seq_len, 64)
 
-        # Forward pass
+        # ECL step
         output, attention_weights = attention(query, key, value)
 
         # Check output shapes
@@ -264,11 +264,11 @@ class TestTernaryLayerNorm(unittest.TestCase):
         self.assertTrue(layernorm.elementwise_affine)
 
     def test_layernorm_forward_pass(self):
-        """Test forward pass through TernaryLayerNorm."""
+        """Test ECL step through TernaryLayerNorm."""
         layernorm = TernaryLayerNorm(64, elementwise_affine=True)
         input_tensor = torch.randn(2, 10, 64)
 
-        # Forward pass
+        # ECL step
         output = layernorm(input_tensor)
 
         # Check output shape
@@ -300,7 +300,7 @@ class TestNetworkConversion(unittest.TestCase):
         self.assertIsInstance(ternary_model[0], TernaryLinear)
         self.assertIsInstance(ternary_model[2], TernaryLinear)
 
-        # Test forward pass
+        # Test ECL step
         input_tensor = torch.randn(3, 10)
         output = ternary_model(input_tensor)
 
@@ -328,7 +328,7 @@ class TestNetworkConversion(unittest.TestCase):
         self.assertIsInstance(ternary_model[2], TernaryConv2d)
         self.assertIsInstance(ternary_model[6], TernaryLinear)
 
-        # Test forward pass
+        # Test ECL step
         input_tensor = torch.randn(2, 3, 32, 32)
         output = ternary_model(input_tensor)
 

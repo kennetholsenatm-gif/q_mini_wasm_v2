@@ -2,8 +2,8 @@
 """Build deterministic CI/release artifacts: trit kernels (.wasm) + TPEM sidecar (.tpem).
 
 Outputs under ``--out-dir``:
-  - ``qminiwasm-kernels.wasm`` — from :func:`qminiwasm.enclave.trit_wasm_runtime.compile_trit_kernels_wasm`
-  - ``qminiwasm-weights.tpem`` — packed trits + :func:`qminiwasm.enclave.tpem_bundle.write_tpem_bundle`
+  - ``qminiwasm-kernels.wasm`` — from :func:`qminiwasm.wasm_host.trit_wasm_runtime.compile_trit_kernels_wasm`
+  - ``qminiwasm-weights.tpem`` — packed trits + :func:`qminiwasm.wasm_host.tpem_bundle.write_tpem_bundle`
   - ``artifact_manifest.json`` — format versions and SHA-256 of the TPEM payload
 """
 
@@ -32,9 +32,9 @@ def main() -> int:
     out: Path = args.out_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
 
-    from qminiwasm.enclave.trit_pack import PACK_ENCODING_VERSION, pack_ternary_list
-    from qminiwasm.enclave.trit_wasm_runtime import compile_trit_kernels_wasm
-    from qminiwasm.enclave.tpem_bundle import BUNDLE_FORMAT_VERSION, write_tpem_bundle
+    from qminiwasm.wasm_host.trit_pack import PACK_ENCODING_VERSION, pack_ternary_list
+    from qminiwasm.wasm_host.trit_wasm_runtime import compile_trit_kernels_wasm
+    from qminiwasm.wasm_host.tpem_bundle import BUNDLE_FORMAT_VERSION, write_tpem_bundle
 
     wasm_path = out / "qminiwasm-kernels.wasm"
     wasm_bytes = compile_trit_kernels_wasm()

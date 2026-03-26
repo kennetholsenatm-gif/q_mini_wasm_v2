@@ -181,7 +181,7 @@ class TestTropicalGeometry(unittest.TestCase):
         key = torch.randn(batch_size, seq_len, 512)
         value = torch.randn(batch_size, seq_len, 512)
 
-        # Test forward pass
+        # Test ECL step
         output = attention.forward(query, key, value)
 
         self.assertEqual(output.shape, (batch_size, seq_len, 512))

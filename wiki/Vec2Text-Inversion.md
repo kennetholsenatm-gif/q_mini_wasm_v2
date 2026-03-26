@@ -7,7 +7,7 @@ This document details the Vec2Text inversion process using conditional masked di
 ### Problem Statement
 
 Traditional LLM context rot occurs because:
-1. **Context Window Limitations**: Fixed context length in transformer architectures
+1. **Maximum State Aperture (MSA) limits**: Fixed state bounds in transformer architectures
 2. **Information Loss**: Progressive degradation during attention mechanisms
 3. **Memory Fading**: Loss of detail over sequential processing
 
@@ -155,14 +155,14 @@ Algorithmic compensation techniques reduce the total error:
 ## Performance Optimization
 
 ### Memory Efficiency
-- **Gradient Checkpointing**: Reducing memory usage during training
-- **Mixed Precision**: Using FP16 for faster computation
-- **Model Pruning**: Removing unnecessary parameters
+- **Activation / state tiling**: Reducing linear-memory pressure during training
+- **Discrete-friendly paths**: Prefer TPEM-aligned dtypes where the stack allows
+- **EF-aware pruning**: Removing unnecessary parameters within enclave footprint targets
 
 ### Computational Efficiency
-- **Parallel Processing**: Multi-GPU training
-- **Optimized Kernels**: Custom CUDA kernels for diffusion operations
-- **Batch Processing**: Processing multiple samples simultaneously
+- **Parallel processing**: Multi-device training where the deployment tier allows
+- **Optimized kernels**: Device-native kernels for diffusion operations
+- **Batch processing**: Processing multiple samples simultaneously
 
 ### Quality Optimization
 - **Curriculum Learning**: Training on easier examples first
@@ -191,8 +191,8 @@ The system must be robust against adversarial attacks:
 - **Diffusers**: Stable diffusion implementation
 
 ### Hardware Requirements
-- **GPU**: NVIDIA A100 or equivalent
-- **Memory**: 40GB+ VRAM for training
+- **Accelerator**: Large EF / high LMS class device for research-scale training
+- **Memory**: Large unified or device-local pool (enterprise **Macro-Enclave** / Tier 3+ class)
 - **Storage**: High-speed SSD for dataset storage
 
 ### Training Pipeline

@@ -8,11 +8,11 @@ The implementation includes:
 - Straight-Through Estimator (STE) for classical training
 - Ternary weight binarization with adaptive thresholding
 - Variance initialization for ternary parameters
-- Forward pass with STE graph manipulation
+- ECL step with STE graph manipulation
 
 The implementation follows the mathematical formulations from the Q-Mini-WASM white
 paper, including:
-- Floating-point drift mitigation
+- Continuous-latent drift mitigation
 - STE graph manipulation using detach()
 - Variance initialization for ternary parameters
 """
@@ -87,13 +87,13 @@ class TernaryWASMExpert(nn.Linear):
         weight_ternary = torch.clamp(weight_ternary, -1.0, 1.0)
 
         # The Straight-Through Estimator (STE) Graph Manipulation
-        # During the forward pass, the actual discrete `weight_ternary` is utilized.
+        # During the ECL step, the actual discrete `weight_ternary` is utilized.
         # During the backward pass, the gradient routes around `weight_ternary`
         # and flows directly into the continuous `weight`.
         return (weight_ternary - weight).detach() + weight
 
     def forward(self, input_tensor):
-        """Forward pass of the TernaryWASMExpert.
+        """ECL step for the TernaryWASMExpert.
 
         Args:
             input_tensor: Input tensor of shape (batch_size, in_features)

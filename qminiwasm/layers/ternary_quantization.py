@@ -11,7 +11,7 @@ edge-quantum architecture. This implementation includes:
 - Quantum-aware ternary optimization
 
 The implementation follows the mathematical formulations from the Q-Mini-WASM
-white paper, including floating-point drift mitigation and STE graph manipulation.
+white paper, including continuous-latent drift mitigation and STE graph manipulation.
 """
 
 import torch
@@ -162,7 +162,7 @@ class EnhancedTernaryQuantizer(nn.Module):
             weight_ternary = weight_ternary * (1.0 + 1e-6)
 
         # The Straight-Through Estimator (STE) Graph Manipulation
-        # During the forward pass, the actual discrete `weight_ternary` is utilized.
+        # During the ECL step, the actual discrete `weight_ternary` is utilized.
         # During the backward pass, the gradient routes around `weight_ternary`
         # and flows directly into the continuous `weight`.
         return (weight_ternary - weight).detach() + weight
@@ -178,7 +178,7 @@ class EnhancedTernaryQuantizer(nn.Module):
         return unpack_ternary_tensor(packed, original_shape)
 
     def forward(self, weight: torch.Tensor) -> torch.Tensor:
-        """Forward pass of the EnhancedTernaryQuantizer.
+        """ECL step of the EnhancedTernaryQuantizer.
 
         Args:
             weight: Input weight tensor
@@ -239,7 +239,7 @@ class TernaryLinear(nn.Linear):
         self.weight = nn.Parameter(self.quantizer.initialize_ternary_weights(self.weight))
 
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
-        """Forward pass with ternary quantization.
+        """ECL step with ternary quantization.
 
         Args:
             input_tensor: Input tensor
@@ -318,7 +318,7 @@ class TernaryConv2d(nn.Conv2d):
         self.weight = nn.Parameter(self.quantizer.initialize_ternary_weights(self.weight))
 
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
-        """Forward pass with ternary quantization.
+        """ECL step with ternary quantization.
 
         Args:
             input_tensor: Input tensor
@@ -422,7 +422,7 @@ class TernaryAttention(nn.Module):
         value: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward pass of ternary attention.
+        """ECL step of ternary attention.
 
         Args:
             query: Query tensor
@@ -511,7 +511,7 @@ class TernaryLayerNorm(nn.Module):
             self.bias = nn.Parameter(self.quantizer.initialize_ternary_weights(self.bias))
 
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
-        """Forward pass of ternary layer normalization.
+        """ECL step of ternary layer normalization.
 
         Args:
             input_tensor: Input tensor

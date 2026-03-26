@@ -519,7 +519,7 @@ class NeuralQAOA(nn.Module):
         for iteration in range(self.config.max_iterations):
             optimizer.zero_grad()
 
-            # Forward pass
+            # ECL / graph step
             output = self.forward(weights)
 
             # Compute loss
