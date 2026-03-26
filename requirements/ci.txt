@@ -1,7 +1,8 @@
 # CI-only: lint, test, and security scan without heavy/optional deps
 # Use this in GitHub Actions to avoid install failures from hardware/k8s/quantum backends.
--r requirements/core.txt
--r requirements/dev.txt
+# Paths are relative to this file's directory (requirements/).
+-r core.txt
+-r dev.txt
 # Minimal quantum for HybridQuantumMoE (default.qubit)
 pennylane>=0.28
 # WASM: wasmtime only (pywasm>=2 requires Python 3.12; CI uses 3.11)
