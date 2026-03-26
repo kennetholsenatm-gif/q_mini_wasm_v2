@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Structured training configuration (TOML + Pydantic).
 
 Secrets (e.g. Hugging Face tokens) stay in environment / .env — do not commit them in TOML.

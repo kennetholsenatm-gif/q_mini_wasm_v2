@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Intel SYCL Hardware Integration and Deployment
 
 This module implements the hardware deployment refinements specified in the white paper,

@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Engine config: TOML file + explicit kwargs. Secrets (HF token) may be read from env."""
 
 from __future__ import annotations

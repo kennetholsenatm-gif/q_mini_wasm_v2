@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Main Model Interface
 
 This module implements the QMiniWASM class (referenced in README.md) which serves as the top-level

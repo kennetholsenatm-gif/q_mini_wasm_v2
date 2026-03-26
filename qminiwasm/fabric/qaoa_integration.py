@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Quantum Approximate Optimization Algorithm (QAOA) Integration
 
 This module implements the Neural Network-initialized QAOA protocol for

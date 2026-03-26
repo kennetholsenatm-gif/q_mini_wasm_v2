@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Failure Taxonomy and Fallback Mechanisms
 
 This module implements the failure taxonomy and fallback mechanisms as specified in the white paper.

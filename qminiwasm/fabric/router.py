@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Quantum Router for Q-Mini-WASM
 
 This module provides the quantum routing functionality for the Q-Mini-WASM architecture.

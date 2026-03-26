@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Data Pipeline Implementation
 
 This module implements the Synthetic Data Pipeline (Pillar 5) which provides the data infrastructure

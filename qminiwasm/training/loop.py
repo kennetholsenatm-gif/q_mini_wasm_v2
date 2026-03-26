@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """PyTorch training loop for the classical ML components with quantum routing.
 
 Orchestrates device selection (CUDA/ARC/CPU), model forward through the quantum

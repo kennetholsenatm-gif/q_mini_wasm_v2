@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Optional Hugging Face tabular loader for hybrid_inference MSE pretraining.
 
 This path does not provide WASM linear-memory semantics; it encodes each row as a

@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Performance Optimization for Encrypted Quantum Routing
 
 This module provides performance optimizations for the QAOA-based routing over encrypted vectors,

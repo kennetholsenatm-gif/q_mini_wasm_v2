@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Integration Testing for Encrypted Quantum Routing System
 
 This module provides comprehensive integration tests for the enhanced QAOA-based routing

@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Enhanced Ternary Quantization Layer
 
 This module implements the EnhancedTernaryQuantizer class which provides

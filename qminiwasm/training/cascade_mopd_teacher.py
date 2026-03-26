@@ -6,6 +6,7 @@ See docs/CASCADE_AND_MOPD.md for how these are used in run_training_loop.
 from __future__ import annotations
 
 import torch
+from typing import cast
 
 from .cascade_rl import CascadeHiddenFn
 
@@ -27,4 +28,4 @@ def build_noise_state_mopd_fns(
     def teacher_h(s: torch.Tensor) -> dict[str, torch.Tensor]:
         return {"emb": (s + std * torch.randn_like(s)).unsqueeze(0)}
 
-    return student_h, teacher_h
+    return cast(CascadeHiddenFn, student_h), cast(CascadeHiddenFn, teacher_h)

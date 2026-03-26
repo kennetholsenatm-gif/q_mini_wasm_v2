@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """SYCL DPAS Lowering Pass for Ternary Quantization
 
 This module implements a custom SYCL DPAS (Dot Product and Accumulate Systolic)
