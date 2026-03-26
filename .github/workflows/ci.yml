@@ -156,7 +156,7 @@ jobs:
             set +e
             bandit -r $PATHS -c pyproject.toml -f json -o bandit-report.json
             BANDIT_RC=$?
-            pip-audit -r requirements.txt -f json -o pip-audit-report.json
+            pip-audit -r requirements.txt --ignore-vuln CVE-2026-4539 -f json -o pip-audit-report.json
             PIP_AUDIT_RC=$?
             set -e
             if [ "$BANDIT_RC" -ne 0 ]; then

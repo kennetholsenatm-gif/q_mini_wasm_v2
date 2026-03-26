@@ -139,9 +139,9 @@ def verify_rs256_jwt(
     return dict(payload)
 
 
-def build_ephemeral_ca_and_host() -> Tuple[
-    rsa.RSAPrivateKey, x509.Certificate, rsa.RSAPrivateKey, x509.Certificate
-]:
+def build_ephemeral_ca_and_host() -> (
+    Tuple[rsa.RSAPrivateKey, x509.Certificate, rsa.RSAPrivateKey, x509.Certificate]
+):
     """Minimal CA + host EE certificate (RSA, SHA-256) for mTLS-style trust checks."""
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "ZTEE Local CA")])
@@ -194,7 +194,9 @@ def verify_host_chain(host_cert: x509.Certificate, ca_cert: x509.Certificate) ->
     )
 
 
-def aes_gcm_encrypt_wles(plaintext: bytes, key: Optional[bytes] = None) -> Tuple[bytes, bytes, bytes]:
+def aes_gcm_encrypt_wles(
+    plaintext: bytes, key: Optional[bytes] = None
+) -> Tuple[bytes, bytes, bytes]:
     """AES-256-GCM encrypt; returns ``(key, nonce, ciphertext_with_tag)``."""
     k = key if key is not None else os.urandom(32)
     nonce = os.urandom(12)

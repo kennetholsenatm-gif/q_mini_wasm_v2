@@ -42,8 +42,10 @@ jobs:
           if [ -d wui/backend ]; then PATHS="$PATHS wui/backend/"; fi
           .venv/bin/bandit -r $PATHS -c pyproject.toml -f json -o bandit-report.json
 
+      # CVE-2026-4539 (pygments ReDoS): no fixed release on PyPI yet (latest 2.19.2).
+      # Drop --ignore-vuln when pygments publishes a fix (e.g. >2.19.2).
       - name: Run pip-audit
-        run: .venv/bin/pip-audit -r requirements.txt -f json -o pip-audit-report.json
+        run: .venv/bin/pip-audit -r requirements.txt --ignore-vuln CVE-2026-4539 -f json -o pip-audit-report.json
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.35.0
