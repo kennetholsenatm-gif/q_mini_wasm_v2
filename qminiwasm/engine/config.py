@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from qminiwasm.config import WASM_PAGE_SIZE_BYTES, get_enclave_tier_preset
+
 from .secret_sanitize import sanitize_api_key_like
 
 
@@ -505,18 +507,99 @@ class EngineConfig:
                 memory64_max_mb = float(env_memory64_max_mb)
             except ValueError:
                 pass
+        resolved = self._resolve_enclave_runtime_policy(
+            store_memory_limit_bytes=lim_b,
+            use_memory64=use_memory64,
+            memory64_max_mb=memory64_max_mb,
+        )
         return {
             "runtime": WasmRuntimeConfig(
-                store_memory_limit_bytes=lim_b,
+                store_memory_limit_bytes=resolved["store_memory_limit_bytes"],
                 fallback_policy=fp,
                 backend=backend,
                 force_mock=fm,
                 store_instance_limit=self.wasm_store_instance_limit,
                 store_memories_limit=self.wasm_store_memories_limit,
-                use_memory64=bool(use_memory64) if use_memory64 is not None else False,
-                memory64_max_mb=memory64_max_mb,
+                use_memory64=resolved["use_memory64"],
+                memory64_max_mb=resolved["memory64_max_mb"],
                 enclave_tier=self.enclave_tier,
             )
+        }
+
+    def _resolve_enclave_runtime_policy(
+        self,
+        *,
+        store_memory_limit_bytes: int,
+        use_memory64: Optional[bool],
+        memory64_max_mb: Optional[float],
+    ) -> Dict[str, Any]:
+        """Resolve tier preset policy with override precedence.
+
+        Precedence:
+        1. Explicit overrides from ``[enclave]`` / env (`max_linear_memory_pages`,
+           `wasm_memory64_max_mb`, `use_memory64`)
+        2. Tier preset defaults
+        3. Existing runtime defaults
+        """
+        logger = logging.getLogger(__name__)
+        tier = (self.enclave_tier or "").strip().lower() or None
+        preset = get_enclave_tier_preset(tier)
+        pages_override = self.max_linear_memory_pages
+
+        resolved_memory_bytes = int(store_memory_limit_bytes)
+        resolved_use_memory64 = bool(use_memory64) if use_memory64 is not None else False
+        resolved_memory64_max_mb = memory64_max_mb
+
+        if preset is not None:
+            preset_bytes = int(preset.default_linear_memory_pages * WASM_PAGE_SIZE_BYTES)
+            if pages_override is None:
+                resolved_memory_bytes = max(resolved_memory_bytes, preset_bytes)
+            else:
+                if pages_override < max(1, preset.default_linear_memory_pages // 4):
+                    raise ValueError(
+                        "Invalid enclave memory override: "
+                        f"enclave_tier={tier} expects around {preset.default_linear_memory_pages} "
+                        f"pages, but max_linear_memory_pages={pages_override} is too low. "
+                        "Either increase max_linear_memory_pages or select a lower enclave tier."
+                    )
+                resolved_memory_bytes = int(max(1, int(pages_override)) * WASM_PAGE_SIZE_BYTES)
+
+            if preset.memory64_required:
+                if use_memory64 is False:
+                    raise ValueError(
+                        "Invalid enclave memory policy: "
+                        f"enclave_tier={tier} requires Memory64, but use_memory64=false was set."
+                    )
+                resolved_use_memory64 = True
+                if resolved_memory64_max_mb is None:
+                    resolved_memory64_max_mb = preset.default_memory64_max_mb
+            else:
+                if use_memory64 is None:
+                    resolved_use_memory64 = False
+
+            if (
+                self.enclave_footprint_mb is not None
+                and self.enclave_footprint_mb < preset.boundary_band_mb[0]
+            ):
+                logger.warning(
+                    "enclave_footprint_mb=%s is below recommended lower bound %s for tier=%s.",
+                    self.enclave_footprint_mb,
+                    preset.boundary_band_mb[0],
+                    tier,
+                )
+
+        elif pages_override is not None:
+            resolved_memory_bytes = int(max(1, int(pages_override)) * WASM_PAGE_SIZE_BYTES)
+
+        if resolved_memory64_max_mb is not None and resolved_memory64_max_mb <= 0:
+            raise ValueError("wasm_memory64_max_mb must be > 0 when set.")
+
+        return {
+            "store_memory_limit_bytes": int(resolved_memory_bytes),
+            "use_memory64": bool(resolved_use_memory64),
+            "memory64_max_mb": (
+                float(resolved_memory64_max_mb) if resolved_memory64_max_mb is not None else None
+            ),
         }
 
     @classmethod

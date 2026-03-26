@@ -10,7 +10,7 @@ Q-Mini-WASM implements a comprehensive DevSecOps framework that integrates secur
 
 The project uses GitHub Actions for automated CI/CD with these workflows:
 
-**Enrollment and continuous trust (ZTEE):** For the normative zero-trust mesh enrollment protocol—host PKI vs enclave OIDC/JWT, mTLS bootstrap, encrypted **WLES** migration, **CRL/OCSP revocation + IdP session/JWT family revocation and broker socket drop**, and CPL-driven eviction—see [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md). In-production, **LCI** / **EM** (and related SOA signals) feed operational audits alongside CI smoke tests.
+**Enrollment and continuous trust (ZTEE):** For the normative zero-trust mesh enrollment pattern—host PKI vs enclave OIDC/JWT, mTLS bootstrap, encrypted **WLES** migration, **CRL/OCSP revocation + IdP session/JWT family revocation and broker socket drop**, and CPL-driven eviction—see [`docs/IDENTITY_STACK_REFERENCE.md`](../docs/IDENTITY_STACK_REFERENCE.md). In-production, **LCI** / **EM** (and related SOA signals) feed operational audits alongside CI smoke tests.
 
 #### CI Workflow (`.github/workflows/ci.yml`)
 - **Linting**: Black, Flake8

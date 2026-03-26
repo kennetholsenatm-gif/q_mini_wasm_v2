@@ -21,8 +21,8 @@ The framework uses a single production lexicon aligned with [../docs/Q-Mini-WASM
 | **Linear Memory Saturation (LMS)** | How fully the WASM linear memory arena is used under a fixed EF cap—replaces “VRAM utilization” on unified-memory hosts (Apple M-series, AMD Strix Halo class). |
 | **Trit-to-Bandwidth Ratio (TBR)** | Effective moved packed-trit throughput vs memory bandwidth—replaces informal “memory bandwidth utilization” when discussing TPEM-friendly kernels (`qminiwasm/wasm_host/trit_pack.py`). |
 | **Zero-Trust Boundary Escapes** | Count of escalations that cross the local trust boundary (Fog/Cloud paths after CGE)—use instead of informal “API calls” / “network requests” when describing controlled egress, not every HTTP use. |
-| **Zero-Trust Ephemeral Enrollment (ZTEE)** | Protocol pattern for enrolling WASM mesh nodes: host **X.509** + enclave **OIDC/JWT**, mTLS to broker/QAHR, encrypted **WLES** transfer with OOB keys, CRL/IdP revocation. See [docs/ZTEE_FRAMEWORK.md](docs/ZTEE_FRAMEWORK.md). |
-| **Cognitive Provenance Ledger (CPL)** | Conceptual audit trail binding enclave identity to runtime evidence (LCI, EM/ESI fidelity, telemetry). Operational store is outside this repo; ZTEE ties continuous trust to CPL ingestion. See [docs/ZTEE_FRAMEWORK.md](docs/ZTEE_FRAMEWORK.md). |
+| **Zero-Trust Ephemeral Enrollment (ZTEE)** | Protocol pattern for enrolling WASM mesh nodes: host **X.509** + enclave **OIDC/JWT**, mTLS to broker/QAHR, encrypted **WLES** transfer with OOB keys, CRL/IdP revocation. See [docs/IDENTITY_STACK_REFERENCE.md](docs/IDENTITY_STACK_REFERENCE.md). |
+| **Cognitive Provenance Ledger (CPL)** | Conceptual audit trail binding enclave identity to runtime evidence (LCI, EM/ESI fidelity, telemetry). Operational store is outside this repo; ZTEE ties continuous trust to CPL ingestion. See [docs/IDENTITY_STACK_REFERENCE.md](docs/IDENTITY_STACK_REFERENCE.md). |
 
 **Model classification tiers (WASM deployment)**  
 - **Tier 1 — Micro-Enclaves:** sub-250 MB EF (~1.2B effective parameters at ternary packing).  

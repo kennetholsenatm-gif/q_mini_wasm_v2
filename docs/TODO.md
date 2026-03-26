@@ -12,10 +12,10 @@ Link to the full milestone narrative: [`wiki/Roadmap.md`](../wiki/Roadmap.md).
 
 2. **ZTEE local simulator**
    - **Done:** in-process CA, JWT/JWKS RS256, `jti` revocation, AES-256-GCM — [`ztee_local_simulator.py`](../qminiwasm/security/ztee_local_simulator.py), [`test_ztee_handshake_simulator.py`](../tests/test_ztee_handshake_simulator.py).
-   - **Next:** HTTP **OIDC** stub (`localhost`); **gRPC**-shaped encrypted WLES transfer tests (see [`docs/ZTEE_FRAMEWORK.md`](ZTEE_FRAMEWORK.md)).
+   - **Next:** HTTP **OIDC** stub (`localhost`); **gRPC**-shaped encrypted WLES transfer tests (see [`docs/IDENTITY_STACK_REFERENCE.md`](IDENTITY_STACK_REFERENCE.md)).
 
 3. **CPL integration**
-   - Read and refine spike: [`docs/CPL_INTEGRATION_SPIKE.md`](CPL_INTEGRATION_SPIKE.md).
+   - Track CPL integration details in this checklist and `wiki/Roadmap.md`.
    - Follow-on: canonical CPL **event schema** versioned in docs or `configs/`, then backend + verifier tooling as separate issues.
 
 ## Maintainer hygiene (CI and docs)

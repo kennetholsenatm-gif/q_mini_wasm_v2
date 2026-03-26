@@ -308,3 +308,39 @@ def test_edge_hf_streaming_knobs_from_toml(tmp_path):
     assert c.hf_max_buffered_rows == 512
     assert c.hf_text_truncate_bytes == 2048
     assert c.hf_deterministic_keep_every_n == 3
+
+
+def test_enclave_tier_preset_macro_applies_memory64_defaults():
+    from qminiwasm.engine.config import EngineConfig
+
+    c = EngineConfig(enclave_tier="macro")
+    runtime = c.wasm_runtime_kwargs()["runtime"]
+    # Macro preset: 8 GiB cap, Memory64 required, 8192 MB default ceiling.
+    assert runtime.store_memory_limit_bytes >= 8 * 1024 * 1024 * 1024
+    assert runtime.use_memory64 is True
+    assert runtime.memory64_max_mb == 8192.0
+
+
+def test_enclave_override_pages_win_over_tier_defaults():
+    from qminiwasm.engine.config import EngineConfig
+
+    c = EngineConfig(enclave_tier="micro", max_linear_memory_pages=8192)
+    runtime = c.wasm_runtime_kwargs()["runtime"]
+    # Explicit override should win (8192 pages = 512 MiB).
+    assert runtime.store_memory_limit_bytes == 8192 * 64 * 1024
+
+
+def test_enclave_macro_rejects_memory64_false():
+    from qminiwasm.engine.config import EngineConfig
+
+    c = EngineConfig(enclave_tier="macro", use_memory64=False)
+    with pytest.raises(ValueError, match="requires Memory64"):
+        c.wasm_runtime_kwargs()
+
+
+def test_enclave_override_pages_too_low_for_tier_rejected():
+    from qminiwasm.engine.config import EngineConfig
+
+    c = EngineConfig(enclave_tier="macro", max_linear_memory_pages=1000)
+    with pytest.raises(ValueError, match="too low"):
+        c.wasm_runtime_kwargs()

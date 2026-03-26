@@ -32,7 +32,7 @@ This file tracks the **Q-Mini-WASM Master Realignment** prompt against what is *
 
 | Item | Status |
 |------|--------|
-| Stateful WASM / ZTEE / ECL / CGE “how” | **Done** — [`ENCLAVE_LIFECYCLE.md`](ENCLAVE_LIFECYCLE.md), [`ZTEE_FRAMEWORK.md`](ZTEE_FRAMEWORK.md) |
+| Stateful WASM / ZTEE / ECL / CGE “how” | **Done** — [`architecture/JOURNEY_OF_A_VECTOR.md`](architecture/JOURNEY_OF_A_VECTOR.md), [`IDENTITY_STACK_REFERENCE.md`](IDENTITY_STACK_REFERENCE.md) |
 | Wiki entry + Tier 1–5 table | **Done** — [`wiki/Home.md`](../wiki/Home.md) (trainable TPEM vocabulary, Tier 1–5 summary); wiki passes aligned with taxonomy where updated ([`wiki/Vec2Text-Inversion.md`](../wiki/Vec2Text-Inversion.md), [`wiki/Architecture-Overview.md`](../wiki/Architecture-Overview.md), [`wiki/Mathematical-Formulation.md`](../wiki/Mathematical-Formulation.md)) |
 
 ---
@@ -52,6 +52,6 @@ This file tracks the **Q-Mini-WASM Master Realignment** prompt against what is *
 
 | Item | Status |
 |------|--------|
-| Roadmap / TODO pivot to implementation tooling | **Done** — [`wiki/Roadmap.md`](../wiki/Roadmap.md), [`docs/TODO.md`](TODO.md), [`CPL_INTEGRATION_SPIKE.md`](CPL_INTEGRATION_SPIKE.md) |
+| Roadmap / TODO pivot to implementation tooling | **Done** — [`wiki/Roadmap.md`](../wiki/Roadmap.md), [`docs/TODO.md`](TODO.md) |
 
 **Last updated:** Master realignment batch — taxonomy full workflow + prose-only FP rules; WLES Wasmtime harness; wiki/Home Tier 1–5; ESI EM + ZTEE OIDC metadata tests; ECL lexicon pass.

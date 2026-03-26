@@ -19,7 +19,7 @@ For enrolled stateful WASM enclaves, continuous trust is enforced by **Zero-Trus
 - **Revocation**: **CRL/OCSP** plus IdP session/JWT family revocation and broker socket drop
 - **Autonomous eviction**: CPL/telemetry-driven removal when anomalies or scope violations are detected
 
-Canonical protocol text: [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md). Lifecycle flow: [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md).
+Canonical identity/trust reference: [`docs/IDENTITY_STACK_REFERENCE.md`](../docs/IDENTITY_STACK_REFERENCE.md). Lifecycle flow: [`docs/architecture/JOURNEY_OF_A_VECTOR.md`](../docs/architecture/JOURNEY_OF_A_VECTOR.md).
 
 ### Implementation Layers
 

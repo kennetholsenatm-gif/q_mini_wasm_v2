@@ -100,11 +100,18 @@
 [enclave]
 # Enclave-as-Code runtime policy knobs (optional; defaults preserve existing behavior).
 # enclave_tier = "micro"            # micro | meso | macro | workgroup | enterprise_core
-# enclave_footprint_mb = 256.0
+# Tier defaults:
+#   micro           -> 4096 pages (~256MiB), Memory64 off
+#   meso            -> 32768 pages (~2GiB), Memory64 off
+#   macro           -> 131072 pages (~8GiB), Memory64 on, memory64_max_mb=8192
+#   workgroup       -> 262144 pages (~16GiB), Memory64 on, memory64_max_mb=16384
+#   enterprise_core -> 4194304 pages (~256GiB), Memory64 on, memory64_max_mb=262144
+# Override precedence: explicit overrides below > tier defaults > runtime defaults.
+# enclave_footprint_mb = 250.0      # optional EF hint (policy/observability)
 # certainty_scalar_threshold = 0.85
-# max_linear_memory_pages = 131072
-# wasm_memory64_max_mb = 8192.0
-# use_memory64 = true
+# max_linear_memory_pages = 131072  # explicit override
+# wasm_memory64_max_mb = 8192.0     # explicit override
+# use_memory64 = true               # explicit override
 
 [serve]
 # Used when loading configs/serve/*.toml (inference). Optional in training files.

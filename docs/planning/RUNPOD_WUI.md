@@ -20,7 +20,7 @@
 | Phase | Scope |
 |-------|--------|
 | **P0** | ~~Document current flow; optional “copy SSH command” from `tofu output` in the UI.~~ **Done:** `CLOUD_ACCELERATOR.md`, example script, WUI hints when `public_ip` is present; pod env defaults for CUDA. |
-| **P1** | Optional **remote command** field: run `ssh user@ip 'cd /opt/qmw && python -m qminiwasm.engine ...'` (or `docker exec`) after apply, with SSH key from env. |
+| **P1** | Optional **remote command** field: run `ssh user@ip 'cd /opt/qmw && python -m qminiwasm.engine --config configs/training/<profile>.toml'` (or `docker exec`) after apply, with SSH key from env. |
 | **P2** | **rsync** or small agent to sync repo + `configs/` + `artifacts/` bidirectionally. |
 | **P3** | RunPod **HTTP API** (if available) for pod exec/logs instead of raw SSH. |
 

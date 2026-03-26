@@ -12,7 +12,7 @@ For the stateful WASM agent paradigm, operational trust is governed by **Zero-Tr
 - **CRL/OCSP** revocation and IdP session/JWT family revocation
 - telemetry-driven **Cognitive Provenance Ledger (CPL)** eviction signals (LCI/EM)
 
-Canonical protocol text: [`docs/ZTEE_FRAMEWORK.md`](../docs/ZTEE_FRAMEWORK.md). Lifecycle flow: [`docs/ENCLAVE_LIFECYCLE.md`](../docs/ENCLAVE_LIFECYCLE.md).
+Canonical identity/trust reference: [`docs/IDENTITY_STACK_REFERENCE.md`](../docs/IDENTITY_STACK_REFERENCE.md). Lifecycle flow: [`docs/architecture/JOURNEY_OF_A_VECTOR.md`](../docs/architecture/JOURNEY_OF_A_VECTOR.md).
 
 ## Security Architecture
 
