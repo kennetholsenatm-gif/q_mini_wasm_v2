@@ -2,6 +2,8 @@
 
 This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics** from `python -m qminiwasm.engine`.
 
+**Configuration policy:** Prefer **`configs/training/*.toml`** and the **[Training WUI](../training-wui/README.md)** for training knobs. Use **`.env`** only for **credentials** ([environment-variables.md](environment-variables.md)). The engine may still honor **legacy process-environment** variables in CI, Docker, or one-off shells — see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)** for that inventory.
+
 ## Local training (default)
 
 The sections below describe training on your machine (or any environment where you run `python -m qminiwasm.engine` directly). They cover TOML config, data sources, checkpoints, and metrics—not cloud provisioning.
@@ -11,7 +13,7 @@ The sections below describe training on your machine (or any environment where y
 Hyperparameters and non-secret options should live in **TOML** under [`configs/training/`](../configs/training/) so runs are diffable and reproducible. Example files:
 
 - [`configs/training/mesh_cpu.toml`](../configs/training/mesh_cpu.toml) — synthetic mesh on CPU
-- [`configs/training/hf_tabular_example.toml`](../configs/training/hf_tabular_example.toml) — Hugging Face tabular (set `HF_DATASET_CONFIG` / tokens in `.env` as needed)
+- [`configs/training/hf_tabular_example.toml`](../configs/training/hf_tabular_example.toml) — Hugging Face tabular (dataset fields in TOML; Hub tokens in `.env` per [environment-variables.md](environment-variables.md))
 - [`configs/training/schema.toml`](../configs/training/schema.toml) — commented reference for all sections
 
 Run training:
@@ -20,13 +22,13 @@ Run training:
 python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 ```
 
-**Precedence:** values set in the TOML file override environment variables for those keys. **`ACCELERATOR`** is still applied from the environment when set (after loading the file), so containers can pin the device without editing the file. **`HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`** are always read from the environment when not passed explicitly — **never commit tokens in TOML**.
+**Precedence:** values set in the TOML file override environment variables for those keys. **`ACCELERATOR`** is still applied from the environment when set (after loading the file), so containers can pin the device without editing the file — listed under [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md). **`HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`** are always read from the environment when not passed explicitly — **never commit tokens in TOML**.
 
 If you omit `--config`, the engine falls back to environment variables only and logs a **deprecation warning**.
 
 ## Enclave tiers and memory boundaries (preset + override)
 
-Use `[enclave]` in TOML (or matching env vars) to express runtime memory policy by tier.
+Use `[enclave]` in TOML to express runtime memory policy by tier.
 
 | Tier | `enclave_tier` | Default pages | Approx linear memory | Memory64 default |
 |------|----------------|---------------|----------------------|------------------|
@@ -110,6 +112,8 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 
 ## Environment reference (engine / training loop)
 
+The variables below are **process-environment** hooks (shell, CI, containers). **Prefer TOML** and the WUI when the schema exposes the same knob. **Secrets** are summarized in [environment-variables.md](environment-variables.md); a broader maintainer list lives in [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md).
+
 | Variable | Role |
 |----------|------|
 | `TRAINING_DATA_SOURCE` | `mesh`, `corpus`, or `hf_tabular` |
@@ -149,11 +153,15 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 | `STOP_ON_TARGET_MSE` | If `1` / `true`, stop early when the threshold is met (prefers **holdout eval** when `EVAL_EVERY_EPOCH=1`; otherwise train mean MSE — see training loop warning) |
 | `HYBRID_ADAPTER` | If `1` / `true`, enable residual MLP after ternary (see subsection above) |
 | `HYBRID_ADAPTER_HIDDEN` | Bottleneck width (integer ≥ 32; default **1024**) |
-| `CASCADE_RL`, `CASCADE_POLICY_LR`, `CASCADE_STEPS_PER_EPOCH`, `CASCADE_GROUP_SIZE`, `CASCADE_STATE_DIM`, `CASCADE_NUM_ACTIONS`, `CASCADE_MOPD_LAMBDA`, `CASCADE_MOPD_FEAT_LOSS`, `CASCADE_SEED_FROM_HIDDEN` | Cascade GRPO phase before each epoch’s MSE batches (see `.env.example` and **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**) |
+| `CASCADE_RL`, `CASCADE_POLICY_LR`, `CASCADE_STEPS_PER_EPOCH`, `CASCADE_GROUP_SIZE`, `CASCADE_STATE_DIM`, `CASCADE_NUM_ACTIONS`, `CASCADE_MOPD_LAMBDA`, `CASCADE_MOPD_FEAT_LOSS`, `CASCADE_SEED_FROM_HIDDEN` | Cascade GRPO phase before each epoch’s MSE batches (prefer [`configs/training/cascade_mopd.toml`](../configs/training/cascade_mopd.toml); see **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**; CI env in [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)) |
 | `CASCADE_COUPLE_FORWARD` | If `0` / `false`, digest uses **input hidden mean only**; otherwise (default) blends **0.5 × input mean + 0.5 × `hybrid_inference` output mean** per batch |
 | `USE_CASCADE_ROUTER` | Attach `CascadeRouter` on the model (trained by cascade optimizer, not main AdamW) |
 | `CASCADE_LEARNED_PROJECTOR` | Loop-owned `CascadeRouter` when model has no router |
 | `CASCADE_ROUTER_HIDDEN` | Router MLP width |
+| `QAOA_SIMULATOR_BACKEND` | `auto`, `statevector`, or `mps` for `qiskit_statevector` execution mode |
+| `QAOA_MPS_MAX_BOND_DIM` | Optional MPS bond-dimension cap (when using MPS backend) |
+| `QAOA_PRUNE_ENABLED`, `QAOA_PRUNE_THRESHOLD`, `QAOA_PRUNE_MIN_NODES` | Topology pruning controls before QUBO build |
+| `QAOA_WARM_START_CACHE_TTL` | Number of recent topology fingerprints retained for angle warm-start cache |
 
 ## Edge fast-iteration presets
 
@@ -168,10 +176,6 @@ python -m qminiwasm.engine --config configs/training/edge_fast_iter.toml
 python -m qminiwasm.engine --config configs/training/edge_full_curriculum_streaming.toml
 python scripts/benchmark_edge_curriculum.py
 ```
-| `QAOA_SIMULATOR_BACKEND` | `auto`, `statevector`, or `mps` for `qiskit_statevector` execution mode |
-| `QAOA_MPS_MAX_BOND_DIM` | Optional MPS bond-dimension cap (when using MPS backend) |
-| `QAOA_PRUNE_ENABLED`, `QAOA_PRUNE_THRESHOLD`, `QAOA_PRUNE_MIN_NODES` | Topology pruning controls before QUBO build |
-| `QAOA_WARM_START_CACHE_TTL` | Number of recent topology fingerprints retained for angle warm-start cache |
 
 **`hf_tabular` defaults (when env vars are unset):** `TARGET_MEAN_MSE=1e-4`, `GRAD_CLIP_NORM=1`, `CASCADE_POLICY_LR = 0.5 × learning_rate`, and `learning_rate=1.5e-4` when the engine constructor LR is the default **1e-4** and `LEARNING_RATE` is not set. Set env vars explicitly to override.
 
@@ -189,13 +193,13 @@ The training loop runs a short **cascade GRPO** phase (toy routing MDP) before e
 
 Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**.
 
-**Continuation run (baseline → Cascade + MOPD):** see **§ Recommended continuation run** in [CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md) and the matching block in [.env.example](../.env.example).
+**Continuation run (baseline → Cascade + MOPD):** see **§ Recommended continuation run** in [CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md) and [`configs/training/cascade_mopd.toml`](../configs/training/cascade_mopd.toml).
 
 ### Checkpoints and evaluation (making training useful)
 
 **Layout:** Prefer one directory per run or model under **`artifacts/models/<slug>/`** with stable names: **`final.pt`** (end-of-run / `save_path`), **`best.pt`**, **`latest.pt`**. This matches the **training WUI** (“Build + Run”) and the **`agent_bundle.json`** / **`serve.toml`** sidecars written next to those files.
 
-1. Train and save a final checkpoint (paths can live in TOML `[checkpoint]` or in `.env`):
+1. Train and save a final checkpoint (prefer TOML `[checkpoint]`; env below is for shell/CI — see [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)):
 
 ```bash
 export SEED=42   # optional; or set [training].seed in TOML
@@ -209,7 +213,7 @@ python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 
 2. Optional holdout metric (same forward as training, data not seen in the train split): set `[eval]` in your TOML (`holdout_fraction`, `every_epoch`) or use `EVAL_HOLDOUT_FRACTION` / `EVAL_EVERY_EPOCH` when those keys are omitted from the file.
 
-3. **Serving:** run the API with the same weights file. Set `QMINIWASM_CHECKPOINT` (or `CHECKPOINT_LOAD_PATH`), or point **`QMINIWASM_SERVE_CONFIG`** at a TOML file such as [`configs/serve/default.toml`](../configs/serve/default.toml) with a `[serve]` table (`checkpoint`, `hybrid_adapter`, cascade dims). Environment variables still fill any field omitted from that file. Optional **`USE_CASCADE_ROUTER=1`** and matching cascade dims align with training; responses may include **`cascade_logits`** per row. Set **`HYBRID_ADAPTER=1`** if the checkpoint contains `hybrid_adapter` weights (or rely on auto-attach on load).
+3. **Serving:** run the API with the same weights file. Prefer **`configs/serve/*.toml`** (e.g. [`configs/serve/default.toml`](../configs/serve/default.toml) with a `[serve]` table: `checkpoint`, `hybrid_adapter`, cascade dims). Legacy env such as `QMINIWASM_CHECKPOINT` / `QMINIWASM_SERVE_CONFIG` may still apply when documented in [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md). Optional **`USE_CASCADE_ROUTER=1`** and matching cascade dims align with training; responses may include **`cascade_logits`** per row. Set **`HYBRID_ADAPTER=1`** if the checkpoint contains `hybrid_adapter` weights (or rely on auto-attach on load).
 
 Checkpoint files include `format_version`, `d_model`, `quantum_router`, `ternary_expert`, optional **`hybrid_adapter`**, optional **`cascade_policy`** (same tensors as `model.cascade_router` when used), and optional `meta` (training tags). Loading uses `strict=False` and logs missing/unexpected keys.
 

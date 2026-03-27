@@ -8,7 +8,7 @@ from qminiwasm.runtime_modes import apply_optimized_auto_defaults
 from qminiwasm.training.loop import run_training_loop
 
 
-def main(config: EngineConfig | None = None) -> dict:
+def main(config: EngineConfig | None = None, *, wui_stop_file: str | None = None) -> dict:
     """Run the training loop with the given or env-derived config."""
     load_dotenv_if_available()
     apply_optimized_auto_defaults()
@@ -32,6 +32,7 @@ def main(config: EngineConfig | None = None) -> dict:
     return run_training_loop(
         epochs=config.epochs,
         batch_size=config.batch_size,
+        dataloader_num_workers=getattr(config, "dataloader_num_workers", None),
         learning_rate=config.learning_rate,
         accelerator=config.accelerator,
         device_index=config.device_index,
@@ -114,4 +115,8 @@ def main(config: EngineConfig | None = None) -> dict:
         enclave_tier=getattr(config, "enclave_tier", None),
         enclave_footprint_mb=getattr(config, "enclave_footprint_mb", None),
         export_runtime_policy=export_runtime_policy,
+        log_xpu_memory=bool(getattr(config, "log_xpu_memory", False)),
+        log_xpu_memory_reset_peak=bool(getattr(config, "log_xpu_memory_reset_peak", False)),
+        log_train_throughput=bool(getattr(config, "log_train_throughput", False)),
+        wui_stop_file=wui_stop_file,
     )

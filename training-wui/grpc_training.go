@@ -96,23 +96,14 @@ func trainingGRPCReachable(timeout time.Duration) bool {
 }
 
 func (m *manager) broadcastTelemetryProto(runID string, ev *trainingrpc.TelemetryEvent) {
+	ts := time.Now().UTC().Format(time.RFC3339)
 	epoch := float64(ev.GetEpoch())
 	trainLoss := ev.GetTrainLoss()
 	valLoss := ev.GetValLoss()
 	msg := ev.GetMessage()
 	eventType := strings.ToLower(ev.GetEventType())
 
-	wsHub.broadcast(runID, map[string]any{
-		"type":             "metric",
-		"run_id":           runID,
-		"ts":               time.Now().UTC().Format(time.RFC3339),
-		"epoch":            epoch,
-		"mean_loss":        trainLoss,
-		"mean_return":      0.0,
-		"mean_mse":         valLoss,
-		"line":             "grpc:" + msg,
-		"telemetry_source": telemetrySourceGRPCCPP,
-	})
+	wsHub.broadcast(runID, buildGRPCMetricWebSocketPayload(runID, ev, ts))
 
 	m.mu.Lock()
 	if rec := m.byID[runID]; rec != nil {

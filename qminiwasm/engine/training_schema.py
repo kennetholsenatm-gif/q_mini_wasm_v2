@@ -45,6 +45,8 @@ class TrainingSection(BaseModel):
 
     epochs: Optional[int] = None
     batch_size: Optional[int] = None
+    #: Host-side DataLoader workers for supervised batch collation (TOML / WUI only).
+    dataloader_num_workers: Optional[int] = None
     learning_rate: Optional[float] = None
     seed: Optional[int] = None
     grad_clip_norm: Optional[float] = None
@@ -52,6 +54,12 @@ class TrainingSection(BaseModel):
     lr_plateau_factor: Optional[float] = None
     lr_plateau_min_lr: Optional[float] = None
     early_stop_patience: Optional[int] = None
+    #: Structured ``qmw_xpu_mem`` stdout lines when training on XPU (WUI / TOML; no env required).
+    log_xpu_memory: Optional[bool] = None
+    #: Reset ``torch.xpu`` peak memory stats each epoch (use with ``log_xpu_memory``).
+    log_xpu_memory_reset_peak: Optional[bool] = None
+    #: ``qmw_train_throughput`` line after each supervised phase (wall time, samples/s, host RSS).
+    log_train_throughput: Optional[bool] = None
 
 
 class DataSection(BaseModel):

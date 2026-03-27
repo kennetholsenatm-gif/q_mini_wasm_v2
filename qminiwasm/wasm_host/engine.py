@@ -32,7 +32,7 @@ from qminiwasm.runtime_modes import strict_native_enabled
 from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
 
 # Wasmtime Store max linear memory (bytes): ~1e6 rows × d_model (encode_linear_memory width).
-# Override: TOML [wasm] store_memory_limit_mb or env QMW_WASM_STORE_MEMORY_LIMIT_*.
+# Override via training TOML [wasm] store_memory_limit_mb (EngineConfig → WasmRuntimeConfig).
 DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES = 1_000_000 * D_MODEL
 # Wasmtime default instance cap is ~10k if only memory_size is set; mesh ingest may exceed it.
 # Override: [wasm] store_instance_limit / store_memories_limit in training TOML.
@@ -57,10 +57,7 @@ MESH_EXPORT_NAMES: Dict[str, str] = {
 
 @dataclass(frozen=True)
 class WasmRuntimeConfig:
-    """Wasmtime store limits and fallback behavior (from EngineConfig / training TOML).
-
-    ``store_memory_limit_bytes`` may be raised via env in :meth:`EngineConfig.wasm_runtime_kwargs`.
-    """
+    """Wasmtime store limits and fallback behavior (from EngineConfig / training TOML)."""
 
     store_memory_limit_bytes: int = DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES
     fallback_policy: str = "mock"

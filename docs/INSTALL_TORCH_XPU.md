@@ -49,7 +49,7 @@ You should see `torch.xpu.is_available(): True` and a device name. If it is **Fa
 
 ## 3. Configure the engine / serving
 
-In **`.env`** or the shell:
+Prefer **`[hardware]`** in your training TOML (`accelerator`, `device_index` — see [`configs/training/schema.toml`](../configs/training/schema.toml)). For containers or CI that pin the device without editing the file, **`ACCELERATOR`** / **`DEVICE_INDEX`** may still be set in the shell; see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)**.
 
 ```text
 ACCELERATOR=xpu

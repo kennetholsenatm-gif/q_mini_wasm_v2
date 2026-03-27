@@ -7,7 +7,7 @@ This document tracks **Pilot 4** in [LAYOUT_REALIGNMENT_RFC.md](LAYOUT_REALIGNME
 | Location | Responsibility |
 |----------|------------------|
 | **`qminiwasm/`** (library) | Model, training loop, WASM host, data pipeline, quantum/fabric, shared config types. Keeps notebooks and unit tests free of the TOML/CLI process layer. |
-| **`qminiwasm.engine`** | **Process shell**: `.env`, training TOML → `EngineConfig`, training `main`, FastAPI inference (`serve`), secret sanitization — under [`qminiwasm/engine/`](../qminiwasm/engine/). |
+| **`qminiwasm.engine`** | **Process shell**: `.env` (credentials), training TOML → `EngineConfig`, training `main`, FastAPI inference (`serve`), secret sanitization — under [`qminiwasm/engine/`](../qminiwasm/engine/). |
 
 There is **no** top-level `engine/` Python package anymore; use **`python -m qminiwasm.engine`** (or **`python -m qminiwasm.cli train`**).
 

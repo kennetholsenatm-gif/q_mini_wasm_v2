@@ -24,7 +24,7 @@ class EnvVar:
         self.var_type = "string"
         self.default = ""
         self.sensitive = False
-        self.required = True
+        self.required = False
 
 
 def parse_env_schema(schema_file: str) -> List[EnvVar]:
@@ -40,6 +40,8 @@ def parse_env_schema(schema_file: str) -> List[EnvVar]:
     env_vars = []
     current_var = None
     current_description = []
+    pending_type = "string"
+    pending_sensitive = False
 
     with open(schema_file, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -61,6 +63,8 @@ def parse_env_schema(schema_file: str) -> List[EnvVar]:
             # Start new variable (we'll get the name from the next line)
             current_var = None
             current_description = []
+            pending_type = "string"
+            pending_sensitive = False
 
         elif line.startswith("@description"):
             if current_var:
@@ -71,37 +75,42 @@ def parse_env_schema(schema_file: str) -> List[EnvVar]:
                 current_description.append(line.replace("@description", "").strip())
 
         elif line.startswith("@type"):
+            t = line.replace("@type", "").strip()
             if current_var:
-                current_var.var_type = line.replace("@type", "").strip()
+                current_var.var_type = t
+            else:
+                pending_type = t
 
         elif line.startswith("@default"):
             if current_var:
                 current_var.default = line.replace("@default", "").strip()
 
         elif line.startswith("@sensitive"):
+            sens = line.replace("@sensitive", "").strip().lower() == "true"
             if current_var:
-                sensitive_value = line.replace("@sensitive", "").strip().lower()
-                current_var.sensitive = sensitive_value == "true"
+                current_var.sensitive = sens
+            else:
+                pending_sensitive = sens
 
         elif "=" in line and not line.startswith("@"):
             # This should be the variable definition
             name = line.split("=")[0].strip()
             if current_var is None:
                 current_var = EnvVar(name)
+                current_var.var_type = pending_type
+                current_var.sensitive = pending_sensitive
             else:
                 current_var.name = name
 
             # Set description from accumulated lines
             current_var.description = " ".join(current_description).strip()
 
-            # Determine if required (has no default)
-            if current_var.default and current_var.default != "None":
-                current_var.required = False
-
             # Add to list and reset
             env_vars.append(current_var)
             current_var = None
             current_description = []
+            pending_type = "string"
+            pending_sensitive = False
 
     return env_vars
 
@@ -119,62 +128,31 @@ def generate_markdown_table(env_vars: List[EnvVar]) -> str:
     if not env_vars:
         return "# Environment Variables\n\nNo environment variables found.\n"
 
-    # Sort by category (based on common prefixes)
+    # Group credentials only (.env.schema is secrets/API keys — not app configuration)
     categories = {
+        "Hugging Face": [],
         "IBM Quantum": [],
-        "Qiskit": [],
-        "Quantum Simulation": [],
-        "WASM": [],
-        "Intel ARC/GPU": [],
-        "Cloud": [],
-        "Database": [],
-        "Monitoring": [],
-        "Docker": [],
-        "Development": [],
-        "Security": [],
-        "Performance": [],
-        "Intel Cloud": [],
-        "Intel Quantum": [],
+        "RunPod": [],
         "Other": [],
     }
 
     for var in env_vars:
         name = var.name.upper()
-        if "IBM_QUANTUM" in name:
+        if name in ("HUGGING_FACE_HUB_TOKEN", "HF_TOKEN"):
+            categories["Hugging Face"].append(var)
+        elif "IBM_QUANTUM" in name or "QISKIT_IBM" in name:
             categories["IBM Quantum"].append(var)
-        elif "QISKIT" in name:
-            categories["Qiskit"].append(var)
-        elif "QUANTUM" in name and "IBM" not in name:
-            categories["Quantum Simulation"].append(var)
-        elif "WASM" in name:
-            categories["WASM"].append(var)
-        elif "INTEL" in name and ("GPU" in name or "XPU" in name):
-            categories["Intel ARC/GPU"].append(var)
-        elif "AWS" in name or "CLOUD" in name:
-            categories["Cloud"].append(var)
-        elif "DATABASE" in name or "REDIS" in name:
-            categories["Database"].append(var)
-        elif "PROMETHEUS" in name or "GRAFANA" in name or "NODE_EXPORTER" in name:
-            categories["Monitoring"].append(var)
-        elif "DOCKER" in name:
-            categories["Docker"].append(var)
-        elif "DEBUG" in name or "LOG" in name or "PORT" in name or "WORKER" in name:
-            categories["Development"].append(var)
-        elif any(sec in name for sec in ["SECRET", "JWT", "ENCRYPTION", "KEY"]):
-            categories["Security"].append(var)
-        elif any(perm in name for perm in ["MAX_", "BATCH", "TIMEOUT", "RETRY"]):
-            categories["Performance"].append(var)
-        elif "INTEL_CLOUD" in name:
-            categories["Intel Cloud"].append(var)
-        elif "INTEL_QUANTUM" in name or "INTEL_QS" in name:
-            categories["Intel Quantum"].append(var)
+        elif "RUNPOD" in name:
+            categories["RunPod"].append(var)
         else:
             categories["Other"].append(var)
 
     # Generate markdown
-    markdown = """# Environment Variables
+    markdown = """# Environment variables (secrets and APIs)
 
-This document provides a comprehensive reference for all environment variables used in the LLM Pract project.
+**Policy:** Variables documented here are **credentials and API keys** loaded from `.env` (or the process environment). They are **not** how you configure training, inference, accelerators, WASM limits, or feature toggles — use **`configs/training/*.toml`**, **`configs/serve/*.toml`**, and the **[Training WUI](../training-wui/README.md)** for that.
+
+For **CI, Docker, serverless, and toolchain** variables that may still be read by the codebase, see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)**.
 
 ## Table of Contents
 
@@ -215,45 +193,17 @@ This document provides a comprehensive reference for all environment variables u
         markdown += "\n"
 
     # Add usage notes
-    markdown += """## Usage Notes
+    markdown += """## Usage notes
 
-### Sensitive Variables
+- Treat variables marked with 🔒 as **secrets**: never commit real values; use a secrets manager in production where applicable.
+- Copy **[.env.example](../.env.example)** to `.env` for local development (`.env` is gitignored).
+- **Do not** add training hyperparameters or runtime toggles to `.env` — add them to TOML or use the WUI.
 
-Variables marked with 🔒 are sensitive and should never be committed to version control:
-- `IBM_QUANTUM_API_KEY`
-- `AWS_SECRET_ACCESS_KEY`
-- `SECRET_KEY`
-- `JWT_SECRET`
-- `ENCRYPTION_KEY`
-- `INTEL_CLOUD_API_KEY`
+## Related documentation
 
-### Configuration Sources
-
-Environment variables can be set through:
-1. **Environment**: Directly in your shell or CI/CD pipeline
-2. **.env files**: For local development (ensure .env files are in .gitignore)
-3. **Secrets management**: Use tools like HashiCorp Vault, AWS Secrets Manager, or Kubernetes secrets for production
-
-### Variable Precedence
-
-When the same variable is defined in multiple places, the precedence (from highest to lowest) is:
-1. Direct environment variable
-2. .env.local
-3. .env.development/.env.production
-4. .env
-
-### Development vs Production
-
-Some variables have different requirements in development vs production:
-- `DEBUG`: Should be `false` in production
-- `LOG_LEVEL`: Consider `WARNING` or `ERROR` in production
-- Sensitive variables: Always use secrets management in production
-
-## Related Documentation
-
-- [README](../README.md) — project overview and quick start
-- [Training data and env](TRAINING_DATA.md)
-- [Development Guide](../wiki/Development.md)
+- [README](../README.md) — project overview
+- [Training data](TRAINING_DATA.md)
+- [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md) — CI / container / legacy process env (not WUI user config)
 """
 
     return markdown

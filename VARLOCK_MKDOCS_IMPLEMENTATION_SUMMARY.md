@@ -1,5 +1,7 @@
 # Varlock & MkDocs Implementation Summary
 
+**Scope update (env):** [`.env.schema`](.env.schema) documents **credentials and API keys only** (Hugging Face, IBM Quantum, RunPod). Training and runtime configuration belong in **`configs/training/*.toml`**, **`configs/serve/*.toml`**, and the Training WUI — not in `.env`. CI, Docker, and toolchain variables that the code may still read are listed in **[docs/ENV_CI_OVERRIDES.md](docs/ENV_CI_OVERRIDES.md)**.
+
 ## 🎯 Project Overview
 
 This document summarizes the successful implementation of Varlock for configuration management and MkDocs (Material theme) for documentation generation in the LLM Pract project. The implementation follows modern DevOps practices with comprehensive automation and integration.

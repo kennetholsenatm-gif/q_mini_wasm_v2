@@ -1253,6 +1253,9 @@
       border-radius: 4px;
       font-size: var(--text-sm);
     }
+    .telemetry-metric-table-wrap table.telemetry-full-metrics {
+      font-size: var(--text-xs, 0.75rem);
+    }
     .telemetry-metric-table-wrap table {
       width: 100%;
       border-collapse: collapse;
@@ -1288,7 +1291,7 @@
           <label for="globalRunTarget"><strong>Execution target</strong></label>
           <select id="globalRunTarget" title="Where training runs — independent of TOML model config">
             <option value="local">Local (this machine)</option>
-            <option value="runpod">RunPod (OpenTofu apply → SSH)</option>
+            <option value="runpod">RunPod (remote GPU over SSH)</option>
             <option value="runpod_serverless">RunPod serverless endpoint</option>
           </select>
           <details id="globalInfraAdvanced" class="stack-sm" style="width:100%;max-width:640px;">
@@ -1307,7 +1310,7 @@
                 </label>
                 <label class="checkline stack-sm">
                   <input id="globalRunpodSkipApply" type="checkbox" />
-                  Skip OpenTofu apply (use existing state)
+                  Skip OpenTofu apply (Terraform state or warm target below)
                 </label>
               </div>
               <div id="globalRunpodServerlessWrap" style="display:none" class="stack-sm">
@@ -1332,6 +1335,7 @@
     <button type="button" class="danger" id="btnAbortSticky" disabled>Emergency Abort</button>
     <div class="hint" id="stickyEpochLabel" style="margin:0;">Epoch: -- / --</div>
     <progress id="stickyEpochProgress" max="100" value="0" style="width:260px;"></progress>
+    <span id="stickyGrpcTelemetryLabel" class="hint" style="margin:0;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Latest C++ engine telemetry (step, lr, throughput)">gRPC: —</span>
     <span id="stickyRunLabel" class="hint" style="margin:0;">No active run</span>
   </div>
   <nav class="app-tabs" role="tablist" aria-label="Main views">
@@ -1395,7 +1399,7 @@
         <p id="telemetryWarning" class="status error" style="display:none;font-weight:700;">
           WARNING: Hardware Accelerator Offline or WASM OOM - Falling back to degraded mode.
         </p>
-        <div class="hint">Streaming over WebSocket from training stdout/stderr metrics and alerts.</div>
+        <div class="hint">Streaming over WebSocket from training stdout/stderr metrics and alerts. Python <code>qmw_metric</code> rows usually appear <strong>at the end of each epoch</strong> (a long first epoch can look quiet). Match the filter to your run: <strong>All</strong>, <strong>C++ gRPC stream</strong> for native engine, or <strong>Python loop</strong> for <code>python -m qminiwasm.engine</code>.</div>
         <div class="telemetry-filter-row" role="group" aria-label="Telemetry stream filter">
           <span class="label-like" style="margin:0">Show metrics:</span>
           <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="all" checked /> All</label>
@@ -1405,14 +1409,40 @@
         <div id="telemetryStatus" class="status">No run selected.</div>
         <canvas id="chartReturn" height="220" class="stack-sm"></canvas>
         <canvas id="chartMSE" height="220" class="stack-sm"></canvas>
+        <div class="routing-telemetry-panel stack-sm" style="margin-top:var(--space-md)">
+          <h3 style="font-size:var(--text-md);margin:0 0 var(--space-sm);font-weight:600;">Quantum routing</h3>
+          <p class="hint" style="margin:0 0 var(--space-sm)">
+            State 1 = classical assignment; State 2 = Qiskit QAOA path after the latency budget. Chart: estimated % of samples in State 2 over the last 60 seconds.
+          </p>
+          <div class="row" style="gap:16px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:1;min-width:200px">
+              <div class="hint" style="margin:0 0 4px 0;font-size:var(--text-xs)">Classical assignment vs 50 ms budget (10 ms floor)</div>
+              <progress id="routingLatencyGauge" max="100" value="0" style="width:100%;height:10px;"></progress>
+              <div id="routingLatencyGaugeLabel" class="hint" style="margin:4px 0 0 0;font-size:var(--text-xs)">—</div>
+            </div>
+            <div style="min-width:140px">
+              <div class="hint" style="margin:0 0 4px 0;font-size:var(--text-xs)">Handoffs / minute</div>
+              <div id="routingHandoffDensity" style="font-size:1.25rem;font-weight:600;">0</div>
+            </div>
+          </div>
+          <canvas id="chartRoutingState2" height="120" class="stack-sm" style="max-width:100%"></canvas>
+        </div>
         <div class="telemetry-metric-table-wrap" id="telemetryMetricTableWrap">
-          <table>
+          <table class="telemetry-full-metrics">
             <thead>
               <tr>
                 <th>Epoch</th>
                 <th>Loss</th>
                 <th>Return</th>
                 <th>MSE</th>
+                <th>Step</th>
+                <th>LR</th>
+                <th title="samples/s (gRPC)">σ/s</th>
+                <th title="sampler / prefetch / compute queue depth">Q</th>
+                <th title="taxonomy tier · precision">Tier</th>
+                <th title="stage / event_type">Stage</th>
+                <th title="decoherence_score">Dec</th>
+                <th title="enclave / attestation">TEE</th>
                 <th>Source</th>
               </tr>
             </thead>
@@ -1692,6 +1722,15 @@
       <section class="dash-card" data-card-id="lego-review" data-col="1" data-lego-step="5">
         <h2>5 · Review file &amp; save</h2>
         <p class="hint hint-block" style="margin-top:0">Sanity-check the payload, then save to <code>wui_working.toml</code>. Model facts call the same preview API.</p>
+        <div class="stack-sm mb-md" id="wizardWarmTargetWrap" style="display:none">
+          <label for="wizardRunpodWarmTarget">Remote GPU target</label>
+          <select id="wizardRunpodWarmTarget" style="max-width:520px;box-sizing:border-box">
+            <option value="">Default — resolve host from Terraform state (after apply)</option>
+          </select>
+          <p class="hint" style="margin:0">
+            Choosing a <strong>warm target</strong> skips OpenTofu on launch. Manage targets under <strong>Infra &amp; RunPod → Environment targets</strong>.
+          </p>
+        </div>
         <div class="review-box" id="bReview"></div>
         <div class="row stack-md mt-md">
           <button type="button" class="primary" id="btnBuildRun">Save working config (wizard)</button>
@@ -1702,6 +1741,20 @@
             <button type="button" class="ghost" id="btnModelFacts">Refresh facts</button>
           </div>
           <div class="kv" id="modelFacts"></div>
+        </div>
+        <div class="model-card stack-md" id="deployServeCard" style="margin-top:var(--space-md)">
+          <h3 style="margin-top:0">Deploy to serve</h3>
+          <p class="hint" style="margin:0">
+            After <code>agent_bundle.json</code> and <code>serve.toml</code> exist for this model, start a local HTTP API (uvicorn on
+            <code>127.0.0.1</code>) and generate <code>docker-compose.serve.yaml</code> in the model folder.
+          </p>
+          <div class="row stack-sm align-center flex-wrap">
+            <button type="button" class="primary" id="btnDeployServe">Deploy to serve</button>
+            <button type="button" class="ghost" id="btnServeStop">Stop serving</button>
+            <button type="button" class="ghost" id="btnServeStatus">Refresh serve status</button>
+          </div>
+          <p class="status stack-sm" id="deployServeMsg" aria-live="polite"></p>
+          <p class="hint" id="deployServeHealth" style="margin:0"></p>
         </div>
         <p class="status stack-md" id="buildMsg" aria-live="polite"></p>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
@@ -1847,11 +1900,12 @@
         <div class="log-toolbar">
           <button type="button" class="danger" id="btnStop" disabled title="SIGINT to the training process: finish current batch, write latest.pt, then exit">Stop (graceful)</button>
           <button type="button" class="danger ghost" id="btnStopForce" disabled title="Immediate process kill — may lose in-epoch work">Force kill</button>
+          <button type="button" class="ghost" id="btnCoopStop" disabled title="Writes the WUI stop file: same graceful stop as SIGINT at the next batch boundary. Use when Stop (graceful) fails on Windows (GUI-launched WUI). RunPod SSH: touches file on the pod.">Cooperative stop (file)</button>
           <button type="button" class="primary ghost" id="btnStopAndData" disabled title="Graceful stop, then open Training tab · step 3 (Data source) to swap dataset or mix">Stop → edit data (step 3)</button>
           <button type="button" class="ghost" id="btnClearLog">Clear view</button>
         </div>
         <p class="log-hint" style="font-size:var(--text-sm);color:var(--text-secondary);margin:6px 0 0 0;">
-          Graceful stop works for local and RunPod SSH runs (serverless uses cancel). Use <strong>Stop → edit data</strong> to jump to the wizard after stopping, keep <strong>Resume latest</strong> if you want the same weights, then launch again. Multi-dataset mix lives in <strong>step 1</strong> (rail).
+          Graceful stop works for local and RunPod SSH runs (serverless uses cancel). If <strong>Stop (graceful)</strong> cannot deliver SIGINT (common when the WUI is started from a GUI on Windows), use <strong>Cooperative stop (file)</strong> instead. Use <strong>Stop → edit data</strong> to jump to the wizard after stopping, keep <strong>Resume latest</strong> if you want the same weights, then launch again. Multi-dataset mix lives in <strong>step 1</strong> (rail).
         </p>
         <p class="log-legend" id="logLegend" aria-hidden="true">
           <span class="lg lg-better">■ improved</span>
@@ -1907,6 +1961,47 @@
           <span class="hint" style="margin:0">Drag by section title; resize from the corner grip.</span>
         </div>
         <div class="infra-dash-wrap">
+        <div class="infra-section dash-card billing-surface-warn" data-card-id="infra-warm-targets">
+          <h2>Environment targets (warm RunPod)</h2>
+          <p class="hint mb-sm">
+            <strong>Provision first</strong> with <code>tofu apply</code> below (or any host you control). Register GPU hosts here so training launch can
+            <strong>skip OpenTofu</strong> and sync over SSH immediately. Used when you pick a target in the wizard step 5 dropdown.
+          </p>
+          <p class="status stack-sm" id="warmTargetsMsg" aria-live="polite"></p>
+          <div style="overflow:auto;max-height:220px;border:1px solid var(--surface-interface-gray);border-radius:4px;margin-bottom:var(--space-sm)">
+            <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+              <thead>
+                <tr style="text-align:left;border-bottom:1px solid var(--surface-interface-gray);">
+                  <th style="padding:6px 8px;">Label</th>
+                  <th style="padding:6px 8px;">Host</th>
+                  <th style="padding:6px 8px;">SSH user</th>
+                  <th style="padding:6px 8px;width:1%;"></th>
+                </tr>
+              </thead>
+              <tbody id="warmTargetsBody"></tbody>
+            </table>
+          </div>
+          <div class="grid stack-sm" style="max-width:720px">
+            <div>
+              <label for="warmTargetNewLabel">New label</label>
+              <input id="warmTargetNewLabel" type="text" placeholder="my-a4000-pod" autocomplete="off" style="width:100%;box-sizing:border-box" />
+            </div>
+            <div>
+              <label for="warmTargetNewHost">Host / IP</label>
+              <input id="warmTargetNewHost" type="text" placeholder="203.0.113.7" autocomplete="off" style="width:100%;box-sizing:border-box" />
+            </div>
+            <div>
+              <label for="warmTargetNewUser">SSH user (optional)</label>
+              <input id="warmTargetNewUser" type="text" placeholder="root (default if empty)" autocomplete="off" style="width:100%;box-sizing:border-box" />
+            </div>
+          </div>
+          <div class="row stack-sm align-center mt-sm flex-wrap">
+            <button type="button" class="ghost" id="btnWarmTargetsReload">Reload list</button>
+            <button type="button" class="primary" id="btnWarmTargetAdd">Add target</button>
+            <button type="button" class="ghost" id="btnWarmTargetCaptureIP">Capture current Terraform public_ip</button>
+          </div>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+        </div>
         <div class="infra-section dash-card billing-surface-warn" data-card-id="infra-tfvars">
           <h2>terraform.tfvars</h2>
           <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (header target), the engine runs on the GPU pod after SSH sync; turn that off in <strong>Execution target → Target options</strong> to run <code>python -m qminiwasm.engine</code> on the WUI host.</p>
@@ -2118,7 +2213,7 @@
       <label for="modalLaunchTarget">Target</label>
       <select id="modalLaunchTarget" style="width:100%;max-width:100%;box-sizing:border-box;margin-bottom:var(--space-sm)">
         <option value="local">Local (this machine)</option>
-        <option value="runpod">RunPod (OpenTofu apply → SSH)</option>
+        <option value="runpod">RunPod (remote GPU over SSH)</option>
         <option value="runpod_serverless">RunPod serverless endpoint</option>
       </select>
       <p class="hint" id="modalLaunchSummary" style="margin:0"></p>
@@ -2155,6 +2250,7 @@
       } catch (_) {}
     }
     bootstrapWuiTokenFromURL();
+    /** #region agent log */ const __agentWuiT0 = performance.now(); /** #endregion agent log */
     function getWuiToken() {
       try {
         return sessionStorage.getItem(WUI_TOKEN_SESSION_KEY) || "";
@@ -2186,6 +2282,7 @@
       return path + sep + "wui_token=" + encodeURIComponent(tok);
     }
     let pollTimer = null;
+    /** #region agent log */ let pollLogBusy = false; let telemetryMsgCount = 0; let telemetryLogT0 = 0; /** #endregion agent log */
     let logOffset = 0;
     let activeRunId = null;
     let stickyLastEpoch = 0;
@@ -2210,6 +2307,11 @@
     let telemetryWS = null;
     let chartReturn = null;
     let chartMSE = null;
+    let chartRoutingState2 = null;
+    const ROUTING_HISTORY_MS = 60000;
+    let routingStateHistory = [];
+    let routingHandoffTimes = [];
+    let combinatorialWallMarkerDone = false;
     let schemaFields = [];
     let telemetryMetricCount = 0;
     let telemetryIdleTimer = null;
@@ -2232,6 +2334,9 @@
       "training.epochs",
       "training.batch_size",
       "training.learning_rate",
+      "training.log_xpu_memory",
+      "training.log_xpu_memory_reset_peak",
+      "training.log_train_throughput",
       "data.source",
       "data.path",
       "huggingface.dataset_config",
@@ -2260,6 +2365,7 @@
     const RUNPOD_SERVERLESS_ENDPOINT_ID_STORAGE_KEY = "qmw_runpod_serverless_endpoint_id_v1";
     const RUNPOD_WORKER_IMAGE_STORAGE_KEY = "qmw_runpod_worker_image_v1";
     const GLOBAL_INFRA_STORAGE_KEY = "qmw_global_infra_v1";
+    const WIZARD_WARM_TARGET_KEY = "qmw_wizard_warm_target_id_v1";
 
     function getGlobalRunTarget() {
       const el = $("globalRunTarget");
@@ -2484,9 +2590,88 @@
       return r ? String(r.value || "cpu") : "cpu";
     }
 
+    function trimRoutingHistory(now) {
+      const cutoff = now - ROUTING_HISTORY_MS;
+      routingStateHistory = routingStateHistory.filter((e) => e.t >= cutoff);
+      routingHandoffTimes = routingHandoffTimes.filter((t) => t >= cutoff);
+    }
+
+    function pctState2InWindow() {
+      if (!routingStateHistory.length) return 0;
+      const n2 = routingStateHistory.filter((e) => e.state === 2).length;
+      return (n2 / routingStateHistory.length) * 100;
+    }
+
+    function handoffsPerMinute() {
+      const now = Date.now();
+      trimRoutingHistory(now);
+      if (!routingHandoffTimes.length) return 0;
+      const spanMin = Math.max(1 / 60, (now - routingHandoffTimes[0]) / 60000);
+      return routingHandoffTimes.length / spanMin;
+    }
+
+    function updateRoutingLatencyGauge(assignmentMs, budgetMs) {
+      const g = $("routingLatencyGauge");
+      const lab = $("routingLatencyGaugeLabel");
+      const b = Number(budgetMs) || 50;
+      const a = Number(assignmentMs) || 0;
+      const floor = 10;
+      const denom = Math.max(1e-6, b - floor);
+      const pct = Math.max(0, Math.min(100, ((a - floor) / denom) * 100));
+      if (g) g.value = pct;
+      if (lab) lab.textContent = `${a.toFixed(2)} ms / ${b} ms budget`;
+    }
+
+    function pushRoutingTelemetrySample(msg) {
+      const now = Date.now();
+      const st = parseInt(String(msg.routing_state ?? "0"), 10) || 0;
+      const assign = Number(msg.assignment_ms) || 0;
+      const budget = Number(msg.budget_ms) || 50;
+      routingStateHistory.push({ t: now, state: st });
+      trimRoutingHistory(now);
+      updateRoutingLatencyGauge(assign, budget);
+      const dens = $("routingHandoffDensity");
+      if (dens) dens.textContent = handoffsPerMinute().toFixed(1);
+      const pct = pctState2InWindow();
+      if (chartRoutingState2) {
+        const tlab = new Date(now).toLocaleTimeString();
+        chartRoutingState2.data.labels.push(tlab);
+        chartRoutingState2.data.datasets[0].data.push(pct);
+        if (chartRoutingState2.data.labels.length > 90) {
+          chartRoutingState2.data.labels.shift();
+          chartRoutingState2.data.datasets[0].data.shift();
+        }
+        chartRoutingState2.update("none");
+      }
+    }
+
+    function onRoutingHandoffWS(msg) {
+      const now = Date.now();
+      routingHandoffTimes.push(now);
+      trimRoutingHistory(now);
+      const dens = $("routingHandoffDensity");
+      if (dens) dens.textContent = handoffsPerMinute().toFixed(1);
+      if (
+        msg.combinatorial_wall === 1 &&
+        activeRunId &&
+        !combinatorialWallMarkerDone
+      ) {
+        combinatorialWallMarkerDone = true;
+        const ms = Number(msg.assignment_ms) || 0;
+        const tag = `\n── combinatorial wall @ ${ms.toFixed(2)} ms (State 1→2) ──\n`;
+        logPlainAccum += tag;
+        const lg = $("log");
+        if (lg) {
+          lg.innerHTML = renderTrainingLogFromPlain(logPlainAccum);
+          lg.scrollTop = lg.scrollHeight;
+        }
+      }
+    }
+
     function initTelemetryCharts() {
       const ret = $("chartReturn");
       const mse = $("chartMSE");
+      const r2el = $("chartRoutingState2");
       if (!ret || !mse || typeof Chart === "undefined") return;
       chartReturn = new Chart(ret.getContext("2d"), {
         type: "line",
@@ -2498,6 +2683,26 @@
         data: { labels: [], datasets: [{ label: "mean_mse", data: [], borderColor: "#0078d4", tension: 0.2 }] },
         options: { animation: false, responsive: true, plugins: { legend: { labels: { color: "#fff" } } }, scales: { x: { ticks: { color: "#8c8c8c" } }, y: { ticks: { color: "#8c8c8c" } } } },
       });
+      if (r2el) {
+        chartRoutingState2 = new Chart(r2el.getContext("2d"), {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              { label: "% samples in State 2 (rolling 60s)", data: [], borderColor: "#c48600", tension: 0.2 },
+            ],
+          },
+          options: {
+            animation: false,
+            responsive: true,
+            plugins: { legend: { labels: { color: "#fff" } } },
+            scales: {
+              x: { ticks: { color: "#8c8c8c", maxRotation: 45 } },
+              y: { min: 0, max: 100, ticks: { color: "#8c8c8c" } },
+            },
+          },
+        });
+      }
     }
 
     function clearTelemetryMetricRows() {
@@ -2515,6 +2720,63 @@
       }
     }
 
+    function telemetryDash(v) {
+      if (v === undefined || v === null || v === "") return "—";
+      return String(v);
+    }
+
+    function telemetryGrpcExtraCells(metric) {
+      const isGrpc = metric.engine === "grpc" || metric.telemetry_source === TELEMETRY_SOURCE_CPP;
+      if (!isGrpc) {
+        return (
+          "<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>"
+        );
+      }
+      const q = [metric.sampler_queue_depth, metric.prefetch_queue_depth, metric.compute_queue_depth]
+        .map((x) => telemetryDash(x))
+        .join("/");
+      const tier =
+        [metric.taxonomy_tier, metric.precision_mode].filter((s) => s != null && String(s).trim() !== "").join(" · ") ||
+        "—";
+      const stage =
+        [metric.stage, metric.event_type].filter((s) => s != null && String(s).trim() !== "").join(" / ") || "—";
+      let dec = "—";
+      if (metric.decoherence_score !== undefined && metric.decoherence_score !== null && metric.decoherence_score !== "") {
+        const d = Number(metric.decoherence_score);
+        dec = Number.isFinite(d) ? d.toFixed(4) : telemetryDash(metric.decoherence_score);
+      }
+      let tee = "—";
+      if (metric.enclave_state || metric.attestation_state) {
+        tee =
+          String(metric.enclave_state || "").slice(0, 12).trim() +
+          " " +
+          String(metric.attestation_state || "").slice(0, 10).trim();
+        tee = tee.trim() || "—";
+      }
+      let lr = "—";
+      if (metric.learning_rate !== undefined && metric.learning_rate !== null && metric.learning_rate !== "") {
+        const lrn = Number(metric.learning_rate);
+        lr = Number.isFinite(lrn) ? lrn.toExponential(2) : telemetryDash(metric.learning_rate);
+      }
+      let sps = "—";
+      if (metric.samples_per_second !== undefined && metric.samples_per_second !== null && metric.samples_per_second !== "") {
+        const sp = Number(metric.samples_per_second);
+        sps = Number.isFinite(sp) ? sp.toFixed(1) : telemetryDash(metric.samples_per_second);
+      }
+      const stepStr =
+        metric.step !== undefined && metric.step !== null && metric.step !== "" ? String(metric.step) : "—";
+      return (
+        `<td>${escapeHtml(stepStr)}</td>` +
+        `<td>${escapeHtml(lr)}</td>` +
+        `<td>${escapeHtml(sps)}</td>` +
+        `<td title="sampler/prefetch/compute">${escapeHtml(q)}</td>` +
+        `<td>${escapeHtml(tier)}</td>` +
+        `<td>${escapeHtml(stage)}</td>` +
+        `<td>${escapeHtml(dec)}</td>` +
+        `<td title="${escapeHtml(String(metric.enclave_state || "") + " | " + String(metric.attestation_state || ""))}">${escapeHtml(tee)}</td>`
+      );
+    }
+
     function appendTelemetryMetricRow(metric) {
       const tb = $("telemetryMetricBody");
       if (!tb) return;
@@ -2527,6 +2789,7 @@
         `<td>${escapeHtml(String(metric.mean_loss ?? ""))}</td>` +
         `<td>${escapeHtml(String(metric.mean_return ?? ""))}</td>` +
         `<td>${escapeHtml(String(metric.mean_mse ?? ""))}</td>` +
+        telemetryGrpcExtraCells(metric) +
         `<td><span class="${pillClass}">${escapeHtml(src)}</span></td>`;
       tr.style.display = telemetryFilterAllowsMetric(metric) ? "" : "none";
       tb.insertBefore(tr, tb.firstChild);
@@ -2534,15 +2797,30 @@
     }
 
     function resetTelemetryCharts() {
-      for (const c of [chartReturn, chartMSE]) {
+      for (const c of [chartReturn, chartMSE, chartRoutingState2]) {
         if (!c) continue;
         c.data.labels = [];
         c.data.datasets[0].data = [];
         c.update("none");
       }
+      routingStateHistory = [];
+      routingHandoffTimes = [];
+      combinatorialWallMarkerDone = false;
+      const g = $("routingLatencyGauge");
+      const rlab = $("routingLatencyGaugeLabel");
+      const dens = $("routingHandoffDensity");
+      if (g) g.value = 0;
+      if (rlab) rlab.textContent = "—";
+      if (dens) dens.textContent = "0";
       $("telemetryWarning").style.display = "none";
       telemetryMetricCount = 0;
+      /** #region agent log */ telemetryMsgCount = 0; telemetryLogT0 = 0; /** #endregion agent log */
       clearTelemetryMetricRows();
+      const sg = $("stickyGrpcTelemetryLabel");
+      if (sg) {
+        sg.textContent = "gRPC: —";
+        sg.title = "";
+      }
       const st = $("telemetryStatus");
       if (st) {
         st.textContent = "Waiting for metrics...";
@@ -2551,6 +2829,28 @@
     }
 
     function pushTelemetryPoint(metric) {
+      /** #region agent log */
+      telemetryMsgCount += 1;
+      if (!telemetryLogT0) telemetryLogT0 = performance.now();
+      const dt = performance.now() - telemetryLogT0;
+      if (telemetryMsgCount === 1 || telemetryMsgCount % 25 === 0 || dt >= 2000) {
+        fetch("http://127.0.0.1:7595/ingest/e362bdac-a7aa-4cfc-ae6e-2f801348a0a2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4b1a8d" },
+          body: JSON.stringify({
+            sessionId: "4b1a8d",
+            hypothesisId: "B",
+            location: "index.html:pushTelemetryPoint",
+            message: "telemetry_metrics",
+            data: { total: telemetryMsgCount, windowMs: Math.round(dt) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        if (dt >= 2000) {
+          telemetryLogT0 = performance.now();
+        }
+      }
+      /** #endregion agent log */
       telemetryMetricCount += 1;
       const st = $("telemetryStatus");
       if (st) {
@@ -2578,6 +2878,33 @@
         chartMSE.update("none");
       }
       appendTelemetryMetricRow(metric);
+      const sg = $("stickyGrpcTelemetryLabel");
+      if (sg && (metric.engine === "grpc" || metric.telemetry_source === TELEMETRY_SOURCE_CPP)) {
+        const parts = [];
+        if (metric.step !== undefined && metric.step !== null && metric.step !== "") parts.push(`step ${metric.step}`);
+        if (metric.learning_rate !== undefined && metric.learning_rate !== null && metric.learning_rate !== "") {
+          const lr = Number(metric.learning_rate);
+          if (Number.isFinite(lr)) parts.push(`lr ${lr.toExponential(1)}`);
+        }
+        if (
+          metric.samples_per_second !== undefined &&
+          metric.samples_per_second !== null &&
+          metric.samples_per_second !== ""
+        ) {
+          const sp = Number(metric.samples_per_second);
+          if (Number.isFinite(sp) && sp > 0) parts.push(`${sp.toFixed(0)} σ/s`);
+        }
+        sg.textContent = parts.length ? `gRPC: ${parts.join(" · ")}` : "gRPC: …";
+        sg.title = [
+          metric.stage,
+          metric.event_type,
+          metric.graph_id,
+          metric.node_id,
+          metric.grpc_message || (metric.line && String(metric.line).startsWith("grpc:") ? String(metric.line).slice(5) : ""),
+        ]
+          .filter(Boolean)
+          .join(" | ");
+      }
     }
 
     function connectRunTelemetryWS(runId) {
@@ -2605,6 +2932,10 @@
         if (!msg || msg.run_id !== runId) return;
         if (msg.type === "metric") {
           pushTelemetryPoint(msg);
+        } else if (msg.type === "routing_telemetry") {
+          pushRoutingTelemetrySample(msg);
+        } else if (msg.type === "routing_handoff") {
+          onRoutingHandoffWS(msg);
         } else if (msg.type === "backend_status") {
           const st = $("telemetryStatus");
           if (st) {
@@ -2619,7 +2950,8 @@
         }
       };
       telemetryWS.onopen = () => {
-        $("telemetryStatus").textContent = "Connected. Waiting for metric lines matching: epoch=... mean_loss=... mean_return=... mean_mse=...";
+        $("telemetryStatus").textContent =
+          "Connected. Python runs emit qmw_metric at epoch end. C++ gRPC runs send full TelemetryEvent (step, LR, queues, …) without log-line parsing. Use the stream filter (All / C++ / Python) to match your run.";
         $("telemetryStatus").className = "status";
         if (telemetryIdleTimer) clearTimeout(telemetryIdleTimer);
         telemetryIdleTimer = setTimeout(() => {
@@ -3726,16 +4058,18 @@
       if (!host) return;
       const rtVal = getGlobalRunTarget();
       const rtLabel =
-        rtVal === "runpod" ? "RunPod (OpenTofu)" : rtVal === "runpod_serverless" ? "RunPod Serverless" : "Local";
+        rtVal === "runpod" ? "RunPod (remote GPU)" : rtVal === "runpod_serverless" ? "RunPod Serverless" : "Local";
       const trainRemote =
         rtVal === "runpod" && ($("globalRunpodTrainOnPod") ? $("globalRunpodTrainOnPod").checked : true);
       const skipApply =
         rtVal === "runpod" && $("globalRunpodSkipApply") && $("globalRunpodSkipApply").checked;
+      const warmId = wizardRunpodWarmTargetId();
       const podNote =
         rtVal === "runpod"
           ? ($("globalRunpodDestroy").checked ? "destroy pod when training stops" : "leave pod running") +
             (trainRemote ? "; train on pod (SSH)" : "; train on WUI host (local Python)") +
-            (skipApply ? "; skip tofu apply" : "")
+            (warmId ? "; warm target (no OpenTofu on launch)" : "") +
+            (skipApply && !warmId ? "; skip tofu apply" : "")
           : rtVal === "runpod_serverless"
             ? "POST /run + poll /status; no OpenTofu"
             : "";
@@ -3854,6 +4188,49 @@
         .replace(/^-+|-+$/g, "")
         .replace(/--+/g, "-");
       return slug || "model_" + Math.floor(Date.now() / 1000);
+    }
+
+    async function deployServeForStem(modelStem) {
+      const stem = String(modelStem || "").trim();
+      const msg = $("deployServeMsg");
+      const health = $("deployServeHealth");
+      if (!stem) {
+        if (msg) {
+          msg.textContent = "Model stem is empty.";
+          msg.className = "status error";
+        }
+        return;
+      }
+      if (msg) {
+        msg.textContent = "Starting serve…";
+        msg.className = "status";
+      }
+      if (health) health.textContent = "";
+      try {
+        const r = await apiFetch("/api/serve/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model_stem: stem, port: 8001 }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (msg) {
+          msg.textContent = `Serving ${stem} on port ${data.port} (pid ${data.pid})`;
+          msg.className = "status done";
+        }
+        if (health && data.health_url) {
+          health.innerHTML =
+            `Health: <a href="${escapeHtml(String(data.health_url))}" target="_blank" rel="noopener">${escapeHtml(String(data.health_url))}</a>` +
+            (data.docker_compose
+              ? ` · compose: <code>${escapeHtml(String(data.docker_compose))}</code>`
+              : "");
+        }
+      } catch (e) {
+        if (msg) {
+          msg.textContent = String(e.message || e);
+          msg.className = "status error";
+        }
+      }
     }
 
     function runpodInfraSlugFromWizard() {
@@ -4164,6 +4541,16 @@
 
     function refreshWizardReview() {
       const p = buildPayload();
+      const hdrRt = getGlobalRunTarget();
+      const trainRemote =
+        hdrRt === "runpod" && ($("globalRunpodTrainOnPod") ? $("globalRunpodTrainOnPod").checked : true);
+      const wt = wizardRunpodWarmTargetId();
+      const wtSummary = wt
+        ? (() => {
+            const t = warmTargetsCache.find((x) => x.id === wt);
+            return t ? `${t.label || t.id} (${t.host})` : wt;
+          })()
+        : "Default (Terraform public_ip)";
       $("bReview").innerHTML =
         `<strong>Model name</strong>: ${escapeHtml(p.name || "(auto-generated)")}<br/>` +
         `<strong>Accelerator</strong>: ${escapeHtml(p.accelerator)}<br/>` +
@@ -4177,13 +4564,16 @@
         `<strong>HF max rows</strong>: ${escapeHtml(p.hf_num_samples > 0 ? String(p.hf_num_samples) : "auto (≤300k)")}<br/>` +
         `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
         `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
-        `<strong>Execution target</strong>: ${escapeHtml(p.run_target || "local")}${
-          p.run_target === "runpod"
-            ? " (destroy after: " + (p.runpod_destroy_on_exit ? "yes" : "no") + ")"
-            : p.run_target === "runpod_serverless"
+        `<strong>Execution target (header)</strong>: ${escapeHtml(hdrRt)}${
+          hdrRt === "runpod"
+            ? " (destroy after: " + ($("globalRunpodDestroy").checked ? "yes" : "no") + ")"
+            : hdrRt === "runpod_serverless"
               ? " (Serverless job API)"
               : ""
         }<br/>` +
+        (hdrRt === "runpod" && trainRemote
+          ? `<strong>Remote GPU target</strong>: ${escapeHtml(wtSummary)}<br/>`
+          : "") +
         `<strong>LR trial mode</strong>: ${p.lr_trial_mode ? "on" : "off"}${p.lr_trial_mode ? ` (${escapeHtml(String(p.lr_trial_epochs))} epochs)` : ""}<br/>` +
         `<strong>Resume latest checkpoint</strong>: ${p.resume_latest ? "yes" : "no"}`;
     }
@@ -4316,11 +4706,158 @@
       if (rw) rw.style.display = pod ? "block" : "none";
       const sw = $("globalRunpodServerlessWrap");
       if (sw) sw.style.display = rt === "runpod_serverless" ? "block" : "none";
+      const ww = $("wizardWarmTargetWrap");
+      if (ww) {
+        const trainPod = !$("globalRunpodTrainOnPod") || $("globalRunpodTrainOnPod").checked;
+        ww.style.display = pod && trainPod ? "block" : "none";
+      }
       updateLaunchExecSummary();
     }
 
     let lastInfraPodIp = "";
     let lastInfraRemoteCmd = "";
+    let warmTargetsCache = [];
+
+    function wizardRunpodWarmTargetId() {
+      const el = $("wizardRunpodWarmTarget");
+      return el && el.value ? String(el.value).trim() : "";
+    }
+
+    function persistWizardWarmTarget() {
+      try {
+        const v = wizardRunpodWarmTargetId();
+        if (v) localStorage.setItem(WIZARD_WARM_TARGET_KEY, v);
+        else localStorage.removeItem(WIZARD_WARM_TARGET_KEY);
+      } catch (_) {}
+    }
+
+    function restoreWizardWarmTarget() {
+      try {
+        const v = localStorage.getItem(WIZARD_WARM_TARGET_KEY);
+        const el = $("wizardRunpodWarmTarget");
+        if (!el || !v) return;
+        if ([...el.options].some((o) => o.value === v)) el.value = v;
+      } catch (_) {}
+    }
+
+    function populateWizardWarmTargetSelect() {
+      const el = $("wizardRunpodWarmTarget");
+      if (!el) return;
+      const prev = el.value;
+      el.innerHTML =
+        '<option value="">Default — resolve host from Terraform state (after apply)</option>';
+      for (const t of warmTargetsCache) {
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = (t.label || t.id) + " (" + t.host + ")";
+        el.appendChild(opt);
+      }
+      if (prev && [...el.options].some((o) => o.value === prev)) el.value = prev;
+      else restoreWizardWarmTarget();
+    }
+
+    function renderWarmTargetsInfraTable() {
+      const tb = $("warmTargetsBody");
+      if (!tb) return;
+      tb.innerHTML = "";
+      if (!warmTargetsCache.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 4;
+        td.style.padding = "8px";
+        td.style.color = "var(--text-secondary)";
+        td.textContent = "No warm targets yet — add one or capture Terraform public_ip from Status.";
+        tr.appendChild(td);
+        tb.appendChild(tr);
+        return;
+      }
+      for (const t of warmTargetsCache) {
+        const tr = document.createElement("tr");
+        const del = String(t.id).replace(/"/g, "&quot;");
+        tr.innerHTML =
+          `<td style="padding:6px 8px;border-bottom:1px solid var(--surface-interface-gray)">${escapeHtml(t.label || t.id)}</td>` +
+          `<td style="padding:6px 8px;border-bottom:1px solid var(--surface-interface-gray);font-family:var(--font-mono,monospace)">${escapeHtml(t.host)}</td>` +
+          `<td style="padding:6px 8px;border-bottom:1px solid var(--surface-interface-gray)">${escapeHtml(t.ssh_user || "—")}</td>` +
+          `<td style="padding:6px 8px;border-bottom:1px solid var(--surface-interface-gray)"><button type="button" class="ghost warm-target-del" data-id="${del}">Remove</button></td>`;
+        tb.appendChild(tr);
+      }
+      tb.querySelectorAll(".warm-target-del").forEach((btn) => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+          if (!id || !window.confirm("Remove warm target " + id + "?")) return;
+          const prev = warmTargetsCache.slice();
+          warmTargetsCache = warmTargetsCache.filter((x) => x.id !== id);
+          try {
+            await saveWarmTargetsToServer();
+          } catch (e) {
+            warmTargetsCache = prev;
+            const msg = $("warmTargetsMsg");
+            if (msg) {
+              msg.textContent = String(e.message || e);
+              msg.className = "status error";
+            }
+          }
+        };
+      });
+    }
+
+    async function saveWarmTargetsToServer() {
+      const msg = $("warmTargetsMsg");
+      if (msg) {
+        msg.textContent = "Saving…";
+        msg.className = "status";
+      }
+      const r = await apiFetch("/api/runpod/warm-targets", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targets: warmTargetsCache }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      warmTargetsCache = Array.isArray(data.targets) ? data.targets : warmTargetsCache;
+      renderWarmTargetsInfraTable();
+      populateWizardWarmTargetSelect();
+      if (msg) {
+        msg.textContent = "Saved " + warmTargetsCache.length + " target(s).";
+        msg.className = "status done";
+      }
+    }
+
+    async function refreshWarmTargetsFromServer() {
+      const msg = $("warmTargetsMsg");
+      if (msg) {
+        msg.textContent = "Loading…";
+        msg.className = "status";
+      }
+      try {
+        const r = await apiFetch("/api/runpod/warm-targets");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        warmTargetsCache = Array.isArray(data.targets) ? data.targets : [];
+        renderWarmTargetsInfraTable();
+        populateWizardWarmTargetSelect();
+        syncGlobalInfraChrome();
+        if (msg) {
+          msg.textContent = warmTargetsCache.length + " warm target(s) loaded.";
+          msg.className = "status done";
+        }
+      } catch (e) {
+        if (msg) {
+          msg.textContent = String(e.message || e);
+          msg.className = "status error";
+        }
+      }
+    }
+
+    function onWizardWarmTargetChange() {
+      const v = wizardRunpodWarmTargetId();
+      const skip = $("globalRunpodSkipApply");
+      if (v && skip) skip.checked = true;
+      persistWizardWarmTarget();
+      persistGlobalInfraBasics();
+      refreshWizardReview();
+      updateLaunchExecSummary();
+    }
 
     function renderInfraBadges(rp) {
       const wrap = $("infraBadges");
@@ -4483,6 +5020,12 @@
           ["Preflight accelerator (Build form)", p.preflight_accelerator_override ? String(p.preflight_accelerator_override) : "(use config file)"],
           ["Requested accelerator (device check)", p.requested_accelerator || "auto"],
           ["Resolved torch device", p.resolved_torch_device || "unknown"],
+          ["Python version", p.python_version || "unknown"],
+          ["XPU support class", p.xpu_support_class != null && p.xpu_support_class !== "" ? String(p.xpu_support_class) : "(n/a)"],
+          ["XPU device name", p.xpu_device_name != null && p.xpu_device_name !== "" ? String(p.xpu_device_name) : "(n/a)"],
+          ["XPU memory allocated (bytes)", p.xpu_memory_allocated_bytes != null ? p.xpu_memory_allocated_bytes : "(n/a)"],
+          ["XPU peak memory allocated (bytes)", p.xpu_max_memory_allocated_bytes != null ? p.xpu_max_memory_allocated_bytes : "(n/a)"],
+          ["Intel XPU / Python advisory", p.intel_xpu_stack_advisory ? String(p.intel_xpu_stack_advisory) : "(none)"],
           ["Backend policy selected", p.backend_policy && p.backend_policy.selected_device ? p.backend_policy.selected_device : "(unknown)"],
           ["Backend policy reason", p.backend_policy && p.backend_policy.reason_code ? p.backend_policy.reason_code : "(none)"],
           ["SYCL backend active", p.sycl_backend_active ? "yes" : "no"],
@@ -4535,6 +5078,7 @@
       $("logTitle").textContent = id ? "· " + (configPath || id) : "";
       $("btnStop").disabled = !id;
       if ($("btnStopForce")) $("btnStopForce").disabled = !id;
+      if ($("btnCoopStop")) $("btnCoopStop").disabled = !id;
       if ($("btnStopAndData")) $("btnStopAndData").disabled = !id;
       $("btnAbortSticky").disabled = !id;
       $("stickyRunLabel").textContent = id ? `Active run: ${id.slice(0,8)}` : "No active run";
@@ -4546,18 +5090,69 @@
 
     async function pollLog() {
       if (!activeRunId) return;
+      /** #region agent log */
+      if (pollLogBusy) {
+        fetch("http://127.0.0.1:7595/ingest/e362bdac-a7aa-4cfc-ae6e-2f801348a0a2", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4b1a8d" },
+          body: JSON.stringify({
+            sessionId: "4b1a8d",
+            hypothesisId: "E",
+            location: "index.html:pollLog",
+            message: "poll_overlapped",
+            data: { activeRunId: String(activeRunId).slice(0, 8) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        return;
+      }
+      pollLogBusy = true;
+      /** #endregion agent log */
       try {
         const r = await apiFetch("/api/runs/" + encodeURIComponent(activeRunId) + "/log?offset=" + logOffset);
         const data = await r.json();
         if (data.text) {
+          /** #region agent log */
+          const t0 = performance.now();
+          const chunkLen = data.text.length;
+          const prevAccum = logPlainAccum.length;
+          /** #endregion agent log */
           logPlainAccum += data.text;
-          $("log").innerHTML = renderTrainingLogFromPlain(logPlainAccum);
+          const html = renderTrainingLogFromPlain(logPlainAccum);
+          /** #region agent log */
+          const t1 = performance.now();
+          /** #endregion agent log */
+          $("log").innerHTML = html;
+          /** #region agent log */
+          const t2 = performance.now();
+          const lineCount = logPlainAccum.split("\n").length;
+          fetch("http://127.0.0.1:7595/ingest/e362bdac-a7aa-4cfc-ae6e-2f801348a0a2", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4b1a8d" },
+            body: JSON.stringify({
+              sessionId: "4b1a8d",
+              hypothesisId: "A",
+              location: "index.html:pollLog",
+              message: "log_render_timings",
+              data: {
+                renderMs: Math.round(t1 - t0),
+                domMs: Math.round(t2 - t1),
+                accumBytes: logPlainAccum.length,
+                chunkBytes: chunkLen,
+                lineCount,
+                prevAccum,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          /** #endregion agent log */
           $("log").scrollTop = $("log").scrollHeight;
           refreshEnclaveFootprintFromLogs();
         }
         logOffset = data.next_offset || logOffset;
         $("btnStop").disabled = !data.running;
         if ($("btnStopForce")) $("btnStopForce").disabled = !data.running;
+        if ($("btnCoopStop")) $("btnCoopStop").disabled = !data.running;
         if ($("btnStopAndData")) $("btnStopAndData").disabled = !data.running;
         $("btnAbortSticky").disabled = !data.running;
         if (!data.running) {
@@ -4568,6 +5163,8 @@
         }
       } catch (e) {
         console.error(e);
+      } finally {
+        /** #region agent log */ pollLogBusy = false; /** #endregion agent log */
       }
     }
 
@@ -4604,7 +5201,7 @@
           const rt = sel.value;
           const labels = {
             local: "Local (this machine)",
-            runpod: "RunPod (OpenTofu + SSH)",
+            runpod: "RunPod (remote GPU over SSH)",
             runpod_serverless: "RunPod serverless endpoint",
           };
           if (line) line.textContent = "Deploying to: " + (labels[rt] || rt);
@@ -4729,6 +5326,15 @@
           memory_limit_mb: row.linearMiB,
           hardware_accelerator: hwAcc,
         };
+        const warmPick = wizardRunpodWarmTargetId();
+        if (
+          rtLaunch === "runpod" &&
+          ($("globalRunpodTrainOnPod") ? $("globalRunpodTrainOnPod").checked : true) &&
+          warmPick
+        ) {
+          launchBody.runpod_warm_target_id = warmPick;
+          launchBody.runpod_skip_apply = true;
+        }
         if (getGlobalRunTarget() === "runpod_serverless") {
           $("msg").className = "status";
           try {
@@ -4790,6 +5396,28 @@
       return ok;
     }
 
+    async function cooperativeStopRun() {
+      if (!activeRunId) return false;
+      let ok = false;
+      try {
+        const r = await apiFetch(
+          "/api/runs/" + encodeURIComponent(activeRunId) + "/cooperative-stop",
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+        );
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        ok = true;
+        addToast("Cooperative stop requested — training will stop at the next batch boundary.");
+      } catch (e) {
+        if ($("msg")) {
+          $("msg").textContent = String(e.message || e);
+          $("msg").className = "status error";
+        }
+      }
+      pollLog();
+      return ok;
+    }
+
     function openWizardDataSourceStep() {
       showAppTab("training");
       setLegoStep(3);
@@ -4821,6 +5449,11 @@
           return;
         }
         await stopRun(true);
+      };
+    }
+    if ($("btnCoopStop")) {
+      $("btnCoopStop").onclick = async () => {
+        await cooperativeStopRun();
       };
     }
     if ($("btnStopAndData")) {
@@ -5069,11 +5702,18 @@
         const rows = data.artifacts || [];
         for (const a of rows) {
           const tr = document.createElement("tr");
+          const pth = a.path || a.name || "";
+          const stem = /^artifacts\/models\/([^/]+)\//.exec(String(pth).replace(/\\/g, "/"));
+          const stemVal = stem ? stem[1] : "";
+          const serveBtn =
+            String(pth).endsWith("agent_bundle.json") && stemVal
+              ? ` <button type="button" class="ghost registry-deploy-serve" data-stem="${encodeURIComponent(stemVal)}">Deploy serve</button>`
+              : "";
           tr.innerHTML =
-            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><code>${escapeHtml(a.path || a.name || "")}</code></td>` +
+            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><code>${escapeHtml(pth)}</code></td>` +
             `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray);text-align:right">${fmtBytes(a.size_bytes)}</td>` +
             `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)">${escapeHtml(a.modified || "")}</td>` +
-            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><button type="button" class="ghost" data-push="${encodeURIComponent(a.path)}">Push to HF</button> <a href="/api/artifacts/download?path=${encodeURIComponent(a.path)}">Download</a></td>`;
+            `<td style="padding:6px;border-bottom:1px solid var(--surface-interface-gray)"><button type="button" class="ghost" data-push="${encodeURIComponent(a.path)}">Push to HF</button> <a href="/api/artifacts/download?path=${encodeURIComponent(a.path)}">Download</a>${serveBtn}</td>`;
           body.appendChild(tr);
         }
         msg.textContent = `${rows.length} checkpoint artifact(s)`;
@@ -5616,6 +6256,79 @@
     $("btnQuantumRefresh").onclick = loadQuantumTopology;
     $("btnRegistryRefresh").onclick = loadRegistryArtifacts;
     $("btnInfraRefresh").onclick = loadRunpodStatus;
+    const btnWTR = $("btnWarmTargetsReload");
+    if (btnWTR) btnWTR.onclick = () => void refreshWarmTargetsFromServer();
+    const btnWAdd = $("btnWarmTargetAdd");
+    if (btnWAdd) {
+      btnWAdd.onclick = async () => {
+        const msg = $("warmTargetsMsg");
+        const label = ($("warmTargetNewLabel").value || "").trim();
+        const host = ($("warmTargetNewHost").value || "").trim();
+        const sshUser = ($("warmTargetNewUser").value || "").trim();
+        if (!label || !host) {
+          if (msg) {
+            msg.textContent = "Label and host are required.";
+            msg.className = "status error";
+          }
+          return;
+        }
+        const id = "warm-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+        warmTargetsCache.push({
+          id,
+          label,
+          host,
+          ssh_user: sshUser,
+          updated_at: new Date().toISOString(),
+        });
+        try {
+          await saveWarmTargetsToServer();
+          $("warmTargetNewLabel").value = "";
+          $("warmTargetNewHost").value = "";
+          $("warmTargetNewUser").value = "";
+        } catch (e) {
+          warmTargetsCache.pop();
+          if (msg) {
+            msg.textContent = String(e.message || e);
+            msg.className = "status error";
+          }
+        }
+      };
+    }
+    const btnWCap = $("btnWarmTargetCaptureIP");
+    if (btnWCap) {
+      btnWCap.onclick = async () => {
+        const msg = $("warmTargetsMsg");
+        if (!lastInfraPodIp) {
+          if (msg) {
+            msg.textContent = "No public_ip in Terraform outputs — click Refresh status on the Status card first.";
+            msg.className = "status error";
+          }
+          return;
+        }
+        const lab = window.prompt("Label for this host", "pod-" + lastInfraPodIp.replace(/\./g, "-"));
+        if (lab == null) return;
+        const label = String(lab).trim() || "pod-" + lastInfraPodIp;
+        const id = "warm-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+        warmTargetsCache.push({
+          id,
+          label,
+          host: lastInfraPodIp,
+          ssh_user: "",
+          updated_at: new Date().toISOString(),
+        });
+        try {
+          await saveWarmTargetsToServer();
+        } catch (e) {
+          warmTargetsCache.pop();
+          if (msg) {
+            msg.textContent = String(e.message || e);
+            msg.className = "status error";
+          }
+        }
+      };
+    }
+    const wizWt = $("wizardRunpodWarmTarget");
+    if (wizWt) wizWt.addEventListener("change", onWizardWarmTargetChange);
     $("btnCopyPodIP").onclick = () => {
       if (lastInfraPodIp) copyToClipboard(lastInfraPodIp, "Pod IP copied.");
     };
@@ -5655,6 +6368,7 @@
         el.addEventListener("change", () => {
           updateLaunchExecSummary();
           persistGlobalInfraBasics();
+          syncGlobalInfraChrome();
         });
       }
     }
@@ -5742,10 +6456,11 @@
     restoreRunpodWorkerImage();
     restoreRunpodServerlessEndpointId();
     syncGlobalInfraChrome();
+    void refreshWarmTargetsFromServer();
     document.querySelectorAll('input[name="telemetryFilter"]').forEach((radio) => {
       radio.addEventListener("change", () => {
         telemetryStreamFilter = radio.value;
-        for (const c of [chartReturn, chartMSE]) {
+        for (const c of [chartReturn, chartMSE, chartRoutingState2]) {
           if (!c) continue;
           c.data.labels = [];
           c.data.datasets[0].data = [];
@@ -5791,6 +6506,22 @@
     else renderLegoWizard();
     refreshModelFacts();
     setInterval(loadRuns, 5000);
+    /** #region agent log */
+    requestAnimationFrame(() => {
+      fetch("http://127.0.0.1:7595/ingest/e362bdac-a7aa-4cfc-ae6e-2f801348a0a2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4b1a8d" },
+        body: JSON.stringify({
+          sessionId: "4b1a8d",
+          hypothesisId: "C",
+          location: "index.html:boot",
+          message: "sync_init_then_rAF",
+          data: { msSinceScriptChunk: Math.round(performance.now() - __agentWuiT0) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    });
+    /** #endregion agent log */
 
     function buildDeploymentSnippets(tier, paths, hwMode) {
       const acc = String(hwMode || lastHardwareAccelerator || "cpu").toLowerCase();
@@ -5958,7 +6689,68 @@
     wireEdgeCopy("btnCopyDocker", "edgeSnippetDocker");
     wireEdgeCopy("btnCopyIncus", "edgeSnippetIncus");
 
+    const btnDeployServe = $("btnDeployServe");
+    if (btnDeployServe) {
+      btnDeployServe.onclick = () =>
+        void deployServeForStem(modelSlugFromName(($("bName").value || "").trim()));
+    }
+    const btnServeStopEl = $("btnServeStop");
+    if (btnServeStopEl) {
+      btnServeStopEl.onclick = async () => {
+        const msg = $("deployServeMsg");
+        try {
+          const r = await apiFetch("/api/serve/stop", { method: "POST" });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(data.error || r.statusText);
+          if (msg) {
+            msg.textContent = "Serve process stopped.";
+            msg.className = "status done";
+          }
+          const h = $("deployServeHealth");
+          if (h) h.textContent = "";
+        } catch (e) {
+          if (msg) {
+            msg.textContent = String(e.message || e);
+            msg.className = "status error";
+          }
+        }
+      };
+    }
+    const btnServeStatusEl = $("btnServeStatus");
+    if (btnServeStatusEl) {
+      btnServeStatusEl.onclick = async () => {
+        const msg = $("deployServeMsg");
+        try {
+          const r = await apiFetch("/api/serve/status");
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || r.statusText);
+          if (!data.running) {
+            if (msg) {
+              msg.textContent = "No serve process running.";
+              msg.className = "status";
+            }
+            return;
+          }
+          if (msg) {
+            msg.textContent = `Running ${data.model_stem} on port ${data.port} (pid ${data.pid})`;
+            msg.className = "status done";
+          }
+        } catch (e) {
+          if (msg) {
+            msg.textContent = String(e.message || e);
+            msg.className = "status error";
+          }
+        }
+      };
+    }
+
     $("registryBody").addEventListener("click", async (ev) => {
+      const dep = ev.target.closest(".registry-deploy-serve");
+      if (dep) {
+        const stem = decodeURIComponent(dep.getAttribute("data-stem") || "");
+        await deployServeForStem(stem);
+        return;
+      }
       const btn = ev.target.closest("button[data-push]");
       if (!btn) return;
       const path = decodeURIComponent(btn.getAttribute("data-push"));

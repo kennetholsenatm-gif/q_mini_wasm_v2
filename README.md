@@ -62,7 +62,7 @@ Execution stays in a **sandboxed WebAssembly module** with bounded linear memory
 - Training and data: [docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)
 - Quantum: [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)
 - Cascade RL / MOPD: [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
-- Environment variables: [docs/environment-variables.md](docs/environment-variables.md)
+- Environment variables (secrets / APIs only): [docs/environment-variables.md](docs/environment-variables.md); CI and container overrides: [docs/ENV_CI_OVERRIDES.md](docs/ENV_CI_OVERRIDES.md)
 - Wiki: [wiki/README.md](wiki/README.md)
 - Hardware acceleration: [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
 - Extended taxonomy (research vocabulary): [docs/Q-Mini-WASM_ Edge AI Taxonomy.md](docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md)
