@@ -2,6 +2,10 @@
 
 This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics** from `python -m qminiwasm.engine`.
 
+## Local training (default)
+
+The sections below describe training on your machine (or any environment where you run `python -m qminiwasm.engine` directly). They cover TOML config, data sources, checkpoints, and metrics—not cloud provisioning.
+
 ## Structured config (TOML)
 
 Hyperparameters and non-secret options should live in **TOML** under [`configs/training/`](../configs/training/) so runs are diffable and reproducible. Example files:
@@ -253,6 +257,10 @@ Use these series to compare runs with the same `SEED`, `HF_NUM_SAMPLES`, and `BA
 ## When you need “real” WASM traces
 
 For architecture-aligned supervision, prefer **`corpus`** or **`mesh`** (wasmtime + linear memory), not `hf_tabular`. **WASI-linked** modules (imports `wasi_snapshot_preview1`, etc.) are instantiated via wasmtime’s **`Linker` + `WasiConfig`** (`qminiwasm.wasm_host.wasi_link.instantiate_wasmtime_module`). To compile C as **wasm32-wasip1** with wasi-sdk, set **`WASI_SDK_PATH`** and **`QMINIWASM_WASM_C_LINK=wasip1`** (default remains bare `wasm32` for embedded mesh snippets).
+
+## Remote GPU / OpenTofu
+
+For RunPod pods, OpenTofu lifecycle under `infra/runpod/`, serverless workers, SSH sync, and remote execution of `python -m qminiwasm.engine`, use the operator runbook only—do not duplicate provisioning commands here. See **[OPERATIONS_RUNBOOK.md](operations/OPERATIONS_RUNBOOK.md)** and the **[`infra/runpod/`](../../infra/runpod/)** tree.
 
 ## License notes
 
