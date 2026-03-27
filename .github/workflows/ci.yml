@@ -110,6 +110,8 @@ jobs:
             echo "::warning::requirements/ci.txt failed; falling back to requirements.txt"
             pip install -r requirements.txt
           fi
+          # Register the import package (benchmarks and coverage import qminiwasm by name).
+          pip install -e . --no-deps
           # Only pass wui/backend when it has .py files (Dockerfile-only tree is skipped; avoids black "path does not exist").
           BLACK_TARGETS=(qminiwasm/ tests/)
           FLAKE_TARGETS=(qminiwasm/ tests/)

@@ -96,6 +96,8 @@ exclude = ["tests/", "build/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Ensure `import qminiwasm` works during collection (benchmarks, etc.) without a prior editable install.
+pythonpath = ["."]
 addopts = "-v --tb=short"
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
