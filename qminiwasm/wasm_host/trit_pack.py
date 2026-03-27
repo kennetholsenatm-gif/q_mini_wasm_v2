@@ -88,9 +88,9 @@ def pack_ternary_list(weights: Sequence[int]) -> bytes:
     """Pack a sequence of {-1,0,1} into bytes (MSB-first per group, variable k on last group)."""
     impl = _trit_pack_impl()
     if impl != "python" and _native_pack_ternary_list is not None:
-        out = _native_pack_ternary_list(list(int(x) for x in weights))
-        if isinstance(out, (bytes, bytearray)):
-            return bytes(out)
+        native_packed = _native_pack_ternary_list(list(int(x) for x in weights))
+        if isinstance(native_packed, (bytes, bytearray)):
+            return bytes(native_packed)
     if impl == "native" and _native_pack_ternary_list is None:
         raise RuntimeError("QMINIWASM_TRIT_PACK_IMPL=native but native packer is unavailable")
     n = len(weights)

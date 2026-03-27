@@ -169,12 +169,12 @@ def cascade_rl_train_step(
                     device=dev,
                     dtype=torch.float32,
                 ).reshape(group_size, state_dim)
-                logprob_tensor = []
+                logprob_parts: list[torch.Tensor] = []
                 for i in range(group_size):
                     logits = policy_logits_fn(final_states[i])
                     logp = torch.log_softmax(logits, dim=-1).mean() * float(max_steps)
-                    logprob_tensor.append(logp)
-                logprob_tensor = torch.stack(logprob_tensor)
+                    logprob_parts.append(logp)
+                logprob_tensor = torch.stack(logprob_parts)
                 returns_tensor = torch.tensor(
                     [returns_buf[i] for i in range(group_size)],
                     device=dev,
