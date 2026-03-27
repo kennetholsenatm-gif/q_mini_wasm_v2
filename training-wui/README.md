@@ -6,7 +6,7 @@ Small web UI to pick a `configs/training/*.toml` file and run `python -m qminiwa
 
 - [Go](https://go.dev/dl/) 1.22+
 - Python env with the package installed (`pip install -e ".[training]"`) and `python` on `PATH`
-- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Setup checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md). Incus/host automation now lives in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus`.
+- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Setup checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md).
 
 ## Run
 
