@@ -66,6 +66,8 @@ This document provides a comprehensive reference for all environment variables u
 
 **Recommended mode split:** keep local development permissive (`QMINIWASM_WASM_FALLBACK_POLICY=mock`), and set CI/integration to strict (`QMINIWASM_WASM_FALLBACK_POLICY=error`) to prevent silent mock-mode regressions.
 
+**Enclave precedence rule:** explicit overrides (`WASM_MAX_LINEAR_MEMORY_PAGES`, `WASM_MEMORY64_MAX_MB`, `WASM_USE_MEMORY64`) take priority over `ENCLAVE_TIER` defaults; tier defaults then override baseline runtime defaults.
+
 ## Intel ARC/GPU
 
 | Variable | Type | Default | Required | Description |
