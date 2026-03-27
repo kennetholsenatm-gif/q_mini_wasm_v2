@@ -124,10 +124,13 @@ def cascade_rl_train_step(
     dev = _policy_device(policy_logits_fn)
 
     impl_mode = _cascade_rl_impl_mode()
-    use_native_rollout = (
-        os.getenv("QMINIWASM_NATIVE_RL_RUNTIME", "0").strip().lower()
-        not in {"", "0", "false", "off", "no"}
-    )
+    use_native_rollout = os.getenv("QMINIWASM_NATIVE_RL_RUNTIME", "0").strip().lower() not in {
+        "",
+        "0",
+        "false",
+        "off",
+        "no",
+    }
     if impl_mode == "python":
         use_native_rollout = False
     if impl_mode == "native":

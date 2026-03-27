@@ -70,7 +70,9 @@ def _validate_manifest_shape(manifest: dict[str, Any]) -> list[str]:
     if "sha256" in kernels and not _HEX64_RE.match(str(kernels["sha256"])):
         errors.append("manifest.artifacts.kernels_wasm.sha256 must be 64 lowercase hex chars")
     if "payload_sha256" in weights and not _HEX64_RE.match(str(weights["payload_sha256"])):
-        errors.append("manifest.artifacts.weights_tpem.payload_sha256 must be 64 lowercase hex chars")
+        errors.append(
+            "manifest.artifacts.weights_tpem.payload_sha256 must be 64 lowercase hex chars"
+        )
     if isinstance(edge_schema, dict) and "sha256" in edge_schema:
         if not _HEX64_RE.match(str(edge_schema["sha256"])):
             errors.append("manifest.artifacts.edge_schema.sha256 must be 64 lowercase hex chars")
@@ -79,7 +81,9 @@ def _validate_manifest_shape(manifest: dict[str, Any]) -> list[str]:
             errors.append("manifest.artifacts.edge_bundle.sha256 must be 64 lowercase hex chars")
     if isinstance(edge_bundle_tpem, dict) and "sha256" in edge_bundle_tpem:
         if not _HEX64_RE.match(str(edge_bundle_tpem["sha256"])):
-            errors.append("manifest.artifacts.edge_bundle_tpem.sha256 must be 64 lowercase hex chars")
+            errors.append(
+                "manifest.artifacts.edge_bundle_tpem.sha256 must be 64 lowercase hex chars"
+            )
     return errors
 
 
@@ -176,7 +180,9 @@ def verify_artifact_contract(
 def main() -> int:
     ap = argparse.ArgumentParser(description="Verify qminiwasm artifact contract.")
     sub = ap.add_subparsers(dest="command", required=True)
-    verify = sub.add_parser("verify", help="Verify artifact manifest, checksums, and TPEM contract.")
+    verify = sub.add_parser(
+        "verify", help="Verify artifact manifest, checksums, and TPEM contract."
+    )
     verify.add_argument(
         "artifacts_dir",
         type=Path,

@@ -118,8 +118,7 @@ def normalize_enclave_tier_value(v: Any) -> Optional[str]:
     if s in ENCLAVE_TIER_PRESETS:
         return s
     raise ValueError(
-        f"Invalid enclave_tier {v!r}; expected 1–5 or one of "
-        f"{sorted(ENCLAVE_TIER_PRESETS)}."
+        f"Invalid enclave_tier {v!r}; expected 1–5 or one of " f"{sorted(ENCLAVE_TIER_PRESETS)}."
     )
 
 

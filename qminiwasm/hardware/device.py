@@ -154,9 +154,9 @@ def resolve_backend_policy(
                 {
                     "selected_device": f"xpu:{idx}",
                     "selected_backend": "xpu",
-                    "reason_code": "xpu_selected"
-                    if accelerator == "xpu"
-                    else "sycl_mapped_to_xpu_selected",
+                    "reason_code": (
+                        "xpu_selected" if accelerator == "xpu" else "sycl_mapped_to_xpu_selected"
+                    ),
                     "reason": str(status["reason"]),
                     "xpu_status": status,
                 }
@@ -168,9 +168,11 @@ def resolve_backend_policy(
             )
         decision.update(
             {
-                "reason_code": "xpu_unavailable_fallback_cpu"
-                if accelerator == "xpu"
-                else "sycl_unavailable_fallback_cpu",
+                "reason_code": (
+                    "xpu_unavailable_fallback_cpu"
+                    if accelerator == "xpu"
+                    else "sycl_unavailable_fallback_cpu"
+                ),
                 "reason": str(status["reason"]),
                 "xpu_status": status,
             }

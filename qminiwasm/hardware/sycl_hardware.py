@@ -158,7 +158,9 @@ class SYCLHardware:
     def backend_status(self) -> dict[str, object]:
         """Structured SYCL helper backend status for telemetry and health UIs."""
         active = self.is_backend_active()
-        dev_name = str(getattr(self.device, "name", "unknown")) if self.device is not None else "none"
+        dev_name = (
+            str(getattr(self.device, "name", "unknown")) if self.device is not None else "none"
+        )
         reason = self._fallback_reason if not active else ""
         return {
             "active": active,

@@ -517,10 +517,7 @@ def run_training_loop(
         int(bool(xpu_status.get("available"))),
         str(xpu_status.get("support_class")),
         str(xpu_status.get("device_name", "")).replace(" ", "_"),
-        int(
-            os.getenv("QMINIWASM_STRICT_XPU", "0").strip().lower()
-            in {"1", "true", "yes", "on"}
-        ),
+        int(os.getenv("QMINIWASM_STRICT_XPU", "0").strip().lower() in {"1", "true", "yes", "on"}),
         str(xpu_status.get("reason", "")).replace(" ", "_"),
         int(bool(sycl_status.get("active"))),
         str(sycl_status.get("backend", "")).replace(" ", "_"),
@@ -604,10 +601,12 @@ def run_training_loop(
         else DataPipeline(wasm_runtime=wasm_runtime)
     )
     source = (training_data_source or "mesh").strip().lower()
-    strict_cfg = (
-        os.getenv("QMINIWASM_STRICT_CONFIG_VALIDATION", "0").strip().lower()
-        in {"1", "true", "yes", "on"}
-    )
+    strict_cfg = os.getenv("QMINIWASM_STRICT_CONFIG_VALIDATION", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     if strict_cfg and source not in {"mesh", "corpus", "hf_tabular"}:
         raise ValueError(f"Unsupported training_data_source={source!r} under strict validation.")
     num_samples = max(1, batch_size * 4)
@@ -758,10 +757,9 @@ def run_training_loop(
         if wasm_sample_total > 0
         else 0.0
     )
-    strict_mock_gate_enabled = (
-        os.getenv("QMINIWASM_ASSERT_ZERO_MOCK_RATIO", "0").strip().lower()
-        in {"1", "true", "yes", "on"}
-    )
+    strict_mock_gate_enabled = os.getenv(
+        "QMINIWASM_ASSERT_ZERO_MOCK_RATIO", "0"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     if strict_mock_gate_enabled and wasm_origin_counts["mock"] > 0:
         raise RuntimeError(
             "Strict WASM integration gate failed: mock sample ratio is non-zero "
@@ -979,10 +977,9 @@ def run_training_loop(
                 )
 
             _student_h, _teacher_h = build_noise_state_mopd_fns(noise_std=0.05)
-            use_native_rollout = (
-                os.getenv("QMINIWASM_NATIVE_RL_RUNTIME", "0").strip().lower()
-                not in {"", "0", "false", "off", "no"}
-            )
+            use_native_rollout = os.getenv(
+                "QMINIWASM_NATIVE_RL_RUNTIME", "0"
+            ).strip().lower() not in {"", "0", "false", "off", "no"}
             cascade_steps_done = 0
             for _ in range(int(cascade_steps_per_epoch)):
                 if stop_requested.is_set():
@@ -1215,7 +1212,9 @@ def run_training_loop(
                                 "epoch": epoch + 1,
                                 "epochs_requested": epochs,
                                 "epoch_mean_mse": final_loss,
-                                "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
+                                "best_epoch_mean_mse": (
+                                    best_mse if best_mse < float("inf") else None
+                                ),
                                 "learning_rate": float(optimizer.param_groups[0]["lr"]),
                             }
                         ),

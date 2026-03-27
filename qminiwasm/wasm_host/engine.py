@@ -571,7 +571,9 @@ class WasmEngine:
         for i, v in enumerate(args):
             args_arr[i] = int(v)
         out = ctypes.c_int32(0)
-        wasm_arr = (ctypes.c_uint8 * len(wasm_bytes)).from_buffer_copy(wasm_bytes) if wasm_bytes else None
+        wasm_arr = (
+            (ctypes.c_uint8 * len(wasm_bytes)).from_buffer_copy(wasm_bytes) if wasm_bytes else None
+        )
         rc = fn(
             ctypes.cast(wasm_arr, ctypes.POINTER(ctypes.c_uint8)) if wasm_arr is not None else None,
             ctypes.c_size_t(len(wasm_bytes)),
@@ -587,7 +589,15 @@ class WasmEngine:
         first_arg = args[0] if args else 0
         pre_b = struct.pack("<6I", 0, first_arg, 0, len(args), 0, 0) + b"\x00" * 512
         post_b = (
-            struct.pack("<6I", 1, first_arg, 0, len(args), result & 0xFFFFFFFF, (result ^ 0xFFFFFFFF) & 0xFFFFFFFF)
+            struct.pack(
+                "<6I",
+                1,
+                first_arg,
+                0,
+                len(args),
+                result & 0xFFFFFFFF,
+                (result ^ 0xFFFFFFFF) & 0xFFFFFFFF,
+            )
             + b"\x00" * 512
         )
         hidden = encode_linear_memory(pre_b, result_i32=0, first_arg=first_arg)

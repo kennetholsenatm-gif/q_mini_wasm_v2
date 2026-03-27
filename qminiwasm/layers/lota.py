@@ -21,10 +21,13 @@ class LoRALinearSide(nn.Module):
         nn.init.zeros_(self.lora_b.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        use_native = (
-            os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower()
-            not in {"", "0", "false", "off", "no"}
-        )
+        use_native = os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower() not in {
+            "",
+            "0",
+            "false",
+            "off",
+            "no",
+        }
         if (
             use_native
             and x.device.type == "cpu"
@@ -77,10 +80,13 @@ def merge_lora_into_linear_weight(
 ) -> None:
     """Add ``B @ A`` to ``base_weight`` (in-place) and reset ``lora_b`` to zero."""
     with torch.no_grad():
-        use_native = (
-            os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower()
-            not in {"", "0", "false", "off", "no"}
-        )
+        use_native = os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower() not in {
+            "",
+            "0",
+            "false",
+            "off",
+            "no",
+        }
         if (
             use_native
             and base_weight.device.type == "cpu"
@@ -101,7 +107,9 @@ def merge_lora_into_linear_weight(
                 ]
                 fn.restype = None
                 fn(
-                    ctypes.cast(base_weight.contiguous().numpy().ctypes.data, ctypes.POINTER(ctypes.c_float)),
+                    ctypes.cast(
+                        base_weight.contiguous().numpy().ctypes.data, ctypes.POINTER(ctypes.c_float)
+                    ),
                     ctypes.cast(
                         lora.lora_a.weight.contiguous().detach().numpy().ctypes.data,
                         ctypes.POINTER(ctypes.c_float),
