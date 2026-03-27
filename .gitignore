@@ -163,6 +163,8 @@ cloud_config/
 cloud_secrets/
 
 # ML Model Files
+# Optional local BitNet checkout (was a broken submodule gitlink; not versioned)
+models/bitnet/
 *.pth
 *.pt
 *.onnx
