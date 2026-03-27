@@ -350,6 +350,8 @@ def test_wasm_fallback_policy_env_override(monkeypatch):
 def test_wasm_fallback_policy_invalid_raises_with_strict_validation(monkeypatch):
     from qminiwasm.engine.config import EngineConfig
 
+    # Job-level CI may set QMINIWASM_WASM_FALLBACK_POLICY; that would mask invalid TOML/config.
+    monkeypatch.delenv("QMINIWASM_WASM_FALLBACK_POLICY", raising=False)
     monkeypatch.setenv("QMINIWASM_STRICT_CONFIG_VALIDATION", "1")
     cfg = EngineConfig(wasm_fallback_policy="nonsense")
     with pytest.raises(ValueError, match="Invalid wasm_fallback_policy"):
