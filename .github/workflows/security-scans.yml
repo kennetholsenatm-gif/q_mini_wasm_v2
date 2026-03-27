@@ -36,11 +36,21 @@ jobs:
           pip install -e . --no-deps 2>/dev/null || true
 
       - name: Run Bandit
+        id: bandit
+        continue-on-error: true
         run: |
           set -e
           PATHS="qminiwasm/"
           if [ -d wui/backend ]; then PATHS="$PATHS wui/backend/"; fi
           .venv/bin/bandit -r $PATHS -c pyproject.toml -f json -o bandit-report.json
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bandit-report
+          path: bandit-report.json
+        continue-on-error: true
 
       # CVE-2026-4539 (pygments ReDoS): no fixed release on PyPI yet (latest 2.19.2).
       # Drop --ignore-vuln when pygments publishes a fix (e.g. >2.19.2).
@@ -91,16 +101,13 @@ jobs:
         if: always()
         continue-on-error: true
 
-      - name: Upload Bandit report
-        uses: actions/upload-artifact@v7
-        with:
-          name: bandit-report
-          path: bandit-report.json
-        continue-on-error: true
-
       - name: Upload pip-audit report
         uses: actions/upload-artifact@v7
         with:
           name: pip-audit-report
           path: pip-audit-report.json
         continue-on-error: true
+
+      - name: Enforce Bandit (fail job on findings)
+        if: always() && steps.bandit.outcome == 'failure'
+        run: exit 1

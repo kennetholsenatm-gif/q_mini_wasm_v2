@@ -47,6 +47,7 @@ training = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
     "tomli>=2.0.0; python_version<'3.11'",
+    "tomli-w>=1.0.0",
 ]
 gpu = ["dpctl>=0.15.0"]
 arc = ["dpctl>=0.15.0"]
@@ -95,6 +96,8 @@ exclude = ["tests/", "build/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Ensure `import qminiwasm` works during collection (benchmarks, etc.) without a prior editable install.
+pythonpath = ["."]
 addopts = "-v --tb=short"
 python_files = ["test_*.py"]
 python_functions = ["test_*"]

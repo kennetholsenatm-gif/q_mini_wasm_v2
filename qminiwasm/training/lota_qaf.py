@@ -17,10 +17,13 @@ class TSignSGD(torch.optim.Optimizer):
 
     @torch.no_grad()
     def step(self, closure=None):  # noqa: ARG002
-        use_native = (
-            os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower()
-            not in {"", "0", "false", "off", "no"}
-        )
+        use_native = os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower() not in {
+            "",
+            "0",
+            "false",
+            "off",
+            "no",
+        }
         lib = load_native_lib() if use_native else None
         fn = None
         if lib is not None and hasattr(lib, "qmw_tsign_update_f32"):

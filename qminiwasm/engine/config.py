@@ -8,7 +8,12 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from qminiwasm.config import WASM_PAGE_SIZE_BYTES, get_enclave_tier_preset
+from qminiwasm.config import (
+    WASM_PAGE_SIZE_BYTES,
+    get_enclave_tier_preset,
+    normalize_enclave_tier_value,
+)
+from qminiwasm.runtime_modes import apply_optimized_auto_defaults
 
 from .secret_sanitize import sanitize_api_key_like
 
@@ -131,6 +136,7 @@ class EngineConfig:
         wasm_memory64_max_mb: Optional[float] = None,
         use_memory64: Optional[bool] = None,
     ):
+        apply_optimized_auto_defaults()
         self.accelerator = accelerator
         self.device_index = int(device_index) if device_index is not None else 0
         self.quantum_backend = quantum_backend if quantum_backend is not None else "penny_lane"
@@ -443,7 +449,7 @@ class EngineConfig:
         self.enclave_footprint_mb = (
             float(enclave_footprint_mb) if enclave_footprint_mb is not None else None
         )
-        self.enclave_tier = str(enclave_tier).strip().lower() if enclave_tier is not None else None
+        self.enclave_tier = normalize_enclave_tier_value(enclave_tier)
         self.certainty_scalar_threshold = (
             float(certainty_scalar_threshold) if certainty_scalar_threshold is not None else None
         )
@@ -483,6 +489,19 @@ class EngineConfig:
                 except ValueError:
                     pass
         fp = (self.wasm_fallback_policy or "mock").strip().lower()
+        env_fp = os.environ.get("QMINIWASM_WASM_FALLBACK_POLICY", "").strip().lower()
+        if env_fp:
+            fp = env_fp
+        strict_cfg = os.environ.get("QMINIWASM_STRICT_CONFIG_VALIDATION", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if strict_cfg and fp not in ("error", "fail", "strict", "mock"):
+            raise ValueError(
+                f"Invalid wasm_fallback_policy={fp!r}; expected one of error/fail/strict/mock."
+            )
         if fp in ("error", "fail", "strict"):
             fp = "error"
         else:

@@ -57,6 +57,14 @@ This document provides a comprehensive reference for all environment variables u
 | `WASM_MEMORY64_MAX_MB` | float | `None` | No | Memory64 linear memory ceiling override (MB); tier defaults: Macro 8192, Workgroup 16384, Enterprise Core 262144 |
 | `WASM_MAX_LINEAR_MEMORY_PAGES` | int | `None` | No | Max 64KiB WASM pages override; tier defaults: Micro 4096, Meso 32768, Macro 131072, Workgroup 262144, Enterprise Core 4194304 |
 | `WASM_USE_MEMORY64` | bool | `false` | No | Set `1`/`true` to prefer Memory64 addressing when supported |
+| `QMINIWASM_WASM_BACKEND` | string | `wasmtime` | No | Runtime backend override: `wasmtime`, `wasmedge_native`, or `enclave_adapter` |
+| `QMINIWASM_WASM_FALLBACK_POLICY` | string | `mock` | No | Fallback mode override: `mock` (permissive) or `error` (fail fast) |
+| `QMINIWASM_STRICT_CONFIG_VALIDATION` | bool | `0` | No | Strict boundary validation for config/runtime inputs; invalid critical values raise errors |
+| `QMINIWASM_ASSERT_ZERO_MOCK_RATIO` | bool | `0` | No | Training-loop CI gate: fail run when any sample reports mock WASM execution origin |
+
+**Enclave precedence rule:** explicit overrides (`WASM_MAX_LINEAR_MEMORY_PAGES`, `WASM_MEMORY64_MAX_MB`, `WASM_USE_MEMORY64`) take priority over `ENCLAVE_TIER` defaults; tier defaults then override baseline runtime defaults.
+
+**Recommended mode split:** keep local development permissive (`QMINIWASM_WASM_FALLBACK_POLICY=mock`), and set CI/integration to strict (`QMINIWASM_WASM_FALLBACK_POLICY=error`) to prevent silent mock-mode regressions.
 
 **Enclave precedence rule:** explicit overrides (`WASM_MAX_LINEAR_MEMORY_PAGES`, `WASM_MEMORY64_MAX_MB`, `WASM_USE_MEMORY64`) take priority over `ENCLAVE_TIER` defaults; tier defaults then override baseline runtime defaults.
 
@@ -158,7 +166,7 @@ Variables marked with 🔒 are sensitive and should never be committed to versio
 Environment variables can be set through:
 1. **Environment**: Directly in your shell or CI/CD pipeline
 2. **.env files**: For local development (ensure .env files are in .gitignore)
-3. **Secrets management**: Use tools like HashiCorp Vault, AWS Secrets Manager, or Kubernetes secrets for production
+3. **Secrets management**: Use a centralized secrets manager (for example: Vault-class stores, AWS Secrets Manager, or Kubernetes secrets) for production
 
 ### Variable Precedence
 
@@ -174,6 +182,17 @@ Some variables have different requirements in development vs production:
 - `DEBUG`: Should be `false` in production
 - `LOG_LEVEL`: Consider `WARNING` or `ERROR` in production
 - Sensitive variables: Always use secrets management in production
+
+## Python-to-C++ A/B Runtime Controls
+
+- `QMINIWASM_TERNARY_IMPL` (`auto` default): `python|native|auto`
+- `QMINIWASM_TRIT_PACK_IMPL` (`auto` default): `python|native|auto`
+- `QMINIWASM_MEMORY_ENCODE_IMPL` (`auto` default): `python|native|auto`
+- `QMINIWASM_WASM_EXEC_IMPL` (`auto` default): `python|native|auto`
+- `QMINIWASM_CASCADE_RL_IMPL` (`auto` default): `python|native|auto`
+- `QMINIWASM_TRAINING_RUNTIME_MODE` (`auto` default): `python|cpp|auto` for WUI path selection
+- `QMINIWASM_TPEM_NATIVE_BUNDLE` (`0` default in optimized profile): set `1|true|on` to force native bundle path
+- `QMINIWASM_NATIVE_STRICT` (`false` default): when true, explicit native requests fail fast instead of silently falling back
 
 ## Related Documentation
 

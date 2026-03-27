@@ -20,11 +20,12 @@ cmake --build build --target qminiwasm_training_engine_server
 ./build/qminiwasm_training_engine_server 127.0.0.1:50061
 ```
 
-## Deferred Go WUI integration
+## Go WUI integration
 
-Recommended incremental integration path in `training-wui`:
+`training-wui` now uses a generated Go gRPC client for `proto/training_engine.proto`:
 
-1. Add a local Go gRPC client for `training_engine.proto`.
-2. Keep current browser websocket contract unchanged.
-3. Bridge typed gRPC telemetry events into existing websocket payloads.
-4. Remove regex log parsing when parity is reached.
+1. **Done:** Native `StartTraining` / `StreamTelemetry` / `StopTraining` from the WUI for local and RunPod “train on host” runs.
+2. **Done:** WebSocket payloads match the previous `metric` / `alert` contract (`telemetry_source` distinguishes sources).
+3. **Partial:** Log-line regex telemetry still applies to **subprocess (Python)** runs only; full parity for quantum/prune/QAOA metrics on the C++ path depends on richer `TelemetryEvent` or synthetic lines.
+
+WUI env: **`QMINIWASM_TRAINING_GRPC_ADDR`** (default `127.0.0.1:50061`). See [`training-wui/README.md`](../../training-wui/README.md).

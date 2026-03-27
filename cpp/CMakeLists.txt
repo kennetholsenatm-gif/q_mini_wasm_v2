@@ -19,7 +19,8 @@ option(QMINIWASM_WITH_WASMEDGE "Build WasmEdge C++ host helpers (needs WasmEdge 
 option(QMINIWASM_WITH_NLOPT "Link NLopt for COBYLA QUBO solver" ON)
 option(QMINIWASM_BUILD_PYBIND "Build pybind11 qminiwasm_cpp_native module" ON)
 
-set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+# CMakeLists.txt lives in cpp/; repository root (proto/, qminiwasm/) is one level up.
+set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 include(FetchContent)
 

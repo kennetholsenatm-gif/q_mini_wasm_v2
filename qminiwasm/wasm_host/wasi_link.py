@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import wasmtime
 
@@ -69,12 +69,48 @@ def default_wasi_sdk_path() -> str | None:
     return p or None
 
 
+def default_wasm_clang_profile() -> str:
+    """Read clang optimization profile for runtime C->WASM builds."""
+    return os.environ.get("QMINIWASM_WASM_CLANG_PROFILE", "compat").strip().lower() or "compat"
+
+
+def default_wasm_export_mode() -> str:
+    """Read export mode: `all` (legacy) or `targeted`."""
+    return os.environ.get("QMINIWASM_WASM_EXPORT_MODE", "all").strip().lower() or "all"
+
+
+def _clang_opt_flags(profile: str) -> List[str]:
+    p = (profile or "compat").strip().lower()
+    if p in ("speed", "fast"):
+        return ["-O3", "-flto"]
+    if p in ("balanced", "default"):
+        return ["-O2"]
+    if p in ("size", "small"):
+        return ["-Oz", "-fdata-sections", "-ffunction-sections", "-Wl,--gc-sections"]
+    return ["-O1"]
+
+
+def _export_flags(export_mode: str, export_names: Optional[List[str]]) -> List[str]:
+    mode = (export_mode or "all").strip().lower()
+    if mode in ("targeted", "named") and export_names:
+        flags = ["-Wl,--no-entry"]
+        for name in export_names:
+            n = (name or "").strip()
+            if n:
+                flags.append(f"-Wl,--export={n}")
+        return flags
+    return ["-Wl,--no-entry", "-Wl,--export-all"]
+
+
 def build_clang_wasm_compile_command(
     c_file: str,
     out_wasm: str,
     *,
     link: str | None = None,
     wasi_sdk_path: str | None = None,
+    profile: str | None = None,
+    export_mode: str | None = None,
+    export_names: Optional[List[str]] = None,
 ) -> List[str]:
     """Assemble a ``clang`` argv for mesh-style freestanding C (``--no-entry``, ``--export-all``).
 
@@ -82,14 +118,16 @@ def build_clang_wasm_compile_command(
     * ``wasip1`` — wasi-sdk ``clang``, ``--target=wasm32-wasip1`` (requires ``wasi_sdk_path``).
     """
     mode = (link or default_wasm_c_link_mode()).strip().lower()
+    opt_flags = _clang_opt_flags(profile or default_wasm_clang_profile())
+    exp_flags = _export_flags(export_mode or default_wasm_export_mode(), export_names)
     if mode in ("bare", "wasm32"):
         return [
             "clang",
             "-target",
             "wasm32",
             "-nostdlib",
-            "-Wl,--no-entry",
-            "-Wl,--export-all",
+            *opt_flags,
+            *exp_flags,
             "-o",
             out_wasm,
             c_file,
@@ -106,8 +144,8 @@ def build_clang_wasm_compile_command(
             cc,
             "--target=wasm32-wasip1",
             "-nostdlib",
-            "-Wl,--no-entry",
-            "-Wl,--export-all",
+            *opt_flags,
+            *exp_flags,
             "-o",
             out_wasm,
             c_file,

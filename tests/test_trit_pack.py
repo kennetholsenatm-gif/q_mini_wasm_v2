@@ -1,5 +1,6 @@
 """Tests for MSB-first 5-trit packing (``qminiwasm.wasm_host.trit_pack``)."""
 
+import random
 import unittest
 
 from qminiwasm.wasm_host.trit_pack import (
@@ -49,3 +50,11 @@ class TestTritPack(unittest.TestCase):
 
     def test_trits_per_byte_constant(self):
         self.assertEqual(TRITS_PER_BYTE, 5)
+
+    def test_roundtrip_many_lengths(self):
+        rng = random.Random(7)
+        for n in (1, 2, 3, 4, 5, 7, 9, 32, 257):
+            vals = [rng.choice([-1, 0, 1]) for _ in range(n)]
+            packed = pack_ternary_list(vals)
+            unpacked = unpack_ternary_list(packed, n)
+            self.assertEqual(unpacked, vals)

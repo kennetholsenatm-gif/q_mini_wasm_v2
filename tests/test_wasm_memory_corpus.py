@@ -9,7 +9,7 @@ import pytest
 import torch
 import wasmtime
 
-from qminiwasm.data.pipeline import DataPipeline
+from qminiwasm.data.pipeline import DataPipeline, ESIStateRecoveryHull
 from qminiwasm.wasm_host.engine import (
     DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES,
     WasmEngine,
@@ -54,6 +54,38 @@ def test_wasm_engine_memory_snapshot_changes(tmp_path: Path):
     assert h1.numel() == 4096 and t1.numel() == 4096
     assert not torch.allclose(t1, t2)
     assert len(post1) >= 36
+
+
+def test_wasm_engine_execute_reports_execution_origin(tmp_path: Path):
+    wat = r"""
+    (module
+      (memory 1)
+      (func $run (param i32 i32) (result i32)
+        (return (i32.add (local.get 0) (local.get 1)))
+      )
+      (export "memory" (memory 0))
+      (export "run" (func $run))
+    )
+    """
+    wasm_path = tmp_path / "origin.wasm"
+    wasm_path.write_bytes(wasmtime.wat2wasm(wat))
+
+    eng = WasmEngine(use_mock=False)
+    if eng.use_mock:
+        pytest.skip("WASM runtime unavailable in this environment")
+    mod = eng.compile_wasm(wasm_path.read_bytes())
+    assert mod is not None
+
+    out, state = eng.execute(mod, "run", [2, 5])
+    assert out == 7
+    assert state["wasm_execution_origin"] == "real"
+
+
+def test_wasm_engine_execute_reports_mock_origin():
+    eng = WasmEngine(use_mock=True)
+    out, state = eng.execute(None, "hash", [2, 3])
+    assert isinstance(out, int)
+    assert state["wasm_execution_origin"] == "mock"
 
 
 def test_generate_training_data_from_corpus(tmp_path: Path):
@@ -188,3 +220,23 @@ def test_wasm_engine_memory_error_mock_policy_falls_back(monkeypatch):
     assert eng.use_mock is True
     assert isinstance(out, int)
     assert hidden is not None and target is not None
+
+
+def test_esi_state_recovery_hull_hashed_key_roundtrip():
+    hull = ESIStateRecoveryHull()
+    hidden = torch.randn(16, dtype=torch.float32)
+    target = torch.randn(16, dtype=torch.float32)
+    hull.store_valid_state(hidden, target)
+    restored = hull.retrieve_target_state(hidden.clone())
+    assert restored is not None
+    assert torch.allclose(restored, target)
+
+
+def test_esi_state_recovery_hull_batch_store_lookup():
+    hull = ESIStateRecoveryHull()
+    hs = [torch.randn(16, dtype=torch.float32) for _ in range(3)]
+    ts = [torch.randn(16, dtype=torch.float32) for _ in range(3)]
+    hull.store_valid_states(hs, ts)
+    out = hull.retrieve_target_states([h.clone() for h in hs])
+    assert len(out) == 3
+    assert all(v is not None for v in out)

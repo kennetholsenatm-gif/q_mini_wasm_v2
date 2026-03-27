@@ -51,15 +51,38 @@ class ESIStateRecoveryHull:
         self.cache = {}
         self.logger = logging.getLogger(__name__)
 
+    @staticmethod
+    def _state_key(t: torch.Tensor) -> bytes:
+        # Compact deterministic key tuned for measured cache-path performance.
+        tc = t.detach()
+        if tc.device.type != "cpu" or tc.dtype != torch.float32 or not tc.is_contiguous():
+            tc = tc.to(dtype=torch.float32, device="cpu").contiguous()
+        tb = tc.numpy().tobytes()
+        return hashlib.sha256(tb).digest()
+
     def store_valid_state(self, hidden_state: torch.Tensor, target_state: torch.Tensor):
         """Store a valid state transition in the cache"""
-        state_key = tuple(hidden_state.tolist())
+        state_key = self._state_key(hidden_state)
         self.cache[state_key] = target_state.clone()
 
     def retrieve_target_state(self, hidden_state: torch.Tensor) -> Optional[torch.Tensor]:
         """Retrieve the target state for a given hidden state"""
-        state_key = tuple(hidden_state.tolist())
+        state_key = self._state_key(hidden_state)
         return self.cache.get(state_key, None)
+
+    def store_valid_states(
+        self, hidden_states: List[torch.Tensor], target_states: List[torch.Tensor]
+    ) -> None:
+        """Batch store transitions to reduce Python call overhead in hot paths."""
+        n = min(len(hidden_states), len(target_states))
+        for i in range(n):
+            self.store_valid_state(hidden_states[i], target_states[i])
+
+    def retrieve_target_states(
+        self, hidden_states: List[torch.Tensor]
+    ) -> List[Optional[torch.Tensor]]:
+        """Batch lookup for control-plane friendly state-recovery reads."""
+        return [self.retrieve_target_state(h) for h in hidden_states]
 
     def generate_corrective_tokens(
         self, corrupted_state: torch.Tensor, valid_state: torch.Tensor
@@ -157,6 +180,7 @@ class DataPipeline:
                         "execution_state": {
                             "instruction_pointer": 0,
                             "memory_size": hidden_state.numel(),
+                            "wasm_execution_origin": "mock",
                         },
                     }
                     training_data.append(sample)
@@ -200,6 +224,7 @@ class DataPipeline:
                         "execution_state": {
                             "instruction_pointer": 0,
                             "memory_size": hidden_state.numel(),
+                            "wasm_execution_origin": self.wasm_engine._last_execution_origin,
                         },
                     }
                     training_data.append(sample)
@@ -310,6 +335,7 @@ class DataPipeline:
                                 "instruction_pointer": 0,
                                 "memory_size": hidden_state.numel(),
                                 "wasm_path": str(wasm_file),
+                                "wasm_execution_origin": self.wasm_engine._last_execution_origin,
                             },
                         }
                     )

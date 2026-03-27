@@ -17,6 +17,7 @@ unset, the default is CPU unless tests pass ``prefer_xpu=True``.
 
 import logging
 import math
+import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -37,6 +38,11 @@ from .wasm_host.engine import WasmEngine as WasmExecutor, WasmRuntimeConfig
 from .hardware import SYCLHardware
 from .hardware.device import get_device
 from .data.pipeline import DataPipeline
+
+
+def _qmw_env_on(name: str) -> bool:
+    v = (os.environ.get(name) or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
 
 
 class QMiniWASM:
@@ -160,7 +166,18 @@ class QMiniWASM:
         self.sycl_hardware = SYCLHardware()
         self.data_pipeline = DataPipeline(wasm_runtime=wasm_runtime)
         self.state_migration = StateMigrationInterconnect()
-        self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
+        # Edge profiling: QMW_DISABLE_TROPICAL_ATTN=1 or QMW_TROPICAL_ATTN_HEADS=N (4096 % N == 0).
+        heads_s = (os.environ.get("QMW_TROPICAL_ATTN_HEADS") or "").strip()
+        if _qmw_env_on("QMW_DISABLE_TROPICAL_ATTN"):
+            self.tropical_attention = None
+        elif heads_s.isdigit():
+            nh = int(heads_s)
+            if nh <= 0 or (4096 % nh) != 0:
+                self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
+            else:
+                self.tropical_attention = TropicalAttention(4096, num_heads=nh).to(self.device)
+        else:
+            self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
         self.cascade_router: Optional[CascadeRouter] = None
         if bool(use_cascade_router):
             self.cascade_router = CascadeRouter(

@@ -75,6 +75,7 @@ _setup_kw = dict(
             "python-dotenv>=1.0.0",
             "pydantic>=2.5.0",
             "tomli>=2.0.0; python_version<'3.11'",
+            "tomli-w>=1.0.0",
         ],
         "gpu": [
             "dpctl>=0.15.0",

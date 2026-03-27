@@ -18,6 +18,12 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 import torch
+from qminiwasm.runtime_modes import resolve_impl_mode
+
+try:
+    from qminiwasm._native_ternary import encode_linear_memory_u8 as _native_encode_linear_memory_u8
+except ImportError:
+    _native_encode_linear_memory_u8 = None
 
 D_MODEL = 4096
 WLES_PAYLOAD_VERSION = 1
@@ -27,6 +33,10 @@ BODY_SLOTS = D_MODEL - META_SLOTS
 ENCODING_VERSION = 1.0
 
 
+def _memory_encode_impl() -> str:
+    return resolve_impl_mode("QMINIWASM_MEMORY_ENCODE_IMPL", "auto")
+
+
 def encode_linear_memory(
     mem: bytes,
     *,
@@ -34,6 +44,34 @@ def encode_linear_memory(
     first_arg: int = 0,
 ) -> torch.Tensor:
     """Encode a linear-memory snapshot and scalars into a single 4096-dim float vector."""
+    impl = _memory_encode_impl()
+    if impl != "python":
+        try:
+            if _native_encode_linear_memory_u8 is not None:
+                out = _native_encode_linear_memory_u8(
+                    bytes(mem),
+                    int(result_i32),
+                    int(first_arg),
+                    int(D_MODEL),
+                    int(META_SLOTS),
+                )
+                if isinstance(out, torch.Tensor) and out.shape == (D_MODEL,):
+                    return out.to(dtype=torch.float32)
+                out_t = torch.as_tensor(out, dtype=torch.float32)
+                if out_t.shape == (D_MODEL,):
+                    return out_t
+            else:
+                if impl == "native":
+                    raise RuntimeError(
+                        "QMINIWASM_MEMORY_ENCODE_IMPL=native but encode_linear_memory_u8 "
+                        "is unavailable"
+                    )
+        except RuntimeError:
+            if impl == "native":
+                raise
+        except Exception:
+            if impl == "native":
+                raise
     out = torch.zeros(D_MODEL, dtype=torch.float32)
     out[0] = ENCODING_VERSION
     out[1] = (abs(int(first_arg)) % 65536) / 65535.0

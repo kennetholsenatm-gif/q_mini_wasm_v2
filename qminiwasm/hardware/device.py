@@ -10,6 +10,7 @@ defaults to CPU unless ``prefer_xpu=True`` is passed explicitly (no environment 
 from __future__ import annotations
 
 import logging
+import os
 from typing import Literal, Tuple
 
 import torch
@@ -27,6 +28,13 @@ except ImportError:
     pass
 
 AcceleratorType = Literal["cuda", "xpu", "cpu", "sycl"]
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    v = os.getenv(name, "").strip().lower()
+    if not v:
+        return default
+    return v in {"1", "true", "yes", "on"}
 
 
 def _cuda_available() -> bool:
@@ -59,6 +67,142 @@ def _xpu_runtime_status() -> Tuple[bool, str]:
     return False, "torch.xpu exists and IPEX imported, but torch.xpu.is_available() is false"
 
 
+def _xpu_device_name(device_index: int = 0) -> str:
+    """Best-effort XPU device name."""
+    xpu = getattr(torch, "xpu", None)
+    if xpu is None:
+        return "unknown"
+    getter = getattr(xpu, "get_device_name", None)
+    if callable(getter):
+        try:
+            return str(getter(device_index))
+        except Exception:
+            return "unknown"
+    return "unknown"
+
+
+def get_xpu_backend_status(device_index: int | None = None) -> dict[str, object]:
+    """Return a structured backend status for XPU capability gating and telemetry.
+
+    `support_class` is one of:
+    - `supported`: runtime available and likely production-capable
+    - `experimental`: runtime available but known-risk hardware class (e.g. Iris Xe)
+    - `unsupported`: runtime unavailable
+    """
+    idx = device_index if device_index is not None else 0
+    available, reason = _xpu_runtime_status()
+    name = _xpu_device_name(idx) if available else "unknown"
+    lowered = name.lower()
+    support_class = "unsupported"
+    if available:
+        if "iris" in lowered and "xe" in lowered:
+            support_class = "experimental"
+        else:
+            support_class = "supported"
+    return {
+        "backend": "xpu",
+        "available": bool(available),
+        "support_class": support_class,
+        "device_name": name,
+        "reason": reason,
+        "ipex_importable": bool(_IPEX_AVAILABLE),
+        "strict_mode_env": "QMINIWASM_STRICT_XPU",
+    }
+
+
+def resolve_backend_policy(
+    accelerator: AcceleratorType | None = None,
+    device_index: int | None = None,
+    *,
+    prefer_xpu: bool | None = None,
+) -> dict[str, object]:
+    """Resolve accelerator request into a deterministic compat-first backend decision."""
+    idx = device_index if device_index is not None else 0
+    strict_xpu = _env_flag("QMINIWASM_STRICT_XPU", False)
+    requested = accelerator if accelerator is not None else ("xpu" if prefer_xpu else "cpu")
+    decision: dict[str, object] = {
+        "requested_accelerator": requested,
+        "selected_device": "cpu",
+        "selected_backend": "cpu",
+        "reason_code": "cpu_default",
+        "reason": "using CPU default path",
+    }
+
+    if accelerator == "cuda":
+        if _cuda_available():
+            decision.update(
+                {
+                    "selected_device": f"cuda:{idx}",
+                    "selected_backend": "cuda",
+                    "reason_code": "cuda_selected",
+                    "reason": "cuda available",
+                }
+            )
+            return decision
+        decision.update(
+            {
+                "reason_code": "cuda_unavailable_fallback_cpu",
+                "reason": "CUDA requested but unavailable; using CPU",
+            }
+        )
+        return decision
+
+    if accelerator in ("xpu", "sycl"):
+        status = get_xpu_backend_status(idx)
+        if bool(status["available"]):
+            decision.update(
+                {
+                    "selected_device": f"xpu:{idx}",
+                    "selected_backend": "xpu",
+                    "reason_code": (
+                        "xpu_selected" if accelerator == "xpu" else "sycl_mapped_to_xpu_selected"
+                    ),
+                    "reason": str(status["reason"]),
+                    "xpu_status": status,
+                }
+            )
+            return decision
+        if strict_xpu:
+            raise RuntimeError(
+                f"ACCELERATOR={accelerator} requested but unavailable under strict mode: {status['reason']}"
+            )
+        decision.update(
+            {
+                "reason_code": (
+                    "xpu_unavailable_fallback_cpu"
+                    if accelerator == "xpu"
+                    else "sycl_unavailable_fallback_cpu"
+                ),
+                "reason": str(status["reason"]),
+                "xpu_status": status,
+            }
+        )
+        return decision
+
+    if accelerator == "cpu":
+        decision.update(
+            {
+                "selected_device": "cpu",
+                "selected_backend": "cpu",
+                "reason_code": "cpu_requested",
+                "reason": "cpu explicitly requested",
+            }
+        )
+        return decision
+
+    if accelerator is None and prefer_xpu is True and _xpu_available():
+        decision.update(
+            {
+                "selected_device": f"xpu:{idx}",
+                "selected_backend": "xpu",
+                "reason_code": "prefer_xpu_selected",
+                "reason": "prefer_xpu enabled and xpu available",
+            }
+        )
+        return decision
+    return decision
+
+
 def get_device(
     accelerator: AcceleratorType | None = None,
     device_index: int | None = None,
@@ -80,51 +224,43 @@ def get_device(
     Returns:
         torch.device: cuda:index, xpu:index, or cpu.
     """
-    idx = device_index if device_index is not None else 0
-
     if accelerator is not None:
-        if accelerator == "cuda":
-            if _cuda_available():
-                dev = torch.device(f"cuda:{idx}")
-                logger.info("Using CUDA device for training/inference: %s", dev)
-                return dev
-            logger.info("CUDA requested but not available; using CPU")
-            return torch.device("cpu")
-        if accelerator == "xpu":
-            ok, why = _xpu_runtime_status()
-            if ok:
-                dev = torch.device(f"xpu:{idx}")
-                logger.info("Using Intel XPU device for training/inference: %s", dev)
-                return dev
-            logger.warning(
-                "ACCELERATOR=xpu requested but XPU runtime is unavailable (%s); using CPU. "
-                "Install an Intel XPU-enabled PyTorch build and intel-extension-for-pytorch (IPEX). "
-                "SYCL/dpctl seeing Iris Xe only affects SYCLHardware helpers, not torch.nn training."
-                " (IPEX importable=%s)",
-                why,
-                _IPEX_AVAILABLE,
-            )
-            return torch.device("cpu")
-        if accelerator == "cpu":
-            return torch.device("cpu")
-        if accelerator == "sycl":
-            if _xpu_available():
-                dev = torch.device(f"xpu:{idx}")
-                logger.info("Using SYCL accelerator via Intel XPU device: %s", dev)
-                return dev
-            logger.warning(
-                "ACCELERATOR=sycl requested but no PyTorch XPU device is available; using CPU. "
-                "This codebase currently maps SYCL to a single torch backend device (xpu) "
-                "and does not schedule one training step across CPU+GPU simultaneously."
-            )
-            return torch.device("cpu")
-        raise ValueError(f"Unknown accelerator: {accelerator}")
+        if accelerator not in ("cuda", "xpu", "cpu", "sycl"):
+            raise ValueError(f"Unknown accelerator: {accelerator}")
 
-    if prefer_xpu is True and _xpu_available():
-        dev = torch.device(f"xpu:{idx}")
-        logger.info("Using Intel XPU device (prefer_xpu=True): %s", dev)
+    decision = resolve_backend_policy(
+        accelerator=accelerator,
+        device_index=device_index,
+        prefer_xpu=prefer_xpu,
+    )
+    sel = str(decision.get("selected_device", "cpu"))
+    if sel.startswith("cuda:"):
+        dev = torch.device(sel)
+        logger.info("Using CUDA device for training/inference: %s", dev)
         return dev
-    logger.info("Using CPU device (no accelerator in config)")
+    if sel.startswith("xpu:"):
+        dev = torch.device(sel)
+        status = decision.get("xpu_status")
+        if isinstance(status, dict):
+            logger.info(
+                "Using Intel XPU device for training/inference: %s (%s; support_class=%s)",
+                dev,
+                status.get("device_name"),
+                status.get("support_class"),
+            )
+            if status.get("support_class") == "experimental":
+                logger.warning(
+                    "XPU selected on experimental hardware class (%s).",
+                    status.get("device_name"),
+                )
+        else:
+            logger.info("Using Intel XPU device for training/inference: %s", dev)
+        return dev
+    reason = str(decision.get("reason", "falling back to CPU"))
+    if accelerator in ("xpu", "sycl"):
+        logger.warning("ACCELERATOR=%s unresolved (%s); using CPU", accelerator, reason)
+    else:
+        logger.info("%s", reason)
     return torch.device("cpu")
 
 

@@ -59,11 +59,56 @@ class SYCLHardware:
         else:
             self.logger.info("Initialized SYCLHardware with stubs")
             self._backend = None
+        self._strict_helper = os.getenv("QMINIWASM_STRICT_SYCL_HELPER", "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        self._fallback_warned = False
+        if self._strict_helper and not self.is_backend_active():
+            st = self.backend_status()
+            raise RuntimeError(
+                "Strict SYCL helper mode enabled but backend is inactive "
+                f"(reason={st.get('fallback_reason')}, active={st.get('active')})"
+            )
+
+    def is_backend_active(self) -> bool:
+        return self._backend is not None
+
+    def backend_status(self) -> dict:
+        if self._backend and hasattr(self._backend, "backend_status"):
+            try:
+                st = self._backend.backend_status()
+                st["strict_helper"] = bool(self._strict_helper)
+                return st
+            except Exception as e:
+                self.logger.debug("SYCL backend_status() raised %s; using stub status", e)
+        return {
+            "active": False,
+            "device_name": "none",
+            "dpctl_device_count": 0,
+            "fallback_reason": "sycl_backend_disabled_or_unavailable",
+            "backend": "stub",
+            "strict_helper": bool(self._strict_helper),
+        }
+
+    def _warn_stub_once(self, op: str) -> None:
+        if self._fallback_warned:
+            return
+        self._fallback_warned = True
+        st = self.backend_status()
+        self.logger.warning(
+            "SYCL stub fallback active during %s (reason=%s).",
+            op,
+            st.get("fallback_reason"),
+        )
 
     def execute_vector_engine(self, kernel: str, data: List[float]) -> List[float]:
         """Execute kernel on Vector Engine (XVE)."""
         if self._backend:
             return self._backend.execute_vector_engine(kernel, data)
+        self._warn_stub_once("execute_vector_engine")
         self.logger.info("Executing %s on Vector Engine (XVE) [stub]", kernel)
         return data
 
@@ -73,6 +118,7 @@ class SYCLHardware:
         """Execute matrix operations on Matrix Engine (XMX)."""
         if self._backend:
             return self._backend.execute_matrix_engine(matrix, weights)
+        self._warn_stub_once("execute_matrix_engine")
         self.logger.info("Executing matrix operations on Matrix Engine (XMX) [stub]")
         return [[sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix]
 
@@ -96,4 +142,5 @@ class SYCLHardware:
         """Implement driver-level memory paging."""
         if self._backend:
             return self._backend.driver_memory_paging(memory, size)
+        self._warn_stub_once("driver_memory_paging")
         self.logger.info("Executing driver-level memory paging [stub]")

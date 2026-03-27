@@ -110,11 +110,18 @@ class SYCLHardware:
         self._sycl = None
         self._tensor = None
         self.device = None
+        self._fallback_reason = ""
+        self._fallback_warned = False
+        self._dpctl_device_count = 0
 
         try:
             import dpctl  # type: ignore
 
             self._sycl = dpctl
+            try:
+                self._dpctl_device_count = int(len(dpctl.get_devices()))
+            except Exception:
+                self._dpctl_device_count = 0
             try:
                 # dpctl.tensor is deprecated; only import if needed and suppress its warning.
                 with warnings.catch_warnings():
@@ -133,6 +140,7 @@ class SYCLHardware:
             if self.device is not None:
                 self.logger.info("Using SYCL device: %s", getattr(self.device, "name", "unknown"))
             else:
+                self._fallback_reason = "no_default_device"
                 logfn = self.logger.debug if sys.platform == "win32" else self.logger.warning
                 logfn(
                     "No default SYCL device from dpctl (optional on CPU-only hosts); using NumPy fallback."
@@ -142,6 +150,38 @@ class SYCLHardware:
             self._sycl = None
             self._tensor = None
             self.device = None
+            self._fallback_reason = f"dpctl_import_error:{e}"
+
+        if self._sycl is not None and self._tensor is None:
+            self._fallback_reason = self._fallback_reason or "dpctl_tensor_unavailable"
+
+    def backend_status(self) -> dict[str, object]:
+        """Structured SYCL helper backend status for telemetry and health UIs."""
+        active = self.is_backend_active()
+        dev_name = (
+            str(getattr(self.device, "name", "unknown")) if self.device is not None else "none"
+        )
+        reason = self._fallback_reason if not active else ""
+        return {
+            "active": active,
+            "device_name": dev_name,
+            "dpctl_device_count": int(self._dpctl_device_count),
+            "fallback_reason": reason,
+            "backend": "dpctl_sycl",
+        }
+
+    def _warn_once_on_fallback(self, op: str) -> None:
+        if self._fallback_warned:
+            return
+        self._fallback_warned = True
+        status = self.backend_status()
+        self.logger.warning(
+            "SYCL helper fallback active during %s (active=%s reason=%s device_count=%s); using deterministic CPU/NumPy path.",
+            op,
+            status.get("active"),
+            status.get("fallback_reason") or "unknown",
+            status.get("dpctl_device_count"),
+        )
 
     def is_backend_active(self) -> bool:
         """Return True when a usable SYCL device + tensor runtime are available."""
@@ -163,6 +203,7 @@ class SYCLHardware:
             Output data from execution
         """
         if self.device is None or self._tensor is None:
+            self._warn_once_on_fallback("execute_vector_engine")
             # Fallback: keep behavior deterministic and warning-free in environments
             # without a working SYCL runtime.
             return list(data)
@@ -190,6 +231,7 @@ class SYCLHardware:
             Result matrix from execution
         """
         if self.device is None or self._tensor is None or self._sycl is None:
+            self._warn_once_on_fallback("execute_matrix_engine")
             return [
                 [sum(a * b for a, b in zip(row, col)) for col in zip(*weights)] for row in matrix
             ]
@@ -249,7 +291,7 @@ class SYCLHardware:
             size: Size of memory to page
         """
         if self.device is None:
-            self.logger.warning("No SYCL device available, falling back to stub behavior")
+            self._warn_once_on_fallback("driver_memory_paging")
             return
 
         self.logger.info("Executing driver-level memory paging using SYCL")

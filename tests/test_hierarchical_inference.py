@@ -121,6 +121,25 @@ class TestHierarchicalFlow(unittest.TestCase):
             all(isinstance(p[0], int) and isinstance(p[1], (bytes, type(None))) for p in deltas)
         )
 
+    def test_state_migration_accept_delta_against_baseline(self):
+        inter = StateMigrationInterconnect()
+        baseline = b"\x00" * 16
+        current = bytearray(baseline)
+        current[8:12] = b"\x01\x02\x03\x04"
+        deltas = inter.accept(
+            {
+                "linear_memory": bytes(current),
+                "baseline_linear_memory": baseline,
+                "chunk_size": 4,
+            }
+        )
+        self.assertEqual(deltas, [(8, b"\x01\x02\x03\x04")])
+
+    def test_state_migration_accept_rejects_invalid_payload(self):
+        inter = StateMigrationInterconnect()
+        with self.assertRaises(TypeError):
+            inter.accept({"linear_memory": "not-bytes"})
+
     def test_data_pipeline_load_wasm_traces(self):
         """Data pipeline load_wasm_traces returns list of trace dicts."""
         pipe = DataPipeline()

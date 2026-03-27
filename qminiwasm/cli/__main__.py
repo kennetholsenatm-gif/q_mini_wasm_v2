@@ -23,9 +23,7 @@ def _usage() -> str:
 
 def _handle_graph(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help"):
-        sys.stdout.write(
-            "usage: python -m qminiwasm.cli graph <validate|apply> <manifest.json>\n"
-        )
+        sys.stdout.write("usage: python -m qminiwasm.cli graph <validate|apply> <manifest.json>\n")
         return 0
     if len(argv) != 2:
         sys.stderr.write("graph command expects exactly 2 args: <validate|apply> <manifest.json>\n")

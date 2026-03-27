@@ -52,9 +52,10 @@ When you **Launch training** with execution target **RunPod Serverless**, the WU
 ```
 
 - **`config_rel`**: path relative to the **worker’s** checkout of the repo (your handler must know where the repo root is).
-- **`extra_env`**: quantum-related overrides from the WUI (`buildQuantumEnvOverrides`), same idea as local runs.
+- **`extra_env`**: quantum-related overrides from the WUI (`buildQuantumEnvOverrides`), same idea as local runs. Edge profiling may add `QMW_DISABLE_TROPICAL_ATTN=1` for Tier 1 runs.
+- **`toml_overlay`** (optional): TOML fragment (non-secret) **deep-merged** into the file at `config_rel` on the worker before `python -m qminiwasm.engine` runs. Omit the field when unused. The WUI caps size at **64 KiB**. The reference handler at `serverless/handler.py` implements merge using **`tomli-w`**; install **`llm-pract[training]`** (or `tomli-w`) in the worker image when using overlays.
 
-Your worker must implement this input (or a superset). The repository does **not** ship a production Serverless worker image; you build a container with `qminiwasm-core`, dependencies, and a RunPod handler that runs `python -m qminiwasm.engine --config <path>`.
+Your worker must implement this input (or a superset). The repository does **not** ship a production Serverless worker image; you build a container with `qminiwasm-core`, dependencies, and a RunPod handler that runs `python -m qminiwasm.engine --config <path>` (after optional overlay merge).
 
 ## HTTP API (training-wui)
 

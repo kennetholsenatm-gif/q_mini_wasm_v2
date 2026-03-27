@@ -53,7 +53,11 @@ class _RouterConfig:
 
     def __init__(self):
         self.quantum_enabled = True
-        self.taxonomy_tier = (os.getenv("QMINIWASM_TAXONOMY_TIER", "edge_constrained") or "edge_constrained").strip().lower()
+        self.taxonomy_tier = (
+            (os.getenv("QMINIWASM_TAXONOMY_TIER", "edge_constrained") or "edge_constrained")
+            .strip()
+            .lower()
+        )
 
 
 class QuantumRouter:
@@ -72,10 +76,13 @@ class QuantumRouter:
         """Fallback: return k nearest by L2 distance."""
         if not database_vectors or k <= 0:
             return []
-        use_native = (
-            os.getenv("QMINIWASM_NATIVE_DQAOA_ROUTING", "0").strip().lower()
-            not in {"", "0", "false", "off", "no"}
-        )
+        use_native = os.getenv("QMINIWASM_NATIVE_DQAOA_ROUTING", "0").strip().lower() not in {
+            "",
+            "0",
+            "false",
+            "off",
+            "no",
+        }
         if use_native:
             lib = load_native_lib()
             if lib is not None and hasattr(lib, "qmw_route_topk_l2_f64"):

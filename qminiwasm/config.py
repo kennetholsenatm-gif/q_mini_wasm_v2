@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 WASM_PAGE_SIZE_BYTES = 64 * 1024
 _MIB = 1024 * 1024
@@ -85,6 +85,41 @@ ENCLAVE_TIER_PRESETS: Dict[str, EnclaveTierPreset] = {
         boundary_band_mb=(65_536.0, 262_144.0),
     ),
 }
+
+_NUMERIC_ENCLAVE_TIERS: Dict[int, str] = {
+    1: "micro",
+    2: "meso",
+    3: "macro",
+    4: "workgroup",
+    5: "enterprise_core",
+}
+
+
+def normalize_enclave_tier_value(v: Any) -> Optional[str]:
+    """Map ints 1–5, digit strings, or tier names to canonical preset keys.
+
+    Used by TOML (integer tiers), :class:`~qminiwasm.engine.config.EngineConfig`, and
+    Pydantic ``[enclave].enclave_tier`` validation.
+    """
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        raise ValueError(f"Invalid enclave_tier {v!r}; expected 1–5 or a tier name.")
+    if isinstance(v, (int, float)):
+        n = int(v)
+        if n in _NUMERIC_ENCLAVE_TIERS:
+            return _NUMERIC_ENCLAVE_TIERS[n]
+        raise ValueError(f"Invalid enclave_tier numeric value {v!r}; expected 1–5.")
+    s = str(v).strip().lower()
+    if not s:
+        return None
+    if s.isdigit():
+        return normalize_enclave_tier_value(int(s))
+    if s in ENCLAVE_TIER_PRESETS:
+        return s
+    raise ValueError(
+        f"Invalid enclave_tier {v!r}; expected 1–5 or one of " f"{sorted(ENCLAVE_TIER_PRESETS)}."
+    )
 
 
 def get_enclave_tier_preset(enclave_tier: Optional[str]) -> Optional[EnclaveTierPreset]:
