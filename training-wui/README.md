@@ -7,6 +7,7 @@ Small web UI to pick a `configs/training/*.toml` file and start training. **Loca
 - [Go](https://go.dev/dl/) 1.22+
 - Python env with the package installed (`pip install -e ".[training]"`) and `python` on `PATH`
 - **Cloud GPU provider (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or **Terraform-compatible CLI** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Setup checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md). Incus/host automation now lives in your separate ops runbook repository.
+- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Setup checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md).
 
 ## Run
 
