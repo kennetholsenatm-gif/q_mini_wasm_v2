@@ -1,4 +1,5 @@
-FROM almalinux:10
+# Quay mirror avoids Docker Hub rate limits (same AlmaLinux content as docker.io/almalinux).
+FROM quay.io/almalinux/almalinux:10
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \

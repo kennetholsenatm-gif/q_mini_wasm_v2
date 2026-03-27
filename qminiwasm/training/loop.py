@@ -445,7 +445,7 @@ def run_training_loop(
             ``seed`` is set (0 disables).
         wasm_runtime: Optional Wasm store limits / fallback policy for mesh and pipeline.
         enclave_tier: Optional tier (``micro`` … ``enterprise_core``); enables Tier-1 TPEM footprint
-            handling and is copied into checkpoint ``meta`` when ``export_runtime_policy`` is set.
+            handling and is copied into persisted trainable TPEM ``meta`` when ``export_runtime_policy`` is set.
         enclave_footprint_mb: Optional EF cap; for ``micro``, lowers the footprint target below the
             preset when smaller than ``ef_target_mb``.
         export_runtime_policy: Resolved runtime fields (``use_memory64``, Memory64 ceiling, store

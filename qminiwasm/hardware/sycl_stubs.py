@@ -82,8 +82,8 @@ class SYCLHardware:
                 st = self._backend.backend_status()
                 st["strict_helper"] = bool(self._strict_helper)
                 return st
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.debug("SYCL backend_status() raised %s; using stub status", e)
         return {
             "active": False,
             "device_name": "none",

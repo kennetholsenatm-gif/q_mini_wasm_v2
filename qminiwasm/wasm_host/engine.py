@@ -226,7 +226,8 @@ class WasmEngine:
         }
         if not enabled:
             return
-        if not shutil.which("wasm-opt"):
+        wasm_opt_bin = shutil.which("wasm-opt")
+        if not wasm_opt_bin:
             self.logger.debug("runtime wasm-opt requested but tool not on PATH; skipping")
             return
         level = os.environ.get("QMINIWASM_WASM_RUNTIME_WASM_OPT_LEVEL", "O2").strip()
@@ -235,7 +236,7 @@ class WasmEngine:
             tmp_out = os.path.join(td, "optimized.wasm")
             try:
                 subprocess.run(
-                    ["wasm-opt", flag, wasm_file, "-o", tmp_out],
+                    [wasm_opt_bin, flag, wasm_file, "-o", tmp_out],
                     check=True,
                     capture_output=True,
                     text=True,
