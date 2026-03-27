@@ -1,6 +1,7 @@
 """CLI for ``python -m qminiwasm.engine``."""
 
 import argparse
+import io
 import logging
 import os
 import sys
@@ -64,10 +65,11 @@ if __name__ == "__main__":
         stream=sys.stdout,
         force=True,
     )
-    try:
-        sys.stdout.reconfigure(line_buffering=True)
-    except (AttributeError, OSError):
-        pass
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        try:
+            sys.stdout.reconfigure(line_buffering=True)
+        except OSError:
+            pass
     _quiet_third_party_loggers()
     log = logging.getLogger(__name__)
 
