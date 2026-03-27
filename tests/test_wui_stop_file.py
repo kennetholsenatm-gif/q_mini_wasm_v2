@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from qminiwasm.training.loop import run_training_loop
 
 
