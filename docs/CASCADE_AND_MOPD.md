@@ -1,6 +1,6 @@
 # Cascade reinforcement learning and MOPD
 
-This document describes **cascade GRPO** (group-relative policy optimization for the escalation / routing head) and **MOPD** (multi-domain on-policy distillation) as implemented in **qminiwasm-core**, how they fit into `run_training_loop`, and which environment variables control them. Base hyperparameters can live in TOML under **`configs/training/`** (see **[TRAINING_DATA.md](TRAINING_DATA.md)**); the helper script **`scripts/run_training_cascade_mopd.py`** defaults to **`--config configs/training/cascade_mopd.toml`** and still injects **`CASCADE_MOPD_*`** and checkpoint paths via env for quick overrides. For the full env table, see **[TRAINING_DATA.md](TRAINING_DATA.md)**.
+This document describes **cascade GRPO** (group-relative policy optimization for the escalation / routing head) and **MOPD** (multi-domain on-policy distillation) as implemented in **qminiwasm-core**, how they fit into `run_training_loop`, and which environment variables control them. **Prefer TOML** under **`configs/training/`** (see **[TRAINING_DATA.md](TRAINING_DATA.md)**); the helper script **`scripts/run_training_cascade_mopd.py`** defaults to **`--config configs/training/cascade_mopd.toml`** and may still inject **`CASCADE_MOPD_*`** and checkpoint paths via env for quick overrides. For the full env table, see **[TRAINING_DATA.md](TRAINING_DATA.md)**; maintainer-oriented process-env inventory: **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)**.
 
 ## Where the code lives
 

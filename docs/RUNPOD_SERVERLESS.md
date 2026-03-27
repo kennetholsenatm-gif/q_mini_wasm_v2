@@ -16,9 +16,9 @@ This repo supports two RunPod integration modes:
 
 Official RunPod docs: [Serverless overview](https://docs.runpod.io/serverless/overview), [Send API requests](https://docs.runpod.io/serverless/endpoints/send-requests), [Operation reference](https://docs.runpod.io/serverless/endpoints/operation-reference), [Handler functions](https://docs.runpod.io/serverless/workers/handler-functions), [SDKs](https://docs.runpod.io/serverless/sdks), [Hugging Face on Serverless](https://docs.runpod.io/serverless/development/huggingface-models).
 
-## Environment
+## Environment (credentials)
 
-Environment (see `.env.example`):
+RunPod keys are **secrets** (not training config). Put them in repo **`.env`** (see [`.env.example`](../.env.example) and [environment-variables.md](environment-variables.md)):
 
 - **`RUNPOD_TOKEN_END`** (optional): **Endpoint API key** from the RunPod console for that Serverless endpoint. When set, the WUI uses it for **`https://api.runpod.ai/v2/{ENDPOINT_ID}/…`** (health, `/run`, `/status`, cancel, Launch training). If unset, **`RUNPOD_API_KEY`** or **`RUNPOD_TOKEN`** is used for the queue API instead.
 - **`RUNPOD_API_KEY`** or **`RUNPOD_TOKEN`**: Account-wide key — required for **`https://rest.runpod.io/v1`** (list/create endpoints in the WUI). The endpoint key alone is **not** used for management REST.

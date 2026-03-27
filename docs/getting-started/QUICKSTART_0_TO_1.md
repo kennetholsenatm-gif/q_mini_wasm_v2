@@ -63,17 +63,13 @@ Expected result:
 
 - JSON response with an `output` key containing one 4096-length vector
 
-## Security note (ZTEE)
+## Production identity
 
-Production deployments use **Zero-Trust Ephemeral Enrollment (ZTEE)**, the cryptographic handshake and identity bootstrap required for secure node startup, to authenticate both:
-- the host (**X.509** PKI over **mTLS 1.3**)
-- the enclave (**OIDC/OAuth2 JWT** claims that encode tier + EF + topic scopes)
-
-Identity and trust reference: [`docs/IDENTITY_STACK_REFERENCE.md`](../IDENTITY_STACK_REFERENCE.md). For end-to-end runtime flow, see [`docs/architecture/JOURNEY_OF_A_VECTOR.md`](../architecture/JOURNEY_OF_A_VECTOR.md).
+Beyond this local quickstart, hardened deployments authenticate the **host** (X.509 PKI over mTLS 1.3) and **workload identity** (OIDC/OAuth2 JWT claims for tier, footprint, and topic scopes). See [`docs/IDENTITY_STACK_REFERENCE.md`](../IDENTITY_STACK_REFERENCE.md) for the reference pattern; acronym and vocabulary: [`docs/GLOSSARY.md`](../GLOSSARY.md). End-to-end runtime flow: [`docs/architecture/JOURNEY_OF_A_VECTOR.md`](../architecture/JOURNEY_OF_A_VECTOR.md).
 
 ## What to do next
 
-- Strategic architecture path: [../../README.md](../../README.md#why-this-stack)
+- Strategic architecture path: [../../README.md](../../README.md#how-we-stay-within-the-constraint)
 - Data and training references: [../TRAINING_DATA.md](../TRAINING_DATA.md)
 - Quantum mode details: [../QUANTUM_QISKIT.md](../QUANTUM_QISKIT.md)
 - Operator workflows: [../operations/OPERATIONS_RUNBOOK.md](../operations/OPERATIONS_RUNBOOK.md)

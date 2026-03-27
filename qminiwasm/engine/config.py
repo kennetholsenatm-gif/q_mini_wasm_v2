@@ -45,8 +45,10 @@ class EngineConfig:
     """Configuration for the ML engine.
 
     Non-secret options must come from a training TOML file or explicit constructor
-    arguments. The only environment variables read here are **HUGGING_FACE_HUB_TOKEN**
-    and **HF_TOKEN** when ``hf_token`` is not passed explicitly.
+    arguments. **HUGGING_FACE_HUB_TOKEN** / **HF_TOKEN** are read when ``hf_token`` is
+    not passed explicitly. **QMINIWASM_STRICT_CONFIG_VALIDATION** is read in
+    :meth:`wasm_runtime_kwargs` for strict CI-style validation only (see
+    ``docs/ENV_CI_OVERRIDES.md``).
     """
 
     def __init__(
@@ -68,6 +70,7 @@ class EngineConfig:
         diff_method: Optional[str] = None,
         epochs: Optional[int] = None,
         batch_size: Optional[int] = None,
+        dataloader_num_workers: Optional[int] = None,
         learning_rate: Optional[float] = None,
         data_path: Optional[str] = None,
         training_data_source: Optional[str] = None,
@@ -86,6 +89,9 @@ class EngineConfig:
         lr_plateau_factor: Optional[float] = None,
         lr_plateau_min_lr: Optional[float] = None,
         early_stop_patience: Optional[int] = None,
+        log_xpu_memory: Optional[bool] = None,
+        log_xpu_memory_reset_peak: Optional[bool] = None,
+        log_train_throughput: Optional[bool] = None,
         checkpoint_load_path: Optional[str] = None,
         checkpoint_save_path: Optional[str] = None,
         checkpoint_best_path: Optional[str] = None,
@@ -184,6 +190,10 @@ class EngineConfig:
         self.diff_method = diff_method if diff_method is not None else "parameter-shift"
         self.epochs = int(epochs) if epochs is not None else 25
         self.batch_size = int(batch_size) if batch_size is not None else 32
+        if dataloader_num_workers is not None:
+            self.dataloader_num_workers = max(0, int(dataloader_num_workers))
+        else:
+            self.dataloader_num_workers = None
         if learning_rate is not None:
             self.learning_rate = float(learning_rate)
         else:
@@ -265,6 +275,14 @@ class EngineConfig:
             self.early_stop_patience = early_stop_patience
         else:
             self.early_stop_patience = None
+
+        self.log_xpu_memory = bool(log_xpu_memory) if log_xpu_memory is not None else False
+        self.log_xpu_memory_reset_peak = (
+            bool(log_xpu_memory_reset_peak) if log_xpu_memory_reset_peak is not None else False
+        )
+        self.log_train_throughput = (
+            bool(log_train_throughput) if log_train_throughput is not None else False
+        )
 
         self.checkpoint_load_path = checkpoint_load_path
         self.checkpoint_save_path = checkpoint_save_path
@@ -474,24 +492,7 @@ class EngineConfig:
             if mb is not None and mb > 0
             else DEFAULT_WASM_STORE_MEMORY_LIMIT_BYTES
         )
-        # Override TOML/default without editing config (e.g. Docker image still on old wheel).
-        env_bytes = os.environ.get("QMW_WASM_STORE_MEMORY_LIMIT_BYTES", "").strip()
-        if env_bytes:
-            try:
-                lim_b = max(1, int(env_bytes, 10))
-            except ValueError:
-                pass
-        else:
-            env_mb = os.environ.get("QMW_WASM_STORE_MEMORY_LIMIT_MB", "").strip()
-            if env_mb:
-                try:
-                    lim_b = max(1, int(env_mb, 10)) * 1024 * 1024
-                except ValueError:
-                    pass
         fp = (self.wasm_fallback_policy or "mock").strip().lower()
-        env_fp = os.environ.get("QMINIWASM_WASM_FALLBACK_POLICY", "").strip().lower()
-        if env_fp:
-            fp = env_fp
         strict_cfg = os.environ.get("QMINIWASM_STRICT_CONFIG_VALIDATION", "").strip().lower() in {
             "1",
             "true",
@@ -508,24 +509,10 @@ class EngineConfig:
             fp = "mock"
         fm = bool(self.wasm_force_mock) if self.wasm_force_mock is not None else False
         backend = (self.wasm_backend or "wasmtime").strip().lower()
-        env_backend = os.environ.get("QMINIWASM_WASM_BACKEND", "").strip().lower()
-        if env_backend:
-            backend = env_backend
         if backend not in ("wasmtime", "wasmedge_native", "enclave_adapter"):
             backend = "wasmtime"
-        env_use_memory64 = os.environ.get("QMINIWASM_USE_MEMORY64", "").strip().lower()
         use_memory64 = self.use_memory64
-        if env_use_memory64 in {"1", "true", "yes", "on"}:
-            use_memory64 = True
-        elif env_use_memory64 in {"0", "false", "no", "off"}:
-            use_memory64 = False
         memory64_max_mb = self.wasm_memory64_max_mb
-        env_memory64_max_mb = os.environ.get("QMINIWASM_WASM_MEMORY64_MAX_MB", "").strip()
-        if env_memory64_max_mb:
-            try:
-                memory64_max_mb = float(env_memory64_max_mb)
-            except ValueError:
-                pass
         resolved = self._resolve_enclave_runtime_policy(
             store_memory_limit_bytes=lim_b,
             use_memory64=use_memory64,
@@ -555,7 +542,7 @@ class EngineConfig:
         """Resolve tier preset policy with override precedence.
 
         Precedence:
-        1. Explicit overrides from ``[enclave]`` / env (`max_linear_memory_pages`,
+        1. Explicit overrides from ``[enclave]`` (`max_linear_memory_pages`,
            `wasm_memory64_max_mb`, `use_memory64`)
         2. Tier preset defaults
         3. Existing runtime defaults

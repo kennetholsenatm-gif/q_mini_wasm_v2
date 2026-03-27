@@ -22,11 +22,16 @@ artifacts/
 
 # Training WUI — single working TOML written by Save working config (not for version control)
 configs/training/wui_working.toml
+configs/training/.wui_runpod_targets.json
 *.pyc
 __pycache__/
 *.log
 *.out
 *.tmp
+*.exe~
+
+# Local WUI edge experiment configs (do not commit)
+configs/training/.wui_edge_*.toml
 
 # IDE Configuration
 .vscode/

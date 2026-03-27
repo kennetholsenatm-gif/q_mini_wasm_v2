@@ -1,6 +1,7 @@
 """CLI for ``python -m qminiwasm.engine``."""
 
 import argparse
+import io
 import logging
 import os
 import sys
@@ -40,6 +41,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="LEVEL",
         help="Python logging level. When omitted, uses LOG_LEVEL (if set) or INFO.",
     )
+    p.add_argument(
+        "--wui-stop-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Absolute path to a sentinel file: when it exists, training requests graceful stop "
+            "(same as SIGINT) at the next batch boundary. Removed after consumption. Used by the "
+            "Training WUI when OS signals cannot reach the child (e.g. Windows GUI launches)."
+        ),
+    )
     return p.parse_args(argv)
 
 
@@ -54,6 +65,11 @@ if __name__ == "__main__":
         stream=sys.stdout,
         force=True,
     )
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        try:
+            sys.stdout.reconfigure(line_buffering=True)
+        except OSError:
+            pass
     _quiet_third_party_loggers()
     log = logging.getLogger(__name__)
 
@@ -70,5 +86,8 @@ if __name__ == "__main__":
         )
         config = EngineConfig()
 
-    result = train_main(config=config)
+    wui_sf = None
+    if getattr(args, "wui_stop_file", None):
+        wui_sf = str(args.wui_stop_file).strip() or None
+    result = train_main(config=config, wui_stop_file=wui_sf)
     print("Training complete:", result)

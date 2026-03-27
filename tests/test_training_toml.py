@@ -338,11 +338,10 @@ def test_enclave_macro_rejects_memory64_false():
         c.wasm_runtime_kwargs()
 
 
-def test_wasm_fallback_policy_env_override(monkeypatch):
+def test_wasm_fallback_policy_from_engine_config():
     from qminiwasm.engine.config import EngineConfig
 
-    monkeypatch.setenv("QMINIWASM_WASM_FALLBACK_POLICY", "error")
-    cfg = EngineConfig(wasm_fallback_policy="mock")
+    cfg = EngineConfig(wasm_fallback_policy="error")
     runtime = cfg.wasm_runtime_kwargs()["runtime"]
     assert runtime.fallback_policy == "error"
 
@@ -350,7 +349,6 @@ def test_wasm_fallback_policy_env_override(monkeypatch):
 def test_wasm_fallback_policy_invalid_raises_with_strict_validation(monkeypatch):
     from qminiwasm.engine.config import EngineConfig
 
-    # Job-level CI may set QMINIWASM_WASM_FALLBACK_POLICY; that would mask invalid TOML/config.
     monkeypatch.delenv("QMINIWASM_WASM_FALLBACK_POLICY", raising=False)
     monkeypatch.setenv("QMINIWASM_STRICT_CONFIG_VALIDATION", "1")
     cfg = EngineConfig(wasm_fallback_policy="nonsense")

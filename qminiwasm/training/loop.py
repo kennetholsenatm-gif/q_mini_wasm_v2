@@ -15,12 +15,14 @@ import os
 import random
 import signal
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, cast
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 
 from ..data.pipeline import DataPipeline
 from ..hardware.device import (
@@ -150,6 +152,192 @@ def _validate_training_sample(sample: Dict[str, Any]) -> TrainingSample:
     if not isinstance(hidden, torch.Tensor) or not isinstance(target, torch.Tensor):
         raise TypeError("Training sample 'hidden' and 'target' must be torch.Tensor values")
     return cast(TrainingSample, sample)
+
+
+def _as_d_model_1d(name: str, t: torch.Tensor) -> torch.Tensor:
+    """Validate shape and dtype for a single training row (host-side; used by DataLoader workers)."""
+    if not isinstance(t, torch.Tensor):
+        raise TypeError(f"Expected {name} to be torch.Tensor, got {type(t).__name__}")
+    if t.dim() != 1 or t.shape[0] != _D_MODEL:
+        raise ValueError(
+            f"Expected {name} shape ({_D_MODEL},), got {tuple(t.shape)}; "
+            "regenerate data or fix encoder."
+        )
+    return t.to(dtype=torch.float32)
+
+
+class _TrainingSampleListDataset(torch.utils.data.Dataset):
+    """Picklable dataset over in-memory training rows (for ``DataLoader`` workers)."""
+
+    __slots__ = ("_samples",)
+
+    def __init__(self, samples: List[Dict[str, Any]]):
+        self._samples = samples
+
+    def __len__(self) -> int:
+        return len(self._samples)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        b = _validate_training_sample(self._samples[idx])
+        return (
+            _as_d_model_1d("hidden", b["hidden"]),
+            _as_d_model_1d("target", b["target"]),
+        )
+
+
+def _collate_hidden_target(
+    batch: List[Tuple[torch.Tensor, torch.Tensor]],
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    hs, ts = zip(*batch)
+    return torch.stack(list(hs), 0), torch.stack(list(ts), 0)
+
+
+def _resolve_dataloader_num_workers(explicit: int | None) -> int:
+    """Non-negative worker count from ``[training].dataloader_num_workers`` only (see TOML / WUI)."""
+    if explicit is not None:
+        return max(0, int(explicit))
+    return 0
+
+
+def _reset_xpu_peak_memory_if_enabled(
+    device: torch.device,
+    *,
+    log_xpu_memory: bool,
+    reset_peak: bool,
+) -> None:
+    if not log_xpu_memory or not reset_peak:
+        return
+    if device.type != "xpu":
+        return
+    xpu = getattr(torch, "xpu", None)
+    if xpu is None:
+        return
+    idx = device.index if device.index is not None else 0
+    reset = getattr(xpu, "reset_peak_memory_stats", None)
+    if not callable(reset):
+        return
+    try:
+        reset(idx)
+    except Exception as e:
+        logger.debug("reset_peak_memory_stats skipped: %s", e)
+
+
+def _log_xpu_training_setup_if_enabled(
+    device: torch.device,
+    batch_size: int,
+    n_train: int,
+    dl_workers: int,
+    *,
+    log_xpu_memory: bool,
+) -> None:
+    if not log_xpu_memory or device.type != "xpu":
+        return
+    logger.info(
+        "qmw_xpu_mem phase=training_setup device=%s batch_size=%d train_samples=%d dataloader_workers=%d",
+        device,
+        int(batch_size),
+        int(n_train),
+        int(dl_workers),
+    )
+
+
+def _log_xpu_memory_if_enabled(
+    device: torch.device,
+    *,
+    log_xpu_memory: bool,
+    phase: str,
+    epoch: int,
+    epochs_total: int,
+    batches: int,
+) -> None:
+    if not log_xpu_memory or device.type != "xpu":
+        return
+    xpu = getattr(torch, "xpu", None)
+    if xpu is None:
+        return
+    idx = device.index if device.index is not None else 0
+    try:
+        cur = int(xpu.memory_allocated(idx)) if hasattr(xpu, "memory_allocated") else -1
+        peak = int(xpu.max_memory_allocated(idx)) if hasattr(xpu, "max_memory_allocated") else -1
+        cur_mib = cur / (1024.0 * 1024.0) if cur >= 0 else -1.0
+        peak_mib = peak / (1024.0 * 1024.0) if peak >= 0 else -1.0
+        logger.info(
+            "qmw_xpu_mem phase=%s epoch=%d epochs_total=%d batches=%d device=xpu:%d "
+            "allocated_bytes=%d max_allocated_bytes=%d allocated_mib=%.4f max_allocated_mib=%.4f",
+            phase,
+            epoch,
+            epochs_total,
+            batches,
+            idx,
+            cur,
+            peak,
+            cur_mib,
+            peak_mib,
+        )
+    except Exception as e:
+        logger.debug("qmw_xpu_mem phase=%s skipped: %s", phase, e)
+
+
+def _host_rss_mib_best_effort() -> float | None:
+    try:
+        import psutil
+    except ImportError:
+        return None
+    try:
+        return float(psutil.Process().memory_info().rss) / (1024.0 * 1024.0)
+    except Exception:
+        return None
+
+
+def _log_train_throughput_if_enabled(
+    *,
+    log_train_throughput: bool,
+    epoch: int,
+    epochs_total: int,
+    wall_s: float,
+    n_batches: int,
+    n_samples: int,
+    batch_size: int,
+    dl_workers: int,
+    cascade_s: float,
+) -> None:
+    if not log_train_throughput or n_batches <= 0 or wall_s <= 0:
+        return
+    sps = float(n_samples) / wall_s
+    bps = float(n_batches) / wall_s
+    rss = _host_rss_mib_best_effort()
+    if rss is not None:
+        logger.info(
+            "qmw_train_throughput epoch=%d epochs_total=%d wall_s=%.4f batches=%d samples=%d "
+            "batch_size=%d samples_per_s=%.4f batches_per_s=%.4f dataloader_workers=%d "
+            "cascade_s=%.4f host_rss_mib=%.2f",
+            epoch,
+            epochs_total,
+            wall_s,
+            n_batches,
+            n_samples,
+            batch_size,
+            sps,
+            bps,
+            dl_workers,
+            cascade_s,
+            rss,
+        )
+    else:
+        logger.info(
+            "qmw_train_throughput epoch=%d epochs_total=%d wall_s=%.4f batches=%d samples=%d "
+            "batch_size=%d samples_per_s=%.4f batches_per_s=%.4f dataloader_workers=%d cascade_s=%.4f",
+            epoch,
+            epochs_total,
+            wall_s,
+            n_batches,
+            n_samples,
+            batch_size,
+            sps,
+            bps,
+            dl_workers,
+            cascade_s,
+        )
 
 
 def _split_int_budget(total: int, parts: int) -> List[int]:
@@ -358,6 +546,11 @@ def run_training_loop(
     enclave_tier: str | None = None,
     enclave_footprint_mb: float | None = None,
     export_runtime_policy: dict[str, Any] | None = None,
+    dataloader_num_workers: int | None = None,
+    log_xpu_memory: bool = False,
+    log_xpu_memory_reset_peak: bool = False,
+    log_train_throughput: bool = False,
+    wui_stop_file: str | None = None,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -450,6 +643,18 @@ def run_training_loop(
             preset when smaller than ``ef_target_mb``.
         export_runtime_policy: Resolved runtime fields (``use_memory64``, Memory64 ceiling, store
             limit, tier) merged into each ``save_trainable_tpem_artifact`` ``meta`` for operators.
+        dataloader_num_workers: Host-side ``DataLoader`` workers for supervised batch collation
+            (overlap with XPU/CUDA compute). When None, treated as 0; set ``[training].dataloader_num_workers``
+            in TOML / WUI. ``pin_memory`` is True only for CUDA.
+        log_xpu_memory: When True, emit structured ``qmw_xpu_mem`` lines (XPU only); set via
+            ``[training].log_xpu_memory`` in TOML / WUI schema.
+        log_xpu_memory_reset_peak: When True with ``log_xpu_memory``, reset XPU peak memory stats
+            each epoch (``[training].log_xpu_memory_reset_peak``).
+        log_train_throughput: When True, emit ``qmw_train_throughput`` after each supervised phase
+            (``[training].log_train_throughput``).
+        wui_stop_file: Optional absolute path; when the file exists, training requests the same
+            graceful stop as SIGINT (batch boundary). The Training WUI creates this file when
+            OS signals cannot reach the child (typical on Windows GUI launches).
 
     Returns:
         Dict with ``epochs_run``, ``final_loss``, ``metrics``, and TPEM artifact path fields
@@ -487,6 +692,31 @@ def run_training_loop(
             signal.signal(signal.SIGTERM, _on_train_stop_signal)
         except (AttributeError, ValueError):
             pass
+
+    wui_stop_path = (str(wui_stop_file).strip() if wui_stop_file else "") or ""
+    _wui_stop_announced = False
+
+    def _poll_wui_stop_file() -> None:
+        nonlocal _wui_stop_announced
+        if not wui_stop_path:
+            return
+        p = Path(wui_stop_path)
+        try:
+            if not p.is_file():
+                return
+        except OSError:
+            return
+        try:
+            p.unlink(missing_ok=True)
+        except OSError:
+            pass
+        stop_requested.set()
+        if not _wui_stop_announced:
+            logger.info(
+                "WUI cooperative stop file observed at %s; requesting graceful stop (batch boundary).",
+                p,
+            )
+            _wui_stop_announced = True
 
     device = get_device(
         accelerator=cast(AcceleratorType | None, accelerator),
@@ -739,14 +969,7 @@ def run_training_loop(
         eval_samples = []
 
     def _as_d_model(name: str, t: torch.Tensor) -> torch.Tensor:
-        if not isinstance(t, torch.Tensor):
-            raise TypeError(f"Expected {name} to be torch.Tensor, got {type(t).__name__}")
-        if t.dim() != 1 or t.shape[0] != _D_MODEL:
-            raise ValueError(
-                f"Expected {name} shape ({_D_MODEL},), got {tuple(t.shape)}; "
-                "regenerate data or fix encoder."
-            )
-        return t.to(dtype=torch.float32)
+        return _as_d_model_1d(name, t)
 
     wasm_origin_counts = {"real": 0, "mock": 0, "error": 0, "unknown": 0}
     for row in processed_data:
@@ -929,12 +1152,49 @@ def run_training_loop(
 
     _emit_enclave_telemetry()
 
+    dl_workers = _resolve_dataloader_num_workers(dataloader_num_workers)
+    pin_memory = device.type == "cuda"
+    train_loader: DataLoader | None
+    if dl_workers > 0:
+        logger.info(
+            "Supervised training DataLoader num_workers=%s pin_memory=%s (host batch collation overlap).",
+            dl_workers,
+            pin_memory,
+        )
+        train_loader = DataLoader(
+            _TrainingSampleListDataset(train_samples),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=dl_workers,
+            collate_fn=_collate_hidden_target,
+            pin_memory=pin_memory,
+            persistent_workers=True,
+        )
+    else:
+        train_loader = None
+
+    _log_xpu_training_setup_if_enabled(
+        device,
+        batch_size,
+        len(train_samples),
+        dl_workers,
+        log_xpu_memory=log_xpu_memory,
+    )
+
     for epoch in range(epochs):
+        _poll_wui_stop_file()
         if stop_requested.is_set():
             stopped_early = True
             logger.info("Graceful stop before epoch %s/%s.", epoch + 1, epochs)
             break
+        _reset_xpu_peak_memory_if_enabled(
+            device,
+            log_xpu_memory=log_xpu_memory,
+            reset_peak=log_xpu_memory_reset_peak,
+        )
+        cascade_s = 0.0
         if use_cascade_rl and int(cascade_steps_per_epoch) > 0:
+            t_cascade0 = time.perf_counter()
             assert cascade_policy is not None and cascade_optimizer is not None
             if cascade_seed_from_hidden and train_samples:
                 with torch.no_grad():
@@ -982,6 +1242,7 @@ def run_training_loop(
             ).strip().lower() not in {"", "0", "false", "off", "no"}
             cascade_steps_done = 0
             for _ in range(int(cascade_steps_per_epoch)):
+                _poll_wui_stop_file()
                 if stop_requested.is_set():
                     break
                 if mopd_mod is not None:
@@ -1021,7 +1282,9 @@ def run_training_loop(
                 int(cascade_steps_per_epoch),
                 int(cascade_group_size),
             )
+            cascade_s = time.perf_counter() - t_cascade0
 
+        _poll_wui_stop_file()
         if stop_requested.is_set():
             stopped_early = True
             logger.info(
@@ -1033,30 +1296,16 @@ def run_training_loop(
 
         epoch_loss = 0.0
         n_batches = 0
+        supervised_sample_count = 0
         user_stop_mid_epoch = False
-        for i in range(0, len(train_samples), batch_size):
-            if stop_requested.is_set():
-                user_stop_mid_epoch = True
-                logger.info(
-                    "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
-                    epoch + 1,
-                    epochs,
-                    n_batches,
-                )
-                break
-            batch = train_samples[i : i + batch_size]
-            if not batch:
-                continue
-            try:
-                validated_batch = [_validate_training_sample(b) for b in batch]
-                hidden_list = [_as_d_model("hidden", b["hidden"]) for b in validated_batch]
-                target_list = [_as_d_model("target", b["target"]) for b in validated_batch]
-            except (KeyError, TypeError) as e:
-                raise type(e)(f"Invalid training batch sample: {e}") from e
+        t_supervised0 = time.perf_counter()
 
-            hidden_states = torch.stack(hidden_list).to(device)
-            targets = torch.stack(target_list).to(device)
-
+        def _supervised_one_batch(
+            hidden_states: torch.Tensor,
+            targets: torch.Tensor,
+            batch_start_index: int,
+        ) -> None:
+            nonlocal epoch_loss, n_batches, skipped_nonfinite_batches, supervised_sample_count
             optimizer.zero_grad()
             if tsign_opt is not None:
                 tsign_opt.zero_grad()
@@ -1076,18 +1325,75 @@ def run_training_loop(
                 logger.error(
                     "Non-finite loss at epoch %s batch starting index %s; skipping step.",
                     epoch,
-                    i,
+                    batch_start_index,
                 )
-                continue
+                return
             loss.backward()
             if grad_clip_norm is not None and grad_clip_norm > 0:
                 _clip_grad_norm_xpu_safe(adam_params, grad_clip_norm, device)
             optimizer.step()
             if tsign_opt is not None:
                 tsign_opt.step()
-
             epoch_loss += loss.item()
             n_batches += 1
+            supervised_sample_count += int(hidden_states.shape[0])
+
+        if train_loader is not None:
+            batch_start_idx = 0
+            for hidden_states_cpu, targets_cpu in train_loader:
+                _poll_wui_stop_file()
+                if stop_requested.is_set():
+                    user_stop_mid_epoch = True
+                    logger.info(
+                        "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
+                        epoch + 1,
+                        epochs,
+                        n_batches,
+                    )
+                    break
+                i = batch_start_idx
+                batch_start_idx += int(hidden_states_cpu.shape[0])
+                hidden_states = hidden_states_cpu.to(device)
+                targets = targets_cpu.to(device)
+                _supervised_one_batch(hidden_states, targets, i)
+        else:
+            for i in range(0, len(train_samples), batch_size):
+                _poll_wui_stop_file()
+                if stop_requested.is_set():
+                    user_stop_mid_epoch = True
+                    logger.info(
+                        "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
+                        epoch + 1,
+                        epochs,
+                        n_batches,
+                    )
+                    break
+                batch = train_samples[i : i + batch_size]
+                if not batch:
+                    continue
+                try:
+                    validated_batch = [_validate_training_sample(b) for b in batch]
+                    hidden_list = [_as_d_model("hidden", b["hidden"]) for b in validated_batch]
+                    target_list = [_as_d_model("target", b["target"]) for b in validated_batch]
+                except (KeyError, TypeError) as e:
+                    raise type(e)(f"Invalid training batch sample: {e}") from e
+                hidden_states = torch.stack(hidden_list).to(device)
+                targets = torch.stack(target_list).to(device)
+                _supervised_one_batch(hidden_states, targets, i)
+
+        supervised_wall_s = time.perf_counter() - t_supervised0
+        if n_batches > 0:
+            _log_train_throughput_if_enabled(
+                log_train_throughput=log_train_throughput,
+                epoch=epoch + 1,
+                epochs_total=epochs,
+                wall_s=supervised_wall_s,
+                n_batches=n_batches,
+                n_samples=supervised_sample_count,
+                batch_size=batch_size,
+                dl_workers=dl_workers,
+                cascade_s=cascade_s,
+            )
 
         if user_stop_mid_epoch:
             if n_batches > 0:
@@ -1113,6 +1419,14 @@ def run_training_loop(
                     final_loss,
                 )
                 _emit_enclave_telemetry()
+                _log_xpu_memory_if_enabled(
+                    device,
+                    log_xpu_memory=log_xpu_memory,
+                    phase="epoch_partial",
+                    epoch=epoch + 1,
+                    epochs_total=epochs,
+                    batches=n_batches,
+                )
                 if checkpoint_latest_path and ((epoch + 1) % latest_every_n_epochs == 0):
                     try:
                         save_trainable_tpem_artifact(
@@ -1200,6 +1514,14 @@ def run_training_loop(
                 final_loss,
             )
             _emit_enclave_telemetry()
+            _log_xpu_memory_if_enabled(
+                device,
+                log_xpu_memory=log_xpu_memory,
+                phase="epoch_end",
+                epoch=epoch + 1,
+                epochs_total=epochs,
+                batches=n_batches,
+            )
             if checkpoint_latest_path and ((epoch + 1) % latest_every_n_epochs == 0):
                 try:
                     save_trainable_tpem_artifact(

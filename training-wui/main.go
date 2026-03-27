@@ -37,12 +37,13 @@ import (
 var webFS embed.FS
 
 var (
-	repoRoot        string
-	pythonExe       string
-	serverAddr      string
-	serverAuthToken string
-	runManager      = newManager()
-	wsHub           = newRunWSHub()
+	repoRoot          string
+	pythonExe         string
+	serverAddr        string
+	serverAuthToken   string
+	agentDebugLogPath string
+	runManager        = newManager()
+	wsHub             = newRunWSHub()
 )
 
 var (
@@ -54,6 +55,21 @@ var (
 	qaoaLoadRe         = regexp.MustCompile(`(?i)\bqaoa_sim_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+qpu_est_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
 	enclaveTelemetryRe = regexp.MustCompile(
 		`qmw_enclave_telemetry estimated_tpem_mb=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+tier_cap_mb=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+enclave_tier=(\S+)\s+use_memory64=(\d+)`,
+	)
+	routingTelemetryRe = regexp.MustCompile(
+		`qmw_routing_telemetry\s+routing_state=(\d+)\s+assignment_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+budget_ms=(\d+)`,
+	)
+	routingHandoffRe = regexp.MustCompile(
+		`qmw_routing_handoff\s+from=(\d+)\s+to=(\d+)\s+assignment_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+budget_ms=(\d+)\s+reason=(\S+)\s+combinatorial_wall=(\d+)`,
+	)
+	xpuMemTrainingSetupRe = regexp.MustCompile(
+		`qmw_xpu_mem\s+phase=training_setup\s+device=(\S+)\s+batch_size=(\d+)\s+train_samples=(\d+)\s+dataloader_workers=(\d+)`,
+	)
+	xpuMemEpochRe = regexp.MustCompile(
+		`qmw_xpu_mem\s+phase=(\S+)\s+epoch=(\d+)\s+epochs_total=(\d+)\s+batches=(\d+)\s+device=xpu:(\d+)\s+allocated_bytes=(-?\d+)\s+max_allocated_bytes=(-?\d+)\s+allocated_mib=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+max_allocated_mib=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`,
+	)
+	trainThroughputRe = regexp.MustCompile(
+		`qmw_train_throughput\s+epoch=(\d+)\s+epochs_total=(\d+)\s+wall_s=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+batches=(\d+)\s+samples=(\d+)\s+batch_size=(\d+)\s+samples_per_s=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+batches_per_s=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+dataloader_workers=(\d+)\s+cascade_s=([+-]?(?:\d+\.?\d*|\d*\.?\d+))(?:\s+host_rss_mib=([+-]?(?:\d+\.?\d*|\d*\.?\d+)))?`,
 	)
 	alertXPU  = "ACCELERATOR=xpu but PyTorch XPU is not available"
 	alertWASM = "switching to mock WASM mode"
@@ -275,6 +291,11 @@ func main() {
 		}
 	}
 
+	agentDebugLogPath = filepath.Join(repoRoot, "training-wui", "debug-4b1a8d.log")
+	if st, err := os.Stat(filepath.Join(repoRoot, "training-wui")); err != nil || !st.IsDir() {
+		agentDebugLogPath = filepath.Join(repoRoot, "debug-4b1a8d.log")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/configs", handleConfigs)
 	mux.HandleFunc("/api/preflight", handlePreflight)
@@ -296,6 +317,10 @@ func main() {
 	mux.HandleFunc("/api/runpod/status", handleRunpodStatus)
 	mux.HandleFunc("/api/runpod/tofu", handleRunpodTofu)
 	mux.HandleFunc("/api/runpod/tfvars", handleRunpodTfvars)
+	mux.HandleFunc("/api/runpod/warm-targets", handleRunpodWarmTargets)
+	mux.HandleFunc("/api/serve/start", handleServeStart)
+	mux.HandleFunc("/api/serve/stop", handleServeStop)
+	mux.HandleFunc("/api/serve/status", handleServeStatus)
 	mux.HandleFunc("/api/runpod/serverless/meta", handleRunpodServerlessMeta)
 	mux.HandleFunc("/api/runpod/serverless/endpoints", handleRunpodServerlessEndpoints)
 	mux.HandleFunc("/api/runpod/serverless/templates", handleRunpodServerlessTemplates)
@@ -319,19 +344,18 @@ func main() {
 	log.Printf("training-wui listening on %s (repo root %s, python %q)", actualAddr, repoRoot, pythonExe)
 	// #region agent log
 	{
-		dbgPath := filepath.Join(repoRoot, "debug-3dadad.log")
 		ln, _ := json.Marshal(map[string]any{
-			"sessionId":    "3dadad",
-			"hypothesisId": "H1-H2",
+			"sessionId":    "4b1a8d",
+			"hypothesisId": "D",
 			"location":     "main.go:after_listen",
-			"message":      "server_bind_ok_before_serve",
+			"message":      "server_bind_ok",
 			"data": map[string]any{
 				"actualAddr": actualAddr,
 				"go_os":      runtime.GOOS,
 			},
 			"timestamp": time.Now().UnixMilli(),
 		})
-		if f, err := os.OpenFile(dbgPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		if f, err := os.OpenFile(agentDebugLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			_, _ = f.Write(append(ln, '\n'))
 			_ = f.Close()
 		}
@@ -603,6 +627,7 @@ type TrainingRequest struct {
 	RunpodSkipApply            *bool  `json:"runpod_skip_apply"`
 	RunpodTrainOnPod           *bool  `json:"runpod_train_on_pod"`
 	RunpodServerlessEndpointID string `json:"runpod_serverless_endpoint_id"`
+	RunpodWarmTargetID         string `json:"runpod_warm_target_id"`
 	AllowMissingCheckpoint     bool   `json:"allow_missing_checkpoint"`
 	EnclaveTier                int    `json:"enclave_tier"`
 	MemoryLimitMB              int    `json:"memory_limit_mb"`
@@ -827,6 +852,7 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			body.RunpodSkipApply,
 			body.RunpodTrainOnPod,
 			body.RunpodServerlessEndpointID,
+			body.RunpodWarmTargetID,
 		)
 		rt := normalizeRunTarget(opts.RunTarget)
 
@@ -949,6 +975,9 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "training.lr_plateau_factor", Section: "training", Key: "lr_plateau_factor", Type: "float", Default: defaults["training.lr_plateau_factor"]},
 		{ID: "training.lr_plateau_min_lr", Section: "training", Key: "lr_plateau_min_lr", Type: "float", Default: defaults["training.lr_plateau_min_lr"]},
 		{ID: "training.early_stop_patience", Section: "training", Key: "early_stop_patience", Type: "int", Default: defaults["training.early_stop_patience"]},
+		{ID: "training.log_xpu_memory", Section: "training", Key: "log_xpu_memory", Type: "bool", Default: defaults["training.log_xpu_memory"], Description: "Emit qmw_xpu_mem lines on XPU (saved in working TOML; no env vars)."},
+		{ID: "training.log_xpu_memory_reset_peak", Section: "training", Key: "log_xpu_memory_reset_peak", Type: "bool", Default: defaults["training.log_xpu_memory_reset_peak"], Description: "Reset XPU peak memory stats each epoch (with log_xpu_memory)."},
+		{ID: "training.log_train_throughput", Section: "training", Key: "log_train_throughput", Type: "bool", Default: defaults["training.log_train_throughput"], Description: "Emit qmw_train_throughput after each supervised phase (wall_s, samples/s, host RSS if psutil)."},
 		{ID: "data.source", Section: "data", Key: "source", Type: "enum", Options: []string{"mesh", "corpus", "hf_tabular", "hybrid_mesh_hf_tabular"}, Required: true, Default: defaults["data.source"], Description: "Data scheme: mesh generation, Hugging Face tabular, or hybrid blend."},
 		{ID: "data.path", Section: "data", Key: "path", Type: "string", Default: defaults["data.path"], Description: "Dataset id/path. For Hugging Face use owner/dataset. Use qminiwasm/hf-multi for extras-only mode."},
 		{ID: "data.mesh_algorithms", Section: "data", Key: "mesh_algorithms", Type: "string", Default: defaults["data.mesh_algorithms"]},
@@ -1573,6 +1602,7 @@ type runStartOpts struct {
 	RunpodSkipApply            bool   `json:"runpod_skip_apply"`
 	RunpodTrainOnPod           bool   `json:"runpod_train_on_pod"`           // ssh sync + engine on pod (default true for runpod)
 	RunpodServerlessEndpointID string `json:"runpod_serverless_endpoint_id"` // optional override; else RUNPOD_SERVERLESS_ENDPOINT_ID
+	RunpodWarmTargetID         string `json:"runpod_warm_target_id"`         // optional: use registered host; skip OpenTofu apply
 }
 
 func normalizeRunTarget(s string) string {
@@ -1589,6 +1619,7 @@ func runStartOptsFromRequest(
 	runpodVarFile string,
 	skipApplyPtr, trainOnPodPtr *bool,
 	runpodServerlessEndpointID string,
+	runpodWarmTargetID string,
 ) runStartOpts {
 	rt := normalizeRunTarget(runTarget)
 	destroy := true
@@ -1608,6 +1639,7 @@ func runStartOptsFromRequest(
 		RunpodSkipApply:            false,
 		RunpodTrainOnPod:           rt == "runpod",
 		RunpodServerlessEndpointID: strings.TrimSpace(runpodServerlessEndpointID),
+		RunpodWarmTargetID:         strings.TrimSpace(runpodWarmTargetID),
 	}
 	if rt == "runpod" {
 		if skipApplyPtr != nil {
@@ -2312,7 +2344,7 @@ import sys
 
 from qminiwasm.engine.config import EngineConfig
 from qminiwasm.engine._dotenv import load_dotenv_if_available
-from qminiwasm.hardware.device import get_device, resolve_backend_policy
+from qminiwasm.hardware.device import get_device, get_xpu_backend_status, resolve_backend_policy
 from qminiwasm.hardware.sycl_hardware import SYCLHardware
 
 load_dotenv_if_available()
@@ -2381,6 +2413,41 @@ out = {
     "cascade_rl_impl": (os.environ.get("QMINIWASM_CASCADE_RL_IMPL", "").strip() or "auto"),
     "tpem_native_bundle": (os.environ.get("QMINIWASM_TPEM_NATIVE_BUNDLE", "").strip() or "0"),
 }
+
+vi = sys.version_info
+out["python_version"] = f"{vi.major}.{vi.minor}.{vi.micro}"
+out["xpu_support_class"] = None
+out["xpu_device_name"] = None
+out["intel_xpu_stack_advisory"] = ""
+out["xpu_memory_allocated_bytes"] = None
+out["xpu_max_memory_allocated_bytes"] = None
+if getattr(device, "type", None) == "xpu":
+    import torch
+
+    xst = get_xpu_backend_status(cfg.device_index)
+    out["xpu_support_class"] = xst.get("support_class")
+    out["xpu_device_name"] = xst.get("device_name")
+    advisory = []
+    if vi.major == 3 and vi.minor >= 13:
+        advisory.append(
+            "Python 3.13+ may be ahead of Intel's published PyTorch XPU install matrix; "
+            "see https://intel.github.io/intel-extension-for-pytorch/xpu/latest/ if XPU misbehaves."
+        )
+    if str(xst.get("support_class") or "") == "experimental":
+        advisory.append(
+            "Integrated XPU is experimental: raise [training].batch_size gradually for more shared GPU memory; "
+            "use [training].dataloader_num_workers in TOML / WUI to overlap host batch prep."
+        )
+    out["intel_xpu_stack_advisory"] = " ".join(advisory)
+    try:
+        idx = device.index if device.index is not None else 0
+        xmod = torch.xpu
+        if hasattr(xmod, "memory_allocated"):
+            out["xpu_memory_allocated_bytes"] = int(xmod.memory_allocated(idx))
+        if hasattr(xmod, "max_memory_allocated"):
+            out["xpu_max_memory_allocated_bytes"] = int(xmod.max_memory_allocated(idx))
+    except Exception:
+        pass
 
 ibm = {
     "runtime_available": False,
@@ -2529,6 +2596,10 @@ func handleRunsItem(w http.ResponseWriter, r *http.Request) {
 		handleRunStop(w, r, id)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "cooperative-stop" && r.Method == http.MethodPost {
+		handleRunCooperativeStop(w, r, id)
+		return
+	}
 	http.NotFound(w, r)
 }
 
@@ -2568,6 +2639,28 @@ func handleRunLog(w http.ResponseWriter, r *http.Request, id string) {
 		jsonErr(w, http.StatusNotFound, err.Error())
 		return
 	}
+	// #region agent log
+	{
+		ln, _ := json.Marshal(map[string]any{
+			"sessionId":    "4b1a8d",
+			"hypothesisId": "D",
+			"location":     "main.go:handleRunLog",
+			"message":      "log_chunk",
+			"data": map[string]any{
+				"run_id":      id,
+				"offset":      offset,
+				"chunk_bytes": len(chunk),
+				"next":        next,
+				"running":     running,
+			},
+			"timestamp": time.Now().UnixMilli(),
+		})
+		if f, err := os.OpenFile(agentDebugLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			_, _ = f.Write(append(ln, '\n'))
+			_ = f.Close()
+		}
+	}
+	// #endregion agent log
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"text":        chunk,
@@ -2596,6 +2689,20 @@ func handleRunStop(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "force": force})
+}
+
+func handleRunCooperativeStop(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Body != nil {
+		defer r.Body.Close()
+		_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 4096))
+	}
+	err := runManager.cooperativeStop(id)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "cooperative": true})
 }
 
 func jsonErr(w http.ResponseWriter, code int, msg string) {
@@ -2756,8 +2863,15 @@ type runRecord struct {
 	SYCLDevice            string
 	SYCLFallback          string
 	SYCLDPCTLCount        int
+	LastRoutingState      int
+	LastAssignmentMS      float64
+	RoutingBudgetMS       float64
 	maxRuns               int                // ring of finished ids for list
 	trainCancel           context.CancelFunc // native gRPC training + telemetry stream
+	wuiStopFile           string             // local abs path, or remote abs path for cooperative stop
+	runpodCoopHost        string             // SSH host when training on RunPod pod (cooperative stop via touch)
+	runpodCoopUser        string
+	runpodCoopKeyPath     string
 }
 
 type manager struct {
@@ -2781,6 +2895,9 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 	if err := validateRunTarget(opts); err != nil {
 		return nil, err
 	}
+	if serveProcessRunning() {
+		return nil, fmt.Errorf("stop the serve process (POST /api/serve/stop) before starting training")
+	}
 
 	m.mu.Lock()
 	for _, id := range m.ordered {
@@ -2790,6 +2907,30 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		}
 	}
 	m.mu.Unlock()
+
+	warmIP := ""
+	warmSSHUser := ""
+	if tid := strings.TrimSpace(opts.RunpodWarmTargetID); tid != "" {
+		if opts.RunTarget != "runpod" || !opts.RunpodTrainOnPod {
+			return nil, errors.New("runpod_warm_target_id requires run_target runpod with train on remote GPU (SSH)")
+		}
+		f, err := loadWarmTargets()
+		if err != nil {
+			return nil, fmt.Errorf("warm targets: %w", err)
+		}
+		t := findWarmTargetByID(f.Targets, tid)
+		if t == nil {
+			return nil, fmt.Errorf("warm target not found: %s", tid)
+		}
+		warmIP = strings.TrimSpace(t.Host)
+		if warmIP == "" {
+			return nil, fmt.Errorf("warm target %q has empty host", tid)
+		}
+		if u := strings.TrimSpace(t.SSHUser); u != "" {
+			warmSSHUser = u
+		}
+		opts.RunpodSkipApply = true
+	}
 
 	var applyLog string
 	applySucceeded := false
@@ -2839,7 +2980,11 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		rec.logBuf.WriteString(applyLog)
 		rec.logBuf.WriteByte('\n')
 	} else if opts.RunTarget == "runpod" && opts.RunpodSkipApply {
-		rec.logBuf.WriteString("=== runpod: skipped OpenTofu apply (using existing terraform state) ===\n")
+		if warmIP != "" {
+			rec.logBuf.WriteString("=== runpod: warm target — skipping OpenTofu apply ===\n")
+		} else {
+			rec.logBuf.WriteString("=== runpod: skipped OpenTofu apply (using existing terraform state) ===\n")
+		}
 	}
 
 	if opts.RunTarget == "runpod_serverless" {
@@ -2922,11 +3067,21 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 	if opts.RunTarget == "runpod" && opts.RunpodTrainOnPod {
 		ipCtx, cancelIP := context.WithTimeout(context.Background(), 12*time.Minute)
 		defer cancelIP()
-		ip, waitErr := waitRunpodPublicIP(ipCtx)
-		if waitErr != nil {
-			return nil, waitErr
+		var ip string
+		var waitErr error
+		if warmIP != "" {
+			ip = warmIP
+			rec.logBuf.WriteString(fmt.Sprintf("=== runpod: SSH host from warm target (%s) ===\n", ip))
+		} else {
+			ip, waitErr = waitRunpodPublicIP(ipCtx)
+			if waitErr != nil {
+				return nil, waitErr
+			}
 		}
 		user := runpodSSHUser()
+		if warmSSHUser != "" {
+			user = warmSSHUser
+		}
 		rdir := runpodRemoteDir()
 		key := runpodSSHKeyPath()
 		if !runpodToolOK("ssh") || !runpodToolOK("tar") {
@@ -2953,15 +3108,27 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 				return nil, fmt.Errorf("runpod scp config: %w", err)
 			}
 		}
-		rTrainCmd, rCmdErr := runpodRemoteTrainCmd(ip, user, key, rdir, remoteConfigRel, extraEnv)
+		wuiStopRel := ".wui/stop_" + id
+		rTrainCmd, rCmdErr := runpodRemoteTrainCmd(ip, user, key, rdir, remoteConfigRel, extraEnv, wuiStopRel)
 		if rCmdErr != nil {
 			return nil, rCmdErr
 		}
 		cmd = rTrainCmd
-		rec.logBuf.WriteString(fmt.Sprintf("=== training: remote python -m qminiwasm.engine (ssh %s@%s) ===\n", user, ip))
+		rec.wuiStopFile = strings.TrimRight(rdir, "/") + "/" + wuiStopRel
+		rec.runpodCoopHost = ip
+		rec.runpodCoopUser = user
+		rec.runpodCoopKeyPath = key
+		rec.logBuf.WriteString(fmt.Sprintf("=== training: remote python -u -m qminiwasm.engine (ssh %s@%s) ===\n", user, ip))
 	} else {
-		rec.logBuf.WriteString("=== training: python -m qminiwasm.engine (local WUI host) ===\n")
-		cmd = exec.Command(pythonExe, "-m", "qminiwasm.engine", "--config", absConfig)
+		wuiDir := filepath.Join(repoRoot, ".wui")
+		if mkErr := os.MkdirAll(wuiDir, 0o755); mkErr != nil {
+			return nil, fmt.Errorf("wui stop dir: %w", mkErr)
+		}
+		stopAbs := filepath.Join(wuiDir, "stop_"+id)
+		_ = os.Remove(stopAbs)
+		rec.wuiStopFile = stopAbs
+		rec.logBuf.WriteString("=== training: python -u -m qminiwasm.engine (local WUI host) ===\n")
+		cmd = exec.Command(pythonExe, "-u", "-m", "qminiwasm.engine", "--config", absConfig, "--wui-stop-file", stopAbs)
 		cmd.Dir = repoRoot
 		cmd.Env = append(os.Environ(), extraEnv...)
 	}
@@ -3062,142 +3229,278 @@ func (m *manager) flushTelemetryLinesLocked(id string, rec *runRecord) {
 	}
 }
 
+// parsePythonTelemetryLine scans one log line for qmw_* / metric patterns (stdout or stderr).
+func (m *manager) parsePythonTelemetryLine(id, line string) {
+	if line == "" {
+		return
+	}
+	if mm := metricCanonicalRe.FindStringSubmatch(line); len(mm) == 5 {
+		epoch, _ := strconv.ParseFloat(mm[1], 64)
+		meanLoss, _ := strconv.ParseFloat(mm[2], 64)
+		meanReturn, _ := strconv.ParseFloat(mm[3], 64)
+		meanMSE, _ := strconv.ParseFloat(mm[4], 64)
+		wsHub.broadcast(id, map[string]any{
+			"type":             "metric",
+			"run_id":           id,
+			"ts":               time.Now().UTC().Format(time.RFC3339),
+			"epoch":            epoch,
+			"mean_loss":        meanLoss,
+			"mean_return":      meanReturn,
+			"mean_mse":         meanMSE,
+			"line":             line,
+			"telemetry_source": telemetrySourcePythonVNV,
+		})
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.LastEpoch = int(epoch)
+			rec.LastMeanLoss = meanLoss
+			rec.LastMeanReturn = meanReturn
+			rec.LastMeanMSE = meanMSE
+		}
+		m.mu.Unlock()
+		return
+	}
+	if mm := metricLineRe.FindStringSubmatch(line); len(mm) == 5 {
+		epoch, _ := strconv.ParseFloat(mm[1], 64)
+		meanLoss, _ := strconv.ParseFloat(mm[2], 64)
+		meanReturn, _ := strconv.ParseFloat(mm[3], 64)
+		meanMSE, _ := strconv.ParseFloat(mm[4], 64)
+		wsHub.broadcast(id, map[string]any{
+			"type":             "metric",
+			"run_id":           id,
+			"ts":               time.Now().UTC().Format(time.RFC3339),
+			"epoch":            epoch,
+			"mean_loss":        meanLoss,
+			"mean_return":      meanReturn,
+			"mean_mse":         meanMSE,
+			"line":             line,
+			"telemetry_source": telemetrySourcePythonVNV,
+		})
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.LastEpoch = int(epoch)
+			rec.LastMeanLoss = meanLoss
+			rec.LastMeanReturn = meanReturn
+			rec.LastMeanMSE = meanMSE
+		}
+		m.mu.Unlock()
+	}
+	if pm := epochProgressRe.FindStringSubmatch(line); len(pm) == 3 {
+		cur, _ := strconv.Atoi(pm[1])
+		tot, _ := strconv.Atoi(pm[2])
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.LastEpoch = cur
+			rec.TotalEpochs = tot
+		}
+		m.mu.Unlock()
+	}
+	if qm := pruneStatsRe.FindStringSubmatch(line); len(qm) == 3 {
+		base, _ := strconv.Atoi(qm[1])
+		pruned, _ := strconv.Atoi(qm[2])
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.PrunedFromNodes = base
+			rec.PrunedToNodes = pruned
+		}
+		m.mu.Unlock()
+	}
+	if lm := qaoaLoadRe.FindStringSubmatch(line); len(lm) == 3 {
+		sim, _ := strconv.ParseFloat(lm[1], 64)
+		qpu, _ := strconv.ParseFloat(lm[2], 64)
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.QAOASimMS = sim
+			rec.QPUEstMS = qpu
+		}
+		m.mu.Unlock()
+	}
+	if em := enclaveTelemetryRe.FindStringSubmatch(line); len(em) == 5 {
+		est, _ := strconv.ParseFloat(em[1], 64)
+		capMB, _ := strconv.ParseFloat(em[2], 64)
+		tier := em[3]
+		u64, _ := strconv.Atoi(em[4])
+		wsHub.broadcast(id, map[string]any{
+			"type":              "enclave_telemetry",
+			"run_id":            id,
+			"ts":                time.Now().UTC().Format(time.RFC3339),
+			"estimated_tpem_mb": est,
+			"tier_cap_mb":       capMB,
+			"enclave_tier":      tier,
+			"use_memory64":      u64,
+			"line":              line,
+			"telemetry_source":  telemetrySourcePythonVNV,
+		})
+	}
+	if xm := xpuMemTrainingSetupRe.FindStringSubmatch(line); len(xm) == 5 {
+		bs, _ := strconv.Atoi(xm[2])
+		ts, _ := strconv.Atoi(xm[3])
+		dw, _ := strconv.Atoi(xm[4])
+		wsHub.broadcast(id, map[string]any{
+			"type":               "xpu_mem",
+			"run_id":             id,
+			"ts":                 time.Now().UTC().Format(time.RFC3339),
+			"phase":              "training_setup",
+			"device":             xm[1],
+			"batch_size":         bs,
+			"train_samples":      ts,
+			"dataloader_workers": dw,
+			"line":               line,
+			"telemetry_source":   telemetrySourcePythonVNV,
+		})
+	}
+	if xm := xpuMemEpochRe.FindStringSubmatch(line); len(xm) == 10 {
+		ep, _ := strconv.Atoi(xm[2])
+		etot, _ := strconv.Atoi(xm[3])
+		batches, _ := strconv.Atoi(xm[4])
+		xidx, _ := strconv.Atoi(xm[5])
+		ab, _ := strconv.ParseInt(xm[6], 10, 64)
+		mb, _ := strconv.ParseInt(xm[7], 10, 64)
+		ami, _ := strconv.ParseFloat(xm[8], 64)
+		mami, _ := strconv.ParseFloat(xm[9], 64)
+		wsHub.broadcast(id, map[string]any{
+			"type":                "xpu_mem",
+			"run_id":              id,
+			"ts":                  time.Now().UTC().Format(time.RFC3339),
+			"phase":               xm[1],
+			"epoch":               ep,
+			"epochs_total":        etot,
+			"batches":             batches,
+			"xpu_index":           xidx,
+			"allocated_bytes":     ab,
+			"max_allocated_bytes": mb,
+			"allocated_mib":       ami,
+			"max_allocated_mib":   mami,
+			"line":                line,
+			"telemetry_source":    telemetrySourcePythonVNV,
+		})
+	}
+	if tt := trainThroughputRe.FindStringSubmatch(line); len(tt) >= 12 {
+		ep, _ := strconv.Atoi(tt[1])
+		etot, _ := strconv.Atoi(tt[2])
+		wall, _ := strconv.ParseFloat(tt[3], 64)
+		batches, _ := strconv.Atoi(tt[4])
+		samples, _ := strconv.Atoi(tt[5])
+		bs, _ := strconv.Atoi(tt[6])
+		sps, _ := strconv.ParseFloat(tt[7], 64)
+		bps, _ := strconv.ParseFloat(tt[8], 64)
+		dw, _ := strconv.Atoi(tt[9])
+		cs, _ := strconv.ParseFloat(tt[10], 64)
+		payload := map[string]any{
+			"type":               "train_throughput",
+			"run_id":             id,
+			"ts":                 time.Now().UTC().Format(time.RFC3339),
+			"epoch":              ep,
+			"epochs_total":       etot,
+			"wall_s":             wall,
+			"batches":            batches,
+			"samples":            samples,
+			"batch_size":         bs,
+			"samples_per_s":      sps,
+			"batches_per_s":      bps,
+			"dataloader_workers": dw,
+			"cascade_s":          cs,
+			"line":               line,
+			"telemetry_source":   telemetrySourcePythonVNV,
+		}
+		if len(tt) > 11 && tt[11] != "" {
+			if rss, err := strconv.ParseFloat(tt[11], 64); err == nil {
+				payload["host_rss_mib"] = rss
+			}
+		}
+		wsHub.broadcast(id, payload)
+	}
+	if rm := routingTelemetryRe.FindStringSubmatch(line); len(rm) == 4 {
+		st, _ := strconv.Atoi(rm[1])
+		assign, _ := strconv.ParseFloat(rm[2], 64)
+		budget, _ := strconv.ParseFloat(rm[3], 64)
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.LastRoutingState = st
+			rec.LastAssignmentMS = assign
+			rec.RoutingBudgetMS = budget
+		}
+		m.mu.Unlock()
+		wsHub.broadcast(id, map[string]any{
+			"type":             "routing_telemetry",
+			"run_id":           id,
+			"ts":               time.Now().UTC().Format(time.RFC3339),
+			"routing_state":    st,
+			"assignment_ms":    assign,
+			"budget_ms":        budget,
+			"line":             line,
+			"telemetry_source": telemetrySourcePythonVNV,
+		})
+	}
+	if hm := routingHandoffRe.FindStringSubmatch(line); len(hm) == 7 {
+		fromSt, _ := strconv.Atoi(hm[1])
+		toSt, _ := strconv.Atoi(hm[2])
+		assign, _ := strconv.ParseFloat(hm[3], 64)
+		budget, _ := strconv.ParseFloat(hm[4], 64)
+		reason := hm[5]
+		comb, _ := strconv.Atoi(hm[6])
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.LastRoutingState = toSt
+			rec.LastAssignmentMS = assign
+			rec.RoutingBudgetMS = budget
+		}
+		m.mu.Unlock()
+		wsHub.broadcast(id, map[string]any{
+			"type":               "routing_handoff",
+			"run_id":             id,
+			"ts":                 time.Now().UTC().Format(time.RFC3339),
+			"from_state":         fromSt,
+			"to_state":           toSt,
+			"assignment_ms":      assign,
+			"budget_ms":          budget,
+			"reason":             reason,
+			"combinatorial_wall": comb,
+			"line":               line,
+			"telemetry_source":   telemetrySourcePythonVNV,
+		})
+	}
+	if bm := backendStatusRe.FindStringSubmatch(line); len(bm) == 14 {
+		syclActive := bm[9] == "1"
+		dpctlCount, _ := strconv.Atoi(strings.TrimSpace(bm[13]))
+		m.mu.Lock()
+		if rec := m.byID[id]; rec != nil {
+			rec.BackendRequested = bm[2]
+			rec.BackendSelected = bm[3]
+			rec.BackendReasonCode = bm[4]
+			rec.XPUSupportClass = bm[6]
+			rec.SYCLActive = syclActive
+			rec.SYCLBackend = bm[10]
+			rec.SYCLDevice = bm[11]
+			rec.SYCLFallback = bm[12]
+			rec.SYCLDPCTLCount = dpctlCount
+		}
+		m.mu.Unlock()
+		wsHub.broadcast(id, map[string]any{
+			"type":                  "backend_status",
+			"run_id":                id,
+			"ts":                    time.Now().UTC().Format(time.RFC3339),
+			"requested_accelerator": bm[2],
+			"selected_device":       bm[3],
+			"reason_code":           bm[4],
+			"xpu_support_class":     bm[6],
+			"sycl_active":           syclActive,
+			"sycl_backend":          bm[10],
+			"sycl_device":           bm[11],
+			"sycl_fallback":         bm[12],
+			"sycl_dpctl_count":      dpctlCount,
+			"line":                  line,
+			"telemetry_source":      telemetrySourcePythonVNV,
+		})
+	}
+}
+
 func (m *manager) handleLogLine(id, line, stream string) {
 	if line == "" {
 		return
 	}
+	m.parsePythonTelemetryLine(id, line)
 	if stream == "stdout" {
-		if mm := metricCanonicalRe.FindStringSubmatch(line); len(mm) == 5 {
-			epoch, _ := strconv.ParseFloat(mm[1], 64)
-			meanLoss, _ := strconv.ParseFloat(mm[2], 64)
-			meanReturn, _ := strconv.ParseFloat(mm[3], 64)
-			meanMSE, _ := strconv.ParseFloat(mm[4], 64)
-			wsHub.broadcast(id, map[string]any{
-				"type":             "metric",
-				"run_id":           id,
-				"ts":               time.Now().UTC().Format(time.RFC3339),
-				"epoch":            epoch,
-				"mean_loss":        meanLoss,
-				"mean_return":      meanReturn,
-				"mean_mse":         meanMSE,
-				"line":             line,
-				"telemetry_source": telemetrySourcePythonVNV,
-			})
-			m.mu.Lock()
-			if rec := m.byID[id]; rec != nil {
-				rec.LastEpoch = int(epoch)
-				rec.LastMeanLoss = meanLoss
-				rec.LastMeanReturn = meanReturn
-				rec.LastMeanMSE = meanMSE
-			}
-			m.mu.Unlock()
-			return
-		}
-		if mm := metricLineRe.FindStringSubmatch(line); len(mm) == 5 {
-			epoch, _ := strconv.ParseFloat(mm[1], 64)
-			meanLoss, _ := strconv.ParseFloat(mm[2], 64)
-			meanReturn, _ := strconv.ParseFloat(mm[3], 64)
-			meanMSE, _ := strconv.ParseFloat(mm[4], 64)
-			wsHub.broadcast(id, map[string]any{
-				"type":             "metric",
-				"run_id":           id,
-				"ts":               time.Now().UTC().Format(time.RFC3339),
-				"epoch":            epoch,
-				"mean_loss":        meanLoss,
-				"mean_return":      meanReturn,
-				"mean_mse":         meanMSE,
-				"line":             line,
-				"telemetry_source": telemetrySourcePythonVNV,
-			})
-			m.mu.Lock()
-			if rec := m.byID[id]; rec != nil {
-				rec.LastEpoch = int(epoch)
-				rec.LastMeanLoss = meanLoss
-				rec.LastMeanReturn = meanReturn
-				rec.LastMeanMSE = meanMSE
-			}
-			m.mu.Unlock()
-		}
-		if pm := epochProgressRe.FindStringSubmatch(line); len(pm) == 3 {
-			cur, _ := strconv.Atoi(pm[1])
-			tot, _ := strconv.Atoi(pm[2])
-			m.mu.Lock()
-			if rec := m.byID[id]; rec != nil {
-				rec.LastEpoch = cur
-				rec.TotalEpochs = tot
-			}
-			m.mu.Unlock()
-		}
-		if qm := pruneStatsRe.FindStringSubmatch(line); len(qm) == 3 {
-			base, _ := strconv.Atoi(qm[1])
-			pruned, _ := strconv.Atoi(qm[2])
-			m.mu.Lock()
-			if rec := m.byID[id]; rec != nil {
-				rec.PrunedFromNodes = base
-				rec.PrunedToNodes = pruned
-			}
-			m.mu.Unlock()
-		}
-		if lm := qaoaLoadRe.FindStringSubmatch(line); len(lm) == 3 {
-			sim, _ := strconv.ParseFloat(lm[1], 64)
-			qpu, _ := strconv.ParseFloat(lm[2], 64)
-			m.mu.Lock()
-			if rec := m.byID[id]; rec != nil {
-				rec.QAOASimMS = sim
-				rec.QPUEstMS = qpu
-			}
-			m.mu.Unlock()
-		}
-		if em := enclaveTelemetryRe.FindStringSubmatch(line); len(em) == 5 {
-			est, _ := strconv.ParseFloat(em[1], 64)
-			capMB, _ := strconv.ParseFloat(em[2], 64)
-			tier := em[3]
-			u64, _ := strconv.Atoi(em[4])
-			wsHub.broadcast(id, map[string]any{
-				"type":              "enclave_telemetry",
-				"run_id":            id,
-				"ts":                time.Now().UTC().Format(time.RFC3339),
-				"estimated_tpem_mb": est,
-				"tier_cap_mb":       capMB,
-				"enclave_tier":      tier,
-				"use_memory64":      u64,
-				"line":              line,
-				"telemetry_source":  telemetrySourcePythonVNV,
-			})
-		}
-		if bm := backendStatusRe.FindStringSubmatch(line); len(bm) == 14 {
-			syclActive := bm[9] == "1"
-			dpctlCount, _ := strconv.Atoi(strings.TrimSpace(bm[13]))
-			m.mu.Lock()
-			if rec := m.byID[id]; rec != nil {
-				rec.BackendRequested = bm[2]
-				rec.BackendSelected = bm[3]
-				rec.BackendReasonCode = bm[4]
-				rec.XPUSupportClass = bm[6]
-				rec.SYCLActive = syclActive
-				rec.SYCLBackend = bm[10]
-				rec.SYCLDevice = bm[11]
-				rec.SYCLFallback = bm[12]
-				rec.SYCLDPCTLCount = dpctlCount
-			}
-			m.mu.Unlock()
-			wsHub.broadcast(id, map[string]any{
-				"type":                  "backend_status",
-				"run_id":                id,
-				"ts":                    time.Now().UTC().Format(time.RFC3339),
-				"requested_accelerator": bm[2],
-				"selected_device":       bm[3],
-				"reason_code":           bm[4],
-				"xpu_support_class":     bm[6],
-				"sycl_active":           syclActive,
-				"sycl_backend":          bm[10],
-				"sycl_device":           bm[11],
-				"sycl_fallback":         bm[12],
-				"sycl_dpctl_count":      dpctlCount,
-				"line":                  line,
-				"telemetry_source":      telemetrySourcePythonVNV,
-			})
-		}
 		return
 	}
 	if strings.Contains(line, alertXPU) {
@@ -3255,14 +3558,21 @@ func (m *manager) wait(id string) {
 	if procDone != nil {
 		close(procDone)
 	}
+	var localWuiStop string
 	m.mu.Lock()
 	rec = m.byID[id]
 	if rec != nil {
 		rec.logMu.Lock()
 		m.flushTelemetryLinesLocked(id, rec)
 		rec.logMu.Unlock()
+		if rec.wuiStopFile != "" && rec.runpodCoopHost == "" {
+			localWuiStop = rec.wuiStopFile
+		}
 	}
 	m.mu.Unlock()
+	if localWuiStop != "" {
+		_ = os.Remove(localWuiStop)
+	}
 	for _, p := range configCleanups {
 		if p != "" {
 			if remErr := os.Remove(p); remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
@@ -3382,6 +3692,11 @@ func (m *manager) list() []map[string]any {
 		if r.ServerlessEndpointID != "" {
 			row["serverless_endpoint_id"] = r.ServerlessEndpointID
 		}
+		if r.LastRoutingState > 0 {
+			row["routing_state"] = r.LastRoutingState
+			row["routing_assignment_ms"] = r.LastAssignmentMS
+			row["routing_budget_ms"] = r.RoutingBudgetMS
+		}
 		out = append(out, row)
 	}
 	return out
@@ -3396,29 +3711,32 @@ func (m *manager) activeRunSummary() map[string]any {
 			continue
 		}
 		s := map[string]any{
-			"id":                r.ID,
-			"config":            r.ConfigRel,
-			"run_target":        r.RunTarget,
-			"epoch":             r.LastEpoch,
-			"total_epochs":      r.TotalEpochs,
-			"mean_loss":         r.LastMeanLoss,
-			"mean_return":       r.LastMeanReturn,
-			"mean_mse":          r.LastMeanMSE,
-			"xpu_fallback":      r.XPUFallbackSeen,
-			"wasm_mock":         r.WasmMockSeen,
-			"backend_requested": r.BackendRequested,
-			"backend_selected":  r.BackendSelected,
-			"backend_reason":    r.BackendReasonCode,
-			"xpu_support_class": r.XPUSupportClass,
-			"sycl_active":       r.SYCLActive,
-			"sycl_backend":      r.SYCLBackend,
-			"sycl_device":       r.SYCLDevice,
-			"sycl_fallback":     r.SYCLFallback,
-			"sycl_dpctl_count":  r.SYCLDPCTLCount,
-			"pruned_from_nodes": r.PrunedFromNodes,
-			"pruned_to_nodes":   r.PrunedToNodes,
-			"qaoa_sim_ms":       r.QAOASimMS,
-			"qpu_est_ms":        r.QPUEstMS,
+			"id":                    r.ID,
+			"config":                r.ConfigRel,
+			"run_target":            r.RunTarget,
+			"epoch":                 r.LastEpoch,
+			"total_epochs":          r.TotalEpochs,
+			"mean_loss":             r.LastMeanLoss,
+			"mean_return":           r.LastMeanReturn,
+			"mean_mse":              r.LastMeanMSE,
+			"xpu_fallback":          r.XPUFallbackSeen,
+			"wasm_mock":             r.WasmMockSeen,
+			"backend_requested":     r.BackendRequested,
+			"backend_selected":      r.BackendSelected,
+			"backend_reason":        r.BackendReasonCode,
+			"xpu_support_class":     r.XPUSupportClass,
+			"sycl_active":           r.SYCLActive,
+			"sycl_backend":          r.SYCLBackend,
+			"sycl_device":           r.SYCLDevice,
+			"sycl_fallback":         r.SYCLFallback,
+			"sycl_dpctl_count":      r.SYCLDPCTLCount,
+			"pruned_from_nodes":     r.PrunedFromNodes,
+			"pruned_to_nodes":       r.PrunedToNodes,
+			"qaoa_sim_ms":           r.QAOASimMS,
+			"qpu_est_ms":            r.QPUEstMS,
+			"routing_state":         r.LastRoutingState,
+			"routing_assignment_ms": r.LastAssignmentMS,
+			"routing_budget_ms":     r.RoutingBudgetMS,
 		}
 		if r.ServerlessJobID != "" {
 			s["serverless_job_id"] = r.ServerlessJobID
@@ -3540,6 +3858,63 @@ func (m *manager) stop(id string, force bool) error {
 			}
 		}()
 	}
+	return nil
+}
+
+func (m *manager) cooperativeStop(id string) error {
+	m.mu.Lock()
+	rec := m.byID[id]
+	if rec == nil || !rec.Running {
+		m.mu.Unlock()
+		return errors.New("run not active")
+	}
+	host := strings.TrimSpace(rec.runpodCoopHost)
+	user := strings.TrimSpace(rec.runpodCoopUser)
+	keyPath := strings.TrimSpace(rec.runpodCoopKeyPath)
+	stopPath := strings.TrimSpace(rec.wuiStopFile)
+	trainCancel := rec.trainCancel
+	cmd := rec.cmd
+	runTarget := rec.RunTarget
+	m.mu.Unlock()
+
+	if trainCancel != nil && cmd == nil {
+		return errors.New("cooperative stop file is not used for native gRPC training; use Stop (graceful) for the C++ engine")
+	}
+	if stopPath == "" {
+		return errors.New("cooperative stop is not configured for this run (e.g. RunPod serverless uses cancel only)")
+	}
+	if runTarget == "runpod_serverless" {
+		return errors.New("cooperative stop file is not available for RunPod serverless; use Stop to cancel the job")
+	}
+
+	if host != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		if err := runpodRemoteTouchStopFile(ctx, host, user, keyPath, stopPath); err != nil {
+			return err
+		}
+		wsHub.broadcast(id, map[string]any{
+			"type":   "lifecycle",
+			"run_id": id,
+			"state":  "cooperative_stop_requested",
+			"mode":   map[string]any{"cooperative_file": true, "remote": true},
+			"ts":     time.Now().UTC().Format(time.RFC3339),
+		})
+		return nil
+	}
+	if cmd == nil {
+		return errors.New("run not active")
+	}
+	if err := os.WriteFile(stopPath, []byte("1\n"), 0o644); err != nil {
+		return fmt.Errorf("write cooperative stop file: %w", err)
+	}
+	wsHub.broadcast(id, map[string]any{
+		"type":   "lifecycle",
+		"run_id": id,
+		"state":  "cooperative_stop_requested",
+		"mode":   map[string]any{"cooperative_file": true},
+		"ts":     time.Now().UTC().Format(time.RFC3339),
+	})
 	return nil
 }
 

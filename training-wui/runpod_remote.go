@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"time"
 )
@@ -161,10 +162,11 @@ func runpodSCPLocalToRemote(ctx context.Context, ip, user, keyPath, localAbs, re
 	return nil
 }
 
-func runpodRemoteEngineScript(remoteDir, configRel string, extraEnv []string) string {
+func runpodRemoteEngineScript(remoteDir, configRel string, extraEnv []string, wuiStopRel string) string {
 	var b strings.Builder
 	b.WriteString("set -euo pipefail\n")
 	b.WriteString(fmt.Sprintf("cd %s\n", shellQuoteSingle(remoteDir)))
+	b.WriteString("mkdir -p .wui\n")
 	b.WriteString("if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi\n")
 	b.WriteString("if [ ! -d .venv ]; then $PY -m venv .venv; fi\n")
 	b.WriteString(". .venv/bin/activate\n")
@@ -183,13 +185,21 @@ func runpodRemoteEngineScript(remoteDir, configRel string, extraEnv []string) st
 		k, v := line[:i], line[i+1:]
 		b.WriteString(fmt.Sprintf("export %s=%s\n", k, shellQuoteSingle(v)))
 	}
-	b.WriteString(fmt.Sprintf("python -m qminiwasm.engine --config %s\n", shellQuoteSingle(configRel)))
+	if strings.TrimSpace(wuiStopRel) != "" {
+		b.WriteString(fmt.Sprintf(
+			"$PY -u -m qminiwasm.engine --config %s --wui-stop-file %s\n",
+			shellQuoteSingle(configRel),
+			shellQuoteSingle(wuiStopRel),
+		))
+	} else {
+		b.WriteString(fmt.Sprintf("$PY -u -m qminiwasm.engine --config %s\n", shellQuoteSingle(configRel)))
+	}
 	return b.String()
 }
 
 // runpodRemoteTrainCmd returns an exec.Cmd that streams a remote bash script over ssh (stdin).
 // Caller must attach StdoutPipe/StderrPipe and call Start.
-func runpodRemoteTrainCmd(ip, user, keyPath, remoteDir, configRel string, extraEnv []string) (*exec.Cmd, error) {
+func runpodRemoteTrainCmd(ip, user, keyPath, remoteDir, configRel string, extraEnv []string, wuiStopRel string) (*exec.Cmd, error) {
 	sshBin, err := exec.LookPath("ssh")
 	if err != nil {
 		return nil, fmt.Errorf("ssh not on PATH: %w", err)
@@ -198,7 +208,23 @@ func runpodRemoteTrainCmd(ip, user, keyPath, remoteDir, configRel string, extraE
 	cmd := exec.Command(sshBin, sshArgs...)
 	cmd.Dir = repoRoot
 	cmd.Env = os.Environ()
-	script := runpodRemoteEngineScript(remoteDir, configRel, extraEnv)
+	script := runpodRemoteEngineScript(remoteDir, configRel, extraEnv, wuiStopRel)
 	cmd.Stdin = strings.NewReader(script)
 	return cmd, nil
+}
+
+// runpodRemoteTouchStopFile runs touch on the remote host (cooperative training stop file).
+func runpodRemoteTouchStopFile(ctx context.Context, ip, user, keyPath, remoteUnixPath string) error {
+	sshBin, err := exec.LookPath("ssh")
+	if err != nil {
+		return fmt.Errorf("ssh not on PATH: %w", err)
+	}
+	args := append(runpodSSHBaseArgs(keyPath), fmt.Sprintf("%s@%s", user, ip),
+		fmt.Sprintf("mkdir -p %s && touch %s", shellQuoteSingle(path.Dir(remoteUnixPath)), shellQuoteSingle(remoteUnixPath)))
+	cmd := exec.CommandContext(ctx, sshBin, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("ssh touch cooperative stop: %w\n%s", err, string(out))
+	}
+	return nil
 }

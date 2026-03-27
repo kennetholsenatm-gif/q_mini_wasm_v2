@@ -25,6 +25,9 @@
 # lr_plateau_factor = 0.5
 # lr_plateau_min_lr = 1.0e-7
 # early_stop_patience = 0
+# log_xpu_memory = false              # qmw_xpu_mem lines (XPU); configure in WUI schema / TOML
+# log_xpu_memory_reset_peak = false   # per-epoch torch.xpu peak reset (with log_xpu_memory)
+# log_train_throughput = false        # qmw_train_throughput (supervised wall time, samples/s, RSS)
 
 [data]
 # source = "mesh" | "corpus" | "hf_tabular"

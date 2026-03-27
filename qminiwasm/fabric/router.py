@@ -15,6 +15,7 @@ hierarchical inference can run without quantum dependencies.
 import logging
 import ctypes
 import os
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -879,11 +880,17 @@ class QAHRRouter(nn.Module):
             self._proj_in = nn.Linear(4096, int(num_qubits))
             self._proj_out = nn.Linear(int(num_qubits), 4096)
             self._mix_scale = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
+        # Mission Control: State 1 = classical assignment only; State 2 = Qiskit QAOA path.
+        self._qmw_routing_state = 1
+        self._qmw_last_telemetry_ts = 0.0
+        self._qmw_handoff_emitted_wall = False
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Project to qubits, run QAOA expectations (Qiskit path), add residual to hidden."""
         if self._qaoa is None or self._proj_in is None or self._proj_out is None:
             return hidden_states
+        budget_ms = float((os.getenv("QMW_ROUTING_LATENCY_BUDGET_MS", "") or "50").strip() or "50")
+        t_cls0 = time.perf_counter()
         w = self._proj_in(hidden_states).mean(dim=0)
         gamma = self._qaoa.gamma
         beta = self._qaoa.beta
@@ -891,6 +898,34 @@ class QAHRRouter(nn.Module):
             pred = self._qaoa.angle_predictor(w)
             gamma = pred[: self._qaoa.config.num_layers]
             beta = pred[self._qaoa.config.num_layers :]
+        assignment_ms = (time.perf_counter() - t_cls0) * 1000.0
+
+        prev_state = self._qmw_routing_state
+        if self._qmw_routing_state == 1 and assignment_ms > budget_ms:
+            self._qmw_routing_state = 2
+            first_wall = not self._qmw_handoff_emitted_wall
+            self._qmw_handoff_emitted_wall = True
+            comb_wall = 1 if first_wall else 0
+            print(
+                "qmw_routing_handoff "
+                f"from={prev_state} to=2 assignment_ms={assignment_ms:.3f} "
+                f"budget_ms={int(budget_ms)} reason=latency_budget combinatorial_wall={comb_wall}",
+                flush=True,
+            )
+
+        now = time.perf_counter()
+        if now - self._qmw_last_telemetry_ts >= 0.2:
+            self._qmw_last_telemetry_ts = now
+            print(
+                "qmw_routing_telemetry "
+                f"routing_state={self._qmw_routing_state} assignment_ms={assignment_ms:.3f} "
+                f"budget_ms={int(budget_ms)}",
+                flush=True,
+            )
+
+        if self._qmw_routing_state == 1:
+            return hidden_states
+
         q_out = self._qaoa.quantum_circuit(w, gamma, beta)
         q_det = q_out.detach()
         delta = self._proj_out(q_det.to(hidden_states.dtype))

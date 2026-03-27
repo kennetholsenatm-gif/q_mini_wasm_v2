@@ -1,79 +1,16 @@
-# Project Taxonomy Glossary
+# qminiwasm-core glossary
 
-This is the canonical glossary for project-specific terminology used across `qminiwasm-core`.
+Acronyms and domain terms used in this repository. Extended narrative vocabulary lives in [Q-Mini-WASM_ Edge AI Taxonomy.md](Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md); identity and enrollment patterns are detailed in [IDENTITY_STACK_REFERENCE.md](IDENTITY_STACK_REFERENCE.md).
 
-If a term changes or a new term is introduced, update this file first and then link to it from other docs instead of redefining terms repeatedly.
-
-## Core Terms
-
-### TPEM (Ternary-Packed Memory Enclave)
-- Static, immutable packed-weight payload loaded into WASM linear memory.
-- Defines the deployable reasoning payload boundary for a node.
-- Related: `EF`, `WLES`.
-
-### EF (Enclave Footprint)
-- Memory budget allocated to an enclave runtime payload.
-- Used for tier sizing and capacity planning across devices.
-- Related: `TPEM`, `MSA`.
-
-### ECL (Edge Cognitive Looping)
-- The enclave's local iterative reasoning cycle.
-- Local decision loop that emits certainty signals as it executes.
-- Related: `CGE`, `ESI`.
-
-### CGE (Certainty-Gated Escalation)
-- Deterministic escalation trigger when local certainty drops below policy.
-- Packages state and hands work to higher-tier routing/execution paths.
-- Related: `ECL`, `QAHR`.
-
-### ESI (Ephemeral State Inversion)
-- Context recovery approach that reconstructs needed state on demand.
-- Maintains bounded memory behavior instead of unbounded historical growth.
-- Related: `MSA`, `WLES`.
-
-### QAHR (Quantum-Assisted Hierarchical Routing)
-- Hierarchical edge-fog-cloud routing policy with quantum-assisted optimization.
-- Chooses escalation path under latency, trust, and topology constraints.
-- Related: `CGE`, `ZTEE`.
-
-### WLES (WASM Linear Execution Snapshots)
-- Suspend/resume mechanism for serializing and restoring WASM linear state.
-- Enables fast idle/restore transitions with deterministic runtime continuity.
-- Related: `TPEM`, `ESI`.
-
-### ZTEE (Zero-Trust Ephemeral Enrollment)
-- Enrollment and trust lifecycle model for enclave nodes.
-- Separates host hardware identity from enclave cognitive identity.
-- Related: `QAHR`, `CPL`.
-
-### CPL (Cognitive Provenance Ledger)
-- Provenance-oriented trust record for cognitive actions and handoffs.
-- Supports auditability and continuous trust verification signals.
-- Related: `ZTEE`, `CGE`.
-
-### MSA (Maximum State Aperture)
-- Explicit upper bound of represented conversational or task state.
-- Used to ensure state remains within enclave memory and policy constraints.
-- Related: `ESI`, `EF`.
-
-## Legacy to Preferred Term Map
-
-Use the preferred taxonomy below in docs and operational artifacts.
-
-| Legacy wording family | Preferred term |
-|---|---|
-| generic weight/tensor payload wording | `TPEM` |
-| generic memory budget wording | `EF` |
-| generic local reasoning-step wording | `ECL` |
-| generic confidence-based handoff wording | `CGE` |
-| generic context-growth wording | `ESI` + `MSA` |
-| generic multi-tier routing wording | `QAHR` |
-| generic suspend/restore state wording | `WLES` |
-| generic zero-trust enrollment wording | `ZTEE` |
-| generic provenance log wording | `CPL` |
-
-## Canonical References
-
-- [Project Goals](Project-Goals.md)
-- [Q-Mini-WASM Edge AI Taxonomy](Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md)
-- [Enclave Lifecycle](ENCLAVE_LIFECYCLE.md)
+| Term | Meaning |
+|------|---------|
+| **WASM linear memory** | The contiguous, byte-addressable memory space of a WebAssembly module. The runtime enforces explicit bounds; the stack uses this for deterministic execution and snapshots. |
+| **Ternary weights** | Model parameters constrained to `{-1, 0, 1}` (after scaling), reducing memory and arithmetic cost versus full-precision tensors for edge-sized footprints. |
+| **TPEM (Ternary-Packed Memory Enclave)** | The packed representation of ternary weights in linear memory—e.g. multiple ternary values per byte via base-3 packing—so more effective capacity fits in the same bytes and memory traffic. See the taxonomy doc for bit-packing detail. |
+| **State 1 / State 2** | **State 1**: default local inference in WASM with bounded memory. **State 2**: optional triggered path when classical expert/path assignment hits a configured combinatorial or latency wall; routing may use a Qiskit-backed **QAOA** solve. |
+| **QAOA (Quantum Approximate Optimization Algorithm)** | Hybrid quantum-classical optimization used in this stack for combinatorial routing when State 2 is engaged—not the default inference path. |
+| **ECL (Edge Cognitive Looping)** | Continuous edge-side reasoning and feedback for hard examples; pairs with escalation and routing policies in the hybrid stack. |
+| **ZTEE (Zero-Trust Ephemeral Enrollment)** | Reference pattern for secure node startup: host identity via **X.509** / **mTLS 1.3**, workload identity via **OIDC/OAuth2 JWT** claims (tier, footprint, scopes). See [IDENTITY_STACK_REFERENCE.md](IDENTITY_STACK_REFERENCE.md). |
+| **Enclave tier (1–5)** | Named memory envelopes (micro → enterprise core) mapping to default WASM page counts, Memory64 policy, and operator-facing capacity labels. Overrides in TOML/env win over tier defaults. |
+| **QAHR (Quantum-Assisted Hierarchical Routing)** | Framing for quantum-assisted routing across edge/fog/cloud when escalation applies; related to State 2 and QAOA in architecture docs. |
+| **WLES (WASM Linear Execution Snapshots)** | Serialization and resume of linear memory and execution state across host/Wasm boundaries (see `wles_wasmtime_harness` and architecture docs). |
