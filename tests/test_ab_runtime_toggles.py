@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 import torch
 
 from qminiwasm.hardware import native_ternary

@@ -1,7 +1,8 @@
 """Best-effort trainable TPEM footprint (MiB) for Tier-1 enclave caps.
 
-The estimate mirrors keys serialized in :func:`qminiwasm.tpem.trainable_tpem.build_trainable_tpem_payload`
-(quantum_router, ternary_expert, optional hybrid_adapter / cascade_policy) and adds a small fudge for
+The estimate mirrors keys serialized in
+:func:`qminiwasm.tpem.trainable_tpem.build_trainable_tpem_payload` (quantum_router,
+ternary_expert, optional hybrid_adapter / cascade_policy) and adds a small fudge for
 ``torch.save`` overhead vs raw tensor bytes.
 """
 

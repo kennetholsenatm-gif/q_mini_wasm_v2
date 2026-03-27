@@ -292,7 +292,8 @@ class WasmEngine:
                     with open(wasm_file, "rb") as f:
                         wasm_bytes = f.read()
                     self.logger.info(
-                        "qmw_wasm_compile clang_ms=%.2f wasm_bytes=%d link_mode=%s profile=%s export_mode=%s exports=%s",
+                        "qmw_wasm_compile clang_ms=%.2f wasm_bytes=%d link_mode=%s "
+                        "profile=%s export_mode=%s exports=%s",
                         elapsed_ms,
                         len(wasm_bytes),
                         os.environ.get("QMINIWASM_WASM_C_LINK", "bare"),
@@ -472,7 +473,8 @@ class WasmEngine:
                 rss_mb = -1.0
         output, _h, _t, pre_mem, post_mem = out
         self.logger.info(
-            "qmw_wasm_exec impl=%s backend=%s func=%s argc=%d elapsed_ms=%.3f rss_mb=%.2f output=%d pre_mem=%d post_mem=%d fallback_reason=%s",
+            "qmw_wasm_exec impl=%s backend=%s func=%s argc=%d elapsed_ms=%.3f "
+            "rss_mb=%.2f output=%d pre_mem=%d post_mem=%d fallback_reason=%s",
             impl,
             self._backend,
             func_name,
@@ -530,11 +532,13 @@ class WasmEngine:
         enabled = os.getenv("QMINIWASM_ENCLAVE_ADAPTER", "0").strip().lower()
         if enabled not in {"1", "true", "yes", "on"}:
             self.logger.info(
-                "enclave_adapter backend selected but adapter feature flag is off; falling back to wasmtime."
+                "enclave_adapter backend selected but adapter feature flag is off; "
+                "falling back to wasmtime."
             )
             return None
         self.logger.warning(
-            "enclave_adapter backend selected but native enclave adapter is unavailable; falling back to wasmtime."
+            "enclave_adapter backend selected but native enclave adapter is unavailable; "
+            "falling back to wasmtime."
         )
         return None
 

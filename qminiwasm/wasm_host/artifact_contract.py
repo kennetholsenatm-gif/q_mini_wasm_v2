@@ -122,7 +122,8 @@ def verify_artifact_contract(
     bundle = read_tpem_bundle(tpem_path)
     if len(bundle.payload) != int(tpem_meta["payload_bytes"]):
         raise ValueError(
-            f"tpem payload byte mismatch: expected {tpem_meta['payload_bytes']} got {len(bundle.payload)}"
+            "tpem payload byte mismatch: expected "
+            f"{tpem_meta['payload_bytes']} got {len(bundle.payload)}"
         )
     if bundle.payload_sha256.hex() != str(tpem_meta["payload_sha256"]):
         raise ValueError("tpem payload sha256 mismatch")

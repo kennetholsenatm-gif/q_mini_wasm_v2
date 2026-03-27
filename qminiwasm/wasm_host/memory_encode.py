@@ -63,7 +63,8 @@ def encode_linear_memory(
             else:
                 if impl == "native":
                     raise RuntimeError(
-                        "QMINIWASM_MEMORY_ENCODE_IMPL=native but encode_linear_memory_u8 is unavailable"
+                        "QMINIWASM_MEMORY_ENCODE_IMPL=native but encode_linear_memory_u8 "
+                        "is unavailable"
                     )
         except RuntimeError:
             if impl == "native":

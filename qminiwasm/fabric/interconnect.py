@@ -57,7 +57,8 @@ class StateMigrationInterconnect:
         current = bytes(linear_memory)
         if len(current) > self.max_payload_bytes:
             raise ValueError(
-                f"payload.linear_memory exceeds max_payload_bytes ({len(current)} > {self.max_payload_bytes})"
+                "payload.linear_memory exceeds max_payload_bytes "
+                f"({len(current)} > {self.max_payload_bytes})"
             )
 
         baseline_raw = payload.get("baseline_linear_memory")

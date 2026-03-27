@@ -224,8 +224,6 @@ def get_device(
     Returns:
         torch.device: cuda:index, xpu:index, or cpu.
     """
-    idx = device_index if device_index is not None else 0
-
     if accelerator is not None:
         if accelerator not in ("cuda", "xpu", "cpu", "sycl"):
             raise ValueError(f"Unknown accelerator: {accelerator}")

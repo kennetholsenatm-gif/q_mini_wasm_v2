@@ -95,7 +95,8 @@ def write_tpem_bundle(
             )
             if written == needed:
                 bundle = bytearray(out_arr[:written])
-                # Enforce canonical digest semantics regardless of native placeholder implementation.
+                # Enforce canonical digest semantics regardless of native placeholder
+                # implementation.
                 bundle[24:56] = digest
                 p.write_bytes(bundle)
                 return
