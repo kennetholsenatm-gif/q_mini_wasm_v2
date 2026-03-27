@@ -1,53 +1,25 @@
 # Training WUI (Go)
 
-Small web UI to pick a `configs/training/*.toml` file and start training. **Training behavior** comes from that TOML (and WUI edits). **RunPod / Hub / IBM tokens** in repo **`.env`** are **credentials**, not training hyperparameters — see [`.env.example`](../.env.example) and [docs/environment-variables.md](../docs/environment-variables.md). **Local** and **Cloud GPU (train on WUI host)** targets use the native **C++ `TrainingEngineService` gRPC** client (`StartTraining` / `StreamTelemetry`). **Cloud GPU (train on pod)** and **serverless cloud worker** paths still use **`python -m qminiwasm.engine`** (remote or async). The WUI maps the selected TOML to `TrainingConfig` fields that exist in `proto/training_engine.proto`; keys with no proto field are ignored until the engine loads full TOML server-side.
+The **Training WUI** is a Go-based web interface for configuring, launching, and monitoring **hybrid quantum–classical** training jobs against this repository. **What the model learns** (architecture, data mix, epochs, checkpoints, accelerators, and related TOML fields) lives in **`configs/training/*.toml`** and the in-app wizard. **Secrets and provider credentials**—RunPod, Hugging Face, IBM Quantum, and similar—belong in the repo **`.env`** file; they are not training hyperparameters. See [`.env.example`](../.env.example) and [docs/environment-variables.md](../docs/environment-variables.md) for the full variable map.
 
-## Requirements
+How telemetry reaches the browser, and how Python subprocess training differs from the native C++ gRPC engine, is explained in **[Architecture & Vision](#architecture--vision)** below.
 
-- [Go](https://go.dev/dl/) 1.22+
-- Python env with the package installed (`pip install -e ".[training]"`) and `python` on `PATH`
-- **Cloud GPU provider (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or **Terraform-compatible CLI** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Setup checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md). Incus/host automation now lives in your separate ops runbook repository.
-- **RunPod (optional):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or HashiCorp **Terraform** on `PATH` (the server shells out to `tofu` / `terraform` under `infra/runpod`). Setup checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md).
+> **SECURITY & OPERATIONAL LIMITATIONS**
+>
+> - **No built-in authentication.** The WUI does not verify clients. Treat it as a **local development** tool. Do **not** bind `-addr` to a public interface or untrusted network without placing it behind a **reverse proxy** and **proper authentication**; otherwise anyone who can reach the port can start long-running training workloads.
+> - **Single training process.** The server allows **only one active training run at a time**. Start another job only after the current run finishes or you use **Stop** (or equivalent) to clear the slot.
 
-## Run
+## Architecture & Vision
 
-From this directory:
+The WUI sits between you, the **Python** training engine (`qminiwasm.engine`), optional **native C++** `TrainingEngineService` over gRPC, and optional **cloud** backends (RunPod pod, RunPod serverless). **Local** training and **cloud GPU with “train on WUI host”** use the Go client for **`StartTraining` / `StreamTelemetry`** when the C++ server is in play. **Train on the remote pod** and **serverless** paths still drive **`python -m qminiwasm.engine`** (over SSH or asynchronously). The UI maps wizard and TOML selections into `TrainingConfig` fields that exist in [`proto/training_engine.proto`](../proto/training_engine.proto); keys without a proto counterpart are ignored until a backend loads the full TOML server-side.
 
-```bash
-go run . -root .. -addr :8765
-```
-
-Or build:
-
-```bash
-go build -o training-wui .
-./training-wui -root ..
-```
-
-From the **repository root**, you can use **[`scripts/deploy-wui.sh`](../scripts/deploy-wui.sh)** (`./scripts/deploy-wui.sh`) to build the same binary; set **`DEST=/path/to/training-wui`** to copy it after the build (optional). The script comments list cloud-provider env vars (`RUNPOD_TOKEN`, `RUNPOD_API_KEY`, **`RUNPOD_TOKEN_END`**, **`RUNPOD_SERVERLESS_ENDPOINT_ID`**) — see [`.env.example`](../.env.example) and [docs/RUNPOD_SERVERLESS.md](../docs/RUNPOD_SERVERLESS.md).
-
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
-
-### Flags
-
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `-addr` | `:8765` | Listen address (`host:port`) |
-| `-root` | `.` | **Repo root** (directory that contains `configs/` and `qminiwasm/`) |
-| `-python` | `python` | Python executable name or path on `PATH` |
-
-### C++ gRPC training (local / WUI host)
-
-- Start `qminiwasm_training_engine_server` (see [`cpp/training/README.md`](../cpp/training/README.md)).
-- Optional env **`QMINIWASM_TRAINING_GRPC_ADDR`** (default **`127.0.0.1:50061`**).
-
-Telemetry is pushed over **`StreamTelemetry`** and re-broadcast as the same WebSocket **`metric`** / **`alert`** shapes as before (no `grpcurl`). The **`metric`** object keeps legacy keys (`epoch`, `mean_loss`, `mean_mse`, `mean_return`, `line`) for charts and adds the full proto field set under snake_case names (`step`, `learning_rate`, queue depths, `stage`, `event_type`, `decoherence_score`, `enclave_state`, `attestation_state`, …) plus **`engine`: `"grpc"`**. Mission Control shows the extra columns when the source is C++ gRPC.
+**Mission Control** is the live operator surface: metrics and logs stream over per-run **WebSockets**. Two telemetry backends feed the same **`type: "metric"`** message shape, distinguished by `telemetry_source` (and, for gRPC, `engine: "grpc"`).
 
 ### Mission Control telemetry contract (Python vs gRPC)
 
 | Surface | How data arrives | What the operator sees |
 |--------|------------------|-------------------------|
-| **Python** (`python -m qminiwasm.engine`) | Stdout lines parsed by the WUI (e.g. **`qmw_metric`** at epoch end, **`qmw_train_throughput`**, **`qmw_xpu_mem`**) | WebSocket **`metric`** with `telemetry_source` = Python VNV; table cells for step/LR/queues stay empty unless future Python emits matching fields |
+| **Python** (`python -m qminiwasm.engine`) | Stdout/stderr lines parsed by the WUI (e.g. **`qmw_metric`** at epoch end, **`qmw_train_throughput`**, **`qmw_xpu_mem`**) | WebSocket **`metric`** with `telemetry_source` = Python VNV; table cells for step/LR/queues stay empty unless future Python emits matching fields |
 | **C++ gRPC** | **`StreamTelemetry`** → `TelemetryEvent` in `proto/training_engine.proto` | Same **`metric`** type with `telemetry_source` = gRPC C++, **`engine`**: `"grpc"`, and populated **Step**, **LR**, **σ/s**, **Q**, **Tier**, **Stage**, **Dec**, **TEE** columns in Mission Control |
 
 **Proto → WebSocket (operator-facing names):**
@@ -109,18 +81,75 @@ flowchart TB
 - **Decoherence:** `decoherence_score` tracks stability of quantum-routing-related state in the engine (when that path is active).
 - **TEE:** `enclave_state` and `attestation_state` summarize trusted-execution context for the run when the engine reports them.
 
+**Quantum routing (Python, Qiskit QAOA path):** With `qaoa_execution_mode` **`qiskit_statevector`** or **`qiskit_ibm`**, the router may emit **`qmw_routing_telemetry`** and **`qmw_routing_handoff`** lines. The WUI forwards them as WebSocket **`routing_telemetry`** / **`routing_handoff`** for Mission Control (latency budget default **50 ms**; override with **`QMW_ROUTING_LATENCY_BUDGET_MS`**—see [Appendix](#appendix-troubleshooting--edge-cases)).
+
+**C++ engine reference:** Telemetry is pushed over **`StreamTelemetry`** and re-broadcast as WebSocket **`metric`** / **`alert`** (no `grpcurl`). The **`metric`** object keeps legacy keys (`epoch`, `mean_loss`, `mean_mse`, `mean_return`, `line`) for charts and adds the full proto field set in snake_case plus **`engine`: `"grpc"`**. See [`cpp/training/README.md`](../cpp/training/README.md).
+
 Regenerate Go stubs after editing the proto (from **`training-wui/`**): `go generate ./...` (requires `protoc` plus `protoc-gen-go` and `protoc-gen-go-grpc` on `PATH`).
 
-### Tabs (workflow)
+## Path A: Local quick start
 
-- **Training** — Single **LEGO-style wizard** (five steps on one tab): (1) dataset mix, (2) model & runtime, (3) data source, (4) training knobs + full **schema** form, (5) review/save, **Launch training** (only control that starts `python -m qminiwasm.engine`), preflight, runs, artifacts. All saves target **`configs/training/wui_working.toml`** unless you pick another file in the dropdown.
-- **Mission Control**, **Infra & Cloud GPU** (node health, **warm RunPod targets**, `terraform.tfvars`, cloud status, OpenTofu), **Quantum Topology**, **Artifact Registry** — Mission Control holds quick metrics, live telemetry (including **quantum routing** State 1/2 visuals when the engine emits `qmw_routing_*` lines), and the training log moved off the wizard for headroom.
+Follow these steps in order the first time you run the WUI on your machine.
 
-`POST /api/runs/build` and `POST /api/runs/custom` only write `wui_working.toml`; **`POST /api/runs`** starts training. Optional JSON field **`allow_missing_checkpoint`**: when `true` and the config’s `checkpoint.load_path` file is missing, the server runs from a temp copy of the TOML with that line removed (fresh weights). The UI sets this only after you confirm in the resume-without-file dialog.
+### 1. Dependencies
 
-Only one training process at a time is allowed (start another after the current run finishes or after **Stop**).
+- [Go](https://go.dev/dl/) **1.22+**
+- **Python** with the package installed: `pip install -e ".[training]"` from the **repository root**, and `python` on `PATH`
+- **Optional (cloud only):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or a **Terraform-compatible** CLI on `PATH` for [`infra/runpod`](../infra/runpod). End-to-end checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md). Host automation with Incus is documented in the separate ops runbook (see [Appendix](#appendix-troubleshooting--edge-cases)).
 
-### Stopping training (SIGINT vs cooperative file)
+### 2. Environment setup
+
+Copy [`.env.example`](../.env.example) to **`.env`** at the repo root and fill in any providers you use. Training behavior is **not** controlled here—only credentials and environment-driven defaults. Details: [docs/environment-variables.md](../docs/environment-variables.md).
+
+### 3. Start the server
+
+From **`training-wui/`**:
+
+```bash
+go run . -root .. -addr :8765
+```
+
+Or build a binary:
+
+```bash
+go build -o training-wui .
+./training-wui -root ..
+```
+
+From the **repository root** you can use [`scripts/deploy-wui.sh`](../scripts/deploy-wui.sh); set **`DEST=/path/to/training-wui`** to copy the binary after build (optional). Script comments list cloud-related env vars—see [`.env.example`](../.env.example) and [docs/RUNPOD_SERVERLESS.md](../docs/RUNPOD_SERVERLESS.md).
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `-addr` | `:8765` | Listen address (`host:port`) |
+| `-root` | `.` | **Repo root** (directory that contains `configs/` and `qminiwasm/`) |
+| `-python` | `python` | Python executable name or path on `PATH` |
+
+### 4. Open the UI and walk through the app
+
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+
+**Training** is a single **wizard** on one tab (dataset mix, model and runtime, data source, training knobs plus full **schema** form, then review). Saves go to **`configs/training/wui_working.toml`** unless you pick another file in the dropdown. **Launch training** is the control that actually starts work; **preflight**, **runs**, and **artifacts** sit alongside it.
+
+**Mission Control** holds live metrics, the **telemetry** stream (charts and tables described under [Architecture & Vision](#architecture--vision)), and the training **log** when using the default layout. **Infra & Cloud GPU**, **Quantum Topology**, and **Artifact Registry** cover cloud tooling, topology views, and artifact browsing.
+
+**API essentials:** `POST /api/runs/build` and `POST /api/runs/custom` only write `wui_working.toml`. **`POST /api/runs`** starts training. Optional JSON field **`allow_missing_checkpoint`**: when `true` and `checkpoint.load_path` is missing, the server runs from a temp TOML with that line removed (fresh weights), after you confirm in the UI.
+
+**Floating panels (optional):** On **Training** and **Infra & Cloud GPU**, you can enable **Floating panels** to drag sections by title and resize from the corner grip. Layout is stored in **`localStorage`**.
+
+### 5. Optional: C++ training engine on the same machine
+
+For **native gRPC** training (local or “train on WUI host” with cloud):
+
+1. Build and run `qminiwasm_training_engine_server` (see [`cpp/training/README.md`](../cpp/training/README.md)).
+2. Optional env **`QMINIWASM_TRAINING_GRPC_ADDR`** (default **`127.0.0.1:50061`**).
+
+Telemetry shape and Mission Control columns are described in [Architecture & Vision](#architecture--vision).
+
+### 6. While a run is active
+
+The server enforces **one training process at a time** (see [warnings](#training-wui-go) at the top).
+
+**Stopping**
 
 ```mermaid
 flowchart LR
@@ -130,33 +159,57 @@ flowchart LR
   D["Force kill"] --> E["Immediate process Kill"]
 ```
 
-- **Stop (graceful)** — sends **SIGINT** to the local training process (or cancels the RunPod serverless job). Finishes the current batch when possible.
-- **Cooperative stop (file)** — `POST /api/runs/<id>/cooperative-stop` creates a sentinel file the Python loop polls (same behavior as SIGINT at the next batch boundary). Use when graceful SIGINT cannot reach the child (**Windows** WUI started from a GUI is a common case). The WUI also exposes **Cooperative stop (file)** next to other stop controls. **RunPod SSH** runs use `ssh` **touch** on the pod path `.wui/stop_<runId>`. Not available for **native gRPC** training or **RunPod serverless** (use **Stop** / cancel).
+- **Stop (graceful)** — **SIGINT** to the local Python child (or cancel serverless job). Stops after the current batch when possible.
+- **Cooperative stop (file)** — `POST /api/runs/<id>/cooperative-stop` creates a sentinel file the Python loop polls (same boundary as SIGINT). The UI exposes **Cooperative stop (file)** beside other stop controls. **RunPod SSH** runs use remote **`.wui/stop_<runId>`**. Not available for **native gRPC** or **RunPod serverless** (use **Stop** / cancel). For **Windows GUI–launched WUI**, SIGINT often fails; see [Appendix: Windows and cooperative stop](#windows-and-cooperative-stop).
 - **Force kill** — immediate `Kill()`; may lose in-epoch work.
 
-Local training is started as **`python -u -m qminiwasm.engine`** so **stdout is line-buffered** and Mission Control can parse **`qmw_metric`** lines as epochs complete. **`qmw_metric`** is emitted at **epoch end** (and on partial epoch after a graceful stop), so a long first epoch can look quiet until it finishes.
+**Logs and metrics cadence:** Local training uses **`python -u -m qminiwasm.engine`** so stdout is line-oriented for the WUI. **`qmw_metric`** appears at **epoch end** (and on partial epoch after graceful stop), so a long first epoch can look quiet until it completes.
 
-### Cloud GPU provider (OpenTofu)
+## Path B: Advanced cloud deployment
 
-End-to-end setup: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md) (API key in `.env`, `scripts/runpod_bootstrap.sh`).
+This path assumes you will provision **RunPod** (current integration) via **OpenTofu/Terraform** from the WUI host, optionally sync the repo to a GPU pod, and train either **on the pod** or **on the WUI machine** against a remote GPU stack.
 
-The dashboard can target a **cloud GPU provider** (current integration: RUNPOD) so OpenTofu runs **`apply`** before training and **`destroy`** when the job exits or you **Stop** (optional checkbox: skip destroy if you want to keep the pod).
+### Prerequisites
 
-- Set **`RUNPOD_TOKEN`** (or `RUNPOD_API_KEY`) in the repo **`.env`**; the WUI loads it on startup (`loadDotenvFromRepo`).
-- Stack lives in **`infra/runpod`**. **`tofu` or `terraform` must be on `PATH`** on the **WUI host**.
-- **Train on the pod (default):** Set **Execution target** to RunPod in the header and leave **Train on cloud GPU** checked. **Launch training** will: `tofu apply` (unless you use a **warm target** or check **Skip OpenTofu apply**), wait for **`public_ip`** (or use the warm host), **tar-sync** the repo to the pod over **SSH**, then run **`python -u -m qminiwasm.engine`** on the pod (venv + `pip install -e ".[training]"` on each run), with **`--wui-stop-file .wui/stop_<runId>`** for cooperative stop from the WUI. The WUI host must have **`ssh`**, **`tar`**, and **`scp`** (scp only needed when the server uses a generated temp config) on **`PATH`**. Optional **`RUNPOD_SSH_USER`**, **`RUNPOD_REMOTE_DIR`**, **`RUNPOD_SSH_KEY`** in `.env` (see [`.env.example`](../.env.example)); per-target **SSH user** can be stored in the warm-target registry. Your repo **`.env`** is included in the sync so Hub / IBM tokens work remotely.
-- **Train on the WUI host:** Uncheck **Train on cloud GPU** — the pod is still provisioned, but training runs on the WUI machine via **gRPC** to the C++ engine (same as **local** target).
-- **Artifacts:** Checkpoints are written on the **pod** under the synced repo (e.g. `artifacts/models/...`). Copy them back with **scp**/**rsync** if you need them on your laptop. **Stop** terminates the local **ssh** process; the remote Python process may keep running until the pod is destroyed or you SSH in manually.
+- **`RUNPOD_TOKEN`** or **`RUNPOD_API_KEY`** in repo **`.env`**; the WUI loads it at startup.
+- Stack under **[`infra/runpod`](../infra/runpod)**; **`tofu`** or **`terraform`** on **`PATH`** on the **WUI host**.
+- Guided setup: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md) and **`scripts/runpod_bootstrap.sh`**.
 
-**Cloud GPU (CUDA):** Pods default to **`ACCELERATOR=cuda`** in container env (`infra/runpod/variables.tf`). See **`infra/runpod/CLOUD_ACCELERATOR.md`**.
+### Provisioning lifecycle
 
-**Infra & Cloud GPU tab:** edit **`infra/runpod/terraform.tfvars`**, **Status** (badges include **ssh** / **scp** / **tar**), and **OpenTofu CLI**. **`GET /api/meta`** includes **`runpod_remote`** defaults and tool detection.
+The dashboard can run **`apply`** before training and **`destroy`** when the job exits or you **Stop**, unless you opt to **skip destroy** to keep the pod. You can **skip OpenTofu apply** when using a **warm target** (saved SSH host) so training attaches to an existing machine.
 
-**Floating panels (optional):** On **Training** and **Infra & Cloud GPU**, enable **Floating panels** to drag sections by their **title** and resize from the **corner grip**. The **Log** panel lives on **Mission Control** when using the default layout. Layout is stored in **`localStorage`**.
+### Train on pod vs train on WUI host
 
-### Agent / inference outputs (after Launch training)
+- **Train on the pod (default for RunPod):** Set **Execution target** to RunPod and leave **Train on cloud GPU** checked. **Launch training** runs **`tofu apply`** (unless skipped or warm target), waits for **`public_ip`** (or uses the warm host), **tar-syncs** the repo over **SSH**, then runs **`python -u -m qminiwasm.engine`** on the pod (venv + `pip install -e ".[training]"` each run) with **`--wui-stop-file .wui/stop_<runId>`** for cooperative stop.
+- **Train on the WUI host:** Uncheck **Train on cloud GPU**. The pod may still be provisioned, but training runs **locally** via **gRPC** to the C++ engine, same idea as a pure local run.
 
-Each training run writes checkpoints under **`artifacts/models/<model-slug>/`** (repo root, gitignored):
+**CUDA:** Pods default to **`ACCELERATOR=cuda`** in container env. See [`infra/runpod/CLOUD_ACCELERATOR.md`](../infra/runpod/CLOUD_ACCELERATOR.md).
+
+### Sync, tools, and artifacts
+
+The WUI host needs **`ssh`**, **`tar`**, and **`scp`** on **`PATH`** (`scp` when the server uses a generated temp config). Optional **`RUNPOD_SSH_USER`**, **`RUNPOD_REMOTE_DIR`**, **`RUNPOD_SSH_KEY`** in `.env` ([`.env.example`](../.env.example)); per-target SSH user can live in the **warm-target** registry. The repo **`.env`** is included in the sync so Hub and IBM tokens work on the remote.
+
+**Artifacts** land under the synced tree on the pod (e.g. **`artifacts/models/...`**). Copy checkpoints back with **scp** or **rsync** if you need them locally. **Stop** ends the local **ssh** session; the remote process may continue until the pod is destroyed or you intervene over SSH.
+
+### Operator surfaces and APIs
+
+- **Infra & Cloud GPU tab:** Edit **`infra/runpod/terraform.tfvars`**, view **Status** (badges for **ssh** / **scp** / **tar**), and drive **OpenTofu** from the UI.
+- **`GET /api/meta`** — includes **`runpod_remote`** defaults and tool detection, plus **`runpod_serverless`** flags (`endpoint_key_present`, `management_key_present`).
+- **`GET /api/runpod/status`** — token presence, binary, `tofu output` when state exists, **`remote_ssh`**, **`remote_scp`**, **`remote_tar`**, **`remote_ssh_user`**, **`remote_dir`**, **`remote_ssh_key_set`**.
+- **`GET` / `PUT /api/runpod/warm-targets`** — JSON `{ "targets": [ { "id", "label", "host", "ssh_user?", "notes?", "updated_at?" } ] }`; pass **`runpod_warm_target_id`** on **`POST /api/runs`** to skip apply and use a registered host.
+- **`GET` / `PUT /api/runpod/tfvars`** — read/write **`terraform.tfvars`** (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example).
+- **`POST /api/runpod/tofu`** — `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional).
+
+**`POST /api/runs`** accepts **`run_target`:** `"local"` | `"runpod"` | **`"runpod_serverless"`**. For pods: **`runpod_destroy_on_exit`**, optional **`runpod_var_file`**, **`runpod_train_on_pod`** (default **true** when `runpod`), **`runpod_skip_apply`**, optional **`runpod_warm_target_id`**. For serverless: optional **`runpod_serverless_endpoint_id`** or **`RUNPOD_SERVERLESS_ENDPOINT_ID`** in `.env`.
+
+### Serverless cloud workers
+
+Queue calls prefer **`RUNPOD_TOKEN_END`** (endpoint API key), else **`RUNPOD_API_KEY`** / **`RUNPOD_TOKEN`**. Management on `rest.runpod.io` uses the **account** key. Representative routes: `GET /api/runpod/serverless/meta`, `GET /api/runpod/serverless/worker-image?config=…`, `GET` / `POST /api/runpod/serverless/templates` (**`POST`** uses GraphQL `saveTemplate` on api.runpod.io), `GET` / `POST /api/runpod/serverless/endpoints`, `GET /api/runpod/serverless/health`, `POST /api/runpod/serverless/run`, `GET /api/runpod/serverless/job?id=…`. Full detail: **[docs/RUNPOD_SERVERLESS.md](../docs/RUNPOD_SERVERLESS.md)**.
+
+## After training: artifacts, inference, and WUI serve
+
+Each run writes checkpoints under **`artifacts/models/<model-slug>/`** (repo root, gitignored):
 
 | File | Role |
 |------|------|
@@ -166,23 +219,11 @@ Each training run writes checkpoints under **`artifacts/models/<model-slug>/`** 
 | `serve.toml` | Minimal `[serve]` table; load with **`QMINIWASM_SERVE_CONFIG=artifacts/models/<slug>/serve.toml`** |
 | `agent_bundle.json` | Machine-readable paths + **`uvicorn qminiwasm.engine.serve:app`** hint + HTTP API summary |
 
-After training, point tools or agents at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn qminiwasm.engine.serve:app`** (**`pip install -e ".[serve]"`**). Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle JSON for the exact contract.
+After training, point tools at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn qminiwasm.engine.serve:app`** with **`pip install -e ".[serve]"`**. Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle for the exact contract.
 
-`GET /api/runpod/status` — token, binary, `tofu output` (when state exists), plus **`remote_ssh`**, **`remote_scp`**, **`remote_tar`**, **`remote_ssh_user`**, **`remote_dir`**, **`remote_ssh_key_set`**. `GET` / `PUT /api/runpod/warm-targets` — JSON `{ "targets": [ { "id", "label", "host", "ssh_user?", "notes?", "updated_at?" } ] }` for saved SSH hosts (training can pass `runpod_warm_target_id` on **`POST /api/runs`**). `GET` / `PUT /api/runpod/tfvars` — read or write **`terraform.tfvars`** only (`PUT` body `{ "content": "…" }`; `GET ?source=example` returns the example file). `POST /api/runpod/tofu` — JSON `{ "action": "init"|"plan"|"apply"|"destroy", "var_file": "terraform.tfvars" }` (`var_file` optional).
+**From the WUI:** After **`agent_bundle.json`** exists, **`POST /api/serve/start`** with body `{ "model_stem": "<slug>", "port": 8001 }` starts **`uvicorn`** on **`127.0.0.1`**, sets **`QMINIWASM_SERVE_CONFIG`**, and writes **`artifacts/models/<slug>/docker-compose.serve.yaml`**. **`POST /api/serve/stop`** stops it; **`GET /api/serve/status`** returns running flag, pid, and log tail. **Training and serve cannot run at the same time** in one WUI process.
 
-**Inference from the WUI (after `agent_bundle.json` exists):** `POST /api/serve/start` — body `{ "model_stem": "<slug>", "port": 8001 }` spawns **`uvicorn`** on **`127.0.0.1`** with **`QMINIWASM_SERVE_CONFIG`** and writes **`artifacts/models/<slug>/docker-compose.serve.yaml`**. **`POST /api/serve/stop`** terminates it. **`GET /api/serve/status`** — running flag, pid, log tail. Training and serve are mutually exclusive on one WUI process.
-
-**Quantum routing telemetry (Qiskit QAOA path):** With `qaoa_execution_mode` **`qiskit_statevector`** or **`qiskit_ibm`**, the Python router may emit stdout lines **`qmw_routing_telemetry`** and **`qmw_routing_handoff`** (latency budget default **50 ms**, override with **`QMW_ROUTING_LATENCY_BUDGET_MS`**). The WUI forwards these over the run WebSocket as **`routing_telemetry`** / **`routing_handoff`** for Mission Control.
-
-**Serverless cloud workers:** Queue calls use **`RUNPOD_TOKEN_END`** (endpoint API key) when set, else **`RUNPOD_API_KEY`** / **`RUNPOD_TOKEN`**. Management (`rest.runpod.io`: templates + endpoints) uses the account key only. Routes: `GET /api/runpod/serverless/meta`, `GET /api/runpod/serverless/worker-image?config=…`, `GET` / `POST /api/runpod/serverless/templates` (**`POST` creates templates via GraphQL `saveTemplate` on api.runpod.io**), `GET` / `POST /api/runpod/serverless/endpoints`, `GET /api/runpod/serverless/health`, `POST /api/runpod/serverless/run`, `GET /api/runpod/serverless/job?id=…`. See **[docs/RUNPOD_SERVERLESS.md](../docs/RUNPOD_SERVERLESS.md)**. **`GET /api/meta`** includes **`runpod_serverless`** flags (`endpoint_key_present`, `management_key_present`).
-
-**`POST /api/runs`** accepts `run_target`: `"local"` | `"runpod"` | **`"runpod_serverless"`**; for pods: `runpod_destroy_on_exit`, optional **`runpod_var_file`**, **`runpod_train_on_pod`** (default **true** when `runpod`), **`runpod_skip_apply`**, optional **`runpod_warm_target_id`** (skips OpenTofu apply; uses registered host). For serverless: optional **`runpod_serverless_endpoint_id`** (else `RUNPOD_SERVERLESS_ENDPOINT_ID` in `.env`).
-
-**Preflight FAQ**
-
-- **CPU vs Build wizard accelerator**: Preflight loads the TOML from the **config dropdown** (e.g. `cascade_mopd.toml` has `accelerator = "cpu"`). The **Build wizard** accelerator is sent as `?accelerator=` so device resolution matches what you intend to train with, without editing that file.
-- **IBM “pending jobs” = 0**: That field is the **backend queue depth** (jobs waiting on that IBM device). Zero does not mean “no quantum access”; it usually means nothing is queued right now. Training may still use a local/simulator path until it submits hardware jobs.
-- **HF “dataset config” (none)**: Optional subset name for multi-config datasets. Empty means the **default** config on Hugging Face; Model Facts shows `(none)` when omitted.
+## Appendix: Troubleshooting & edge cases
 
 ### Intel XPU (Iris / Arc) — memory and throughput
 
@@ -196,9 +237,23 @@ After training, point tools or agents at **`agent_bundle.json`** or set **`QMINI
   - **`log_train_throughput`**: **`qmw_train_throughput`** after supervised steps: **`wall_s`**, **`samples_per_s`**, **`cascade_s`**, **`host_rss_mib`** if **`psutil`** is installed. Use Task Manager / HWiNFO for thermals, not Python.
 - **WUI WebSocket**: Parsed **`qmw_xpu_mem`** and **`qmw_train_throughput`** lines are broadcast as **`type: xpu_mem`** and **`type: train_throughput`**.
 
-## Incus container (ops repo)
+### Preflight FAQ
 
-On the machine where `incus` runs (e.g. WSL):
+- **CPU vs Build wizard accelerator**: Preflight loads the TOML from the **config dropdown** (e.g. `cascade_mopd.toml` has `accelerator = "cpu"`). The **Build wizard** accelerator is sent as `?accelerator=` so device resolution matches what you intend to train with, without editing that file.
+- **IBM “pending jobs” = 0**: That field is the **backend queue depth** (jobs waiting on that IBM device). Zero does not mean “no quantum access”; it usually means nothing is queued right now. Training may still use a local/simulator path until it submits hardware jobs.
+- **HF “dataset config” (none)**: Optional subset name for multi-config datasets. Empty means the **default** config on Hugging Face; Model Facts shows `(none)` when omitted.
+
+### Windows and cooperative stop
+
+When the WUI is started from a **Windows GUI** (no shared console), **graceful SIGINT** often **cannot** reach the Python child. The WUI then falls back to a hard kill and logs a warning. Use **Cooperative stop (file)** so training exits at the **next batch boundary** like a clean SIGINT: the UI calls **`POST /api/runs/<id>/cooperative-stop`**, which creates the sentinel the training loop polls. **Native gRPC** training and **RunPod serverless** do not use the file path—use **Stop** or provider cancel instead.
+
+### Quantum routing latency budget
+
+Override the default **50 ms** routing latency budget with **`QMW_ROUTING_LATENCY_BUDGET_MS`** when using **`qiskit_statevector`** or **`qiskit_ibm`** QAOA modes (see [Architecture & Vision](#architecture--vision)).
+
+### Incus container (ops repo)
+
+Alternative deployment on a host that uses **Incus** (e.g. WSL):
 
 ```bash
 cd /mnt/c/GiTeaRepos/System_admin/runbooks/qminiwasm/incus
@@ -206,8 +261,4 @@ chmod +x run-setup.sh setup-instance.sh install-opentofu.sh install-systemd-wui.
 ./run-setup.sh
 ```
 
-Or **`./setup-instance.sh /absolute/path/to/qminiwasm-core`**. Full details, autostart, and troubleshooting are in the `System_admin` runbook README. In the guest, repo root remains **`/opt/qmw`** (WUI `-root`).
-
-## Security note
-
-This tool is for **local development**. It does not authenticate clients and can start arbitrary-length training jobs. Do not expose `-addr` on a public network without a reverse proxy and auth.
+Or **`./setup-instance.sh /absolute/path/to/qminiwasm-core`**. Full details, autostart, and troubleshooting live in the `System_admin` runbook README. In the guest, repo root is typically **`/opt/qmw`** (WUI **`-root`**).
