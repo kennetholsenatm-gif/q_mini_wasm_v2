@@ -106,7 +106,10 @@ jobs:
           set -e
           python -m pip install --upgrade pip
           pip install black flake8 mypy pytest pytest-cov pypatch==1.0.2
-          pip install -r requirements/ci.txt 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true
+          if ! pip install -r requirements/ci.txt; then
+            echo "::warning::requirements/ci.txt failed; falling back to requirements.txt"
+            pip install -r requirements.txt
+          fi
           # Only pass wui/backend when it has .py files (Dockerfile-only tree is skipped; avoids black "path does not exist").
           BLACK_TARGETS=(qminiwasm/ tests/)
           FLAKE_TARGETS=(qminiwasm/ tests/)
@@ -235,6 +238,8 @@ jobs:
           output: "trivy-image.sarif"
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
+          # Upload SARIF for GitHub Security tab; do not fail the check on findings (image may lag patches).
+          exit-code: "0"
 
       - name: Upload Trivy image SARIF
         uses: github/codeql-action/upload-sarif@v4
