@@ -257,16 +257,8 @@ def _log_xpu_memory_if_enabled(
         return
     idx = device.index if device.index is not None else 0
     try:
-        cur = (
-            int(xpu.memory_allocated(idx))
-            if hasattr(xpu, "memory_allocated")
-            else -1
-        )
-        peak = (
-            int(xpu.max_memory_allocated(idx))
-            if hasattr(xpu, "max_memory_allocated")
-            else -1
-        )
+        cur = int(xpu.memory_allocated(idx)) if hasattr(xpu, "memory_allocated") else -1
+        peak = int(xpu.max_memory_allocated(idx)) if hasattr(xpu, "max_memory_allocated") else -1
         cur_mib = cur / (1024.0 * 1024.0) if cur >= 0 else -1.0
         peak_mib = peak / (1024.0 * 1024.0) if peak >= 0 else -1.0
         logger.info(
