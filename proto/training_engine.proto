@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package qminiwasm.trainingrpc;
 
+option go_package = "github.com/kennetholsenatm-gif/qminiwasm-core/training-wui/trainingrpc;trainingrpc";
+
 message TrainingConfig {
   string run_id = 1;
   string dataset_uri = 2;

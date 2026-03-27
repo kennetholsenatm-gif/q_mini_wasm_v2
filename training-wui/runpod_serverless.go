@@ -95,9 +95,21 @@ func runpodServerlessDoJSON(ctx context.Context, method, url string, body any) (
 		return nil, 0, nil, err
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if readErr != nil {
+		return nil, resp.StatusCode, nil, fmt.Errorf("read runpod response: %w", readErr)
+	}
 	var out map[string]any
-	_ = json.Unmarshal(raw, &out)
+	if len(bytes.TrimSpace(raw)) > 0 {
+		if err := json.Unmarshal(raw, &out); err != nil {
+			const maxPreview = 600
+			preview := string(raw)
+			if len(preview) > maxPreview {
+				preview = preview[:maxPreview] + "...(truncated)"
+			}
+			return nil, resp.StatusCode, raw, fmt.Errorf("decode runpod response JSON (HTTP %d): %w: %s", resp.StatusCode, err, preview)
+		}
+	}
 	if out == nil {
 		out = map[string]any{}
 	}
@@ -248,9 +260,9 @@ func handleRunpodServerlessRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":            true,
-		"status":        code,
-		"runpod":        out,
+		"ok":             true,
+		"status":         code,
+		"runpod":         out,
 		"request_source": source,
 	})
 }
@@ -329,17 +341,49 @@ func handleRunpodServerlessHealth(w http.ResponseWriter, r *http.Request) {
 
 // buildQMWServerlessTrainInputV1 is the WUI → worker contract for Launch with run_target runpod_serverless.
 // Workers should read input["qmw_action"] == "train" and input["config_rel"] (repo-relative path).
-func buildQMWServerlessTrainInputV1(configRel string, extraEnv []string) map[string]any {
+// Optional input.toml_overlay is a TOML fragment deep-merged into the base config on the worker (non-secret).
+func buildQMWServerlessTrainInputV1(configRel string, extraEnv []string, tomlOverlay string) map[string]any {
+	extraEnv = appendRuntimeEnvDefaults(extraEnv)
+	in := map[string]any{
+		"qmw_schema_version": 1,
+		"qmw_action":         "train",
+		"config_rel":         configRel,
+		"extra_env":          extraEnv,
+	}
+	if strings.TrimSpace(tomlOverlay) != "" {
+		in["toml_overlay"] = tomlOverlay
+	}
 	return map[string]any{
-		"input": map[string]any{
-			"qmw_schema_version": 1,
-			"qmw_action":         "train",
-			"config_rel":         configRel,
-			"extra_env":          extraEnv,
-		},
+		"input": in,
 		"policy": map[string]any{
 			"executionTimeout": 172800000, // 48h active (ms)
 			"ttl":              259200000, // 72h total (ms)
 		},
 	}
+}
+
+func appendRuntimeEnvDefaults(extraEnv []string) []string {
+	existing := map[string]bool{}
+	for _, kv := range extraEnv {
+		if i := strings.Index(kv, "="); i > 0 {
+			existing[strings.TrimSpace(kv[:i])] = true
+		}
+	}
+	for _, k := range []string{
+		"QMINIWASM_TRAINING_RUNTIME_MODE",
+		"QMINIWASM_TERNARY_IMPL",
+		"QMINIWASM_TRIT_PACK_IMPL",
+		"QMINIWASM_MEMORY_ENCODE_IMPL",
+		"QMINIWASM_WASM_EXEC_IMPL",
+		"QMINIWASM_CASCADE_RL_IMPL",
+		"QMINIWASM_NATIVE_STRICT",
+	} {
+		if existing[k] {
+			continue
+		}
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			extraEnv = append(extraEnv, k+"="+v)
+		}
+	}
+	return extraEnv
 }

@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import hashlib
+import os
 import struct
 import sys
 from dataclasses import dataclass
@@ -21,6 +22,13 @@ MAGIC = b"QMWTPEM1"
 HEADER_STRUCT = struct.Struct("<8sIIQ32s")
 BUNDLE_FORMAT_VERSION = 1
 HEADER_SIZE = HEADER_STRUCT.size  # 56
+
+
+def _native_tpem_bundle_enabled() -> bool:
+    raw = os.getenv("QMINIWASM_TPEM_NATIVE_BUNDLE", "").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -39,7 +47,7 @@ class TpemBundle:
 
 def write_tpem_bundle(
     path: Union[str, Path],
-    payload: bytes,
+    payload: bytes | bytearray | memoryview,
     *,
     bundle_format_version: int = BUNDLE_FORMAT_VERSION,
     pack_encoding_version: int | None = None,
@@ -48,8 +56,9 @@ def write_tpem_bundle(
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     pe = int(PACK_ENCODING_VERSION if pack_encoding_version is None else pack_encoding_version)
-    digest = hashlib.sha256(payload).digest()
-    lib = load_native_lib()
+    payload_mv = memoryview(payload)
+    digest = hashlib.sha256(payload_mv).digest()
+    lib = load_native_lib() if _native_tpem_bundle_enabled() else None
     if lib is not None and hasattr(lib, "qmw_tpem_build_bundle"):
         fn = lib.qmw_tpem_build_bundle
         fn.argtypes = [
@@ -61,7 +70,7 @@ def write_tpem_bundle(
             ctypes.c_size_t,
         ]
         fn.restype = ctypes.c_size_t
-        payload_arr = (ctypes.c_uint8 * len(payload)).from_buffer_copy(payload)
+        payload_arr = (ctypes.c_uint8 * len(payload_mv)).from_buffer_copy(payload_mv)
         needed = int(
             fn(
                 ctypes.cast(payload_arr, ctypes.POINTER(ctypes.c_uint8)),
@@ -85,19 +94,19 @@ def write_tpem_bundle(
                 )
             )
             if written == needed:
-                bundle = bytearray(bytes(out_arr[:written]))
+                bundle = bytearray(out_arr[:written])
                 # Enforce canonical digest semantics regardless of native placeholder implementation.
                 bundle[24:56] = digest
-                p.write_bytes(bytes(bundle))
+                p.write_bytes(bundle)
                 return
     header = HEADER_STRUCT.pack(
         MAGIC,
         int(bundle_format_version),
         pe,
-        len(payload),
+        len(payload_mv),
         digest,
     )
-    p.write_bytes(header + payload)
+    p.write_bytes(header + payload_mv.tobytes())
 
 
 def read_tpem_bundle(path: Union[str, Path]) -> TpemBundle:

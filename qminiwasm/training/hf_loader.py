@@ -33,6 +33,7 @@ Runbook (CodeSearchNet Python example, after ``pip install -e ".[training]"``):
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -50,6 +51,13 @@ _DEFAULT_CONTEXT_FIELD_KEYS = ("language", "func_name", "repo", "path")
 # Reserve UTF-8 budget for [context] so most of BODY_SLOTS remains for code start.
 _CONTEXT_PREFIX_MAX_BYTES = 900
 _CONTEXT_VALUE_MAX_CHARS = 220
+
+
+def _hf_loader_impl() -> str:
+    impl = os.getenv("QMINIWASM_HF_LOADER_IMPL", "auto").strip().lower()
+    if impl in {"auto", "python", "native"}:
+        return impl
+    return "auto"
 
 
 def _resolve_context_keys(
@@ -112,6 +120,12 @@ def row_to_encoded_blob(
     Only the first ``BODY_SLOTS`` (~4088) bytes affect the 4096-d embedding; a short ``[context]``
     block is prepended in auto mode so that window mixes metadata with the start of the code.
     """
+    impl = _hf_loader_impl()
+    if impl == "native":
+        raise RuntimeError(
+            "QMINIWASM_HF_LOADER_IMPL=native is not available in this build. "
+            "Use auto/python unless a native loader extension is installed."
+        )
     text_fields_explicit = text_fields is not None and len(text_fields) > 0
     ctx_keys = _resolve_context_keys(text_fields_explicit, context_fields)
 

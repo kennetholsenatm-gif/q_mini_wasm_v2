@@ -17,6 +17,9 @@ import struct
 import subprocess
 import tempfile
 import ctypes
+import hashlib
+import time
+import shutil
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -24,7 +27,8 @@ import torch
 import wasmtime
 
 from .memory_encode import D_MODEL, encode_linear_memory
-from ..native_bridge import load_native_lib
+from ..native_bridge import load_native_lib, native_capabilities
+from qminiwasm.runtime_modes import strict_native_enabled
 from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
 
 # Wasmtime Store max linear memory (bytes): ~1e6 rows × d_model (encode_linear_memory width).
@@ -36,6 +40,10 @@ DEFAULT_WASM_STORE_INSTANCE_LIMIT = 16_777_216
 DEFAULT_WASM_STORE_MEMORIES_LIMIT = 16_777_216
 
 logger = logging.getLogger(__name__)
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 # Mesh curriculum: pipeline algorithm key -> exported WASM function name (clang --export-all).
 MESH_EXPORT_NAMES: Dict[str, str] = {
@@ -102,6 +110,8 @@ class WasmEngine:
         self._compiled_module: Optional[Any] = None
         # One Instance per (store id, module id); mesh may reuse the same module many times.
         self._instance_cache: Dict[Tuple[int, int], Any] = {}
+        self._last_execution_origin: str = "unknown"
+        self._last_native_fallback_reason: str = ""
 
         if cfg.force_mock:
             self.logger.warning("WASM runtime config force_mock enabled; using mock WASM engine.")
@@ -207,7 +217,39 @@ class WasmEngine:
         except Exception:
             raise
 
-    def compile_c_to_wasm(self, c_file_path: str) -> Optional[wasmtime.Module]:
+    def _maybe_runtime_wasm_opt(self, wasm_file: str) -> None:
+        enabled = os.environ.get("QMINIWASM_WASM_RUNTIME_WASM_OPT", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if not enabled:
+            return
+        if not shutil.which("wasm-opt"):
+            self.logger.debug("runtime wasm-opt requested but tool not on PATH; skipping")
+            return
+        level = os.environ.get("QMINIWASM_WASM_RUNTIME_WASM_OPT_LEVEL", "O2").strip()
+        flag = "-" + level
+        with tempfile.TemporaryDirectory(prefix="qmw_runtime_wasm_opt_") as td:
+            tmp_out = os.path.join(td, "optimized.wasm")
+            try:
+                subprocess.run(
+                    ["wasm-opt", flag, wasm_file, "-o", tmp_out],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                with open(tmp_out, "rb") as rf:
+                    optimized = rf.read()
+                with open(wasm_file, "wb") as wf:
+                    wf.write(optimized)
+            except Exception as e:
+                self.logger.debug("runtime wasm-opt failed (%s); keeping clang output", e)
+
+    def compile_c_to_wasm(
+        self, c_file_path: str, export_names: Optional[List[str]] = None
+    ) -> Optional[wasmtime.Module]:
         """Compile C source file to WASM module
 
         Args:
@@ -226,21 +268,37 @@ class WasmEngine:
                 # Compile C to WASM using clang
                 wasm_file = os.path.join(tmpdir, "output.wasm")
                 try:
-                    compile_cmd = build_clang_wasm_compile_command(c_file_path, wasm_file)
+                    compile_cmd = build_clang_wasm_compile_command(
+                        c_file_path,
+                        wasm_file,
+                        export_names=export_names,
+                    )
                 except ValueError as e:
                     self.logger.error("%s", e)
                     return None
 
+                t0 = time.perf_counter()
                 result = subprocess.run(compile_cmd, capture_output=True, text=True)
+                elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
                 if result.returncode != 0:
                     self.logger.error("WASM compilation failed: %s", result.stderr)
                     return None
+                self._maybe_runtime_wasm_opt(wasm_file)
 
                 # Load compiled WASM module
                 try:
                     with open(wasm_file, "rb") as f:
                         wasm_bytes = f.read()
+                    self.logger.info(
+                        "qmw_wasm_compile clang_ms=%.2f wasm_bytes=%d link_mode=%s profile=%s export_mode=%s exports=%s",
+                        elapsed_ms,
+                        len(wasm_bytes),
+                        os.environ.get("QMINIWASM_WASM_C_LINK", "bare"),
+                        os.environ.get("QMINIWASM_WASM_CLANG_PROFILE", "compat"),
+                        os.environ.get("QMINIWASM_WASM_EXPORT_MODE", "all"),
+                        ",".join(export_names or []),
+                    )
                     store = self._new_store()
                     module = wasmtime.Module(store.engine, wasm_bytes)  # type: ignore[attr-defined]
                     self._module_exec_cache[id(module)] = (store, module)
@@ -308,6 +366,8 @@ class WasmEngine:
             "target_state": target_state,
             "wasm_memory_pre": pre_mem,
             "wasm_memory_post": post_mem,
+            "wasm_execution_origin": self._last_execution_origin,
+            "wasm_backend": self._backend,
         }
         return output, execution_state
 
@@ -348,36 +408,85 @@ class WasmEngine:
         Returns:
             (output, hidden_state, target_state, pre_memory_bytes, post_memory_bytes)
         """
+        exec_impl = os.getenv("QMINIWASM_WASM_EXEC_IMPL", "auto").strip().lower()
+        if exec_impl not in {"auto", "python", "native"}:
+            exec_impl = "auto"
+
+        t0 = time.perf_counter()
+        out: Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]
         if self._backend == "enclave_adapter":
             native = self._execute_enclave_adapter(module, func_name, args)
             if native is not None:
-                return native
-        if self._backend == "wasmedge_native":
+                out = native
+                self._emit_exec_telemetry(func_name, args, out, t0, "enclave_adapter")
+                return out
+        if self._backend == "wasmedge_native" or exec_impl == "native":
             native = self._execute_wasmedge_native(module, func_name, args)
             if native is not None:
-                return native
+                self._last_execution_origin = "real"
+                out = native
+                self._emit_exec_telemetry(func_name, args, out, t0, "wasmedge_native")
+                return out
+            if exec_impl == "native":
+                msg = (
+                    "QMINIWASM_WASM_EXEC_IMPL=native requested but native execution unavailable; "
+                    "falling back to wasmtime."
+                )
+                if strict_native_enabled():
+                    raise RuntimeError(msg)
+                self._last_native_fallback_reason = "native_wasm_unavailable"
+                self.logger.warning(msg)
         if self.use_mock or module is None:
-            return self._execute_mock(func_name, args)
+            self._last_execution_origin = "mock"
+            out = self._execute_mock(func_name, args)
+            self._emit_exec_telemetry(func_name, args, out, t0, "mock")
+            return out
         store = self._store_for_module(module)
         if store is None:
             self.logger.error(
                 "Module store missing; compile via compile_wasm or compile_c_to_wasm."
             )
-            return 0, None, None, b"", b""
+            self._last_execution_origin = "error"
+            out = (0, None, None, b"", b"")
+            self._emit_exec_telemetry(func_name, args, out, t0, "error")
+            return out
+        out = self._execute_wasmtime(store, module, func_name, args)
+        self._emit_exec_telemetry(func_name, args, out, t0, "wasmtime")
+        return out
 
-    def _execute_enclave_adapter(
-        self, module: Optional[Any], func_name: str, args: List[int]
-    ) -> Optional[Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]]:
-        enabled = os.getenv("QMINIWASM_ENCLAVE_ADAPTER", "0").strip().lower()
-        if enabled not in {"1", "true", "yes", "on"}:
-            self.logger.info(
-                "enclave_adapter backend selected but adapter feature flag is off; falling back to wasmtime."
-            )
-            return None
-        self.logger.warning(
-            "enclave_adapter backend selected but native enclave adapter is unavailable; falling back to wasmtime."
+    def _emit_exec_telemetry(
+        self,
+        func_name: str,
+        args: List[int],
+        out: Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes],
+        start: float,
+        impl: str,
+    ) -> None:
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        rss_mb = -1.0
+        if psutil is not None:
+            try:
+                rss_mb = float(psutil.Process().memory_info().rss) / (1024.0 * 1024.0)
+            except Exception:
+                rss_mb = -1.0
+        output, _h, _t, pre_mem, post_mem = out
+        self.logger.info(
+            "qmw_wasm_exec impl=%s backend=%s func=%s argc=%d elapsed_ms=%.3f rss_mb=%.2f output=%d pre_mem=%d post_mem=%d fallback_reason=%s",
+            impl,
+            self._backend,
+            func_name,
+            len(args),
+            elapsed_ms,
+            rss_mb,
+            int(output),
+            len(pre_mem),
+            len(post_mem),
+            self._last_native_fallback_reason,
         )
-        return None
+
+    def _execute_wasmtime(
+        self, store: Any, module: Any, func_name: str, args: List[int]
+    ) -> Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]:
         try:
             ic_key = (id(store), id(module))
             instance = self._instance_cache.get(ic_key)
@@ -395,9 +504,8 @@ class WasmEngine:
 
             post_mem = self._read_linear_memory(instance, store)
             target_state = encode_linear_memory(post_mem, result_i32=output, first_arg=first_arg)
-
+            self._last_execution_origin = "real"
             return output, hidden_state, target_state, pre_mem, post_mem
-
         except Exception as e:
             msg = str(e)
             if "mmap failed to reserve" in msg or "Cannot allocate memory" in msg:
@@ -407,20 +515,42 @@ class WasmEngine:
                 )
                 if self._fallback_policy == "error":
                     raise RuntimeError(detail) from e
-                # Common in memory-constrained containers with wasmtime virtual memory reservation.
                 self.logger.warning("%s; switching to mock WASM mode.", detail)
                 self.use_mock = True
+                self._last_execution_origin = "mock"
                 return self._execute_mock(func_name, args)
             self.logger.error("WASM execution error: %s", msg)
+            self._last_execution_origin = "error"
             return 0, None, None, b"", b""
+
+    def _execute_enclave_adapter(
+        self, module: Optional[Any], func_name: str, args: List[int]
+    ) -> Optional[Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]]:
+        enabled = os.getenv("QMINIWASM_ENCLAVE_ADAPTER", "0").strip().lower()
+        if enabled not in {"1", "true", "yes", "on"}:
+            self.logger.info(
+                "enclave_adapter backend selected but adapter feature flag is off; falling back to wasmtime."
+            )
+            return None
+        self.logger.warning(
+            "enclave_adapter backend selected but native enclave adapter is unavailable; falling back to wasmtime."
+        )
+        return None
 
     def _execute_wasmedge_native(
         self, module: Optional[Any], func_name: str, args: List[int]
     ) -> Optional[Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]]:
+        self._last_native_fallback_reason = ""
+        caps = native_capabilities()
         lib = load_native_lib()
-        if lib is None or not hasattr(lib, "qmw_wasmedge_execute_mock"):
+        if (
+            lib is None
+            or not bool(caps.get("symbols", {}).get("qmw_wasmedge_execute"))
+            or not hasattr(lib, "qmw_wasmedge_execute")
+        ):
+            self._last_native_fallback_reason = "missing_qmw_wasmedge_execute"
             return None
-        fn = lib.qmw_wasmedge_execute_mock
+        fn = lib.qmw_wasmedge_execute
         fn.argtypes = [
             ctypes.POINTER(ctypes.c_uint8),
             ctypes.c_size_t,
@@ -450,6 +580,7 @@ class WasmEngine:
             ctypes.byref(out),
         )
         if int(rc) != 0:
+            self._last_native_fallback_reason = f"qmw_wasmedge_execute_rc_{int(rc)}"
             return None
         result = int(out.value)
         first_arg = args[0] if args else 0
@@ -527,6 +658,7 @@ class WasmCompiler:
         self.engine = engine
         self.logger = logging.getLogger(__name__)
         self._source_cache: Dict[str, str] = {}
+        self._digest_cache: Dict[str, Optional[wasmtime.Module]] = {}
 
     def compile_algorithm(self, algorithm_name: str, c_code: str) -> Optional[wasmtime.Module]:
         """Compile algorithm C code to WASM module
@@ -542,6 +674,22 @@ class WasmCompiler:
         if algorithm_name in self.engine._module_cache:
             return self.engine._module_cache[algorithm_name]
 
+        export_name = MESH_EXPORT_NAMES.get(algorithm_name, algorithm_name)
+        digest_material = "\n".join(
+            [
+                c_code,
+                os.environ.get("QMINIWASM_WASM_C_LINK", "bare"),
+                os.environ.get("QMINIWASM_WASM_CLANG_PROFILE", "compat"),
+                os.environ.get("QMINIWASM_WASM_EXPORT_MODE", "all"),
+                export_name,
+            ]
+        ).encode("utf-8")
+        digest = hashlib.sha256(digest_material).hexdigest()
+        if digest in self._digest_cache:
+            cached = self._digest_cache[digest]
+            self.engine._module_cache[algorithm_name] = cached
+            return cached
+
         try:
             # Write C code to temporary file
             with tempfile.NamedTemporaryFile(suffix=".c", delete=False) as c_file:
@@ -549,7 +697,7 @@ class WasmCompiler:
                 c_file_path = c_file.name
 
             # Compile to WASM
-            module = self.engine.compile_c_to_wasm(c_file_path)
+            module = self.engine.compile_c_to_wasm(c_file_path, export_names=[export_name])
 
             # Clean up temporary file
             os.unlink(c_file_path)
@@ -557,7 +705,10 @@ class WasmCompiler:
             if module:
                 self.engine._module_cache[algorithm_name] = module
                 self._source_cache[algorithm_name] = c_code
+                self._digest_cache[digest] = module
                 self.logger.info("Compiled %s to WASM successfully", algorithm_name)
+            else:
+                self._digest_cache[digest] = None
 
             return module
 

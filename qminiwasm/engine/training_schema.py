@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -243,6 +243,13 @@ class EnclaveSection(BaseModel):
     use_memory64: Optional[bool] = Field(
         None, description="Prefer Memory64 linear memory when runtime supports it"
     )
+
+    @field_validator("enclave_tier", mode="before")
+    @classmethod
+    def _normalize_enclave_tier(cls, v: Any) -> Optional[str]:
+        from qminiwasm.config import normalize_enclave_tier_value
+
+        return normalize_enclave_tier_value(v)
 
 
 class RunpodServerlessSection(BaseModel):

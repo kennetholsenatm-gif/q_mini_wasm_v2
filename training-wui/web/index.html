@@ -829,6 +829,9 @@
     .status.warn {
       color: var(--alert-warning-orange);
     }
+    .status.ok {
+      color: var(--alert-success-green);
+    }
     .badge {
       display: inline-block;
       padding: var(--space-xs) var(--space-sm);
@@ -1161,6 +1164,112 @@
         min-height: 44px;
       }
     }
+    .billing-surface {
+      border: 2px solid #c43518;
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: rgba(196, 53, 24, 0.12);
+    }
+    .billing-surface-warn {
+      border-color: #d68a1f;
+      background: rgba(214, 138, 31, 0.12);
+    }
+    .billing-control {
+      border-color: #c43518 !important;
+      outline: 1px solid rgba(196, 53, 24, 0.45);
+    }
+    .global-infra-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+      margin-top: var(--space-sm);
+      padding: 8px 0;
+    }
+    .global-infra-row label {
+      font-size: var(--text-sm);
+      margin: 0;
+    }
+    .global-infra-row select,
+    .global-infra-row input[type="text"] {
+      min-height: 36px;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop[hidden] {
+      display: none !important;
+    }
+    .modal-panel {
+      background: var(--surface-interface-gray);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 8px;
+      max-width: 520px;
+      width: 100%;
+      padding: var(--space-md);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    .modal-panel h3 {
+      margin: 0 0 var(--space-sm);
+      font-size: var(--text-md);
+    }
+    .modal-panel .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: var(--space-md);
+      flex-wrap: wrap;
+    }
+    .telemetry-pill {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .telemetry-pill-cpp {
+      background: #1a3a5c;
+      color: #7fc8ff;
+      border: 1px solid #3a7ab8;
+    }
+    .telemetry-pill-py {
+      background: #1e3d2e;
+      color: #9feca8;
+      border: 1px solid #3a8f52;
+    }
+    .telemetry-metric-table-wrap {
+      max-height: 220px;
+      overflow: auto;
+      margin-top: var(--space-sm);
+      border: 1px solid var(--surface-interface-gray);
+      border-radius: 4px;
+      font-size: var(--text-sm);
+    }
+    .telemetry-metric-table-wrap table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .telemetry-metric-table-wrap th,
+    .telemetry-metric-table-wrap td {
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--surface-interface-gray);
+    }
+    .telemetry-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: var(--space-sm) 0;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
@@ -1174,9 +1283,48 @@
         <p class="sub" id="serverBindBanner" style="cursor:pointer;text-decoration:underline dotted;" title="Click to copy bind address">Server bind: detecting...</p>
         <p class="sub" id="serverBindCopyStatus"></p>
       </div>
-      <div class="top-actions">
-        <button type="button" class="ghost" id="btnRefresh">Refresh configs</button>
-        <button type="button" class="ghost" id="btnPreflight">Refresh preflight</button>
+      <div class="top-actions" style="flex-direction:column;align-items:flex-end;gap:8px;">
+        <div class="global-infra-row" id="globalInfraRow">
+          <label for="globalRunTarget"><strong>Execution target</strong></label>
+          <select id="globalRunTarget" title="Where training runs — independent of TOML model config">
+            <option value="local">Local (this machine)</option>
+            <option value="runpod">RunPod (OpenTofu apply → SSH)</option>
+            <option value="runpod_serverless">RunPod serverless endpoint</option>
+          </select>
+          <details id="globalInfraAdvanced" class="stack-sm" style="width:100%;max-width:640px;">
+            <summary style="cursor:pointer;font-weight:600;">Target options</summary>
+            <div class="stack-sm mt-sm grid" style="max-width:640px;">
+              <div id="globalRunpodDestroyWrap" style="display:none">
+                <label class="checkline stack-sm">
+                  <input id="globalRunpodDestroy" type="checkbox" checked />
+                  Destroy RunPod when training stops
+                </label>
+              </div>
+              <div id="globalRunpodRemoteWrap" style="display:none" class="stack-sm">
+                <label class="checkline stack-sm">
+                  <input id="globalRunpodTrainOnPod" type="checkbox" checked />
+                  Train on RunPod GPU (SSH sync + engine on pod)
+                </label>
+                <label class="checkline stack-sm">
+                  <input id="globalRunpodSkipApply" type="checkbox" />
+                  Skip OpenTofu apply (use existing state)
+                </label>
+              </div>
+              <div id="globalRunpodServerlessWrap" style="display:none" class="stack-sm">
+                <p class="hint" style="margin:0">Serverless uses management + queue API keys on the WUI server.</p>
+                <label for="globalRunpodServerlessEndpointId">Endpoint id (optional)</label>
+                <input id="globalRunpodServerlessEndpointId" type="text" placeholder="Leave blank to auto-create on launch" style="width:100%;max-width:520px;box-sizing:border-box;" autocomplete="off" />
+                <label for="globalRunpodWorkerImage">Worker Docker image (optional)</label>
+                <input id="globalRunpodWorkerImage" type="text" placeholder="Else from TOML [runpod_serverless] or server default" style="width:100%;max-width:520px;box-sizing:border-box;" />
+                <button type="button" class="ghost" id="btnGlobalProvisionServerless">Provision template &amp; endpoint only</button>
+              </div>
+            </div>
+          </details>
+        </div>
+        <div class="row" style="gap:8px;">
+          <button type="button" class="ghost" id="btnRefresh">Refresh configs</button>
+          <button type="button" class="ghost" id="btnPreflight">Refresh preflight</button>
+        </div>
       </div>
     </div>
   </header>
@@ -1248,9 +1396,29 @@
           WARNING: Hardware Accelerator Offline or WASM OOM - Falling back to degraded mode.
         </p>
         <div class="hint">Streaming over WebSocket from training stdout/stderr metrics and alerts.</div>
+        <div class="telemetry-filter-row" role="group" aria-label="Telemetry stream filter">
+          <span class="label-like" style="margin:0">Show metrics:</span>
+          <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="all" checked /> All</label>
+          <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="grpc" /> C++ gRPC stream</label>
+          <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="python" /> Python loop</label>
+        </div>
         <div id="telemetryStatus" class="status">No run selected.</div>
         <canvas id="chartReturn" height="220" class="stack-sm"></canvas>
         <canvas id="chartMSE" height="220" class="stack-sm"></canvas>
+        <div class="telemetry-metric-table-wrap" id="telemetryMetricTableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Epoch</th>
+                <th>Loss</th>
+                <th>Return</th>
+                <th>MSE</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="telemetryMetricBody"></tbody>
+          </table>
+        </div>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
       <section class="dash-card" data-card-id="dataset-builder" data-col="1" data-lego-step="1">
@@ -1305,8 +1473,8 @@
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
       <section class="dash-card" data-card-id="lego-runtime" data-col="1" data-lego-step="2">
-        <h2>2 · Model &amp; where it runs</h2>
-        <p class="hint hint-block" style="margin-top:0">Name outputs, choose GPU/RunPod, and quantum behavior. Matches the launch card in step 5 after you save.</p>
+        <h2>2 · Model &amp; device</h2>
+        <p class="hint hint-block" style="margin-top:0">Model name, accelerator, and quantum settings written to the working TOML. <strong>Where</strong> training runs (local, RunPod, serverless) is set in the header <strong>Execution target</strong>, not here.</p>
         <div class="grid">
           <div>
             <label for="bName">Model name</label>
@@ -1316,58 +1484,6 @@
               <input id="bResumeLatest" type="checkbox" />
               Resume from this model's latest checkpoint if available
             </label>
-          </div>
-          <div>
-            <label for="bRunTarget">Execution target</label>
-            <select id="bRunTarget">
-              <option value="local">Local (this machine)</option>
-              <option value="runpod">RunPod (OpenTofu apply → train → destroy)</option>
-              <option value="runpod_serverless">RunPod Serverless (job API, no OpenTofu)</option>
-            </select>
-          </div>
-          <div id="bRunpodServerlessWrap" style="display:none" class="stack-sm">
-            <p class="hint">
-              Training uses the same wizard flow. <strong>Launch training</strong> (step 5) creates a short-lived RunPod template and endpoint when needed, using the worker image from your selected training TOML (<code>[runpod_serverless] worker_image</code>) or the built-in default. Serverless template create omits disk/volume fields (RunPod rejects them). Your worker must accept
-              <code>qmw_schema_version</code>, <code>qmw_action: train</code>, and <code>config_rel</code>.
-            </p>
-            <p class="status stack-sm" id="bRunpodServerlessMsg" aria-live="polite"></p>
-            <details class="stack-sm">
-              <summary style="cursor:pointer;font-weight:600;">Advanced Serverless overrides</summary>
-              <div class="stack-sm mt-sm">
-                <div>
-                  <label for="bRunpodServerlessEndpointId">Reuse existing endpoint id (optional)</label>
-                  <input id="bRunpodServerlessEndpointId" type="text" placeholder="Leave blank to auto-create on each launch" style="width:100%;max-width:520px;box-sizing:border-box;" autocomplete="off" />
-                </div>
-                <div>
-                  <label for="bRunpodWorkerImage">Override worker Docker image (optional)</label>
-                  <input id="bRunpodWorkerImage" type="text" placeholder="Leave blank to use server default" style="width:100%;max-width:520px;box-sizing:border-box;" />
-                </div>
-                <div class="row stack-sm align-center flex-wrap">
-                  <button type="button" class="ghost" id="btnWizardProvisionServerless">Provision template &amp; endpoint only</button>
-                </div>
-                <p class="hint" style="margin:0">Provision only creates infrastructure without starting a training job. Remembered values apply in this browser.</p>
-              </div>
-            </details>
-          </div>
-          <div id="bRunpodDestroyWrap" style="display:none">
-            <label class="checkline stack-sm">
-              <input id="bRunpodDestroy" type="checkbox" checked />
-              Destroy RunPod when training stops
-            </label>
-            <div class="hint">Uncheck only if you will destroy manually (continues billing).</div>
-          </div>
-          <div id="bRunpodRemoteWrap" style="display:none" class="stack-sm">
-            <label class="checkline stack-sm">
-              <input id="bRunpodTrainOnPod" type="checkbox" checked />
-              Train on RunPod GPU (sync repo via SSH, run <code>python -m qminiwasm.engine</code> on the pod)
-            </label>
-            <label class="checkline stack-sm">
-              <input id="bRunpodSkipApply" type="checkbox" />
-              Skip OpenTofu apply (pod already up — use <code>public_ip</code> from existing terraform state)
-            </label>
-            <div class="hint">
-              This machine needs <code>ssh</code>, <code>tar</code>, and <code>scp</code> (when a temp config is pushed) on <code>PATH</code>. The WUI syncs your project to the pod so Hub and IBM settings from your saved config apply there.
-            </div>
           </div>
           <div>
             <label for="bAccel">Accelerator</label>
@@ -1593,14 +1709,50 @@
       <section class="dash-card" data-card-id="start-config" data-col="1" data-lego-step="5">
         <h2>Launch training</h2>
         <p class="hint hint-block" style="margin-top:0">
-          <strong>Only this button starts the engine.</strong> Pick the TOML (usually <code>wui_working.toml</code>). Run target and quantum settings come from <strong>step 2</strong> — no second copy here.
-          <strong>RunPod Serverless:</strong> if no endpoint id is set (step 2 Advanced), this button creates a short-lived template and endpoint, then starts training.
+          <strong>Only this button starts the engine.</strong> Pick the TOML (usually <code>wui_working.toml</code>). Quantum settings come from <strong>step 2</strong>; <strong>execution target</strong> from the header — you confirm both in the launch dialog.
+          <strong>RunPod Serverless:</strong> if no endpoint id is set in header Target options, launch can create a short-lived template and endpoint.
         </p>
         <label for="cfg">Config file to run</label>
         <select id="cfg"></select>
+        <div class="model-card stack-md" id="edgeDeploymentProfileCard" style="margin-top:var(--space-md)">
+          <h3 style="margin-top:0">Edge deployment profile</h3>
+          <p class="hint" style="margin:0 0 var(--space-sm)">
+            Sent with training start (<code>POST /api/runs</code> or <code>/api/training/start</code>) as <code>enclave_tier</code>, <code>memory_limit_mb</code>, and <code>hardware_accelerator</code>.
+          </p>
+          <label for="edgeProfileTier">Enclave tier</label>
+          <select id="edgeProfileTier" style="max-width:100%;box-sizing:border-box">
+            <option value="1">Tier 1: Micro-Enclaves (Sub-250 MB, Ultra-edge sensing)</option>
+            <option value="2" selected>Tier 2: Meso-Enclaves (~2 GB, Laptops / gateways)</option>
+            <option value="3">Tier 3: Macro-Enclaves (~8 GB, Workstations, Memory64 required)</option>
+            <option value="4">Tier 4: Core enclaves — Workgroup (16 GB+)</option>
+            <option value="5">Tier 5: Core enclaves — Enterprise (256 GB+ class)</option>
+          </select>
+          <div class="row" style="gap:var(--space-md);flex-wrap:wrap;margin-top:var(--space-sm)">
+            <div class="stack-sm" style="flex:1;min-width:10rem">
+              <label for="edgeProfileLinearMem">Linear memory limit (MiB)</label>
+              <input id="edgeProfileLinearMem" type="text" readonly tabindex="-1" style="width:100%;box-sizing:border-box;background:var(--surface-interface-gray);color:var(--text-primary);border:1px solid var(--surface-interface-gray);border-radius:4px;padding:var(--space-sm) var(--space-md);font-family:var(--font-mono,monospace);font-size:var(--text-sm)" value="—" />
+            </div>
+            <div class="stack-sm" style="flex:2;min-width:14rem">
+              <label for="edgeProfileRole">Expected role</label>
+              <input id="edgeProfileRole" type="text" readonly tabindex="-1" style="width:100%;box-sizing:border-box;background:var(--surface-interface-gray);color:var(--text-primary);border:1px solid var(--surface-interface-gray);border-radius:4px;padding:var(--space-sm) var(--space-md);font-size:var(--text-sm)" value="—" />
+            </div>
+          </div>
+          <fieldset style="border:1px solid var(--surface-interface-gray);border-radius:4px;padding:var(--space-sm) var(--space-md);margin:var(--space-md) 0 0;background:var(--surface-command-gray)">
+            <legend style="font-size:var(--text-sm);color:var(--text-secondary);padding:0 var(--space-xs)">Hardware accelerator</legend>
+            <div class="row" style="gap:var(--space-md);flex-wrap:wrap;align-items:center">
+              <label class="mb-0" style="cursor:pointer"><input type="radio" name="edgeHwAccel" value="cpu" checked /> CPU only</label>
+              <label class="mb-0" style="cursor:pointer"><input type="radio" name="edgeHwAccel" value="sycl" /> SYCL / XPU</label>
+              <label class="mb-0" style="cursor:pointer"><input type="radio" name="edgeHwAccel" value="quantum_mesh" /> Quantum mesh routing</label>
+            </div>
+          </fieldset>
+        </div>
+        <div id="enclaveFootprintBanner" class="review-box stack-sm" style="margin-top:var(--space-md);display:none;font-size:var(--text-sm)" aria-live="polite">
+          <strong>Enclave footprint (live)</strong>
+          <div id="enclaveFootprintBannerText">—</div>
+        </div>
         <div id="launchExecSummary" class="hint hint-block stack-sm mt-md" style="margin-top:var(--space-md)"></div>
         <div class="row mt-md">
-          <button type="button" class="primary" id="btnStart">Launch training</button>
+            <button type="button" class="primary" id="btnStart" title="Starts training; cloud targets may incur cost">Launch training</button>
         </div>
         <p class="status stack-md" id="msg" aria-live="polite"></p>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
@@ -1636,6 +1788,56 @@
             </thead>
             <tbody id="artifactsBody"></tbody>
           </table>
+        </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
+      <section class="dash-card" data-card-id="edge-build-deploy" data-col="1" data-lego-step="5">
+        <h2>Edge bundle / deployment</h2>
+        <p class="hint hint-block" style="margin-top:0">
+          After training, pack trit kernels + weights into an edge bundle, then use the deployment dashboard for download links and sample commands (placeholders — tune for your host).
+        </p>
+        <div class="stack-md" id="edgeBuildPhase">
+          <label for="edgeBuildWeightsPath">Trainable weights (<code>.pt</code>) repo-relative</label>
+          <input id="edgeBuildWeightsPath" type="text" style="width:100%;box-sizing:border-box;font-family:var(--font-mono,monospace);font-size:var(--text-sm)" placeholder="artifacts/models/&lt;stem&gt;/latest.pt" autocomplete="off" />
+          <label for="edgeBuildTier">Enclave tier (0 = default meso)</label>
+          <select id="edgeBuildTier" style="max-width:12rem">
+            <option value="0">0 · meso (default)</option>
+            <option value="1">1 · micro (Tier-1 edge)</option>
+            <option value="2">2 · meso</option>
+            <option value="3">3 · macro (Memory64 policy)</option>
+            <option value="4">4 · workgroup</option>
+            <option value="5">5 · enterprise_core</option>
+          </select>
+          <div class="row">
+            <button type="button" class="primary" id="btnEdgeBuild">Build edge artifact</button>
+          </div>
+          <p class="status" id="edgeBuildMsg" aria-live="polite"></p>
+        </div>
+        <div id="edgeDeployDashboard" class="stack-md" hidden>
+          <h3 style="margin:var(--space-md) 0 var(--space-sm);font-size:var(--text-lg)">Deployment dashboard</h3>
+          <p class="hint">Downloads require the same auth as the rest of the WUI when a token is configured.</p>
+          <ul class="stack-sm" style="margin:0;padding-left:1.25rem">
+            <li><a id="edgeDlZip" href="#" target="_blank" rel="noopener">Download TPEM bundle (zip, same payload)</a></li>
+            <li id="edgeDlBundleTpemLi" hidden><a id="edgeDlBundleTpem" href="#" target="_blank" rel="noopener">Download TPEM bundle (<code>.tpem</code> — zip format)</a></li>
+            <li><a id="edgeDlTpem" href="#" target="_blank" rel="noopener">Download packed weights (.tpem)</a></li>
+            <li><a id="edgeDlWasm" href="#" target="_blank" rel="noopener">Download trit kernels (.wasm)</a></li>
+            <li><a id="edgeDlSchema" href="#" target="_blank" rel="noopener">Download edge_schema.json</a></li>
+          </ul>
+          <div class="stack-sm" style="margin-top:var(--space-md)">
+            <div class="row" style="flex-wrap:wrap;gap:var(--space-sm);align-items:center">
+              <strong>Sample commands</strong>
+              <button type="button" class="ghost" id="btnCopyWasmedge">Copy Wasmedge</button>
+              <button type="button" class="ghost" id="btnCopyDocker">Copy Docker</button>
+              <button type="button" class="ghost" id="btnCopyIncus">Copy Incus</button>
+            </div>
+            <label class="sr-only" for="edgeSnippetWasmedge">Wasmedge sample</label>
+            <pre id="edgeSnippetWasmedge" class="review-box" style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:var(--text-xs);max-height:220px;overflow:auto"></pre>
+            <label class="sr-only" for="edgeSnippetDocker">Docker sample</label>
+            <pre id="edgeSnippetDocker" class="review-box" style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:var(--text-xs);max-height:220px;overflow:auto"></pre>
+            <label class="sr-only" for="edgeSnippetIncus">Incus sample</label>
+            <pre id="edgeSnippetIncus" class="review-box" style="margin:0;white-space:pre-wrap;word-break:break-word;font-size:var(--text-xs);max-height:220px;overflow:auto"></pre>
+          </div>
+          <p class="hint" id="edgeDeployHint" style="margin-bottom:0"></p>
         </div>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
@@ -1705,9 +1907,9 @@
           <span class="hint" style="margin:0">Drag by section title; resize from the corner grip.</span>
         </div>
         <div class="infra-dash-wrap">
-        <div class="infra-section dash-card" data-card-id="infra-tfvars">
+        <div class="infra-section dash-card billing-surface-warn" data-card-id="infra-tfvars">
           <h2>terraform.tfvars</h2>
-          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (default), the engine runs on the GPU pod after SSH sync; turn that off in step 2 to run <code>python -m qminiwasm.engine</code> on the WUI host.</p>
+          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (header target), the engine runs on the GPU pod after SSH sync; turn that off in <strong>Execution target → Target options</strong> to run <code>python -m qminiwasm.engine</code> on the WUI host.</p>
           <label for="tfvarsEditor" class="sr-only">terraform.tfvars contents</label>
           <textarea id="tfvarsEditor" spellcheck="false" wrap="off" placeholder="# Load example or paste HCL variable assignments…"></textarea>
           <div class="row stack-md align-center">
@@ -1736,7 +1938,7 @@
           </details>
           <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </div>
-        <div class="infra-section dash-card" data-card-id="infra-serverless">
+        <div class="infra-section dash-card billing-surface" data-card-id="infra-serverless">
           <h2>RunPod Serverless</h2>
           <p class="hint mb-sm">Queue API (<code>https://api.runpod.ai/v2</code>) and management (<code>rest.runpod.io</code>) use credentials supplied to the WUI server. Use the controls below to inspect health, send test jobs, and list or create templates and endpoints.</p>
           <p class="status stack-sm" id="slMetaMsg" aria-live="polite"></p>
@@ -1771,7 +1973,7 @@
   "workersMax": 1
 }</textarea>
           <div class="row stack-md align-center mt-sm flex-wrap">
-            <button type="button" class="ghost" id="btnSlAutofillEndpoint" title="Fill name, gpuTypeIds, workersMax from wizard; templateId from last created template in this tab if any">Autofill from wizard</button>
+            <button type="button" class="ghost" id="btnSlAutofillEndpoint" title="Fill name, gpuTypeIds, workersMax from training form; templateId from last created template in this tab if any">Autofill from training</button>
             <button type="button" class="primary" id="btnSlCreateEndpoint">Create endpoint</button>
           </div>
           <h3 class="mt-md mb-sm" style="font-size:var(--text-md);font-weight:600;margin-top:var(--space-md);">Templates (management API)</h3>
@@ -1805,7 +2007,7 @@
   "containerDiskInGb": 50
 }</textarea>
           <div class="row stack-md align-center mt-sm flex-wrap">
-            <button type="button" class="ghost" id="btnSlAutofillTemplate" title="Fill name and imageName from wizard (GraphQL saveTemplate)">Autofill from wizard</button>
+            <button type="button" class="ghost" id="btnSlAutofillTemplate" title="Fill name and imageName from training form (GraphQL saveTemplate)">Autofill from training</button>
             <button type="button" class="primary" id="btnSlCreateTemplate">Create template</button>
           </div>
           <label for="slJsonInput" class="sr-only">Serverless request JSON</label>
@@ -1830,7 +2032,7 @@
           <pre id="slOutPre" class="infra-remote-cmd" style="display:none;max-height:240px;overflow:auto"></pre>
           <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </div>
-        <div class="infra-section dash-card" data-card-id="infra-tofu">
+        <div class="infra-section dash-card billing-surface" data-card-id="infra-tofu">
           <h2>OpenTofu CLI</h2>
           <p class="hint mb-sm">Runs in <code>infra/runpod</code> with the RunPod token available to the WUI process. Commands use the variables from the editor above. Use <strong>Plan</strong> before <strong>Apply</strong>.</p>
           <div class="row stack-sm align-center">
@@ -1909,8 +2111,80 @@
     </div>
   </main>
   <div id="toastHost" style="position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:25;"></div>
+  <div id="modalLaunchBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-panel" role="dialog" aria-labelledby="modalLaunchTitle">
+      <h3 id="modalLaunchTitle">Confirm launch environment</h3>
+      <p class="hint" id="modalLaunchDeployLine" style="margin:0 0 var(--space-sm)"></p>
+      <label for="modalLaunchTarget">Target</label>
+      <select id="modalLaunchTarget" style="width:100%;max-width:100%;box-sizing:border-box;margin-bottom:var(--space-sm)">
+        <option value="local">Local (this machine)</option>
+        <option value="runpod">RunPod (OpenTofu apply → SSH)</option>
+        <option value="runpod_serverless">RunPod serverless endpoint</option>
+      </select>
+      <p class="hint" id="modalLaunchSummary" style="margin:0"></p>
+      <div class="modal-actions">
+        <button type="button" class="ghost" id="modalLaunchCancel">Cancel</button>
+        <button type="button" class="primary" id="modalLaunchContinue">Continue</button>
+      </div>
+    </div>
+  </div>
+  <div id="modalBillingBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-panel billing-surface" role="dialog" aria-labelledby="modalBillingTitle">
+      <h3 id="modalBillingTitle">Confirm billable action</h3>
+      <p class="hint" id="modalBillingMessage" style="margin:0 0 var(--space-sm)"></p>
+      <label for="modalBillingInput">Type <strong>confirm</strong> to proceed</label>
+      <input id="modalBillingInput" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:6px" />
+      <div class="modal-actions">
+        <button type="button" class="ghost" id="modalBillingCancel">Cancel</button>
+        <button type="button" class="primary" id="modalBillingOk" disabled>Proceed</button>
+      </div>
+    </div>
+  </div>
   <script>
     const $ = (id) => document.getElementById(id);
+    const WUI_TOKEN_SESSION_KEY = "qmw_wui_token_session";
+    function bootstrapWuiTokenFromURL() {
+      try {
+        const u = new URL(location.href);
+        const t = u.searchParams.get("wui_token");
+        if (t && String(t).trim()) {
+          sessionStorage.setItem(WUI_TOKEN_SESSION_KEY, String(t).trim());
+          u.searchParams.delete("wui_token");
+          history.replaceState({}, "", u.pathname + u.search + u.hash);
+        }
+      } catch (_) {}
+    }
+    bootstrapWuiTokenFromURL();
+    function getWuiToken() {
+      try {
+        return sessionStorage.getItem(WUI_TOKEN_SESSION_KEY) || "";
+      } catch (_) {
+        return "";
+      }
+    }
+    function apiFetch(url, opts) {
+      const o = opts ? { ...opts } : {};
+      // `new Headers(null)` throws (null is not a valid HeadersInit); missing headers must be undefined.
+      const headers = new Headers(o.headers ?? undefined);
+      const tok = getWuiToken();
+      if (tok) headers.set("X-QMW-WUI-Token", tok);
+      o.headers = headers;
+      return fetch(url, o);
+    }
+    /** Signed GET for edge bundle / .tpem under dist/edge-artifacts (uses wui_token query when set). */
+    function edgeDownloadUrl(relPath) {
+      const p = String(relPath || "").replace(/^\//, "");
+      let u = "/api/edge_artifacts/download?path=" + encodeURIComponent(p);
+      const tok = getWuiToken();
+      if (tok) u += "&wui_token=" + encodeURIComponent(tok);
+      return u;
+    }
+    function wsUrlWithToken(path) {
+      const tok = getWuiToken();
+      if (!tok) return path;
+      const sep = path.includes("?") ? "&" : "?";
+      return path + sep + "wui_token=" + encodeURIComponent(tok);
+    }
     let pollTimer = null;
     let logOffset = 0;
     let activeRunId = null;
@@ -1920,6 +2194,17 @@
     let lastResumeAvailable = false;
     let lastResumeRequested = false;
     let lastLatestCheckpointPath = "";
+    let lastEdgeBuild = null;
+    /** Last accelerator sent with POST /api/runs (cpu | sycl | quantum_mesh). */
+    let lastHardwareAccelerator = "cpu";
+    /** Mirrors qminiwasm.config.ENCLAVE_TIER_PRESETS linear memory (MiB) and roles. */
+    const QMW_ENCLAVE_PROFILE = [
+      { tier: 1, linearMiB: 256, role: "Ultra-edge sensing", cls: "Micro-Enclaves" },
+      { tier: 2, linearMiB: 2048, role: "Laptops / gateways", cls: "Meso-Enclaves" },
+      { tier: 3, linearMiB: 8192, role: "Workstations (Memory64)", cls: "Macro-Enclaves" },
+      { tier: 4, linearMiB: 16384, role: "Workgroup core", cls: "Workgroup Enclaves" },
+      { tier: 5, linearMiB: 262144, role: "Enterprise core", cls: "Enterprise Core Enclaves" },
+    ];
     let logPlainAccum = "";
     const logTrendState = { last: Object.create(null) };
     let telemetryWS = null;
@@ -1928,6 +2213,20 @@
     let schemaFields = [];
     let telemetryMetricCount = 0;
     let telemetryIdleTimer = null;
+    /** Mission Control filter: all | grpc | python */
+    let telemetryStreamFilter = "all";
+    const TELEMETRY_ROW_CAP = 200;
+    const TELEMETRY_SOURCE_CPP = "Source: gRPC C++";
+    const TELEMETRY_SOURCE_PY = "Source: Python VNV";
+
+    function telemetryFilterAllowsMetric(msg) {
+      const src =
+        msg && msg.telemetry_source != null ? String(msg.telemetry_source) : TELEMETRY_SOURCE_PY;
+      if (telemetryStreamFilter === "all") return true;
+      if (telemetryStreamFilter === "grpc") return src === TELEMETRY_SOURCE_CPP;
+      if (telemetryStreamFilter === "python") return src === TELEMETRY_SOURCE_PY;
+      return true;
+    }
     const BASIC_SCHEMA_IDS = new Set([
       "hardware.accelerator",
       "training.epochs",
@@ -1960,6 +2259,38 @@
     const RUNPOD_LAST_TEMPLATE_ID_KEY = "qmw_last_runpod_template_id";
     const RUNPOD_SERVERLESS_ENDPOINT_ID_STORAGE_KEY = "qmw_runpod_serverless_endpoint_id_v1";
     const RUNPOD_WORKER_IMAGE_STORAGE_KEY = "qmw_runpod_worker_image_v1";
+    const GLOBAL_INFRA_STORAGE_KEY = "qmw_global_infra_v1";
+
+    function getGlobalRunTarget() {
+      const el = $("globalRunTarget");
+      return el && el.value ? el.value : "local";
+    }
+
+    function persistGlobalInfraBasics() {
+      try {
+        localStorage.setItem(
+          GLOBAL_INFRA_STORAGE_KEY,
+          JSON.stringify({
+            run_target: getGlobalRunTarget(),
+            destroy: $("globalRunpodDestroy") ? $("globalRunpodDestroy").checked : true,
+            train_on_pod: $("globalRunpodTrainOnPod") ? $("globalRunpodTrainOnPod").checked : true,
+            skip_apply: $("globalRunpodSkipApply") ? $("globalRunpodSkipApply").checked : false,
+          }),
+        );
+      } catch (_) {}
+    }
+
+    function restoreGlobalInfraBasics() {
+      try {
+        const raw = localStorage.getItem(GLOBAL_INFRA_STORAGE_KEY);
+        if (!raw) return;
+        const o = JSON.parse(raw);
+        if (o.run_target && $("globalRunTarget")) $("globalRunTarget").value = o.run_target;
+        if (typeof o.destroy === "boolean" && $("globalRunpodDestroy")) $("globalRunpodDestroy").checked = o.destroy;
+        if (typeof o.train_on_pod === "boolean" && $("globalRunpodTrainOnPod")) $("globalRunpodTrainOnPod").checked = o.train_on_pod;
+        if (typeof o.skip_apply === "boolean" && $("globalRunpodSkipApply")) $("globalRunpodSkipApply").checked = o.skip_apply;
+      } catch (_) {}
+    }
     let runpodServerlessMetaDefaults = { default_worker_image: "", default_container_disk_gb: 50 };
     let datasetMixExtraSpecsOverride = null;
     let datasetBuilderCustomRows = [];
@@ -2108,6 +2439,51 @@
       return lines.map((ln) => colorizeLogLine(ln)).join("<br>\n");
     }
 
+    function syncEdgeProfileReadouts() {
+      const sel = $("edgeProfileTier");
+      const lm = $("edgeProfileLinearMem");
+      const roleEl = $("edgeProfileRole");
+      const btier = $("edgeBuildTier");
+      if (!sel || !lm || !roleEl) return;
+      const t = parseInt(String(sel.value || "2"), 10) || 2;
+      const row = QMW_ENCLAVE_PROFILE.find((r) => r.tier === t) || QMW_ENCLAVE_PROFILE[1];
+      lm.value = String(row.linearMiB);
+      roleEl.value = `${row.cls} · ${row.role}`;
+      if (btier) btier.value = String(t);
+    }
+
+    function refreshEnclaveFootprintFromLogs() {
+      const ban = $("enclaveFootprintBanner");
+      const btxt = $("enclaveFootprintBannerText");
+      if (!ban || !btxt || !logPlainAccum) return;
+      const lines = logPlainAccum.split("\n");
+      let last = "";
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].includes("qmw_enclave_telemetry")) {
+          last = lines[i];
+          break;
+        }
+      }
+      if (!last) return;
+      const est = last.match(/estimated_tpem_mb=([\d.]+)/);
+      if (!est) return;
+      const cap = last.match(/tier_cap_mb=([\d.-]+)/);
+      const tierM = last.match(/enclave_tier=(\S+)/);
+      const u64 = last.match(/use_memory64=(\d+)/);
+      let capS = cap ? cap[1] : "—";
+      if (capS === "-1.0" || capS === "-1") capS = "none";
+      ban.style.display = "block";
+      btxt.textContent =
+        `Estimated trainable TPEM ~${est[1]} MiB · tier cap ${capS} MiB` +
+        (tierM ? ` · tier ${tierM[1]}` : "") +
+        (u64 ? ` · Memory64 ${u64[1]}` : "");
+    }
+
+    function selectedEdgeHardwareAccelerator() {
+      const r = document.querySelector('input[name="edgeHwAccel"]:checked');
+      return r ? String(r.value || "cpu") : "cpu";
+    }
+
     function initTelemetryCharts() {
       const ret = $("chartReturn");
       const mse = $("chartMSE");
@@ -2124,6 +2500,39 @@
       });
     }
 
+    function clearTelemetryMetricRows() {
+      const tb = $("telemetryMetricBody");
+      if (tb) tb.innerHTML = "";
+    }
+
+    function refreshTelemetryRowVisibility() {
+      const tb = $("telemetryMetricBody");
+      if (!tb) return;
+      for (const tr of tb.querySelectorAll("tr")) {
+        const pill = tr.querySelector(".telemetry-pill");
+        const src = pill ? pill.textContent : TELEMETRY_SOURCE_PY;
+        tr.style.display = telemetryFilterAllowsMetric({ telemetry_source: src }) ? "" : "none";
+      }
+    }
+
+    function appendTelemetryMetricRow(metric) {
+      const tb = $("telemetryMetricBody");
+      if (!tb) return;
+      const src =
+        metric.telemetry_source != null ? String(metric.telemetry_source) : TELEMETRY_SOURCE_PY;
+      const tr = document.createElement("tr");
+      const pillClass = src === TELEMETRY_SOURCE_CPP ? "telemetry-pill telemetry-pill-cpp" : "telemetry-pill telemetry-pill-py";
+      tr.innerHTML =
+        `<td>${escapeHtml(String(metric.epoch ?? ""))}</td>` +
+        `<td>${escapeHtml(String(metric.mean_loss ?? ""))}</td>` +
+        `<td>${escapeHtml(String(metric.mean_return ?? ""))}</td>` +
+        `<td>${escapeHtml(String(metric.mean_mse ?? ""))}</td>` +
+        `<td><span class="${pillClass}">${escapeHtml(src)}</span></td>`;
+      tr.style.display = telemetryFilterAllowsMetric(metric) ? "" : "none";
+      tb.insertBefore(tr, tb.firstChild);
+      while (tb.rows.length > TELEMETRY_ROW_CAP) tb.removeChild(tb.lastChild);
+    }
+
     function resetTelemetryCharts() {
       for (const c of [chartReturn, chartMSE]) {
         if (!c) continue;
@@ -2133,16 +2542,24 @@
       }
       $("telemetryWarning").style.display = "none";
       telemetryMetricCount = 0;
-      $("telemetryStatus").textContent = "Waiting for metrics...";
-      $("telemetryStatus").className = "status";
+      clearTelemetryMetricRows();
+      const st = $("telemetryStatus");
+      if (st) {
+        st.textContent = "Waiting for metrics...";
+        st.className = "status";
+      }
     }
 
     function pushTelemetryPoint(metric) {
       telemetryMetricCount += 1;
-      $("telemetryStatus").textContent = `Receiving telemetry (${telemetryMetricCount} points)`;
-      $("telemetryStatus").className = "status done";
+      const st = $("telemetryStatus");
+      if (st) {
+        st.textContent = `Receiving telemetry (${telemetryMetricCount} points)`;
+        st.className = "status done";
+      }
+      const allowCharts = telemetryFilterAllowsMetric(metric);
       const label = String(metric.epoch ?? "");
-      if (chartReturn) {
+      if (allowCharts && chartReturn) {
         chartReturn.data.labels.push(label);
         chartReturn.data.datasets[0].data.push(Number(metric.mean_return || 0));
         if (chartReturn.data.labels.length > 200) {
@@ -2151,7 +2568,7 @@
         }
         chartReturn.update("none");
       }
-      if (chartMSE) {
+      if (allowCharts && chartMSE) {
         chartMSE.data.labels.push(label);
         chartMSE.data.datasets[0].data.push(Number(metric.mean_mse || 0));
         if (chartMSE.data.labels.length > 200) {
@@ -2160,6 +2577,7 @@
         }
         chartMSE.update("none");
       }
+      appendTelemetryMetricRow(metric);
     }
 
     function connectRunTelemetryWS(runId) {
@@ -2168,10 +2586,14 @@
         telemetryWS = null;
       }
       if (!runId) return;
-      $("telemetryStatus").textContent = "Connecting telemetry WebSocket...";
-      $("telemetryStatus").className = "status";
+      const st = $("telemetryStatus");
+      if (st) {
+        st.textContent = "Connecting telemetry WebSocket...";
+        st.className = "status";
+      }
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const url = `${proto}://${location.host}/api/runs/${encodeURIComponent(runId)}/ws`;
+      const path = `${proto}://${location.host}/api/runs/${encodeURIComponent(runId)}/ws`;
+      const url = wsUrlWithToken(path);
       telemetryWS = new WebSocket(url);
       telemetryWS.onmessage = (ev) => {
         let msg = null;
@@ -2183,6 +2605,15 @@
         if (!msg || msg.run_id !== runId) return;
         if (msg.type === "metric") {
           pushTelemetryPoint(msg);
+        } else if (msg.type === "backend_status") {
+          const st = $("telemetryStatus");
+          if (st) {
+            const req = String(msg.requested_accelerator || "auto");
+            const sel = String(msg.selected_device || "unknown");
+            const sy = msg.sycl_active ? "active" : "inactive";
+            st.textContent = `Backend status: requested=${req} selected=${sel} SYCL=${sy}`;
+            st.className = msg.sycl_active ? "status done" : "status";
+          }
         } else if (msg.type === "alert" && msg.severity === "critical") {
           $("telemetryWarning").style.display = "block";
         }
@@ -2401,7 +2832,7 @@
       const keep = sel.value;
       sel.innerHTML = '<option value="">(new/custom data path)</option>';
       try {
-        const r = await fetch("/api/artifacts");
+        const r = await apiFetch("/api/artifacts");
         const data = await r.json();
         const rows = Array.isArray(data.artifacts) ? data.artifacts : [];
         for (const a of rows) {
@@ -2418,7 +2849,7 @@
     }
 
     async function loadSchemaForm() {
-      const r = await fetch("/api/schema");
+      const r = await apiFetch("/api/schema");
       const data = await r.json();
       schemaFields = Array.isArray(data.fields) ? data.fields : [];
       renderSchemaForm();
@@ -2438,7 +2869,7 @@
       const body = $("artifactsBody");
       msg.textContent = "Loading artifacts...";
       msg.className = "status";
-      const r = await fetch("/api/artifacts");
+      const r = await apiFetch("/api/artifacts");
       const data = await r.json();
       body.innerHTML = "";
       const rows = Array.isArray(data.artifacts) ? data.artifacts : [];
@@ -2456,7 +2887,7 @@
     }
 
     async function loadConfigs() {
-      const r = await fetch("/api/configs");
+      const r = await apiFetch("/api/configs");
       const data = await r.json();
       const sel = $("cfg");
       sel.innerHTML = "";
@@ -2486,7 +2917,7 @@
 
     async function refreshRunpodServerlessMetaDefaults() {
       try {
-        const r = await fetch("/api/meta", { cache: "no-store" });
+        const r = await apiFetch("/api/meta", { cache: "no-store" });
         const data = await r.json();
         if (r.ok) applyRunpodServerlessMetaFromPayload(data);
       } catch (_) {}
@@ -2494,21 +2925,48 @@
 
     async function loadServerMeta() {
       try {
-        const r = await fetch("/api/meta");
+        const r = await apiFetch("/api/meta");
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const addr = data.server_addr || "(unknown)";
         $("serverBindBanner").textContent = `Server bind: ${addr}`;
         $("serverBindBanner").dataset.addr = addr;
+        const rp = (data && data.runtime_profile) || {};
+        const mode = rp.training_runtime_mode || "auto";
+        const strict = rp.native_strict_enabled ? "on" : "off";
+        const profile = rp.default_profile || "optimized_auto";
+        $("serverBindCopyStatus").textContent = `Runtime: ${profile} | training_mode=${mode} | native_strict=${strict}`;
         applyRunpodServerlessMetaFromPayload(data);
       } catch (_) {
         $("serverBindBanner").textContent = "Server bind: unavailable";
         $("serverBindBanner").dataset.addr = "";
+        $("serverBindCopyStatus").textContent = "";
       }
     }
 
+    /** Epoch / progress only — avoids rebuilding the runs list every log poll (flicker). */
+    async function refreshStickyEpochFromNodeHealth() {
+      try {
+        const nh = await apiFetch("/api/node/health");
+        const nhd = await nh.json();
+        const ar = nhd.node_health && nhd.node_health.active_run ? nhd.node_health.active_run : null;
+        if (ar) {
+          const cur = Number(ar.epoch || 0);
+          const tot = Number(ar.total_epochs || 0);
+          $("stickyEpochLabel").textContent = `Epoch: ${cur || "--"} / ${tot || "--"}`;
+          if (tot > 0) {
+            $("stickyEpochProgress").value = Math.max(0, Math.min(100, (cur / tot) * 100));
+          }
+          if (cur > stickyLastEpoch && cur > 0) {
+            addToast(`Epoch ${cur} complete`);
+            stickyLastEpoch = cur;
+          }
+        }
+      } catch (_) {}
+    }
+
     async function loadRuns() {
-      const r = await fetch("/api/runs");
+      const r = await apiFetch("/api/runs");
       const data = await r.json();
       const ul = $("runs");
       ul.innerHTML = "";
@@ -2522,23 +2980,7 @@
         $("stickyRunLabel").textContent = "No active run";
       } else {
         $("stickyRunLabel").textContent = `Active run: ${active.id.slice(0,8)}`;
-        try {
-          const nh = await fetch("/api/node/health");
-          const nhd = await nh.json();
-          const ar = nhd.node_health && nhd.node_health.active_run ? nhd.node_health.active_run : null;
-          if (ar) {
-            const cur = Number(ar.epoch || 0);
-            const tot = Number(ar.total_epochs || 0);
-            $("stickyEpochLabel").textContent = `Epoch: ${cur || "--"} / ${tot || "--"}`;
-            if (tot > 0) {
-              $("stickyEpochProgress").value = Math.max(0, Math.min(100, (cur / tot) * 100));
-            }
-            if (cur > stickyLastEpoch && cur > 0) {
-              addToast(`Epoch ${cur} complete`);
-              stickyLastEpoch = cur;
-            }
-          }
-        } catch (_) {}
+        await refreshStickyEpochFromNodeHealth();
       }
       for (const run of runs) {
         const li = document.createElement("li");
@@ -3282,14 +3724,16 @@
     function updateLaunchExecSummary() {
       const host = $("launchExecSummary");
       if (!host) return;
-      const rtVal = $("bRunTarget").value;
+      const rtVal = getGlobalRunTarget();
       const rtLabel =
-        rtVal === "runpod" ? "RunPod" : rtVal === "runpod_serverless" ? "RunPod Serverless" : "Local";
-      const trainRemote = rtVal === "runpod" && ($("bRunpodTrainOnPod") ? $("bRunpodTrainOnPod").checked : true);
-      const skipApply = rtVal === "runpod" && $("bRunpodSkipApply") && $("bRunpodSkipApply").checked;
+        rtVal === "runpod" ? "RunPod (OpenTofu)" : rtVal === "runpod_serverless" ? "RunPod Serverless" : "Local";
+      const trainRemote =
+        rtVal === "runpod" && ($("globalRunpodTrainOnPod") ? $("globalRunpodTrainOnPod").checked : true);
+      const skipApply =
+        rtVal === "runpod" && $("globalRunpodSkipApply") && $("globalRunpodSkipApply").checked;
       const podNote =
         rtVal === "runpod"
-          ? ($("bRunpodDestroy").checked ? "destroy pod when training stops" : "leave pod running") +
+          ? ($("globalRunpodDestroy").checked ? "destroy pod when training stops" : "leave pod running") +
             (trainRemote ? "; train on pod (SSH)" : "; train on WUI host (local Python)") +
             (skipApply ? "; skip tofu apply" : "")
           : rtVal === "runpod_serverless"
@@ -3299,16 +3743,23 @@
       const qb = ($("bQuantumBackend").value || "").trim() || "auto";
       const ibm = ($("bIBMBackendName").value || "").trim() || "(none)";
       host.innerHTML =
-        `<p style="margin:0 0 var(--space-sm)"><strong>From step 2</strong> — <strong>Target</strong>: ${escapeHtml(rtLabel)}` +
+        `<p style="margin:0 0 var(--space-sm)"><strong>Header target</strong> — <strong>Deploy</strong>: ${escapeHtml(rtLabel)}` +
         (podNote ? ` (${escapeHtml(podNote)})` : "") +
-        `. <strong>Quantum</strong>: ${escapeHtml(qpol)}. <strong>Backend id</strong>: ${escapeHtml(qb)}. <strong>IBM override</strong>: ${escapeHtml(ibm)}.</p>` +
-        `<button type="button" class="ghost" id="btnEditExecStep">Edit execution in step 2</button>`;
+        `. <strong>Quantum</strong> (step 2): ${escapeHtml(qpol)}. <strong>Backend id</strong>: ${escapeHtml(qb)}. <strong>IBM override</strong>: ${escapeHtml(ibm)}.</p>` +
+        `<button type="button" class="ghost" id="btnEditExecStep">Edit execution target in header</button>`;
       const btn = $("btnEditExecStep");
-      if (btn) btn.onclick = () => setLegoStep(2);
+      if (btn)
+        btn.onclick = () => {
+          const det = $("globalInfraAdvanced");
+          if (det) det.open = true;
+          const sel = $("globalRunTarget");
+          if (sel) sel.focus();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        };
     }
 
     async function saveWorkingConfigFromBuildWizard() {
-      const r = await fetch("/api/runs/build", {
+      const r = await apiFetch("/api/runs/build", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload()),
@@ -3325,9 +3776,6 @@
     function buildPayload() {
       return {
         name: $("bName").value.trim(),
-        run_target: $("bRunTarget").value,
-        runpod_destroy_on_exit: $("bRunpodDestroy").checked,
-        runpod_var_file: "terraform.tfvars",
         accelerator: $("bAccel").value,
         data_source: $("bDataSource").value,
         data_path: $("bDataPath").value.trim(),
@@ -3350,15 +3798,11 @@
         lr_trial_mode: !!$("bLRTrialMode").checked,
         lr_trial_epochs: Number($("bLRTrialEpochs").value || "2"),
         resume_latest: !!$("bResumeLatest").checked,
-        runpod_serverless_endpoint_id: (() => {
-          const el = $("bRunpodServerlessEndpointId");
-          return el ? String(el.value || "").trim() : "";
-        })(),
       };
     }
 
     function persistRunpodServerlessEndpointId() {
-      const el = $("bRunpodServerlessEndpointId");
+      const el = $("globalRunpodServerlessEndpointId");
       if (!el) return;
       const v = String(el.value || "").trim();
       try {
@@ -3368,7 +3812,7 @@
     }
 
     function restoreRunpodServerlessEndpointId() {
-      const el = $("bRunpodServerlessEndpointId");
+      const el = $("globalRunpodServerlessEndpointId");
       if (!el) return;
       try {
         const v = localStorage.getItem(RUNPOD_SERVERLESS_ENDPOINT_ID_STORAGE_KEY);
@@ -3377,14 +3821,14 @@
     }
 
     function setRunpodServerlessEndpointIdAndPersist(eid) {
-      const el = $("bRunpodServerlessEndpointId");
+      const el = $("globalRunpodServerlessEndpointId");
       if (!el || !eid) return;
       el.value = String(eid).trim();
       persistRunpodServerlessEndpointId();
     }
 
     function persistRunpodWorkerImage() {
-      const el = $("bRunpodWorkerImage");
+      const el = $("globalRunpodWorkerImage");
       if (!el) return;
       const v = String(el.value || "").trim();
       try {
@@ -3394,7 +3838,7 @@
     }
 
     function restoreRunpodWorkerImage() {
-      const el = $("bRunpodWorkerImage");
+      const el = $("globalRunpodWorkerImage");
       if (!el) return;
       try {
         const v = localStorage.getItem(RUNPOD_WORKER_IMAGE_STORAGE_KEY);
@@ -3426,7 +3870,7 @@
         stamp != null && String(stamp).trim() !== ""
           ? String(stamp).trim()
           : Date.now() + "-" + Math.floor(Math.random() * 1e6);
-      const workerImgEl = $("bRunpodWorkerImage");
+      const workerImgEl = $("globalRunpodWorkerImage");
       let imageName = workerImgEl ? String(workerImgEl.value || "").trim() : "";
       if (!imageName && configWorkerImage != null && String(configWorkerImage).trim() !== "") {
         imageName = String(configWorkerImage).trim();
@@ -3475,7 +3919,9 @@
         statusEl.className = cls ? "status " + cls : "status";
       };
 
-      let epId = buildPayload().runpod_serverless_endpoint_id;
+      let epId = "";
+      const epEl = $("globalRunpodServerlessEndpointId");
+      if (epEl) epId = String(epEl.value || "").trim();
       if (epId) return epId;
 
       const configRel =
@@ -3485,7 +3931,7 @@
 
       await refreshRunpodServerlessMetaDefaults();
       setStatus("Resolving worker image from training config…", "");
-      const wi = await fetch(
+      const wi = await apiFetch(
         "/api/runpod/serverless/worker-image?config=" + encodeURIComponent(configRel),
       );
       const wd = await wi.json();
@@ -3507,7 +3953,7 @@
       }
 
       setStatus("Creating RunPod template…", "");
-      const r1 = await fetch("/api/runpod/serverless/templates", {
+      const r1 = await apiFetch("/api/runpod/serverless/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tplBody),
@@ -3523,7 +3969,7 @@
 
       const epBody = buildRunpodEndpointCreateObjectFromWizard(tid, stamp);
       setStatus("Creating RunPod endpoint…", "");
-      const r2 = await fetch("/api/runpod/serverless/endpoints", {
+      const r2 = await apiFetch("/api/runpod/serverless/endpoints", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(epBody),
@@ -3544,11 +3990,15 @@
     }
 
     async function wizardProvisionRunpodServerless() {
-      const msg = $("bRunpodServerlessMsg");
+      const msg = $("msg");
       if (!msg) return;
       msg.textContent = "";
       msg.className = "status";
-      if (!confirm("Create a new RunPod Serverless template and endpoint? This is billable infrastructure.")) {
+      if (
+        !(await confirmBillingAction(
+          "Provision RunPod Serverless template + endpoint (billable). Type confirm to proceed.",
+        ))
+      ) {
         msg.textContent = "Cancelled.";
         msg.className = "status";
         return;
@@ -3568,14 +4018,14 @@
       const ta = $("slTplCreateJson");
       if (!ta) return;
       ta.value = JSON.stringify(buildRunpodTemplateCreateObjectFromWizard(), null, 2);
-      addToast("Template JSON filled from wizard.", "done");
+      addToast("Template JSON filled from training form.", "done");
     }
 
     function slAutofillEndpointFromWizard() {
       const ta = $("slMgmtCreateJson");
       if (!ta) return;
       ta.value = JSON.stringify(buildRunpodEndpointCreateObjectFromWizard(), null, 2);
-      addToast("Endpoint JSON filled from wizard.", "done");
+      addToast("Endpoint JSON filled from training form.", "done");
     }
 
     function renderModelFactsFallback() {
@@ -3640,7 +4090,7 @@
 
     async function refreshModelFacts() {
       try {
-        const r = await fetch("/api/model/facts", {
+        const r = await apiFetch("/api/model/facts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(buildPayload()),
@@ -3656,6 +4106,10 @@
         lastResumeRequested = resumeRequested;
         lastResumeAvailable = resumeAvailable;
         lastLatestCheckpointPath = String(a.latest_path || "");
+        const ewpPath = $("edgeBuildWeightsPath");
+        if (ewpPath && lastLatestCheckpointPath && !String(ewpPath.value || "").trim()) {
+          ewpPath.value = lastLatestCheckpointPath.replace(/\\/g, "/");
+        }
         setModelFactsKV([
           ["Model name", f.model_name || "(unknown)"],
           ["Architecture", f.architecture || "QMiniWASM"],
@@ -3823,6 +4277,7 @@
 
     function evaluatePreflightHealth(p) {
       const resolved = String(p.resolved_torch_device || "").toLowerCase();
+      const requested = String(p.requested_accelerator || "").toLowerCase();
       const syclActive = !!p.sycl_backend_active;
       const dpctlCount = Number.isFinite(Number(p.dpctl_device_count))
         ? Number(p.dpctl_device_count)
@@ -3830,6 +4285,9 @@
       const dpctlErr = String(p.dpctl_error || "");
       if (resolved.startsWith("xpu") || resolved.startsWith("cuda")) {
         return { kind: "ok", label: "OK" };
+      }
+      if ((requested === "xpu" || requested === "sycl") && resolved.startsWith("cpu") && !syclActive) {
+        return { kind: "err", label: "ERROR" };
       }
       if (syclActive || (dpctlCount !== null && dpctlCount > 0)) {
         return { kind: "warn", label: "WARN" };
@@ -3840,14 +4298,25 @@
       return { kind: "warn", label: "CPU" };
     }
 
-    function syncRunpodPanels() {
-      const rt = $("bRunTarget").value;
+    function syncGlobalInfraChrome() {
+      const rt = getGlobalRunTarget();
       const pod = rt === "runpod";
-      $("bRunpodDestroyWrap").style.display = pod ? "block" : "none";
-      const rw = $("bRunpodRemoteWrap");
+      const row = $("globalInfraRow");
+      if (row) {
+        row.classList.remove("billing-surface", "billing-surface-warn");
+        if (rt !== "local") row.classList.add("billing-surface-warn");
+      }
+      const btnSt = $("btnStart");
+      if (btnSt) {
+        btnSt.classList.toggle("billing-control", rt !== "local");
+      }
+      const dw = $("globalRunpodDestroyWrap");
+      if (dw) dw.style.display = pod ? "block" : "none";
+      const rw = $("globalRunpodRemoteWrap");
       if (rw) rw.style.display = pod ? "block" : "none";
-      const sw = $("bRunpodServerlessWrap");
+      const sw = $("globalRunpodServerlessWrap");
       if (sw) sw.style.display = rt === "runpod_serverless" ? "block" : "none";
+      updateLaunchExecSummary();
     }
 
     let lastInfraPodIp = "";
@@ -3902,7 +4371,7 @@
       btnIp.disabled = true;
       btnCmd.disabled = true;
       try {
-        const r = await fetch("/api/runpod/status");
+        const r = await apiFetch("/api/runpod/status");
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const rp = data.runpod || {};
@@ -3993,19 +4462,32 @@
         if (qp) params.set("quantum_policy", qp);
         if (ibm) params.set("ibm_backend_name", ibm);
         const q = params.toString() ? ("?" + params.toString()) : "";
-        const r = await fetch("/api/preflight" + q);
+        const r = await apiFetch("/api/preflight" + q);
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const p = data.preflight || {};
         const health = evaluatePreflightHealth(p);
         setPreflightBadge(health.kind, health.label);
         setPreflightKV([
+          ["Default runtime profile", p.default_runtime_profile || "optimized_auto"],
+          ["Training runtime mode", p.training_runtime_mode || "auto"],
+          ["Native strict mode", p.native_strict_enabled ? "on" : "off"],
+          ["Ternary impl", p.ternary_impl || "auto"],
+          ["Trit pack impl", p.trit_pack_impl || "auto"],
+          ["Memory encode impl", p.memory_encode_impl || "auto"],
+          ["WASM exec impl", p.wasm_exec_impl || "auto"],
+          ["Cascade RL impl", p.cascade_rl_impl || "auto"],
+          ["TPEM native bundle", p.tpem_native_bundle != null ? String(p.tpem_native_bundle) : "0"],
           ["Config", p.config || "(env/default)"],
           ["Accelerator in config file", p.accelerator_from_config_file !== undefined && p.accelerator_from_config_file !== "" ? p.accelerator_from_config_file : "(unset or default)"],
           ["Preflight accelerator (Build form)", p.preflight_accelerator_override ? String(p.preflight_accelerator_override) : "(use config file)"],
           ["Requested accelerator (device check)", p.requested_accelerator || "auto"],
           ["Resolved torch device", p.resolved_torch_device || "unknown"],
+          ["Backend policy selected", p.backend_policy && p.backend_policy.selected_device ? p.backend_policy.selected_device : "(unknown)"],
+          ["Backend policy reason", p.backend_policy && p.backend_policy.reason_code ? p.backend_policy.reason_code : "(none)"],
           ["SYCL backend active", p.sycl_backend_active ? "yes" : "no"],
+          ["SYCL backend kind", p.sycl_backend_status && p.sycl_backend_status.backend ? p.sycl_backend_status.backend : "(unknown)"],
+          ["SYCL fallback reason", p.sycl_backend_status && p.sycl_backend_status.fallback_reason ? p.sycl_backend_status.fallback_reason : "(none)"],
           ["dpctl device count", p.dpctl_device_count ?? "n/a"],
           ["Python executable", p.python_exe || "unknown"],
           ["dpctl error", p.dpctl_error || "(none)"],
@@ -4042,6 +4524,10 @@
       activeRunId = id;
       logOffset = 0;
       logPlainAccum = "";
+      const ban = $("enclaveFootprintBanner");
+      const btxt = $("enclaveFootprintBannerText");
+      if (ban) ban.style.display = "none";
+      if (btxt) btxt.textContent = "—";
       resetLogTrendState();
       resetTelemetryCharts();
       connectRunTelemetryWS(id);
@@ -4061,22 +4547,128 @@
     async function pollLog() {
       if (!activeRunId) return;
       try {
-        const r = await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/log?offset=" + logOffset);
+        const r = await apiFetch("/api/runs/" + encodeURIComponent(activeRunId) + "/log?offset=" + logOffset);
         const data = await r.json();
         if (data.text) {
           logPlainAccum += data.text;
           $("log").innerHTML = renderTrainingLogFromPlain(logPlainAccum);
           $("log").scrollTop = $("log").scrollHeight;
+          refreshEnclaveFootprintFromLogs();
         }
         logOffset = data.next_offset || logOffset;
         $("btnStop").disabled = !data.running;
         if ($("btnStopForce")) $("btnStopForce").disabled = !data.running;
         if ($("btnStopAndData")) $("btnStopAndData").disabled = !data.running;
         $("btnAbortSticky").disabled = !data.running;
-        await loadRuns();
+        if (!data.running) {
+          $("stickyEpochLabel").textContent = "Epoch: -- / --";
+          $("stickyEpochProgress").value = 0;
+        } else {
+          await refreshStickyEpochFromNodeHealth();
+        }
       } catch (e) {
         console.error(e);
       }
+    }
+
+    function launchTargetSummaryLine(rtVal) {
+      const trainRemote =
+        rtVal === "runpod" && ($("globalRunpodTrainOnPod") ? $("globalRunpodTrainOnPod").checked : true);
+      const skipApply =
+        rtVal === "runpod" && $("globalRunpodSkipApply") && $("globalRunpodSkipApply").checked;
+      if (rtVal === "runpod") {
+        return (
+          ($("globalRunpodDestroy").checked ? "Destroy when done" : "Leave pod running") +
+          (trainRemote ? "; SSH train on pod" : "; train on WUI host") +
+          (skipApply ? "; skip tofu apply" : "")
+        );
+      }
+      if (rtVal === "runpod_serverless") return "Serverless job API (billable).";
+      return "Local process only.";
+    }
+
+    function openLaunchEnvironmentModal() {
+      return new Promise((resolve) => {
+        const bd = $("modalLaunchBackdrop");
+        const sel = $("modalLaunchTarget");
+        const line = $("modalLaunchDeployLine");
+        const sum = $("modalLaunchSummary");
+        const cancel = $("modalLaunchCancel");
+        const cont = $("modalLaunchContinue");
+        if (!bd || !sel || !cancel || !cont) {
+          resolve(true);
+          return;
+        }
+        sel.value = getGlobalRunTarget();
+        const syncText = () => {
+          const rt = sel.value;
+          const labels = {
+            local: "Local (this machine)",
+            runpod: "RunPod (OpenTofu + SSH)",
+            runpod_serverless: "RunPod serverless endpoint",
+          };
+          if (line) line.textContent = "Deploying to: " + (labels[rt] || rt);
+          if (sum) sum.textContent = launchTargetSummaryLine(rt);
+        };
+        syncText();
+        sel.onchange = syncText;
+        bd.hidden = false;
+        const cleanup = () => {
+          bd.hidden = true;
+          sel.onchange = null;
+          cancel.onclick = null;
+          cont.onclick = null;
+        };
+        cancel.onclick = () => {
+          cleanup();
+          resolve(false);
+        };
+        cont.onclick = () => {
+          const v = sel.value;
+          const g = $("globalRunTarget");
+          if (g) g.value = v;
+          syncGlobalInfraChrome();
+          persistGlobalInfraBasics();
+          cleanup();
+          resolve(true);
+        };
+      });
+    }
+
+    function confirmBillingAction(message) {
+      return new Promise((resolve) => {
+        const bd = $("modalBillingBackdrop");
+        const msgEl = $("modalBillingMessage");
+        const inp = $("modalBillingInput");
+        const ok = $("modalBillingOk");
+        const cancel = $("modalBillingCancel");
+        if (!bd || !msgEl || !inp || !ok || !cancel) {
+          resolve(false);
+          return;
+        }
+        msgEl.textContent = message;
+        inp.value = "";
+        ok.disabled = true;
+        bd.hidden = false;
+        setTimeout(() => inp.focus(), 0);
+        const cleanup = () => {
+          bd.hidden = true;
+          inp.oninput = null;
+          ok.onclick = null;
+          cancel.onclick = null;
+        };
+        inp.oninput = () => {
+          ok.disabled = inp.value !== "confirm";
+        };
+        ok.onclick = () => {
+          cleanup();
+          resolve(true);
+        };
+        cancel.onclick = () => {
+          cleanup();
+          resolve(false);
+        };
+      });
     }
 
     $("btnStart").onclick = async () => {
@@ -4085,6 +4677,23 @@
       if (!path) return;
       $("btnStart").disabled = true;
       try {
+        const okModal = await openLaunchEnvironmentModal();
+        if (!okModal) {
+          $("msg").textContent = "Launch cancelled.";
+          $("msg").className = "status";
+          return;
+        }
+        const rtLaunch = getGlobalRunTarget();
+        if (rtLaunch !== "local") {
+          const okBill = await confirmBillingAction(
+            "This launch uses cloud or billable infrastructure (RunPod / OpenTofu). Type confirm to proceed.",
+          );
+          if (!okBill) {
+            $("msg").textContent = "Launch cancelled.";
+            $("msg").className = "status";
+            return;
+          }
+        }
         await refreshModelFacts();
         let allowMissingCheckpoint = false;
         if ($("bResumeLatest").checked && lastResumeRequested && !lastResumeAvailable) {
@@ -4101,19 +4710,26 @@
           }
           allowMissingCheckpoint = true;
         }
+        const et = parseInt(String($("edgeProfileTier") && $("edgeProfileTier").value ? $("edgeProfileTier").value : "2"), 10) || 2;
+        const row = QMW_ENCLAVE_PROFILE.find((r) => r.tier === et) || QMW_ENCLAVE_PROFILE[1];
+        const hwAcc = selectedEdgeHardwareAccelerator();
+        lastHardwareAccelerator = hwAcc;
         const launchBody = {
           config: path,
           quantum_backend: $("bQuantumBackend").value.trim(),
           quantum_policy: $("bQuantumPolicy").value,
           ibm_backend_name: $("bIBMBackendName").value.trim(),
-          run_target: $("bRunTarget").value,
-          runpod_destroy_on_exit: $("bRunpodDestroy").checked,
+          run_target: getGlobalRunTarget(),
+          runpod_destroy_on_exit: $("globalRunpodDestroy").checked,
           runpod_var_file: "terraform.tfvars",
-          runpod_train_on_pod: $("bRunpodTrainOnPod") ? $("bRunpodTrainOnPod").checked : true,
-          runpod_skip_apply: $("bRunpodSkipApply") ? $("bRunpodSkipApply").checked : false,
+          runpod_train_on_pod: $("globalRunpodTrainOnPod") ? $("globalRunpodTrainOnPod").checked : true,
+          runpod_skip_apply: $("globalRunpodSkipApply") ? $("globalRunpodSkipApply").checked : false,
           allow_missing_checkpoint: allowMissingCheckpoint,
+          enclave_tier: et,
+          memory_limit_mb: row.linearMiB,
+          hardware_accelerator: hwAcc,
         };
-        if ($("bRunTarget").value === "runpod_serverless") {
+        if (getGlobalRunTarget() === "runpod_serverless") {
           $("msg").className = "status";
           try {
             const ensured = await ensureRunpodServerlessInfraReady({
@@ -4127,10 +4743,11 @@
             throw e;
           }
         } else {
-          const epId = buildPayload().runpod_serverless_endpoint_id;
+          const epEl = $("globalRunpodServerlessEndpointId");
+          const epId = epEl ? String(epEl.value || "").trim() : "";
           if (epId) launchBody.runpod_serverless_endpoint_id = epId;
         }
-        const r = await fetch("/api/runs", {
+        const r = await apiFetch("/api/runs", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-QMW-Source": "wizard-launch" },
           body: JSON.stringify(launchBody),
@@ -4154,7 +4771,7 @@
       const body = force ? JSON.stringify({ force: true }) : "{}";
       let ok = false;
       try {
-        const r = await fetch("/api/runs/" + encodeURIComponent(activeRunId) + "/stop", {
+        const r = await apiFetch("/api/runs/" + encodeURIComponent(activeRunId) + "/stop", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body,
@@ -4247,7 +4864,7 @@
             );
           }
         }
-        const r = await fetch("/api/runs/custom", {
+        const r = await apiFetch("/api/runs/custom", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -4386,7 +5003,7 @@
 
     async function loadNodeHealth() {
       try {
-        const r = await fetch("/api/node/health");
+        const r = await apiFetch("/api/node/health");
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const h = data.node_health || {};
@@ -4398,6 +5015,12 @@
           ["Go goroutines", String(h.go_goroutines || 0)],
           ["Active run", h.active_run && h.active_run.id ? h.active_run.id.slice(0,8) : "none"],
           ["WASM mode", h.active_run && h.active_run.wasm_mock ? "mock fallback" : "native/unknown"],
+          ["XPU fallback", h.active_run && h.active_run.xpu_fallback ? "yes" : "no"],
+          ["Backend selected", h.active_run && h.active_run.backend_selected ? h.active_run.backend_selected : "unknown"],
+          ["Backend reason", h.active_run && h.active_run.backend_reason ? h.active_run.backend_reason : "(none)"],
+          ["SYCL active", h.active_run && h.active_run.sycl_active ? "yes" : "no"],
+          ["SYCL backend", h.active_run && h.active_run.sycl_backend ? h.active_run.sycl_backend : "(none)"],
+          ["SYCL fallback", h.active_run && h.active_run.sycl_fallback ? h.active_run.sycl_fallback : "(none)"],
         ];
         for (const [k, v] of rows) {
           const dk = document.createElement("div"); dk.className = "k"; dk.textContent = k;
@@ -4411,7 +5034,7 @@
 
     async function loadQuantumTopology() {
       try {
-        const r = await fetch("/api/quantum/topology");
+        const r = await apiFetch("/api/quantum/topology");
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const q = data.quantum_topology || {};
@@ -4440,7 +5063,7 @@
       msg.textContent = "Loading local checkpoints...";
       body.innerHTML = "";
       try {
-        const r = await fetch("/api/artifacts");
+        const r = await apiFetch("/api/artifacts");
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const rows = data.artifacts || [];
@@ -4467,7 +5090,7 @@
       msg.textContent = "Loading…";
       msg.className = "status";
       try {
-        const r = await fetch("/api/runpod/tfvars", { cache: "no-store" });
+        const r = await apiFetch("/api/runpod/tfvars", { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const abs = data.abs_path ? String(data.abs_path) : "";
@@ -4478,7 +5101,7 @@
           return;
         }
         ed.value = data.content != null ? String(data.content) : "";
-        const r2 = await fetch("/api/runpod/tfvars?source=example", { cache: "no-store" });
+        const r2 = await apiFetch("/api/runpod/tfvars?source=example", { cache: "no-store" });
         const ex = await r2.json();
         if (r2.ok && ex.content != null && String(ex.content).trim() !== "") {
           ed.value = String(ex.content);
@@ -4503,7 +5126,7 @@
       msg.className = "status";
       $("btnTfvarsSave").disabled = true;
       try {
-        const r = await fetch("/api/runpod/tfvars", {
+        const r = await apiFetch("/api/runpod/tfvars", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: ed.value }),
@@ -4528,7 +5151,7 @@
       msg.textContent = "Loading example…";
       msg.className = "status";
       try {
-        const r = await fetch("/api/runpod/tfvars?source=example", { cache: "no-store" });
+        const r = await apiFetch("/api/runpod/tfvars?source=example", { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         ed.value = data.content != null ? String(data.content) : "";
@@ -4540,7 +5163,15 @@
       }
     }
 
-    $("btnTfvarsSave").onclick = saveTfvarsEditor;
+    $("btnTfvarsSave").onclick = async () => {
+      if (
+        !(await confirmBillingAction(
+          "Saving terraform.tfvars affects the next OpenTofu run (cost-related settings). Type confirm to proceed.",
+        ))
+      )
+        return;
+      saveTfvarsEditor();
+    };
     $("btnTfvarsReload").onclick = loadTfvarsEditor;
     $("btnTfvarsExample").onclick = insertTfvarsExample;
 
@@ -4550,7 +5181,7 @@
       metaEl.textContent = "Loading Serverless meta…";
       metaEl.className = "status";
       try {
-        const r = await fetch("/api/runpod/serverless/meta", { cache: "no-store" });
+        const r = await apiFetch("/api/runpod/serverless/meta", { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const ep = data.endpoint_configured ? "default endpoint id configured" : "no default endpoint id (launch can still pass one)";
@@ -4581,7 +5212,7 @@
       msg.textContent = "Loading endpoints…";
       msg.className = "status";
       try {
-        const r = await fetch("/api/runpod/serverless/endpoints?includeTemplate=true", { cache: "no-store" });
+        const r = await apiFetch("/api/runpod/serverless/endpoints?includeTemplate=true", { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         if (!data.ok) throw new Error(data.error || "Request failed");
@@ -4633,7 +5264,12 @@
       const msg = $("slMgmtMsg");
       const ta = $("slMgmtCreateJson");
       if (!msg || !ta) return;
-      if (!confirm("Create a new RunPod Serverless endpoint? This is billable infrastructure.")) return;
+      if (
+        !(await confirmBillingAction(
+          "Create a RunPod Serverless endpoint (billable). Type confirm to proceed.",
+        ))
+      )
+        return;
       let body;
       try {
         body = JSON.parse(ta.value || "{}");
@@ -4650,7 +5286,7 @@
       msg.textContent = "Creating endpoint…";
       msg.className = "status";
       try {
-        const r = await fetch("/api/runpod/serverless/endpoints", {
+        const r = await apiFetch("/api/runpod/serverless/endpoints", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -4688,7 +5324,7 @@
       msg.textContent = "Loading templates…";
       msg.className = "status";
       try {
-        const r = await fetch(slTemplatesListURL(), { cache: "no-store" });
+        const r = await apiFetch(slTemplatesListURL(), { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         if (!data.ok) throw new Error(data.error || "Request failed");
@@ -4742,7 +5378,12 @@
       const msg = $("slTplMsg");
       const ta = $("slTplCreateJson");
       if (!msg || !ta) return;
-      if (!confirm("Create a new RunPod template? This registers a template in your account (use a real imageName you can pull).")) return;
+      if (
+        !(await confirmBillingAction(
+          "Create a RunPod template via management API (account change). Type confirm to proceed.",
+        ))
+      )
+        return;
       let body;
       try {
         body = JSON.parse(ta.value || "{}");
@@ -4769,7 +5410,7 @@
       msg.textContent = "Creating template…";
       msg.className = "status";
       try {
-        const r = await fetch("/api/runpod/serverless/templates", {
+        const r = await apiFetch("/api/runpod/serverless/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -4816,8 +5457,17 @@
       }
       parsed.mode = $("slRunsync") && $("slRunsync").checked ? "sync" : "async";
       parsed.wait_ms = 120000;
+      if (
+        !(await confirmBillingAction(
+          "Send a test job to RunPod serverless (may incur charges). Type confirm to proceed.",
+        ))
+      ) {
+        msg.textContent = "Cancelled.";
+        msg.className = "status";
+        return;
+      }
       try {
-        const r = await fetch("/api/runpod/serverless/run", {
+        const r = await apiFetch("/api/runpod/serverless/run", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-QMW-Source": "infra-send-test" },
           body: JSON.stringify(parsed),
@@ -4847,7 +5497,7 @@
       msg.className = "status";
       if (pre) pre.style.display = "none";
       try {
-        const r = await fetch("/api/runpod/serverless/health", { cache: "no-store" });
+        const r = await apiFetch("/api/runpod/serverless/health", { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const text = JSON.stringify(data, null, 2);
@@ -4876,7 +5526,7 @@
       msg.className = "status";
       if (pre) pre.style.display = "none";
       try {
-        const r = await fetch("/api/runpod/serverless/job?id=" + encodeURIComponent(jid), { cache: "no-store" });
+        const r = await apiFetch("/api/runpod/serverless/job?id=" + encodeURIComponent(jid), { cache: "no-store" });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
         const text = JSON.stringify(data, null, 2);
@@ -4914,6 +5564,13 @@
     if (btnSlPoll) btnSlPoll.onclick = () => void slPollJob();
 
     async function runpodTofuAction(action) {
+      if (action === "apply" || action === "destroy") {
+        const hint =
+          action === "apply"
+            ? "OpenTofu apply provisions or updates billable cloud resources. Type confirm to proceed."
+            : "OpenTofu destroy tears down cloud resources. Type confirm to proceed.";
+        if (!(await confirmBillingAction(hint))) return;
+      }
       const vf = RUNPOD_TFVARS;
       const msg = $("tofuCmdMsg");
       const pre = $("tofuCmdOutput");
@@ -4925,7 +5582,7 @@
         $(id).disabled = true;
       }
       try {
-        const r = await fetch("/api/runpod/tofu", {
+        const r = await apiFetch("/api/runpod/tofu", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: action, var_file: vf }),
@@ -4952,10 +5609,7 @@
     $("btnTofuInit").onclick = () => runpodTofuAction("init");
     $("btnTofuPlan").onclick = () => runpodTofuAction("plan");
     $("btnTofuApply").onclick = () => runpodTofuAction("apply");
-    $("btnTofuDestroy").onclick = () => {
-      if (!confirm("Destroy RunPod infrastructure in infra/runpod? This deletes the pod if state exists.")) return;
-      runpodTofuAction("destroy");
-    };
+    $("btnTofuDestroy").onclick = () => void runpodTofuAction("destroy");
 
     $("btnRefresh").onclick = async () => { await loadConfigs(); loadRuns(); loadPreflight(); loadRunpodStatus(); };
     $("btnNodeHealthRefresh").onclick = loadNodeHealth;
@@ -4968,32 +5622,44 @@
     $("btnCopyRemoteCmd").onclick = () => {
       if (lastInfraRemoteCmd) copyToClipboard(lastInfraRemoteCmd, "Remote commands copied.");
     };
-    $("bRunTarget").onchange = () => {
-      syncRunpodPanels();
-      updateLaunchExecSummary();
-    };
-    const bRunpodServerlessEndpointEl = $("bRunpodServerlessEndpointId");
+    const globalRunTargetEl = $("globalRunTarget");
+    if (globalRunTargetEl) {
+      globalRunTargetEl.addEventListener("change", () => {
+        syncGlobalInfraChrome();
+        persistGlobalInfraBasics();
+      });
+    }
+    const bRunpodServerlessEndpointEl = $("globalRunpodServerlessEndpointId");
     if (bRunpodServerlessEndpointEl) {
       bRunpodServerlessEndpointEl.addEventListener("change", persistRunpodServerlessEndpointId);
       bRunpodServerlessEndpointEl.addEventListener("blur", persistRunpodServerlessEndpointId);
     }
-    const bRunpodWorkerImageEl = $("bRunpodWorkerImage");
+    const bRunpodWorkerImageEl = $("globalRunpodWorkerImage");
     if (bRunpodWorkerImageEl) {
       bRunpodWorkerImageEl.addEventListener("change", persistRunpodWorkerImage);
       bRunpodWorkerImageEl.addEventListener("blur", persistRunpodWorkerImage);
     }
-    const btnWizardProvisionServerless = $("btnWizardProvisionServerless");
-    if (btnWizardProvisionServerless) btnWizardProvisionServerless.onclick = () => void wizardProvisionRunpodServerless();
+    const btnGlobalProvisionServerless = $("btnGlobalProvisionServerless");
+    if (btnGlobalProvisionServerless)
+      btnGlobalProvisionServerless.onclick = () => void wizardProvisionRunpodServerless();
     for (const id of ["bQuantumPolicy", "bQuantumBackend", "bIBMBackendName"]) {
       const el = $(id);
       if (el) el.addEventListener("change", updateLaunchExecSummary);
       if (el) el.addEventListener("input", updateLaunchExecSummary);
     }
-    const bRunpodDestroyEl = $("bRunpodDestroy");
+    const bRunpodDestroyEl = $("globalRunpodDestroy");
     if (bRunpodDestroyEl) bRunpodDestroyEl.addEventListener("change", updateLaunchExecSummary);
-    for (const id of ["bRunpodTrainOnPod", "bRunpodSkipApply"]) {
+    for (const id of ["globalRunpodTrainOnPod", "globalRunpodSkipApply"]) {
       const el = $(id);
-      if (el) el.addEventListener("change", updateLaunchExecSummary);
+      if (el) {
+        el.addEventListener("change", () => {
+          updateLaunchExecSummary();
+          persistGlobalInfraBasics();
+        });
+      }
+    }
+    if (bRunpodDestroyEl) {
+      bRunpodDestroyEl.addEventListener("change", () => persistGlobalInfraBasics());
     }
     $("btnPreflight").onclick = loadPreflight;
     $("cfg").onchange = loadPreflight;
@@ -5012,7 +5678,7 @@
       msg.className = "status";
       $("btnAutoLR").disabled = true;
       try {
-        const r = await fetch("/api/lr/auto", {
+        const r = await apiFetch("/api/lr/auto", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(buildPayload()),
@@ -5072,10 +5738,29 @@
     initHfExtraCheckboxes();
     toggleHFFields();
     toggleLRTrial();
-    syncRunpodPanels();
+    restoreGlobalInfraBasics();
     restoreRunpodWorkerImage();
     restoreRunpodServerlessEndpointId();
+    syncGlobalInfraChrome();
+    document.querySelectorAll('input[name="telemetryFilter"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        telemetryStreamFilter = radio.value;
+        for (const c of [chartReturn, chartMSE]) {
+          if (!c) continue;
+          c.data.labels = [];
+          c.data.datasets[0].data = [];
+          c.update("none");
+        }
+        telemetryMetricCount = 0;
+        refreshTelemetryRowVisibility();
+      });
+    });
     updateLaunchExecSummary();
+    const ept = $("edgeProfileTier");
+    if (ept) {
+      ept.addEventListener("change", syncEdgeProfileReadouts);
+      syncEdgeProfileReadouts();
+    }
     loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
     loadRuns();
     loadServerMeta();
@@ -5107,6 +5792,172 @@
     refreshModelFacts();
     setInterval(loadRuns, 5000);
 
+    function buildDeploymentSnippets(tier, paths, hwMode) {
+      const acc = String(hwMode || lastHardwareAccelerator || "cpu").toLowerCase();
+      const wantDri = tier >= 3 && (acc === "sycl" || acc === "xpu");
+      const out = paths.out_dir || "dist/edge-artifacts/…";
+      const zipName = "qminiwasm-edge-bundle.zip";
+      const zipComment = paths.bundle_zip || `${out}/${zipName}`;
+      const edgeDir = "./qmw-edge";
+      const wasm = `${edgeDir}/qminiwasm-kernels.wasm`;
+      const tpem = `${edgeDir}/qminiwasm-weights.tpem`;
+      const schema = `${edgeDir}/edge_schema.json`;
+      const unzip = `unzip -o ${zipComment.replace(/\\/g, "/")} -d ${edgeDir}`;
+      let memNote = "8GiB host hint";
+      let dri = "";
+      let incusDri =
+        "# Optional: add GPU/DRI when using SYCL/XPU on Tier 3+\n# incus config device add <name> dri unix-proxy source=/dev/dri path=/dev/dri";
+      if (tier <= 1) {
+        memNote = "256 MiB-class edge (Tier 1); keep kernel + TPEM footprint within enclave EF.";
+      } else if (tier === 2) {
+        memNote = "Meso tier (~2 GiB class linear memory policy — see training TOML [enclave]).";
+      } else if (tier === 3) {
+        memNote = wantDri
+          ? "Macro tier + SYCL/XPU profile: mount /dev/dri alongside Memory64 policy in edge_schema.json."
+          : "Macro tier: Memory64 policy in edge_schema.json; omit /dev/dri if running CPU-only.";
+      } else if (tier >= 4) {
+        memNote = wantDri
+          ? "Core tier + SYCL/XPU: mount /dev/dri; raise host memory per edge_schema.json."
+          : "Core tier — raise host memory limits per edge_schema.json (CPU-only: no DRI).";
+      }
+      if (wantDri) {
+        dri = "  --device /dev/dri:/dev/dri \\\n  --group-add video \\\n";
+        incusDri = `incus config device add qmw-edge dri disk source=/dev/dri path=/dev/dri
+# Or per-device proxies — adjust for your host.`;
+      }
+      const accNote = acc === "quantum_mesh" ? `Accelerator profile: quantum mesh routing (no DRI).\n` : "";
+      const wasmedge =
+        `# ${memNote}\n# ${accNote}# Unpack:\n# ${unzip}\n# Review:\n# cat ${schema}\n` +
+        `export QMW_EDGE="${edgeDir}"\n` +
+        `# Wasmedge (Tier 1: tight memory; tune --max-memory to your build):\n` +
+        `wasmedge --dir "$QMW_EDGE":. \\\n` +
+        (tier <= 1 ? "  --max-memory 268435456 \\\n" : "") +
+        `  "$QMW_EDGE/qminiwasm-kernels.wasm"`;
+      const dockerHint = wantDri
+        ? "DRI passed for Intel SYCL/XPU"
+        : tier >= 3
+          ? "Tier 3+ without SYCL/XPU — omit device lines above for CPU-only"
+          : "no DRI for Tier 1–2 CPU profile";
+      const docker =
+        `# Sample Docker: ${dockerHint}\n` +
+        `docker run --rm \\\n` +
+        dri +
+        `  -v "$(pwd)/${edgeDir}:/edge:ro" \\\n` +
+        `  -w /edge \\\n` +
+        `  wasmedge/wasmedge:latest \\\n` +
+        `  wasmedge --dir .:. qminiwasm-kernels.wasm`;
+      const incus =
+        `# Sample Incus: create instance, attach bundle${wantDri ? ", DRI for XPU" : ""}\n` +
+        `incus launch images:ubuntu/24.04 qmw-edge -c limits.memory=${tier <= 1 ? "1GiB" : tier === 2 ? "4GiB" : "8GiB"}\n` +
+        `incus config device add qmw-edge edgefs disk source=\$(pwd)/${edgeDir} path=/edge\n` +
+        `${wantDri ? incusDri + "\n" : ""}` +
+        `incus exec qmw-edge -- bash -lc 'ls -la /edge && cat /edge/edge_schema.json'`;
+      return { wasmedge, docker, incus };
+    }
+
+    function applyEdgeDeployDashboard(data) {
+      lastEdgeBuild = data;
+      const dash = $("edgeDeployDashboard");
+      const hint = $("edgeDeployHint");
+      if (!dash) return;
+      dash.hidden = !data;
+      if (!data) return;
+      const tier = Number(data.enclave_tier) || 0;
+      const z = $("edgeDlZip");
+      const tp = $("edgeDlTpem");
+      const wm = $("edgeDlWasm");
+      const sc = $("edgeDlSchema");
+      if (z) z.href = edgeDownloadUrl(data.bundle_zip);
+      if (tp) tp.href = edgeDownloadUrl(data.weights_tpem || `${data.out_dir}/qminiwasm-weights.tpem`);
+      if (wm) wm.href = edgeDownloadUrl(data.kernels_wasm || `${data.out_dir}/qminiwasm-kernels.wasm`);
+      if (sc) sc.href = edgeDownloadUrl(data.edge_schema || `${data.out_dir}/edge_schema.json`);
+      const btpemLi = $("edgeDlBundleTpemLi");
+      const btpem = $("edgeDlBundleTpem");
+      if (data.bundle_tpem && btpem) {
+        btpem.href = edgeDownloadUrl(data.bundle_tpem);
+        if (btpemLi) btpemLi.hidden = false;
+      } else {
+        if (btpemLi) btpemLi.hidden = true;
+        if (btpem) btpem.removeAttribute("href");
+      }
+      const sn = buildDeploymentSnippets(tier, data, lastHardwareAccelerator);
+      const sw = $("edgeSnippetWasmedge");
+      const sd = $("edgeSnippetDocker");
+      const si = $("edgeSnippetIncus");
+      if (sw) sw.textContent = sn.wasmedge;
+      if (sd) sd.textContent = sn.docker;
+      if (si) si.textContent = sn.incus;
+      if (hint) {
+        hint.textContent =
+          "Resolved tier " +
+          String(tier) +
+          " · output " +
+          String(data.out_dir || "") +
+          " · accelerator " +
+          String(lastHardwareAccelerator || "cpu") +
+          ". Commands are examples; replace image names and device paths for your environment.";
+      }
+    }
+
+    const btnEdgeBuild = $("btnEdgeBuild");
+    if (btnEdgeBuild) {
+      btnEdgeBuild.onclick = async () => {
+        const msg = $("edgeBuildMsg");
+        const weights = ($("edgeBuildWeightsPath") && $("edgeBuildWeightsPath").value.trim()) || "";
+        if (!weights) {
+          if (msg) {
+            msg.textContent = "Set trainable weights path (.pt).";
+            msg.className = "status error";
+          }
+          return;
+        }
+        const tier = parseInt(($("edgeBuildTier") && $("edgeBuildTier").value) || "0", 10) || 0;
+        btnEdgeBuild.disabled = true;
+        if (msg) {
+          msg.textContent = "Building edge artifact…";
+          msg.className = "status";
+        }
+        try {
+          const r = await apiFetch("/api/build_artifact", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ weights_path: weights, enclave_tier: tier }),
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || r.statusText);
+          if (msg) {
+            msg.textContent = "Edge artifact ready. Tier " + (data.enclave_tier ?? tier) + " · " + (data.out_dir || "");
+            msg.className = "status ok";
+          }
+          applyEdgeDeployDashboard(data);
+        } catch (e) {
+          if (msg) {
+            msg.textContent = String(e.message || e);
+            msg.className = "status error";
+          }
+        } finally {
+          btnEdgeBuild.disabled = false;
+        }
+      };
+    }
+    function wireEdgeCopy(btnId, preId) {
+      const b = $(btnId);
+      const p = $(preId);
+      if (!b || !p) return;
+      b.onclick = async () => {
+        const t = p.textContent || "";
+        try {
+          await navigator.clipboard.writeText(t);
+          addToast("Copied to clipboard");
+        } catch (_) {
+          addToast("Copy failed", "error");
+        }
+      };
+    }
+    wireEdgeCopy("btnCopyWasmedge", "edgeSnippetWasmedge");
+    wireEdgeCopy("btnCopyDocker", "edgeSnippetDocker");
+    wireEdgeCopy("btnCopyIncus", "edgeSnippetIncus");
+
     $("registryBody").addEventListener("click", async (ev) => {
       const btn = ev.target.closest("button[data-push]");
       if (!btn) return;
@@ -5119,7 +5970,7 @@
       }
       btn.disabled = true;
       try {
-        const r = await fetch("/api/artifacts/push_hf", {
+        const r = await apiFetch("/api/artifacts/push_hf", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path, repo, token }),

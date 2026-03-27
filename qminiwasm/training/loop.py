@@ -16,17 +16,25 @@ import random
 import signal
 import threading
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TypedDict, cast
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ..data.pipeline import DataPipeline
-from ..hardware.device import AcceleratorType, get_device
+from ..hardware.device import (
+    AcceleratorType,
+    get_device,
+    get_xpu_backend_status,
+    resolve_backend_policy,
+)
+from ..hardware.sycl_stubs import SYCLHardware
 from ..model import QMiniWASM
+from qminiwasm.config import get_enclave_tier_preset
 from ..wasm_host.engine import WasmRuntimeConfig
 from .cascade_mopd_teacher import build_noise_state_mopd_fns
+from .enclave_footprint import estimate_trainable_tpem_size_mb
 from .cascade_rl import (
     CascadeRouter,
     TinyCascadePolicy,
@@ -112,9 +120,36 @@ _HF_MULTI_PRIMARY_PLACEHOLDERS = frozenset(
 TrainingDataSource = Literal["mesh", "corpus", "hf_tabular"]
 
 
+class TrainingSample(TypedDict, total=False):
+    hidden: torch.Tensor
+    target: torch.Tensor
+    execution_state: Dict[str, Any]
+
+
 def _is_hf_multi_primary_placeholder(primary_id: str) -> bool:
     """True when ``data.path`` is a reserved id that skips the primary Hub load (extras only)."""
     return (primary_id or "").strip().lower() in _HF_MULTI_PRIMARY_PLACEHOLDERS
+
+
+def _sample_wasm_execution_origin(sample: Dict[str, Any]) -> str:
+    exec_state = sample.get("execution_state")
+    if isinstance(exec_state, dict):
+        origin = str(exec_state.get("wasm_execution_origin") or "").strip().lower()
+        if origin in {"real", "mock", "error"}:
+            return origin
+    return "unknown"
+
+
+def _validate_training_sample(sample: Dict[str, Any]) -> TrainingSample:
+    if not isinstance(sample, dict):
+        raise TypeError(f"Expected sample dict, got {type(sample).__name__}")
+    if "hidden" not in sample or "target" not in sample:
+        raise KeyError("Training sample requires 'hidden' and 'target' keys")
+    hidden = sample["hidden"]
+    target = sample["target"]
+    if not isinstance(hidden, torch.Tensor) or not isinstance(target, torch.Tensor):
+        raise TypeError("Training sample 'hidden' and 'target' must be torch.Tensor values")
+    return cast(TrainingSample, sample)
 
 
 def _split_int_budget(total: int, parts: int) -> List[int]:
@@ -320,6 +355,9 @@ def run_training_loop(
     qaoa_warm_start_cache_ttl: int = 128,
     hf_dataset_revision: str = "main",
     wasm_runtime: Optional[WasmRuntimeConfig] = None,
+    enclave_tier: str | None = None,
+    enclave_footprint_mb: float | None = None,
+    export_runtime_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -405,6 +443,13 @@ def run_training_loop(
         hf_mesh_blend_fraction: When ``training_data_source`` is ``hf_tabular``, append this fraction
             of the HF row count as extra mesh-generated samples (WASM curriculum) and shuffle when
             ``seed`` is set (0 disables).
+        wasm_runtime: Optional Wasm store limits / fallback policy for mesh and pipeline.
+        enclave_tier: Optional tier (``micro`` … ``enterprise_core``); enables Tier-1 TPEM footprint
+            handling and is copied into checkpoint ``meta`` when ``export_runtime_policy`` is set.
+        enclave_footprint_mb: Optional EF cap; for ``micro``, lowers the footprint target below the
+            preset when smaller than ``ef_target_mb``.
+        export_runtime_policy: Resolved runtime fields (``use_memory64``, Memory64 ceiling, store
+            limit, tier) merged into each ``save_trainable_tpem_artifact`` ``meta`` for operators.
 
     Returns:
         Dict with ``epochs_run``, ``final_loss``, ``metrics``, and TPEM artifact path fields
@@ -446,6 +491,42 @@ def run_training_loop(
     device = get_device(
         accelerator=cast(AcceleratorType | None, accelerator),
         device_index=device_index,
+    )
+    xpu_status = get_xpu_backend_status(device_index)
+    backend_policy = resolve_backend_policy(
+        accelerator=cast(AcceleratorType | None, accelerator),
+        device_index=device_index,
+    )
+    sycl_status: dict[str, Any] = {}
+    try:
+        sy = SYCLHardware()
+        if hasattr(sy, "backend_status"):
+            sycl_status = dict(sy.backend_status())
+    except Exception as e:
+        sycl_status = {
+            "active": False,
+            "backend": "error",
+            "fallback_reason": f"sycl_status_probe_failed:{e}",
+        }
+    logger.info(
+        "qmw_backend_status backend=%s requested_accelerator=%s selected_device=%s reason_code=%s available=%s support_class=%s device_name=%s strict_xpu=%s reason=%s sycl_active=%s sycl_backend=%s sycl_device=%s sycl_fallback=%s sycl_dpctl_count=%s",
+        xpu_status.get("backend"),
+        str(backend_policy.get("requested_accelerator", accelerator or "auto")),
+        str(backend_policy.get("selected_device", device)),
+        str(backend_policy.get("reason_code", "")),
+        int(bool(xpu_status.get("available"))),
+        str(xpu_status.get("support_class")),
+        str(xpu_status.get("device_name", "")).replace(" ", "_"),
+        int(
+            os.getenv("QMINIWASM_STRICT_XPU", "0").strip().lower()
+            in {"1", "true", "yes", "on"}
+        ),
+        str(xpu_status.get("reason", "")).replace(" ", "_"),
+        int(bool(sycl_status.get("active"))),
+        str(sycl_status.get("backend", "")).replace(" ", "_"),
+        str(sycl_status.get("device_name", "")).replace(" ", "_"),
+        str(sycl_status.get("fallback_reason", "")).replace(" ", "_"),
+        str(sycl_status.get("dpctl_device_count", "")),
     )
 
     model = QMiniWASM(
@@ -523,6 +604,12 @@ def run_training_loop(
         else DataPipeline(wasm_runtime=wasm_runtime)
     )
     source = (training_data_source or "mesh").strip().lower()
+    strict_cfg = (
+        os.getenv("QMINIWASM_STRICT_CONFIG_VALIDATION", "0").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if strict_cfg and source not in {"mesh", "corpus", "hf_tabular"}:
+        raise ValueError(f"Unsupported training_data_source={source!r} under strict validation.")
     num_samples = max(1, batch_size * 4)
 
     corpus_seed = int(seed) if seed is not None else 42
@@ -653,12 +740,33 @@ def run_training_loop(
         eval_samples = []
 
     def _as_d_model(name: str, t: torch.Tensor) -> torch.Tensor:
+        if not isinstance(t, torch.Tensor):
+            raise TypeError(f"Expected {name} to be torch.Tensor, got {type(t).__name__}")
         if t.dim() != 1 or t.shape[0] != _D_MODEL:
             raise ValueError(
                 f"Expected {name} shape ({_D_MODEL},), got {tuple(t.shape)}; "
                 "regenerate data or fix encoder."
             )
         return t.to(dtype=torch.float32)
+
+    wasm_origin_counts = {"real": 0, "mock": 0, "error": 0, "unknown": 0}
+    for row in processed_data:
+        wasm_origin_counts[_sample_wasm_execution_origin(row)] += 1
+    wasm_sample_total = int(len(processed_data))
+    wasm_mock_sample_ratio = (
+        float(wasm_origin_counts["mock"]) / float(wasm_sample_total)
+        if wasm_sample_total > 0
+        else 0.0
+    )
+    strict_mock_gate_enabled = (
+        os.getenv("QMINIWASM_ASSERT_ZERO_MOCK_RATIO", "0").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if strict_mock_gate_enabled and wasm_origin_counts["mock"] > 0:
+        raise RuntimeError(
+            "Strict WASM integration gate failed: mock sample ratio is non-zero "
+            f"({wasm_origin_counts['mock']}/{wasm_sample_total})."
+        )
 
     final_loss = 0.0
     epoch_losses: List[float] = []
@@ -675,6 +783,9 @@ def run_training_loop(
     stopped_on_eval_plateau = False
     stopped_on_target_mse = False
     target_mse_stop_train_metric_warned = False
+    latest_every_n_epochs = max(
+        1, int(os.getenv("QMINIWASM_TPEM_LATEST_EVERY_N_EPOCHS", "1") or "1")
+    )
 
     cascade_policy: nn.Module | None = None
     cascade_optimizer: torch.optim.Optimizer | None = None
@@ -718,6 +829,107 @@ def run_training_loop(
 
     def _cascade_ckpt_module() -> nn.Module | None:
         return cascade_policy if (use_cascade_rl and cascade_policy is not None) else None
+
+    tier_preset = get_enclave_tier_preset(enclave_tier)
+    tier_cap_mb: float | None = None
+    if tier_preset is not None:
+        tier_cap_mb = float(tier_preset.ef_target_mb)
+        if tier_preset.tier == "micro" and enclave_footprint_mb is not None:
+            tier_cap_mb = min(tier_cap_mb, float(enclave_footprint_mb))
+
+    def _merge_export_meta(meta: dict[str, Any]) -> dict[str, Any]:
+        out = dict(meta)
+        if export_runtime_policy:
+            for k in (
+                "enclave_tier",
+                "use_memory64",
+                "wasm_memory64_max_mb",
+                "store_memory_limit_bytes",
+            ):
+                if k in export_runtime_policy and export_runtime_policy[k] is not None:
+                    out[k] = export_runtime_policy[k]
+        return out
+
+    def _telemetry_est_mb() -> float:
+        return float(estimate_trainable_tpem_size_mb(model, _cascade_ckpt_module()))
+
+    def _emit_enclave_telemetry() -> None:
+        est = _telemetry_est_mb()
+        cap_log = float(tier_cap_mb) if tier_cap_mb is not None else -1.0
+        tier_s = str(enclave_tier).strip().lower() if enclave_tier else "none"
+        u64 = 0
+        if export_runtime_policy and bool(export_runtime_policy.get("use_memory64")):
+            u64 = 1
+        logger.info(
+            "qmw_enclave_telemetry estimated_tpem_mb=%.3f tier_cap_mb=%.1f enclave_tier=%s use_memory64=%d",
+            est,
+            cap_log,
+            tier_s,
+            u64,
+        )
+
+    strict_fp = os.getenv("QMINIWASM_STRICT_ENCLAVE_FOOTPRINT", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if tier_preset is not None and tier_preset.tier == "micro" and tier_cap_mb is not None:
+        est0 = _telemetry_est_mb()
+        if est0 > tier_cap_mb * 1.15:
+            raise RuntimeError(
+                f"enclave_tier=micro: estimated trainable TPEM size {est0:.1f} MiB exceeds cap "
+                f"{tier_cap_mb:.1f} MiB by a wide margin (>{(100 * 1.15 - 100):.0f}% over). "
+                "Disable hybrid adapter / cascade router / LoTA in TOML or choose a higher tier."
+            )
+        if est0 > tier_cap_mb:
+            pruned = False
+            if getattr(model, "hybrid_adapter", None) is not None:
+                model.hybrid_adapter = None
+                pruned = True
+            if getattr(model, "lota_branch", None) is not None:
+                model.merge_lota_into_ternary()
+                pruned = True
+            if pruned:
+
+                def _rebuild_optimizers_after_prune() -> None:
+                    nonlocal optimizer, tsign_opt, scheduler, adam_params
+                    use_tsign_local = bool(use_tsign_ternary)
+                    adam_params = (
+                        model.trainable_adam_parameters(exclude_ternary_weight=True)
+                        if use_tsign_local
+                        else model.trainable_hybrid_backbone_parameters()
+                    )
+                    optimizer = torch.optim.AdamW(adam_params, lr=learning_rate)
+                    tsign_opt = None
+                    if use_tsign_local:
+                        tsign_opt = TSignSGD(
+                            [model.ternary_expert.weight],
+                            lr=float(tsign_learning_rate),
+                        )
+                    if lr_plateau_patience is not None and lr_plateau_patience > 0:
+                        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                            optimizer,
+                            mode="min",
+                            factor=lr_plateau_factor,
+                            patience=lr_plateau_patience,
+                            min_lr=lr_plateau_min_lr,
+                        )
+                    else:
+                        scheduler = None
+
+                _rebuild_optimizers_after_prune()
+            est1 = _telemetry_est_mb()
+            if est1 > tier_cap_mb:
+                msg = (
+                    f"enclave_tier=micro: estimated TPEM size {est1:.1f} MiB still above cap "
+                    f"{tier_cap_mb:.1f} MiB after adapter/LoTA stripping (estimate is best-effort)."
+                )
+                logger.error("%s", msg)
+                if strict_fp:
+                    raise RuntimeError(msg)
+
+    _emit_enclave_telemetry()
 
     for epoch in range(epochs):
         if stop_requested.is_set():
@@ -839,10 +1051,11 @@ def run_training_loop(
             if not batch:
                 continue
             try:
-                hidden_list = [_as_d_model("hidden", b["hidden"]) for b in batch]
-                target_list = [_as_d_model("target", b["target"]) for b in batch]
-            except KeyError as e:
-                raise KeyError(f"Batch item missing tensor key: {e}") from e
+                validated_batch = [_validate_training_sample(b) for b in batch]
+                hidden_list = [_as_d_model("hidden", b["hidden"]) for b in validated_batch]
+                target_list = [_as_d_model("target", b["target"]) for b in validated_batch]
+            except (KeyError, TypeError) as e:
+                raise type(e)(f"Invalid training batch sample: {e}") from e
 
             hidden_states = torch.stack(hidden_list).to(device)
             targets = torch.stack(target_list).to(device)
@@ -895,25 +1108,35 @@ def run_training_loop(
                     current_lr,
                     n_batches,
                 )
-                if checkpoint_latest_path:
+                logger.info(
+                    "qmw_metric epoch=%s mean_loss=%.6f mean_return=%.6f mean_mse=%.6f",
+                    epoch + 1,
+                    final_loss,
+                    0.0,
+                    final_loss,
+                )
+                _emit_enclave_telemetry()
+                if checkpoint_latest_path and ((epoch + 1) % latest_every_n_epochs == 0):
                     try:
                         save_trainable_tpem_artifact(
                             checkpoint_latest_path,
                             model,
-                            meta={
-                                "training_data_source": source,
-                                "seed": seed,
-                                "epoch": epoch + 1,
-                                "epochs_requested": epochs,
-                                "epoch_mean_mse": final_loss,
-                                "best_epoch_mean_mse": (
-                                    best_mse if best_mse < float("inf") else None
-                                ),
-                                "learning_rate": current_lr,
-                                "graceful_stop": True,
-                                "partial_epoch": True,
-                                "batches_this_epoch": n_batches,
-                            },
+                            meta=_merge_export_meta(
+                                {
+                                    "training_data_source": source,
+                                    "seed": seed,
+                                    "epoch": epoch + 1,
+                                    "epochs_requested": epochs,
+                                    "epoch_mean_mse": final_loss,
+                                    "best_epoch_mean_mse": (
+                                        best_mse if best_mse < float("inf") else None
+                                    ),
+                                    "learning_rate": current_lr,
+                                    "graceful_stop": True,
+                                    "partial_epoch": True,
+                                    "batches_this_epoch": n_batches,
+                                }
+                            ),
                             cascade_policy=_cascade_ckpt_module(),
                         )
                         checkpoint_latest_saved = checkpoint_latest_path
@@ -946,12 +1169,14 @@ def run_training_loop(
                         save_trainable_tpem_artifact(
                             checkpoint_best_path,
                             model,
-                            meta={
-                                "training_data_source": source,
-                                "seed": seed,
-                                "epoch": epoch + 1,
-                                "best_epoch_mean_mse": best_mse,
-                            },
+                            meta=_merge_export_meta(
+                                {
+                                    "training_data_source": source,
+                                    "seed": seed,
+                                    "epoch": epoch + 1,
+                                    "best_epoch_mean_mse": best_mse,
+                                }
+                            ),
                             cascade_policy=_cascade_ckpt_module(),
                         )
                         checkpoint_best_saved = checkpoint_best_path
@@ -970,20 +1195,30 @@ def run_training_loop(
                 n_batches,
                 " *" if improved else "",
             )
-            if checkpoint_latest_path:
+            logger.info(
+                "qmw_metric epoch=%s mean_loss=%.6f mean_return=%.6f mean_mse=%.6f",
+                epoch + 1,
+                final_loss,
+                0.0,
+                final_loss,
+            )
+            _emit_enclave_telemetry()
+            if checkpoint_latest_path and ((epoch + 1) % latest_every_n_epochs == 0):
                 try:
                     save_trainable_tpem_artifact(
                         checkpoint_latest_path,
                         model,
-                        meta={
-                            "training_data_source": source,
-                            "seed": seed,
-                            "epoch": epoch + 1,
-                            "epochs_requested": epochs,
-                            "epoch_mean_mse": final_loss,
-                            "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
-                            "learning_rate": float(optimizer.param_groups[0]["lr"]),
-                        },
+                        meta=_merge_export_meta(
+                            {
+                                "training_data_source": source,
+                                "seed": seed,
+                                "epoch": epoch + 1,
+                                "epochs_requested": epochs,
+                                "epoch_mean_mse": final_loss,
+                                "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
+                                "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                            }
+                        ),
                         cascade_policy=_cascade_ckpt_module(),
                     )
                     checkpoint_latest_saved = checkpoint_latest_path
@@ -1086,13 +1321,15 @@ def run_training_loop(
             save_trainable_tpem_artifact(
                 checkpoint_save_path,
                 model,
-                meta={
-                    "training_data_source": source,
-                    "seed": seed,
-                    "epochs_completed": epochs_completed,
-                    "final_loss": final_loss,
-                    "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
-                },
+                meta=_merge_export_meta(
+                    {
+                        "training_data_source": source,
+                        "seed": seed,
+                        "epochs_completed": epochs_completed,
+                        "final_loss": final_loss,
+                        "best_epoch_mean_mse": best_mse if best_mse < float("inf") else None,
+                    }
+                ),
                 cascade_policy=_cascade_ckpt_module(),
             )
             checkpoint_saved = checkpoint_save_path
@@ -1120,6 +1357,9 @@ def run_training_loop(
         "stopped_on_target_mse": stopped_on_target_mse,
         "stopped_on_eval_plateau": stopped_on_eval_plateau,
         "graceful_stop_requested": stop_requested.is_set(),
+        "wasm_execution_origin_counts": wasm_origin_counts,
+        "wasm_mock_sample_ratio": wasm_mock_sample_ratio,
+        "strict_wasm_mock_ratio_gate": strict_mock_gate_enabled,
     }
     if seed is not None:
         metrics["seed"] = int(seed)

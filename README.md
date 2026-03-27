@@ -47,7 +47,7 @@ Optional extras are defined in [pyproject.toml](pyproject.toml): `serve` (HTTP i
 
 - [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
 
-For production-style operations (RunPod/OpenTofu, serverless workers, SSH sync, environment controls):
+For production-style operations (cloud GPU provider + IaC, serverless workers, SSH sync, environment controls):
 
 - [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
 

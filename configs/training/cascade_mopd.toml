@@ -25,3 +25,23 @@ num_actions = 4
 # [eval]
 # holdout_fraction = 0.05
 # every_epoch = true
+#
+# Edge profiling (Tier 1 micro / aggressive edge) — copy-paste or merge via WUI enclave_tier=1:
+# [adapter]
+# use_tsign_ternary = true
+# hybrid_adapter = false
+# lota_rank = 0
+# [wasm]
+# store_memory_limit_mb = 256
+# [enclave]
+# enclave_tier = "micro"
+# use_memory64 = false
+# enclave_footprint_mb = 250.0
+#
+# Edge profiling (Tier 3+ macro / Memory64) — WUI enclave_tier>=3:
+# [enclave]
+# enclave_tier = "macro"
+# use_memory64 = true
+# wasm_memory64_max_mb = 8192.0
+# [wasm]
+# store_memory_limit_mb = 8192

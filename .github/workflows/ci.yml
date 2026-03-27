@@ -82,12 +82,14 @@ jobs:
             dist/edge-artifacts/*.wasm
             dist/edge-artifacts/*.tpem
             dist/edge-artifacts/*.json
+            dist/edge-artifacts/*.zip
 
   # Lint and test run inside AlmaLinux 9 (project standard; GH has no AlmaLinux runners).
   lint-and-test:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      QMINIWASM_WASM_FALLBACK_POLICY: "error"
     steps:
       - uses: actions/checkout@v6
 
@@ -117,6 +119,9 @@ jobs:
             # qminiwasm/: full mypy (includes qminiwasm/engine/).
             mypy qminiwasm/ --ignore-missing-imports
             pytest tests/ -v --cov=qminiwasm --cov-report=xml --cov-report=term
+            # CI strict WASM profile: real path + fail-fast runtime fallback.
+            QMINIWASM_WASM_BACKEND=wasmtime QMINIWASM_WASM_FALLBACK_POLICY=error \
+              pytest tests/test_wasm_memory_corpus.py::test_wasm_engine_execute_reports_execution_origin -v
             '
 
       - name: Ensure coverage.xml exists

@@ -9,6 +9,35 @@ import (
 	"time"
 )
 
+func parseServerlessWorkerOutcome(out map[string]any) (ok bool, exitCode int, stderrMsg string, hasOutput bool) {
+	ok = true
+	if out == nil {
+		return ok, 0, "", false
+	}
+	output, _ := out["output"].(map[string]any)
+	if output == nil {
+		return ok, 0, "", false
+	}
+	hasOutput = true
+	if ov, exists := output["ok"]; exists {
+		if b, isBool := ov.(bool); isBool {
+			ok = b
+		}
+	}
+	if ev, exists := output["exit_code"]; exists {
+		switch v := ev.(type) {
+		case float64:
+			exitCode = int(v)
+		case int:
+			exitCode = v
+		}
+	}
+	if sv, _ := output["stderr"].(string); strings.TrimSpace(sv) != "" {
+		stderrMsg = strings.TrimSpace(sv)
+	}
+	return ok, exitCode, stderrMsg, hasOutput
+}
+
 func (m *manager) finishServerlessRun(id string, exitCode int, isErr bool) {
 	m.mu.Lock()
 	if rec := m.byID[id]; rec != nil {
@@ -28,10 +57,14 @@ func (m *manager) finishServerlessRun(id string, exitCode int, isErr bool) {
 	})
 }
 
-func (m *manager) pollServerlessJob(runID, endpointID, jobID, configCleanup string) {
+func (m *manager) pollServerlessJob(runID, endpointID, jobID string, configCleanups []string) {
 	defer func() {
-		if configCleanup != "" {
-			_ = os.Remove(configCleanup)
+		for _, p := range configCleanups {
+			if p != "" {
+				if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+					m.appendLog(runID, []byte("\n=== cleanup warning: failed to remove temp config "+p+": "+err.Error()+" ===\n"), "stderr")
+				}
+			}
 		}
 	}()
 	deadline := time.Now().Add(168 * time.Hour)
@@ -74,6 +107,19 @@ func (m *manager) pollServerlessJob(runID, endpointID, jobID, configCleanup stri
 			m.appendLog(runID, []byte("\n=== runpod serverless job result ===\n"), "stdout")
 			m.appendLog(runID, ob, "stdout")
 			m.appendLog(runID, []byte("\n"), "stdout")
+			ok, exitCode, stderrMsg, hasOutput := parseServerlessWorkerOutcome(out)
+			if !hasOutput {
+				m.appendLog(runID, []byte("=== runpod serverless: no output payload in COMPLETED response; assuming success ===\n"), "stdout")
+			}
+			if !ok || exitCode != 0 {
+				msg := fmt.Sprintf("\n=== runpod serverless worker reported failure (ok=%t exit_code=%d) ===\n", ok, exitCode)
+				m.appendLog(runID, []byte(msg), "stderr")
+				if stderrMsg != "" {
+					m.appendLog(runID, []byte(stderrMsg+"\n"), "stderr")
+				}
+				m.finishServerlessRun(runID, 1, true)
+				return
+			}
 			m.finishServerlessRun(runID, 0, false)
 			return
 		case "FAILED", "ERROR", "CANCELLED", "TIMED_OUT":

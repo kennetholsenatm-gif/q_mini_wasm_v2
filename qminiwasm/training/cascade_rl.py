@@ -17,7 +17,12 @@ import torch.nn.functional as F
 
 from ..rl.cascade_grpo import CascadeGRPO
 from ..native_bridge import load_native_lib
+from qminiwasm.runtime_modes import resolve_impl_mode
 from .distillation import MOPDLoss
+
+
+def _cascade_rl_impl_mode() -> str:
+    return resolve_impl_mode("QMINIWASM_CASCADE_RL_IMPL", "auto")
 
 
 class CascadePolicyFn(Protocol):
@@ -118,10 +123,15 @@ def cascade_rl_train_step(
 
     dev = _policy_device(policy_logits_fn)
 
+    impl_mode = _cascade_rl_impl_mode()
     use_native_rollout = (
         os.getenv("QMINIWASM_NATIVE_RL_RUNTIME", "0").strip().lower()
         not in {"", "0", "false", "off", "no"}
     )
+    if impl_mode == "python":
+        use_native_rollout = False
+    if impl_mode == "native":
+        use_native_rollout = True
     if use_native_rollout and env_factory is None:
         lib = load_native_lib()
         if lib is not None and hasattr(lib, "qmw_rl_rollout_returns"):
@@ -177,6 +187,10 @@ def cascade_rl_train_step(
                 metrics["native_rollout"] = 1.0
                 return metrics
             except Exception:
+                if impl_mode == "native":
+                    raise RuntimeError(
+                        "QMINIWASM_CASCADE_RL_IMPL=native requested but native rollout failed"
+                    )
                 pass
 
     logprob_sums: list[torch.Tensor] = []

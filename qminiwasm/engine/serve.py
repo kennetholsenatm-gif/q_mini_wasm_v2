@@ -30,12 +30,14 @@ from fastapi import FastAPI, HTTPException  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 from qminiwasm.config import DEFAULT_HIERARCHICAL_CONFIG, HierarchicalConfig  # noqa: E402
+from qminiwasm.runtime_modes import apply_optimized_auto_defaults  # noqa: E402
 from qminiwasm.wasm_host.engine import WasmRuntimeConfig  # noqa: E402
 from qminiwasm.engine.graph_apply import dispatch_graph_manifest  # noqa: E402
 
 app = FastAPI(title="QMiniWASM Inference", version="0.1.0")
 
 _model: Optional[Any] = None
+apply_optimized_auto_defaults()
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -109,6 +111,7 @@ def get_model():
     global _model
     if _model is None:
         from qminiwasm.hardware.device import get_device
+        from qminiwasm.hardware.device import resolve_backend_policy
         from qminiwasm.model import QMiniWASM
 
         dev = get_device()
@@ -145,6 +148,7 @@ def get_model():
             )
         if ckpt:
             _model.load_trainable_checkpoint(ckpt, map_location=dev)
+        _model._backend_policy = resolve_backend_policy()
     return _model
 
 
@@ -167,7 +171,21 @@ class InferResponse(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    from qminiwasm.hardware.device import resolve_backend_policy
+    from qminiwasm.hardware.sycl_stubs import SYCLHardware
+
+    sycl_status: dict[str, Any] = {}
+    try:
+        sy = SYCLHardware()
+        if hasattr(sy, "backend_status"):
+            sycl_status = dict(sy.backend_status())
+    except Exception as e:
+        sycl_status = {"active": False, "fallback_reason": f"status_probe_failed:{e}"}
+    return {
+        "status": "ok",
+        "backend_policy": resolve_backend_policy(),
+        "sycl_helper": sycl_status,
+    }
 
 
 @app.post("/infer", response_model=InferResponse)

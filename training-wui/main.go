@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -36,20 +37,30 @@ import (
 var webFS embed.FS
 
 var (
-	repoRoot   string
-	pythonExe  string
-	serverAddr string
-	runManager = newManager()
-	wsHub      = newRunWSHub()
+	repoRoot        string
+	pythonExe       string
+	serverAddr      string
+	serverAuthToken string
+	runManager      = newManager()
+	wsHub           = newRunWSHub()
 )
 
 var (
-	metricLineRe    = regexp.MustCompile(`epoch=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_loss=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_return=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_mse=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
-	epochProgressRe = regexp.MustCompile(`(?i)\bepoch\s+(\d+)\s*/\s*(\d+)\b`)
-	pruneStatsRe    = regexp.MustCompile(`(?i)\b(?:base graph|graph)\s*:\s*(\d+)\s*nodes?\s*->\s*pruned\s*to\s*(\d+)\s*nodes?\b`)
-	qaoaLoadRe      = regexp.MustCompile(`(?i)\bqaoa_sim_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+qpu_est_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
-	alertXPU        = "ACCELERATOR=xpu but PyTorch XPU is not available"
-	alertWASM       = "switching to mock WASM mode"
+	metricLineRe       = regexp.MustCompile(`epoch=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_loss=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_return=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_mse=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
+	metricCanonicalRe  = regexp.MustCompile(`qmw_metric\s+epoch=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_loss=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_return=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+mean_mse=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
+	backendStatusRe    = regexp.MustCompile(`qmw_backend_status\s+backend=(\S+)\s+requested_accelerator=(\S+)\s+selected_device=(\S+)\s+reason_code=(\S+)\s+available=(\d+)\s+support_class=(\S+)\s+device_name=(\S+)\s+strict_xpu=(\d+).*sycl_active=(\d+)\s+sycl_backend=(\S+)\s+sycl_device=(\S+)\s+sycl_fallback=(\S*)\s+sycl_dpctl_count=(\S+)`)
+	epochProgressRe    = regexp.MustCompile(`(?i)\bepoch\s+(\d+)\s*/\s*(\d+)\b`)
+	pruneStatsRe       = regexp.MustCompile(`(?i)\b(?:base graph|graph)\s*:\s*(\d+)\s*nodes?\s*->\s*pruned\s*to\s*(\d+)\s*nodes?\b`)
+	qaoaLoadRe         = regexp.MustCompile(`(?i)\bqaoa_sim_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+qpu_est_ms=([+-]?(?:\d+\.?\d*|\d*\.?\d+))`)
+	enclaveTelemetryRe = regexp.MustCompile(
+		`qmw_enclave_telemetry estimated_tpem_mb=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+tier_cap_mb=([+-]?(?:\d+\.?\d*|\d*\.?\d+))\s+enclave_tier=(\S+)\s+use_memory64=(\d+)`,
+	)
+	alertXPU  = "ACCELERATOR=xpu but PyTorch XPU is not available"
+	alertWASM = "switching to mock WASM mode"
+
+	// WebSocket metric payloads include telemetry_source for Mission Control filtering.
+	telemetrySourcePythonVNV = "Source: Python VNV"
+	telemetrySourceGRPCCPP   = "Source: gRPC C++"
 )
 
 // wuiWorkingConfigRel is the single TOML path the WUI writes from Build wizard and Configuration
@@ -229,7 +240,12 @@ func main() {
 	addr := flag.String("addr", ":8765", "HTTP listen address (host:port)")
 	root := flag.String("root", ".", "repository root")
 	py := flag.String("python", "python", "Python executable name or path on PATH")
+	token := flag.String("token", "", "If set, require this token (Bearer / X-QMW-WUI-Token / ?wui_token=) on all routes including WebSocket")
 	flag.Parse()
+	// Go's log defaults to stderr; Windows PowerShell treats native stderr as ErrorRecord
+	// (NativeCommandError) even for informational lines—use stdout for operator messages.
+	log.SetOutput(os.Stdout)
+	serverAuthToken = strings.TrimSpace(*token)
 
 	abs, err := filepath.Abs(*root)
 	if err != nil {
@@ -240,6 +256,9 @@ func main() {
 	// Load repo .env (e.g. /opt/qmw/.env from bind mount) so IBM/HF tokens are visible
 	// to this process and subprocesses (python -m qminiwasm.engine).
 	loadDotenvFromRepo(repoRoot)
+	if _, ok := os.LookupEnv("QMINIWASM_TRAINING_RUNTIME_MODE"); !ok {
+		_ = os.Setenv("QMINIWASM_TRAINING_RUNTIME_MODE", "auto")
+	}
 
 	pythonExe = resolvePythonExecutable(*py)
 
@@ -262,6 +281,7 @@ func main() {
 	mux.HandleFunc("/api/model/facts", handleModelFacts)
 	mux.HandleFunc("/api/lr/auto", handleAutoLR)
 	mux.HandleFunc("/api/runs", handleRunsCollection)
+	mux.HandleFunc("/api/training/start", handleTrainingStart)
 	mux.HandleFunc("/api/runs/build", handleRunBuild)
 	mux.HandleFunc("/api/runs/custom", handleRunCustom)
 	mux.HandleFunc("/api/schema", handleSchema)
@@ -269,6 +289,8 @@ func main() {
 	mux.HandleFunc("/api/artifacts", handleArtifactsList)
 	mux.HandleFunc("/api/artifacts/download", handleArtifactDownload)
 	mux.HandleFunc("/api/artifacts/push_hf", handleArtifactsPushHF)
+	mux.HandleFunc("/api/build_artifact", handleBuildArtifact)
+	mux.HandleFunc("/api/edge_artifacts/download", handleEdgeArtifactDownload)
 	mux.HandleFunc("/api/node/health", handleNodeHealth)
 	mux.HandleFunc("/api/quantum/topology", handleQuantumTopology)
 	mux.HandleFunc("/api/runpod/status", handleRunpodStatus)
@@ -295,7 +317,31 @@ func main() {
 	}
 	serverAddr = actualAddr
 	log.Printf("training-wui listening on %s (repo root %s, python %q)", actualAddr, repoRoot, pythonExe)
-	log.Fatal(http.Serve(ln, withCORS(mux)))
+	// #region agent log
+	{
+		dbgPath := filepath.Join(repoRoot, "debug-3dadad.log")
+		ln, _ := json.Marshal(map[string]any{
+			"sessionId":    "3dadad",
+			"hypothesisId": "H1-H2",
+			"location":     "main.go:after_listen",
+			"message":      "server_bind_ok_before_serve",
+			"data": map[string]any{
+				"actualAddr": actualAddr,
+				"go_os":      runtime.GOOS,
+			},
+			"timestamp": time.Now().UnixMilli(),
+		})
+		if f, err := os.OpenFile(dbgPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			_, _ = f.Write(append(ln, '\n'))
+			_ = f.Close()
+		}
+	}
+	// #endregion agent log
+	stack := http.Handler(mux)
+	if serverAuthToken != "" {
+		stack = withAuth(stack)
+	}
+	log.Fatal(http.Serve(ln, withCORS(stack)))
 }
 
 func resolvePythonExecutable(preferred string) string {
@@ -332,6 +378,61 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 		"server_addr": serverAddr,
 		"repo_root":   repoRoot,
 		"python":      pythonExe,
+		"runtime_profile": map[string]any{
+			"default_profile": "optimized_auto",
+			"training_runtime_mode": strings.TrimSpace(func() string {
+				v := os.Getenv("QMINIWASM_TRAINING_RUNTIME_MODE")
+				if strings.TrimSpace(v) == "" {
+					return "auto"
+				}
+				return v
+			}()),
+			"native_strict_enabled": strings.TrimSpace(os.Getenv("QMINIWASM_NATIVE_STRICT")) != "" && strings.TrimSpace(os.Getenv("QMINIWASM_NATIVE_STRICT")) != "0",
+			"ternary_impl": strings.TrimSpace(func() string {
+				v := os.Getenv("QMINIWASM_TERNARY_IMPL")
+				if strings.TrimSpace(v) == "" {
+					return "auto"
+				}
+				return v
+			}()),
+			"trit_pack_impl": strings.TrimSpace(func() string {
+				v := os.Getenv("QMINIWASM_TRIT_PACK_IMPL")
+				if strings.TrimSpace(v) == "" {
+					return "auto"
+				}
+				return v
+			}()),
+			"memory_encode_impl": strings.TrimSpace(func() string {
+				v := os.Getenv("QMINIWASM_MEMORY_ENCODE_IMPL")
+				if strings.TrimSpace(v) == "" {
+					return "auto"
+				}
+				return v
+			}()),
+			"wasm_exec_impl": strings.TrimSpace(func() string {
+				v := os.Getenv("QMINIWASM_WASM_EXEC_IMPL")
+				if strings.TrimSpace(v) == "" {
+					return "auto"
+				}
+				return v
+			}()),
+			"cascade_rl_impl": strings.TrimSpace(func() string {
+				v := os.Getenv("QMINIWASM_CASCADE_RL_IMPL")
+				if strings.TrimSpace(v) == "" {
+					return "auto"
+				}
+				return v
+			}()),
+			"tpem_native_bundle": strings.TrimSpace(func() string {
+				v := os.Getenv("QMINIWASM_TPEM_NATIVE_BUNDLE")
+				if strings.TrimSpace(v) == "" {
+					return "0"
+				}
+				return v
+			}()),
+			"grpc_engine_reachable": trainingGRPCReachable(600 * time.Millisecond),
+			"grpc_engine_addr":      trainingGRPCAddress(),
+		},
 		"runpod_remote": map[string]any{
 			"ssh_user":    runpodSSHUser(),
 			"remote_dir":  runpodRemoteDir(),
@@ -397,9 +498,51 @@ func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-QMW-WUI-Token, X-QMW-Source")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func authTokenFromRequest(r *http.Request) string {
+	authz := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(authz), "bearer ") {
+		return strings.TrimSpace(authz[7:])
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-QMW-WUI-Token")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(r.URL.Query().Get("wui_token"))
+}
+
+func authOK(r *http.Request) bool {
+	if serverAuthToken == "" {
+		return true
+	}
+	got := authTokenFromRequest(r)
+	if got == "" {
+		return false
+	}
+	return subtleConstantTimeEqual(got, serverAuthToken)
+}
+
+func subtleConstantTimeEqual(a, b string) bool {
+	aa, bb := []byte(a), []byte(b)
+	if len(aa) != len(bb) {
+		return false
+	}
+	return subtle.ConstantTimeCompare(aa, bb) == 1
+}
+
+func withAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !authOK(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized: pass Authorization Bearer, X-QMW-WUI-Token, or ?wui_token="})
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -448,27 +591,186 @@ func handleConfigs(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"configs": out})
 }
 
+// TrainingRequest is the JSON body for POST /api/runs.
+type TrainingRequest struct {
+	Config                     string `json:"config"`
+	QuantumBackend             string `json:"quantum_backend"`
+	QuantumPolicy              string `json:"quantum_policy"`
+	IBMBackendName             string `json:"ibm_backend_name"`
+	RunTarget                  string `json:"run_target"`
+	RunpodDestroyOnExit        *bool  `json:"runpod_destroy_on_exit"`
+	RunpodVarFile              string `json:"runpod_var_file"`
+	RunpodSkipApply            *bool  `json:"runpod_skip_apply"`
+	RunpodTrainOnPod           *bool  `json:"runpod_train_on_pod"`
+	RunpodServerlessEndpointID string `json:"runpod_serverless_endpoint_id"`
+	AllowMissingCheckpoint     bool   `json:"allow_missing_checkpoint"`
+	EnclaveTier                int    `json:"enclave_tier"`
+	MemoryLimitMB              int    `json:"memory_limit_mb"`
+	HardwareAccelerator        string `json:"hardware_accelerator"`
+}
+
+func (r *TrainingRequest) validateEdgeFields() error {
+	if r == nil {
+		return errors.New("nil request")
+	}
+	if r.EnclaveTier < 0 || r.EnclaveTier > 5 {
+		return errors.New("enclave_tier must be between 0 and 5")
+	}
+	if r.MemoryLimitMB < 0 {
+		return errors.New("memory_limit_mb must be >= 0")
+	}
+	a := strings.ToLower(strings.TrimSpace(r.HardwareAccelerator))
+	if a == "" {
+		return nil
+	}
+	switch a {
+	case "cpu", "cuda", "xpu", "sycl", "quantum_mesh":
+		return nil
+	default:
+		return errors.New("hardware_accelerator must be cpu, cuda, xpu, sycl, or quantum_mesh")
+	}
+}
+
+// BuildArtifactRequest is the JSON body for POST /api/build_artifact.
+type BuildArtifactRequest struct {
+	WeightsPath string `json:"weights_path"`
+	EnclaveTier int    `json:"enclave_tier"`
+	OutDir      string `json:"out_dir"` // optional repo-relative directory
+}
+
+func handleBuildArtifact(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body BuildArtifactRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	wp := strings.TrimSpace(body.WeightsPath)
+	if wp == "" {
+		jsonErr(w, http.StatusBadRequest, "weights_path is required")
+		return
+	}
+	if body.EnclaveTier < 0 || body.EnclaveTier > 5 {
+		jsonErr(w, http.StatusBadRequest, "enclave_tier must be between 0 and 5")
+		return
+	}
+	tier := body.EnclaveTier
+	if tier == 0 {
+		tier = 2
+	}
+	absWeights, err := resolveRepoRelativePath(repoRoot, wp)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if st, err := os.Stat(absWeights); err != nil || st.IsDir() {
+		jsonErr(w, http.StatusBadRequest, "weights file not found")
+		return
+	}
+
+	var outAbs string
+	if strings.TrimSpace(body.OutDir) != "" {
+		outAbs, err = resolveRepoRelativePath(repoRoot, body.OutDir)
+		if err != nil {
+			jsonErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else {
+		b := make([]byte, 8)
+		_, _ = rand.Read(b)
+		sub := filepath.Join("dist", "edge-artifacts", "build-"+hex.EncodeToString(b))
+		outAbs = filepath.Join(repoRoot, filepath.FromSlash(sub))
+	}
+	if err := os.MkdirAll(outAbs, 0o755); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to create output directory")
+		return
+	}
+
+	script := filepath.Join(repoRoot, "scripts", "build_tpem_wasm_artifacts.py")
+	if _, err := os.Stat(script); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "build script not found")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, pythonExe, script,
+		"--tier", strconv.Itoa(tier),
+		"--checkpoint", absWeights,
+		"--out-dir", outAbs,
+	)
+	cmd.Dir = repoRoot
+	var logBuf bytes.Buffer
+	cmd.Stdout = &logBuf
+	cmd.Stderr = &logBuf
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(logBuf.String())
+		if msg == "" {
+			msg = err.Error()
+		} else {
+			msg = msg + ": " + err.Error()
+		}
+		jsonErr(w, http.StatusInternalServerError, msg)
+		return
+	}
+
+	bundle := filepath.Join(outAbs, "qminiwasm-edge-bundle.zip")
+	if _, err := os.Stat(bundle); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "bundle zip not produced")
+		return
+	}
+	bundleTpem := filepath.Join(outAbs, "qminiwasm-edge-bundle.tpem")
+	relOut, _ := filepath.Rel(repoRoot, outAbs)
+	relBundle, _ := filepath.Rel(repoRoot, bundle)
+	relBundleTpem, _ := filepath.Rel(repoRoot, bundleTpem)
+	if _, err := os.Stat(bundleTpem); err != nil {
+		relBundleTpem = ""
+	}
+	relWeights, _ := filepath.Rel(repoRoot, filepath.Join(outAbs, "qminiwasm-weights.tpem"))
+	relKernels, _ := filepath.Rel(repoRoot, filepath.Join(outAbs, "qminiwasm-kernels.wasm"))
+	relSchema, _ := filepath.Rel(repoRoot, filepath.Join(outAbs, "edge_schema.json"))
+	resp := map[string]any{
+		"ok":           true,
+		"out_dir":      filepath.ToSlash(relOut),
+		"bundle_zip":   filepath.ToSlash(relBundle),
+		"weights_tpem": filepath.ToSlash(relWeights),
+		"kernels_wasm": filepath.ToSlash(relKernels),
+		"edge_schema":  filepath.ToSlash(relSchema),
+		"enclave_tier": tier,
+		"log":          strings.TrimSpace(logBuf.String()),
+	}
+	if relBundleTpem != "" {
+		resp["bundle_tpem"] = filepath.ToSlash(relBundleTpem)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// handleTrainingStart is POST-only alias for POST /api/runs (same JSON body).
+func handleTrainingStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	handleRunsCollection(w, r)
+}
+
 func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"runs": runManager.list()})
 	case http.MethodPost:
-		var body struct {
-			Config                     string `json:"config"`
-			QuantumBackend             string `json:"quantum_backend"`
-			QuantumPolicy              string `json:"quantum_policy"`
-			IBMBackendName             string `json:"ibm_backend_name"`
-			RunTarget                  string `json:"run_target"`
-			RunpodDestroyOnExit        *bool  `json:"runpod_destroy_on_exit"`
-			RunpodVarFile              string `json:"runpod_var_file"`
-			RunpodSkipApply            *bool  `json:"runpod_skip_apply"`
-			RunpodTrainOnPod           *bool  `json:"runpod_train_on_pod"`
-			RunpodServerlessEndpointID string `json:"runpod_serverless_endpoint_id"`
-			AllowMissingCheckpoint     bool   `json:"allow_missing_checkpoint"`
-		}
+		var body TrainingRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonErr(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		if err := body.validateEdgeFields(); err != nil {
+			jsonErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		abs, err := resolveTrainingConfig(repoRoot, body.Config)
@@ -485,7 +787,14 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 		// allow_missing_checkpoint is accepted for older clients but no longer required.
 		_ = body.AllowMissingCheckpoint
 		absForEngine := abs
-		var configCleanup string
+		var cleanups []string
+		removeCleanups := func() {
+			for _, p := range cleanups {
+				if p != "" {
+					_ = os.Remove(p)
+				}
+			}
+		}
 		if missing != "" {
 			log.Printf("training-wui: checkpoint load_path not found (%s); training from scratch (omit load_path for this run)", missing)
 			tmp, werr := writeConfigOmittingCheckpointLoadPath(abs)
@@ -494,9 +803,23 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			absForEngine = tmp
-			configCleanup = tmp
+			cleanups = append(cleanups, tmp)
 		}
-		extraEnv := buildQuantumEnvOverrides(body.QuantumBackend, body.QuantumPolicy, body.IBMBackendName)
+
+		overlay, oerr := buildEdgeTomlOverlay(&body, absForEngine)
+		if oerr != nil {
+			removeCleanups()
+			jsonErr(w, http.StatusBadRequest, oerr.Error())
+			return
+		}
+		if len(overlay) > MaxTomlOverlayBytes {
+			removeCleanups()
+			jsonErr(w, http.StatusBadRequest, "edge profile overlay too large")
+			return
+		}
+
+		relDisplay := body.Config
+		serverlessOverlay := ""
 		opts := runStartOptsFromRequest(
 			body.RunTarget,
 			body.RunpodDestroyOnExit,
@@ -505,18 +828,35 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			body.RunpodTrainOnPod,
 			body.RunpodServerlessEndpointID,
 		)
-		if err := validateRunTarget(opts); err != nil {
-			if configCleanup != "" {
-				_ = os.Remove(configCleanup)
+		rt := normalizeRunTarget(opts.RunTarget)
+
+		if strings.TrimSpace(overlay) != "" {
+			if rt == "runpod_serverless" {
+				serverlessOverlay = overlay
+			} else {
+				mergedAbs, mergedRel, werr := writeMergedEdgeTrainingConfig(repoRoot, absForEngine, overlay, newRunID()[:12])
+				if werr != nil {
+					removeCleanups()
+					jsonErr(w, http.StatusInternalServerError, "edge profile merge: "+werr.Error())
+					return
+				}
+				cleanups = append(cleanups, mergedAbs)
+				absForEngine = mergedAbs
+				relDisplay = mergedRel
 			}
+		}
+
+		extraEnv := buildQuantumEnvOverrides(body.QuantumBackend, body.QuantumPolicy, body.IBMBackendName)
+		extraEnv = append(extraEnv, buildEdgeProfileExtraEnv(&body)...)
+
+		if err := validateRunTarget(opts); err != nil {
+			removeCleanups()
 			jsonErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		run, err := runManager.start(absForEngine, body.Config, extraEnv, opts, configCleanup)
+		run, err := runManager.start(absForEngine, relDisplay, extraEnv, opts, cleanups, serverlessOverlay)
 		if err != nil {
-			if configCleanup != "" {
-				_ = os.Remove(configCleanup)
-			}
+			removeCleanups()
 			jsonErr(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -934,6 +1274,53 @@ func handleArtifactDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, abs)
 }
 
+func edgeArtifactsBaseDir(root string) string {
+	return filepath.Join(root, "dist", "edge-artifacts")
+}
+
+// resolveEdgeArtifactDownloadPath ensures relPath resolves to a file under repoRoot/dist/edge-artifacts.
+func resolveEdgeArtifactDownloadPath(root, relPath string) (abs string, err error) {
+	relPath = strings.TrimSpace(relPath)
+	if relPath == "" {
+		return "", errors.New("missing path")
+	}
+	relPath = strings.TrimPrefix(relPath, "/")
+	root = filepath.Clean(root)
+	abs = filepath.Join(root, filepath.FromSlash(relPath))
+	abs = filepath.Clean(abs)
+	base := edgeArtifactsBaseDir(root)
+	relBase, e := filepath.Rel(base, abs)
+	if e != nil || strings.HasPrefix(relBase, "..") {
+		return "", errors.New("path must be under dist/edge-artifacts")
+	}
+	return abs, nil
+}
+
+func handleEdgeArtifactDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	rel := strings.TrimSpace(r.URL.Query().Get("path"))
+	abs, err := resolveEdgeArtifactDownloadPath(repoRoot, rel)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	st, err := os.Stat(abs)
+	if err != nil || st.IsDir() {
+		jsonErr(w, http.StatusNotFound, "edge artifact not found")
+		return
+	}
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(abs)+`"`)
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Length", strconv.FormatInt(st.Size(), 10))
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.ServeFile(w, r, abs)
+}
+
 func handleArtifactsPushHF(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1160,6 +1547,23 @@ func PathJoinRepo(root, maybeRel string) string {
 		return p
 	}
 	return filepath.Join(root, filepath.FromSlash(p))
+}
+
+// resolveRepoRelativePath joins user path to root and ensures the result stays inside root.
+func resolveRepoRelativePath(root, user string) (abs string, err error) {
+	user = strings.TrimSpace(user)
+	if user == "" {
+		return "", errors.New("path is required")
+	}
+	user = strings.TrimPrefix(user, "/")
+	root = filepath.Clean(root)
+	abs = filepath.Join(root, filepath.FromSlash(user))
+	abs = filepath.Clean(abs)
+	relRoot, e := filepath.Rel(root, abs)
+	if e != nil || strings.HasPrefix(relRoot, "..") {
+		return "", errors.New("path escapes repository root")
+	}
+	return abs, nil
 }
 
 type runStartOpts struct {
@@ -1879,10 +2283,6 @@ func buildGeneratedTOML(body buildRunRequest, accel, src, srcRaw, modelStem stri
 	b.WriteString("enabled = true\n")
 	b.WriteString("steps_per_epoch = 2\n")
 	b.WriteString("group_size = 4\n")
-	if normalizeRunTarget(body.RunTarget) == "runpod_serverless" {
-		b.WriteString("\n[runpod_serverless]\n")
-		b.WriteString("worker_image = " + strconv.Quote(runpodServerlessBuiltinWorkerImage) + "\n")
-	}
 	return b.String()
 }
 
@@ -1912,7 +2312,7 @@ import sys
 
 from qminiwasm.engine.config import EngineConfig
 from qminiwasm.engine._dotenv import load_dotenv_if_available
-from qminiwasm.hardware.device import get_device
+from qminiwasm.hardware.device import get_device, resolve_backend_policy
 from qminiwasm.hardware.sycl_hardware import SYCLHardware
 
 load_dotenv_if_available()
@@ -1931,6 +2331,7 @@ else:
     accel_for_device = accel_from_config
 requested = accel_for_device
 device = get_device(accelerator=accel_for_device, device_index=cfg.device_index)
+policy = resolve_backend_policy(accelerator=accel_for_device, device_index=cfg.device_index)
 sy = SYCLHardware()
 is_active = False
 if hasattr(sy, "is_backend_active"):
@@ -1940,6 +2341,12 @@ if hasattr(sy, "is_backend_active"):
         is_active = False
 else:
     is_active = getattr(sy, "device", None) is not None
+sycl_status = {}
+if hasattr(sy, "backend_status"):
+    try:
+        sycl_status = dict(sy.backend_status())
+    except Exception:
+        sycl_status = {}
 
 dpctl_count = None
 dpctl_error = ""
@@ -1956,12 +2363,23 @@ out = {
     "accelerator_from_config_file": (cfg.accelerator or ""),
     "preflight_accelerator_override": preflight_accel,
     "resolved_torch_device": str(device),
+    "backend_policy": policy,
     "sycl_backend_active": is_active,
+    "sycl_backend_status": sycl_status,
     "dpctl_device_count": dpctl_count,
     "dpctl_error": dpctl_error,
     "quantum_backend": (os.environ.get("QUANTUM_BACKEND", "").strip() or cfg.quantum_backend or "penny_lane"),
     "quantum_backend_from_config": (cfg.quantum_backend or ""),
     "quantum_policy": (os.environ.get("QUANTUM_EXECUTION_POLICY", "").strip() or "prefer_hardware_fallback"),
+    "default_runtime_profile": "optimized_auto",
+    "training_runtime_mode": (os.environ.get("QMINIWASM_TRAINING_RUNTIME_MODE", "").strip() or "auto"),
+    "native_strict_enabled": os.environ.get("QMINIWASM_NATIVE_STRICT", "").strip().lower() in ("1", "true", "yes", "on"),
+    "ternary_impl": (os.environ.get("QMINIWASM_TERNARY_IMPL", "").strip() or "auto"),
+    "trit_pack_impl": (os.environ.get("QMINIWASM_TRIT_PACK_IMPL", "").strip() or "auto"),
+    "memory_encode_impl": (os.environ.get("QMINIWASM_MEMORY_ENCODE_IMPL", "").strip() or "auto"),
+    "wasm_exec_impl": (os.environ.get("QMINIWASM_WASM_EXEC_IMPL", "").strip() or "auto"),
+    "cascade_rl_impl": (os.environ.get("QMINIWASM_CASCADE_RL_IMPL", "").strip() or "auto"),
+    "tpem_native_bundle": (os.environ.get("QMINIWASM_TPEM_NATIVE_BUNDLE", "").strip() or "0"),
 }
 
 ibm = {
@@ -2123,6 +2541,10 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 func handleRunWS(w http.ResponseWriter, r *http.Request, id string) {
+	if !authOK(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -2212,6 +2634,7 @@ func resolveTrainingConfig(root, user string) (abs string, err error) {
 type runWSSub struct {
 	conn *websocket.Conn
 	send chan []byte
+	done chan struct{}
 }
 
 type runWSHub struct {
@@ -2227,6 +2650,7 @@ func (h *runWSHub) subscribe(runID string, conn *websocket.Conn) *runWSSub {
 	sub := &runWSSub{
 		conn: conn,
 		send: make(chan []byte, 64),
+		done: make(chan struct{}),
 	}
 	h.mu.Lock()
 	if h.subs[runID] == nil {
@@ -2235,10 +2659,15 @@ func (h *runWSHub) subscribe(runID string, conn *websocket.Conn) *runWSSub {
 	h.subs[runID][sub] = struct{}{}
 	h.mu.Unlock()
 	go func() {
-		for msg := range sub.send {
-			_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+		for {
+			select {
+			case <-sub.done:
 				return
+			case msg := <-sub.send:
+				_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+					return
+				}
 			}
 		}
 	}()
@@ -2254,7 +2683,7 @@ func (h *runWSHub) unsubscribe(runID string, sub *runWSSub) {
 		}
 	}
 	h.mu.Unlock()
-	close(sub.send)
+	close(sub.done)
 	_ = sub.conn.Close()
 }
 
@@ -2270,46 +2699,65 @@ func (h *runWSHub) broadcast(runID string, payload map[string]any) {
 		snapshot = append(snapshot, sub)
 	}
 	h.mu.Unlock()
+	dropped := 0
 	for _, sub := range snapshot {
 		select {
+		case <-sub.done:
 		case sub.send <- b:
 		default:
+			dropped++
 		}
+	}
+	if dropped > 0 {
+		msg := fmt.Sprintf("ws backpressure: dropped %d message(s)", dropped)
+		log.Printf("run %s %s", runID, msg)
+		runManager.appendLog(runID, []byte(msg+"\n"), "stderr")
 	}
 }
 
 type runRecord struct {
-	ID                   string    `json:"id"`
-	ConfigRel            string    `json:"config"`
-	Started              time.Time `json:"started"`
-	Running              bool      `json:"running"`
-	ExitCode             int       `json:"exit_code,omitempty"`
-	Error                bool      `json:"error"`
-	RunTarget            string    `json:"run_target,omitempty"`
-	RunpodDestroyOnExit  bool      `json:"runpod_destroy_on_exit,omitempty"`
-	RunpodVarFile        string    `json:"runpod_var_file,omitempty"`
-	ServerlessJobID      string    `json:"serverless_job_id,omitempty"`
-	ServerlessEndpointID string    `json:"serverless_endpoint_id,omitempty"`
-	configCleanup        string    `json:"-"` // temp TOML path to remove after the process exits
-	cmd                  *exec.Cmd
-	logMu                sync.Mutex
-	logBuf               bytes.Buffer
-	stdoutLineBuf        strings.Builder
-	stderrLineBuf        strings.Builder
-	LastEpoch            int
-	TotalEpochs          int
-	LastMeanLoss         float64
-	LastMeanReturn       float64
-	LastMeanMSE          float64
-	procExited           chan struct{} // closed after cmd.Wait (nil for serverless)
-	XPUFallbackSeen      bool
-	WasmMockSeen         bool
-	PrunedFromNodes      int
-	PrunedToNodes        int
-	QAOASimMS            float64
-	QPUEstMS             float64
-	maxRuns              int // ring of finished ids for list
-	grpcBridgeCancel     context.CancelFunc
+	ID                    string    `json:"id"`
+	ConfigRel             string    `json:"config"`
+	Started               time.Time `json:"started"`
+	Running               bool      `json:"running"`
+	ExitCode              int       `json:"exit_code,omitempty"`
+	Error                 bool      `json:"error"`
+	RunTarget             string    `json:"run_target,omitempty"`
+	RunpodDestroyOnExit   bool      `json:"runpod_destroy_on_exit,omitempty"`
+	RunpodVarFile         string    `json:"runpod_var_file,omitempty"`
+	ServerlessJobID       string    `json:"serverless_job_id,omitempty"`
+	ServerlessEndpointID  string    `json:"serverless_endpoint_id,omitempty"`
+	configCleanups        []string  `json:"-"` // temp TOML paths to remove after the process exits
+	serverlessTomlOverlay string    `json:"-"` // RunPod input.toml_overlay (optional)
+	cmd                   *exec.Cmd
+	logMu                 sync.Mutex
+	logBuf                bytes.Buffer
+	stdoutLineBuf         strings.Builder
+	stderrLineBuf         strings.Builder
+	LastEpoch             int
+	TotalEpochs           int
+	LastMeanLoss          float64
+	LastMeanReturn        float64
+	LastMeanMSE           float64
+	procExited            chan struct{} // closed after cmd.Wait (nil for serverless)
+	XPUFallbackSeen       bool
+	WasmMockSeen          bool
+	PrunedFromNodes       int
+	PrunedToNodes         int
+	QAOASimMS             float64
+	QPUEstMS              float64
+	WSDroppedMessages     int
+	BackendRequested      string
+	BackendSelected       string
+	BackendReasonCode     string
+	XPUSupportClass       string
+	SYCLActive            bool
+	SYCLBackend           string
+	SYCLDevice            string
+	SYCLFallback          string
+	SYCLDPCTLCount        int
+	maxRuns               int                // ring of finished ids for list
+	trainCancel           context.CancelFunc // native gRPC training + telemetry stream
 }
 
 type manager struct {
@@ -2328,7 +2776,7 @@ func newRunID() string {
 	return hex.EncodeToString(b)
 }
 
-func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts runStartOpts, configCleanup string) (*runRecord, error) {
+func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts runStartOpts, configCleanups []string, serverlessTomlOverlay string) (*runRecord, error) {
 	opts.RunTarget = normalizeRunTarget(opts.RunTarget)
 	if err := validateRunTarget(opts); err != nil {
 		return nil, err
@@ -2374,15 +2822,17 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 	}
 
 	id := newRunID()
+	cleanups := append([]string(nil), configCleanups...)
 	rec := &runRecord{
-		ID:                  id,
-		ConfigRel:           relDisplay,
-		Started:             time.Now(),
-		Running:             true,
-		RunTarget:           opts.RunTarget,
-		RunpodDestroyOnExit: opts.RunpodDestroyOnExit,
-		RunpodVarFile:       opts.RunpodVarFile,
-		configCleanup:       configCleanup,
+		ID:                    id,
+		ConfigRel:             relDisplay,
+		Started:               time.Now(),
+		Running:               true,
+		RunTarget:             opts.RunTarget,
+		RunpodDestroyOnExit:   opts.RunpodDestroyOnExit,
+		RunpodVarFile:         opts.RunpodVarFile,
+		configCleanups:        cleanups,
+		serverlessTomlOverlay: strings.TrimSpace(serverlessTomlOverlay),
 	}
 	if applyLog != "" {
 		rec.logBuf.WriteString("=== runpod: OpenTofu apply ===\n")
@@ -2405,7 +2855,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		}
 		rec.logBuf.WriteString("=== runpod serverless: POST /run (async training job) ===\n")
 		ctxSub, cancelSub := context.WithTimeout(context.Background(), 5*time.Minute)
-		payload := buildQMWServerlessTrainInputV1(relDisplay, extraEnv)
+		payload := buildQMWServerlessTrainInputV1(relDisplay, extraEnv, rec.serverlessTomlOverlay)
 		if pb, err := json.MarshalIndent(payload, "", "  "); err == nil {
 			rec.logBuf.WriteString("=== runpod serverless payload ===\n")
 			rec.logBuf.Write(pb)
@@ -2432,7 +2882,32 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		if len(m.ordered) > 32 {
 			m.ordered = m.ordered[:32]
 		}
-		go m.pollServerlessJob(id, ep, jobID, configCleanup)
+		go m.pollServerlessJob(id, ep, jobID, cleanups)
+		wsHub.broadcast(id, map[string]any{
+			"type":   "lifecycle",
+			"run_id": id,
+			"state":  "started",
+			"ts":     time.Now().UTC().Format(time.RFC3339),
+		})
+		registered = true
+		return rec, nil
+	}
+
+	if useNativeTrainingEngineGRPC(opts) {
+		cfg, err := TrainingTOMLToProto(absConfig, id)
+		if err != nil {
+			return nil, fmt.Errorf("map training TOML to gRPC config: %w", err)
+		}
+		ctxTrain, cancelTrain := context.WithCancel(context.Background())
+		rec.procExited = make(chan struct{})
+		rec.trainCancel = cancelTrain
+		rec.logBuf.WriteString("=== training: native gRPC TrainingEngineService (C++ engine on " + trainingGRPCAddress() + ") ===\n")
+		m.byID[id] = rec
+		m.ordered = append([]string{id}, m.ordered...)
+		if len(m.ordered) > 32 {
+			m.ordered = m.ordered[:32]
+		}
+		go m.runNativeGRPCTraining(ctxTrain, id, cfg, rec)
 		wsHub.broadcast(id, map[string]any{
 			"type":   "lifecycle",
 			"run_id": id,
@@ -2464,7 +2939,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 			return nil, fmt.Errorf("runpod sync: %w", err)
 		}
 		remoteConfigRel := relDisplay
-		if configCleanup != "" {
+		if len(cleanups) > 0 {
 			if !runpodToolOK("scp") {
 				return nil, fmt.Errorf("scp not on PATH: required to upload generated config for this run")
 			}
@@ -2512,7 +2987,6 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 
 	go m.pump(id, stdout, "stdout")
 	go m.pump(id, stderr, "stderr")
-	m.maybeStartGRPCTelemetryBridge(id, rec, opts)
 	go m.wait(id)
 	wsHub.broadcast(id, map[string]any{
 		"type":   "lifecycle",
@@ -2547,7 +3021,9 @@ func (m *manager) appendLog(id string, p []byte, stream string) {
 	}
 	rec.logMu.Lock()
 	rec.logBuf.Write(p)
-	m.processTelemetryLinesLocked(id, rec, p, stream)
+	if rec.cmd != nil {
+		m.processTelemetryLinesLocked(id, rec, p, stream)
+	}
 	rec.logMu.Unlock()
 }
 
@@ -2573,25 +3049,65 @@ func (m *manager) processTelemetryLinesLocked(id string, rec *runRecord, p []byt
 	}
 }
 
+func (m *manager) flushTelemetryLinesLocked(id string, rec *runRecord) {
+	if rec.stdoutLineBuf.Len() > 0 {
+		line := strings.TrimRight(strings.TrimSpace(rec.stdoutLineBuf.String()), "\r")
+		rec.stdoutLineBuf.Reset()
+		m.handleLogLine(id, line, "stdout")
+	}
+	if rec.stderrLineBuf.Len() > 0 {
+		line := strings.TrimRight(strings.TrimSpace(rec.stderrLineBuf.String()), "\r")
+		rec.stderrLineBuf.Reset()
+		m.handleLogLine(id, line, "stderr")
+	}
+}
+
 func (m *manager) handleLogLine(id, line, stream string) {
 	if line == "" {
 		return
 	}
 	if stream == "stdout" {
+		if mm := metricCanonicalRe.FindStringSubmatch(line); len(mm) == 5 {
+			epoch, _ := strconv.ParseFloat(mm[1], 64)
+			meanLoss, _ := strconv.ParseFloat(mm[2], 64)
+			meanReturn, _ := strconv.ParseFloat(mm[3], 64)
+			meanMSE, _ := strconv.ParseFloat(mm[4], 64)
+			wsHub.broadcast(id, map[string]any{
+				"type":             "metric",
+				"run_id":           id,
+				"ts":               time.Now().UTC().Format(time.RFC3339),
+				"epoch":            epoch,
+				"mean_loss":        meanLoss,
+				"mean_return":      meanReturn,
+				"mean_mse":         meanMSE,
+				"line":             line,
+				"telemetry_source": telemetrySourcePythonVNV,
+			})
+			m.mu.Lock()
+			if rec := m.byID[id]; rec != nil {
+				rec.LastEpoch = int(epoch)
+				rec.LastMeanLoss = meanLoss
+				rec.LastMeanReturn = meanReturn
+				rec.LastMeanMSE = meanMSE
+			}
+			m.mu.Unlock()
+			return
+		}
 		if mm := metricLineRe.FindStringSubmatch(line); len(mm) == 5 {
 			epoch, _ := strconv.ParseFloat(mm[1], 64)
 			meanLoss, _ := strconv.ParseFloat(mm[2], 64)
 			meanReturn, _ := strconv.ParseFloat(mm[3], 64)
 			meanMSE, _ := strconv.ParseFloat(mm[4], 64)
 			wsHub.broadcast(id, map[string]any{
-				"type":        "metric",
-				"run_id":      id,
-				"ts":          time.Now().UTC().Format(time.RFC3339),
-				"epoch":       epoch,
-				"mean_loss":   meanLoss,
-				"mean_return": meanReturn,
-				"mean_mse":    meanMSE,
-				"line":        line,
+				"type":             "metric",
+				"run_id":           id,
+				"ts":               time.Now().UTC().Format(time.RFC3339),
+				"epoch":            epoch,
+				"mean_loss":        meanLoss,
+				"mean_return":      meanReturn,
+				"mean_mse":         meanMSE,
+				"line":             line,
+				"telemetry_source": telemetrySourcePythonVNV,
 			})
 			m.mu.Lock()
 			if rec := m.byID[id]; rec != nil {
@@ -2631,6 +3147,56 @@ func (m *manager) handleLogLine(id, line, stream string) {
 				rec.QPUEstMS = qpu
 			}
 			m.mu.Unlock()
+		}
+		if em := enclaveTelemetryRe.FindStringSubmatch(line); len(em) == 5 {
+			est, _ := strconv.ParseFloat(em[1], 64)
+			capMB, _ := strconv.ParseFloat(em[2], 64)
+			tier := em[3]
+			u64, _ := strconv.Atoi(em[4])
+			wsHub.broadcast(id, map[string]any{
+				"type":              "enclave_telemetry",
+				"run_id":            id,
+				"ts":                time.Now().UTC().Format(time.RFC3339),
+				"estimated_tpem_mb": est,
+				"tier_cap_mb":       capMB,
+				"enclave_tier":      tier,
+				"use_memory64":      u64,
+				"line":              line,
+				"telemetry_source":  telemetrySourcePythonVNV,
+			})
+		}
+		if bm := backendStatusRe.FindStringSubmatch(line); len(bm) == 14 {
+			syclActive := bm[9] == "1"
+			dpctlCount, _ := strconv.Atoi(strings.TrimSpace(bm[13]))
+			m.mu.Lock()
+			if rec := m.byID[id]; rec != nil {
+				rec.BackendRequested = bm[2]
+				rec.BackendSelected = bm[3]
+				rec.BackendReasonCode = bm[4]
+				rec.XPUSupportClass = bm[6]
+				rec.SYCLActive = syclActive
+				rec.SYCLBackend = bm[10]
+				rec.SYCLDevice = bm[11]
+				rec.SYCLFallback = bm[12]
+				rec.SYCLDPCTLCount = dpctlCount
+			}
+			m.mu.Unlock()
+			wsHub.broadcast(id, map[string]any{
+				"type":                  "backend_status",
+				"run_id":                id,
+				"ts":                    time.Now().UTC().Format(time.RFC3339),
+				"requested_accelerator": bm[2],
+				"selected_device":       bm[3],
+				"reason_code":           bm[4],
+				"xpu_support_class":     bm[6],
+				"sycl_active":           syclActive,
+				"sycl_backend":          bm[10],
+				"sycl_device":           bm[11],
+				"sycl_fallback":         bm[12],
+				"sycl_dpctl_count":      dpctlCount,
+				"line":                  line,
+				"telemetry_source":      telemetrySourcePythonVNV,
+			})
 		}
 		return
 	}
@@ -2678,21 +3244,10 @@ func (m *manager) wait(id string) {
 	runTarget := rec.RunTarget
 	destroyPod := rec.RunpodDestroyOnExit
 	runpodVF := rec.RunpodVarFile
-	configCleanup := rec.configCleanup
-	grpcBridgeCancel := rec.grpcBridgeCancel
-	rec.grpcBridgeCancel = nil
-	rec.configCleanup = ""
+	configCleanups := rec.configCleanups
+	rec.configCleanups = nil
 	m.mu.Unlock()
-	if grpcBridgeCancel != nil {
-		grpcBridgeCancel()
-	}
-	wsHub.broadcast(id, map[string]any{
-		"type":      "lifecycle",
-		"run_id":    id,
-		"state":     "finished",
-		"ts":        time.Now().UTC().Format(time.RFC3339),
-		"exit_code": m.exitCode(id),
-	})
+
 	if cmd == nil {
 		return
 	}
@@ -2700,23 +3255,65 @@ func (m *manager) wait(id string) {
 	if procDone != nil {
 		close(procDone)
 	}
-	if configCleanup != "" {
-		_ = os.Remove(configCleanup)
+	m.mu.Lock()
+	rec = m.byID[id]
+	if rec != nil {
+		rec.logMu.Lock()
+		m.flushTelemetryLinesLocked(id, rec)
+		rec.logMu.Unlock()
 	}
+	m.mu.Unlock()
+	for _, p := range configCleanups {
+		if p != "" {
+			if remErr := os.Remove(p); remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
+				m.appendLog(id, []byte("\n=== cleanup warning: failed to remove temp config "+p+": "+remErr.Error()+" ===\n"), "stderr")
+			}
+		}
+	}
+	exitCode := 0
+	var waitErrLog string
+	var waitExitLog string
 	m.mu.Lock()
 	rec = m.byID[id]
 	if rec != nil {
 		rec.Running = false
 		if err != nil {
 			rec.Error = true
+			waitErrLog = "\n=== process wait error: " + err.Error() + " ===\n"
 			if x, ok := err.(*exec.ExitError); ok {
 				rec.ExitCode = x.ExitCode()
+				exitCode = x.ExitCode()
+				waitExitLog = fmt.Sprintf("=== process exited with code %d (run_target=%s) ===\n", exitCode, runTarget)
 			} else {
 				rec.ExitCode = -1
+				exitCode = -1
+				waitExitLog = fmt.Sprintf("=== process exited abnormally (run_target=%s) ===\n", runTarget)
 			}
+		} else {
+			rec.ExitCode = 0
+		}
+	} else if err != nil {
+		if x, ok := err.(*exec.ExitError); ok {
+			exitCode = x.ExitCode()
+		} else {
+			exitCode = -1
 		}
 	}
 	m.mu.Unlock()
+	if waitErrLog != "" {
+		m.appendLog(id, []byte(waitErrLog), "stderr")
+	}
+	if waitExitLog != "" {
+		m.appendLog(id, []byte(waitExitLog), "stderr")
+	}
+
+	wsHub.broadcast(id, map[string]any{
+		"type":      "lifecycle",
+		"run_id":    id,
+		"state":     "finished",
+		"ts":        time.Now().UTC().Format(time.RFC3339),
+		"exit_code": exitCode,
+	})
 
 	if runTarget == "runpod" && destroyPod {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
@@ -2809,6 +3406,15 @@ func (m *manager) activeRunSummary() map[string]any {
 			"mean_mse":          r.LastMeanMSE,
 			"xpu_fallback":      r.XPUFallbackSeen,
 			"wasm_mock":         r.WasmMockSeen,
+			"backend_requested": r.BackendRequested,
+			"backend_selected":  r.BackendSelected,
+			"backend_reason":    r.BackendReasonCode,
+			"xpu_support_class": r.XPUSupportClass,
+			"sycl_active":       r.SYCLActive,
+			"sycl_backend":      r.SYCLBackend,
+			"sycl_device":       r.SYCLDevice,
+			"sycl_fallback":     r.SYCLFallback,
+			"sycl_dpctl_count":  r.SYCLDPCTLCount,
 			"pruned_from_nodes": r.PrunedFromNodes,
 			"pruned_to_nodes":   r.PrunedToNodes,
 			"qaoa_sim_ms":       r.QAOASimMS,
@@ -2847,18 +3453,45 @@ func (m *manager) stop(id string, force bool) error {
 		})
 		return nil
 	}
-	if rec.cmd == nil || rec.cmd.Process == nil {
+	if rec.cmd == nil {
+		trainCancel := rec.trainCancel
+		rec.trainCancel = nil
+		m.mu.Unlock()
+		if trainCancel == nil {
+			return errors.New("run not active")
+		}
+		if force {
+			wsHub.broadcast(id, map[string]any{
+				"type":   "lifecycle",
+				"run_id": id,
+				"state":  "stop_requested",
+				"mode":   map[string]any{"force": true, "grpc": true},
+				"ts":     time.Now().UTC().Format(time.RFC3339),
+			})
+		} else {
+			wsHub.broadcast(id, map[string]any{
+				"type":   "lifecycle",
+				"run_id": id,
+				"state":  "stop_requested",
+				"mode":   map[string]any{"force": false, "graceful": true, "grpc": true},
+				"ts":     time.Now().UTC().Format(time.RFC3339),
+			})
+		}
+		trainCancel()
+		sctx, scancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer scancel()
+		if err := m.grpcCallStopTraining(sctx, id); err != nil {
+			m.appendLogSubprocessAware(id, []byte("\n=== gRPC StopTraining: "+err.Error()+" ===\n"), "stderr")
+		}
+		return nil
+	}
+	if rec.cmd.Process == nil {
 		m.mu.Unlock()
 		return errors.New("run not active")
 	}
 	proc := rec.cmd.Process
 	procDone := rec.procExited
-	grpcBridgeCancel := rec.grpcBridgeCancel
-	rec.grpcBridgeCancel = nil
 	m.mu.Unlock()
-	if grpcBridgeCancel != nil {
-		grpcBridgeCancel()
-	}
 
 	if force {
 		wsHub.broadcast(id, map[string]any{

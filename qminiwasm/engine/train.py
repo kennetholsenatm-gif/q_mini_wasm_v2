@@ -4,15 +4,24 @@ from __future__ import annotations
 
 from ._dotenv import load_dotenv_if_available
 from .config import EngineConfig
+from qminiwasm.runtime_modes import apply_optimized_auto_defaults
 from qminiwasm.training.loop import run_training_loop
 
 
 def main(config: EngineConfig | None = None) -> dict:
     """Run the training loop with the given or env-derived config."""
     load_dotenv_if_available()
+    apply_optimized_auto_defaults()
     if config is None:
         config = EngineConfig()
     wasm_kw = config.wasm_runtime_kwargs()
+    rt = wasm_kw["runtime"]
+    export_runtime_policy = {
+        "enclave_tier": rt.enclave_tier or getattr(config, "enclave_tier", None),
+        "use_memory64": bool(rt.use_memory64),
+        "wasm_memory64_max_mb": rt.memory64_max_mb,
+        "store_memory_limit_bytes": int(rt.store_memory_limit_bytes),
+    }
     mesh_algos = None
     if getattr(config, "mesh_algorithms", None):
         mesh_algos = [a.strip() for a in str(config.mesh_algorithms).split(",") if a.strip()]
@@ -102,4 +111,7 @@ def main(config: EngineConfig | None = None) -> dict:
         hf_deterministic_keep_every_n=getattr(config, "hf_deterministic_keep_every_n", None),
         hf_dataset_revision=str(getattr(config, "hf_dataset_revision", None) or "main"),
         wasm_runtime=wasm_kw["runtime"],
+        enclave_tier=getattr(config, "enclave_tier", None),
+        enclave_footprint_mb=getattr(config, "enclave_footprint_mb", None),
+        export_runtime_policy=export_runtime_policy,
     )
