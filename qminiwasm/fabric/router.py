@@ -14,7 +14,6 @@ hierarchical inference can run without quantum dependencies.
 
 import logging
 import ctypes
-import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -45,6 +44,11 @@ from qminiwasm.security.crypto import (
     EnhancedApproximateDCPE,
     try_load_optional_native_lib,
 )
+from qminiwasm.runtime_modes import (
+    native_dqaoa_routing_enabled,
+    routing_latency_budget_ms,
+    taxonomy_tier,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +58,7 @@ class _RouterConfig:
 
     def __init__(self):
         self.quantum_enabled = True
-        self.taxonomy_tier = (
-            (os.getenv("QMINIWASM_TAXONOMY_TIER", "edge_constrained") or "edge_constrained")
-            .strip()
-            .lower()
-        )
+        self.taxonomy_tier = taxonomy_tier()
 
 
 class QuantumRouter:
@@ -77,13 +77,7 @@ class QuantumRouter:
         """Fallback: return k nearest by L2 distance."""
         if not database_vectors or k <= 0:
             return []
-        use_native = os.getenv("QMINIWASM_NATIVE_DQAOA_ROUTING", "0").strip().lower() not in {
-            "",
-            "0",
-            "false",
-            "off",
-            "no",
-        }
+        use_native = native_dqaoa_routing_enabled()
         if use_native:
             lib = load_native_lib()
             if lib is not None and hasattr(lib, "qmw_route_topk_l2_f64"):
@@ -865,6 +859,7 @@ class QAHRRouter(nn.Module):
         *,
         qaoa_config: Optional[Any] = None,
         num_qubits: int = 8,
+        d_model: int = 4096,
     ):
         super().__init__()
         self.router = EnhancedQuantumRouter(api_key=api_key)
@@ -872,13 +867,14 @@ class QAHRRouter(nn.Module):
         self._proj_in: Optional[nn.Module] = None
         self._proj_out: Optional[nn.Module] = None
         self._mix_scale: Optional[nn.Parameter] = None
+        self._d_model = int(d_model)
         mode = getattr(qaoa_config, "execution_mode", None) if qaoa_config is not None else None
         if mode in ("qiskit_statevector", "qiskit_ibm"):
             from qminiwasm.fabric.qaoa_integration import NeuralQAOA
 
             self._qaoa = NeuralQAOA(int(num_qubits), qaoa_config)
-            self._proj_in = nn.Linear(4096, int(num_qubits))
-            self._proj_out = nn.Linear(int(num_qubits), 4096)
+            self._proj_in = nn.Linear(self._d_model, int(num_qubits))
+            self._proj_out = nn.Linear(int(num_qubits), self._d_model)
             self._mix_scale = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
         # Mission Control: State 1 = classical assignment only; State 2 = Qiskit QAOA path.
         self._qmw_routing_state = 1
@@ -889,7 +885,7 @@ class QAHRRouter(nn.Module):
         """Project to qubits, run QAOA expectations (Qiskit path), add residual to hidden."""
         if self._qaoa is None or self._proj_in is None or self._proj_out is None:
             return hidden_states
-        budget_ms = float((os.getenv("QMW_ROUTING_LATENCY_BUDGET_MS", "") or "50").strip() or "50")
+        budget_ms = routing_latency_budget_ms()
         t_cls0 = time.perf_counter()
         w = self._proj_in(hidden_states).mean(dim=0)
         gamma = self._qaoa.gamma

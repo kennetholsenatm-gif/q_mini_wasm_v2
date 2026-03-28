@@ -35,13 +35,17 @@ When a knob has a TOML equivalent, **prefer TOML** (e.g. `[wasm]` in training co
 
 ## Runtime mode defaults (`qminiwasm.runtime_modes`)
 
-Maps like `QMINIWASM_TERNARY_IMPL`, `QMINIWASM_MEMORY_ENCODE_IMPL`, `QMINIWASM_CASCADE_RL_IMPL`, etc. — used for A/B and CI matrices; prefer documented TOML where exposed.
+**Source of truth:** **`configs/runtime.toml`**. When a variable is **unset** in the process environment, `qminiwasm.runtime_modes` reads the matching table (`[runtime.impl]`, `[training]`, `[fabric]`, `[hardware]`, `[loader]`, `[native]`).
+
+CI and A/B scripts may still **export** `QMINIWASM_*` / `QMW_*` / `SYCL_BACKEND` so non-empty values override the file (same keys as before: ternary/trit/memory/wasm/cascade impls, native strict, routing budget, etc.).
 
 ## Model / router / config (`qminiwasm.model`, `qminiwasm.fabric.router`, `qminiwasm.config`)
 
 Various toggles (`QMW_DISABLE_TROPICAL_ATTN`, `QMW_ROUTING_LATENCY_BUDGET_MS`, `ENCLAVE_TIER`, `N_MAX_LOOPS`, …) — infrastructure and experiments; not part of the WUI `.env` contract.
 
 ## Training WUI (`training-wui`)
+
+**Operator config** for engine mode, gRPC address, RunPod SSH defaults, and runtime-profile mirrors lives in **`configs/wui.toml`** (and optional **`-wui-config` / `-training-runtime` / `-grpc-addr`** flags). The repo default is **`training_runtime_mode = "native"`** (C++ gRPC). The WUI injects matching **`QMINIWASM_*`** vars into Python children so `qminiwasm.engine` stays aligned without relying on the shell environment.
 
 Preflight and subprocess code may pass **secrets** (IBM token, quantum backend name) into a Python probe; **training** still comes from the selected TOML file. Internal keys like `QMW_HF_*` / `QMW_FACTS_*` are script helpers, not user configuration.
 
@@ -58,7 +62,7 @@ Preflight and subprocess code may pass **secrets** (IBM token, quantum backend n
 |----------|------|
 | `QMINIWASM_BUILD_NATIVE` | Build native extensions. |
 | `VCPKG_ROOT`, `CMAKE_TOOLCHAIN_FILE` | C++ gRPC training engine build. |
-| `QMINIWASM_TRAINING_GRPC_ADDR` | gRPC client address for C++ engine. |
+| `QMINIWASM_TRAINING_GRPC_ADDR` | Injected by WUI from **`configs/wui.toml`**; CI may still set it when driving **`qminiwasm.engine`** without the WUI. |
 
 ## CI workflows
 

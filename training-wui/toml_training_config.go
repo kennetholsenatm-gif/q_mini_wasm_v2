@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -33,14 +34,28 @@ type trainingDoc struct {
 		ExtraSpecs    []hfExtraToml `toml:"extra_specs"`
 	} `toml:"huggingface"`
 	Checkpoint struct {
-		LoadPath string `toml:"load_path"`
+		LoadPath   string `toml:"load_path"`
+		SavePath   string `toml:"save_path"`
+		BestPath   string `toml:"best_path"`
+		LatestPath string `toml:"latest_path"`
 	} `toml:"checkpoint"`
+	Tpem struct {
+		LoadPath   string `toml:"load_path"`
+		SavePath   string `toml:"save_path"`
+		BestPath   string `toml:"best_path"`
+		LatestPath string `toml:"latest_path"`
+	} `toml:"tpem"`
 	Enclave struct {
 		EnclaveTier any `toml:"enclave_tier"`
 	} `toml:"enclave"`
 	Adapter struct {
 		UseTsignTernary *bool `toml:"use_tsign_ternary"`
 	} `toml:"adapter"`
+	Model struct {
+		DModel            *int64 `toml:"d_model"`
+		IoDModel          *int64 `toml:"io_d_model"`
+		NumTernaryBlocks  *int64 `toml:"num_ternary_blocks"`
+	} `toml:"model"`
 }
 
 type hfExtraToml struct {
@@ -123,8 +138,37 @@ func buildDatasetURI(doc *trainingDoc) string {
 	return "synthetic"
 }
 
+func mergeCheckpointPaths(doc *trainingDoc) (load, save, best, latest string) {
+	load = strings.TrimSpace(doc.Checkpoint.LoadPath)
+	save = strings.TrimSpace(doc.Checkpoint.SavePath)
+	best = strings.TrimSpace(doc.Checkpoint.BestPath)
+	latest = strings.TrimSpace(doc.Checkpoint.LatestPath)
+	if t := strings.TrimSpace(doc.Tpem.LoadPath); t != "" {
+		load = t
+	}
+	if t := strings.TrimSpace(doc.Tpem.SavePath); t != "" {
+		save = t
+	}
+	if t := strings.TrimSpace(doc.Tpem.BestPath); t != "" {
+		best = t
+	}
+	if t := strings.TrimSpace(doc.Tpem.LatestPath); t != "" {
+		latest = t
+	}
+	return load, save, best, latest
+}
+
+func resolveOptionalRepoPath(root, user string) (string, error) {
+	user = strings.TrimSpace(user)
+	if user == "" {
+		return "", nil
+	}
+	return resolveRepoRelativePath(root, user)
+}
+
 // TrainingTOMLToProto maps a training TOML file to qminiwasm.trainingrpc.TrainingConfig (plan B — not full TOML parity).
-func TrainingTOMLToProto(absConfigPath, runID string) (*trainingrpc.TrainingConfig, error) {
+// repoRoot is used to resolve checkpoint paths to absolute paths for the C++ engine.
+func TrainingTOMLToProto(absConfigPath, runID, repoRoot string) (*trainingrpc.TrainingConfig, error) {
 	raw, err := os.ReadFile(absConfigPath)
 	if err != nil {
 		return nil, err
@@ -138,10 +182,28 @@ func TrainingTOMLToProto(absConfigPath, runID string) (*trainingrpc.TrainingConf
 		tierStr = fmt.Sprint(doc.Enclave.EnclaveTier)
 	}
 
+	loadPath, savePath, bestPath, latestPath := mergeCheckpointPaths(&doc)
+	root := strings.TrimSpace(repoRoot)
+	if root == "" {
+		return nil, errors.New("repo root is required to resolve checkpoint paths")
+	}
+
+	absSave, err := resolveOptionalRepoPath(root, savePath)
+	if err != nil {
+		return nil, fmt.Errorf("checkpoint save_path: %w", err)
+	}
+	absBest, err := resolveOptionalRepoPath(root, bestPath)
+	if err != nil {
+		return nil, fmt.Errorf("checkpoint best_path: %w", err)
+	}
+	absLatest, err := resolveOptionalRepoPath(root, latestPath)
+	if err != nil {
+		return nil, fmt.Errorf("checkpoint latest_path: %w", err)
+	}
 	cfg := &trainingrpc.TrainingConfig{
 		RunId:             runID,
 		DatasetUri:        buildDatasetURI(&doc),
-		ModelUri:          strings.TrimSpace(doc.Checkpoint.LoadPath),
+		ModelUri:          strings.TrimSpace(loadPath),
 		Epochs:            u32Or(doc.Training.Epochs, 1),
 		BatchSize:         u32Or(doc.Training.BatchSize, 64),
 		MicroBatchSize:    u32Or(doc.Training.MicroBatch, 16),
@@ -151,10 +213,22 @@ func TrainingTOMLToProto(absConfigPath, runID string) (*trainingrpc.TrainingConf
 		LearningRate:      f64Or(doc.Training.LearningRate, 1e-3),
 		Seed:              u64Seed(doc.Training.Seed, 42),
 		TaxonomyTier:      enclaveTierToTaxonomy(doc.Enclave.EnclaveTier, tierStr),
-		PrecisionPolicy:   "fp32",
+		PrecisionPolicy:        "fp32",
+		CheckpointSavePath:     absSave,
+		CheckpointBestPath:     absBest,
+		CheckpointLatestPath:   absLatest,
 	}
 	if doc.Adapter.UseTsignTernary != nil && *doc.Adapter.UseTsignTernary {
 		cfg.PrecisionPolicy = "ternary"
+	}
+	if doc.Model.DModel != nil && *doc.Model.DModel > 0 {
+		cfg.DModel = uint32(*doc.Model.DModel)
+	}
+	if doc.Model.IoDModel != nil && *doc.Model.IoDModel > 0 {
+		cfg.IoDModel = uint32(*doc.Model.IoDModel)
+	}
+	if doc.Model.NumTernaryBlocks != nil && *doc.Model.NumTernaryBlocks > 0 {
+		cfg.NumTernaryBlocks = uint32(*doc.Model.NumTernaryBlocks)
 	}
 	return cfg, nil
 }

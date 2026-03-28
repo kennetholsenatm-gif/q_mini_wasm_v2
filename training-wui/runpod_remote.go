@@ -1,5 +1,5 @@
 // RunPod remote training: sync repo over SSH + run python -m qminiwasm.engine on the pod.
-// Requires OpenSSH client (ssh, scp) and tar on PATH. Configure via RUNPOD_SSH_* env vars.
+// Requires OpenSSH client (ssh, scp) and tar on PATH. SSH defaults come from configs/wui.toml [wui.runpod].
 package main
 
 import (
@@ -14,14 +14,15 @@ import (
 )
 
 func runpodSSHUser() string {
-	if s := strings.TrimSpace(os.Getenv("RUNPOD_SSH_USER")); s != "" {
+	s := strings.TrimSpace(wuiResolved.RunpodSSHUser)
+	if s != "" {
 		return s
 	}
 	return "root"
 }
 
 func runpodRemoteDir() string {
-	s := strings.TrimSpace(os.Getenv("RUNPOD_REMOTE_DIR"))
+	s := strings.TrimSpace(wuiResolved.RunpodRemoteDir)
 	if s == "" {
 		return "/workspace/qminiwasm-core"
 	}
@@ -29,7 +30,7 @@ func runpodRemoteDir() string {
 }
 
 func runpodSSHKeyPath() string {
-	return strings.TrimSpace(os.Getenv("RUNPOD_SSH_KEY"))
+	return strings.TrimSpace(wuiResolved.RunpodSSHKeyPath)
 }
 
 func runpodSSHBaseArgs(keyPath string) []string {

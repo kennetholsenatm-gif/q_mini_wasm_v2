@@ -11,7 +11,7 @@ How telemetry reaches the browser, and how Python subprocess training differs fr
 
 ## Architecture & Vision
 
-The WUI sits between you, the **Python** training engine (`qminiwasm.engine`), optional **native C++** `TrainingEngineService` over gRPC, and optional **cloud** backends (RunPod pod, RunPod serverless). **Local** training and **cloud GPU with “train on WUI host”** use the Go client for **`StartTraining` / `StreamTelemetry`** when the C++ server is in play. **Train on the remote pod** and **serverless** paths still drive **`python -m qminiwasm.engine`** (over SSH or asynchronously). The UI maps wizard and TOML selections into `TrainingConfig` fields that exist in [`proto/training_engine.proto`](../proto/training_engine.proto); keys without a proto counterpart are ignored until a backend loads the full TOML server-side.
+The WUI sits between you and training backends with **native LibTorch TPEM over gRPC** as the **default local foundation**: the C++ **`TrainingEngineService`** (`StartTraining` / `StreamTelemetry` at `grpc_addr` from **`configs/wui.toml`**). **Ternary / runtime profile** choices in TOML and the wizard align with that path first. The **Python** engine (`python -m qminiwasm.engine`) remains important for **remote pod** and **serverless** runs, for **auto-fallback** when gRPC is unreachable, and as a **reference** full training loop—but it is not the primary story for local Mission Control. Optional **cloud** backends (RunPod pod, RunPod serverless) complement this. **Local** training and **cloud GPU with “train on WUI host”** use the Go gRPC client when the C++ server is up; **train on the remote pod** and **serverless** still drive Python over SSH or async jobs. The UI maps wizard and TOML selections into `TrainingConfig` fields that exist in [`proto/training_engine.proto`](../proto/training_engine.proto); keys without a proto counterpart are ignored until a backend loads the full TOML server-side.
 
 **Mission Control** is the live operator surface: metrics and logs stream over per-run **WebSockets**. Two telemetry backends feed the same **`type: "metric"`** message shape, distinguished by `telemetry_source` (and, for gRPC, `engine: "grpc"`).
 
@@ -21,6 +21,10 @@ The WUI sits between you, the **Python** training engine (`qminiwasm.engine`), o
 |--------|------------------|-------------------------|
 | **Python** (`python -m qminiwasm.engine`) | Stdout/stderr lines parsed by the WUI (e.g. **`qmw_metric`** at epoch end, **`qmw_train_throughput`**, **`qmw_xpu_mem`**) | WebSocket **`metric`** with `telemetry_source` = Python VNV; table cells for step/LR/queues stay empty unless future Python emits matching fields |
 | **C++ gRPC** | **`StreamTelemetry`** → `TelemetryEvent` in `proto/training_engine.proto` | Same **`metric`** type with `telemetry_source` = gRPC C++, **`engine`**: `"grpc"`, and populated **Step**, **LR**, **σ/s**, **Q**, **Tier**, **Stage**, **Dec**, **TEE** columns in Mission Control |
+
+**Default: native C++ gRPC training.** The revision-controlled default in **`configs/wui.toml`** is **`training_runtime_mode = "native"`** (LibTorch `TrainingEngineService` at **`grpc_addr`**, default **`127.0.0.1:50061`**). Start the server first (e.g. **`scripts/start-training-stack.ps1`** / **`.sh`**, or run **`qminiwasm_training_engine_server`** yourself). Override with **`training-wui -training-runtime`** or TOML: use **`auto`** to probe gRPC and **fall back to Python** if the port is closed; use **`python`** to force the full PyTorch training loop. **Preflight** orders rows for operators: **WUI runtime mode**, **local engine pick** and **gRPC reachability**, **native `StartTraining` (LibTorch TPEM) geometry** (proto `d_model` / `io_d_model` / `num_ternary_blocks`, load path, effective cold-start when unset), then **ternary / impl / bundle** lines, then a **Python environment (reference only)** block (merged `EngineConfig` geometry string, torch/XPU/IBM, etc.). See [docs/CONFIGURATION_POLICY.md](../docs/CONFIGURATION_POLICY.md).
+
+**`StreamTelemetry` lifecycle:** After the run finishes, the server closes the stream so the WUI client sees a normal end (EOF). If the stream were opened with no matching active run, it may end quickly while the engine is **idle**.
 
 **Proto → WebSocket (operator-facing names):**
 
@@ -116,17 +120,34 @@ go build -o training-wui .
 ./training-wui -root ..
 ```
 
+**Windows:** `go build -o training-wui .` produces **`training-wui.exe`**. Run it with an explicit path so you do not pick up another copy on `PATH`:
+
+```powershell
+cd path\to\qminiwasm-core\training-wui
+go build -o training-wui.exe .
+.\training-wui.exe -root .. -strict-addr
+```
+
+**Still seeing an old UI (e.g. “Emergency Abort”) after rebuild?** The binary you **start** is not the one you **built**, or the browser is not talking to that process. Check:
+
+1. Startup log includes **`embedded web/index.html sha256=…`** and **`training-wui UI: http://…`**.
+2. Which executable is listening: `Get-NetTCPConnection -LocalPort 8765 | Select-Object OwningProcess` then `Get-Process -Id <pid> | Select-Object Path`.
+3. Compare embed to disk: `GET /api/meta` field **`embedded_web_index_sha256`** must equal the SHA-256 of **`training-wui/web/index.html`** in *this* repo (PowerShell: `Get-FileHash -Algorithm SHA256 .\web\index.html` from `training-wui/` — compare hex, case-insensitive).
+
 From the **repository root** you can use [`scripts/deploy-wui.sh`](../scripts/deploy-wui.sh); set **`DEST=/path/to/training-wui`** to copy the binary after build (optional). Script comments list cloud-related env vars—see [`.env.example`](../.env.example) and [docs/RUNPOD_SERVERLESS.md](../docs/RUNPOD_SERVERLESS.md).
 
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `-addr` | `:8765` | Listen address (`host:port`) |
+| `-strict-addr` | off | If set, **exit** when `-addr` is already in use instead of trying the next port (`:8766`, …). Use this while developing so you never accidentally browse an **old** process still bound to `:8765` while the new binary listens elsewhere. |
 | `-root` | `.` | **Repo root** (directory that contains `configs/` and `qminiwasm/`) |
 | `-python` | `python` | Python executable name or path on `PATH` |
 
+**Stale or missing UI after editing `web/index.html`:** The page is **embedded** into the binary at build time (`go:embed`). You must **rebuild** (`go build` / `go run`) and run **that** executable. If the requested port is busy, the server tries **8766, 8767, …** and logs a warning—opening the default URL can still hit an **older** server on `:8765`. Check the startup lines **`training-wui listening on …`** and **`training-wui UI: http://…`** (or use `-strict-addr`). On Windows, see what owns the port (for example `Get-NetTCPConnection -LocalPort 8765`) and stop the old process if needed.
+
 ### 4. Open the UI and walk through the app
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+Open the URL printed at startup (**`training-wui UI: …`**) or [http://127.0.0.1:8765](http://127.0.0.1:8765) when nothing else is listening on that port.
 
 **Training** is a single **wizard** on one tab (dataset mix, model and runtime, data source, training knobs plus full **schema** form, then review). Saves go to **`configs/training/wui_working.toml`** unless you pick another file in the dropdown. **Launch training** is the control that actually starts work; **preflight**, **runs**, and **artifacts** sit alongside it.
 
@@ -141,7 +162,8 @@ Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 For **native gRPC** training (local or “train on WUI host” with cloud):
 
 1. Build and run `qminiwasm_training_engine_server` (see [`cpp/training/README.md`](../cpp/training/README.md)).
-2. Optional env **`QMINIWASM_TRAINING_GRPC_ADDR`** (default **`127.0.0.1:50061`**).
+2. Point **`configs/wui.toml`** `[wui] grpc_addr` at the listener (default **`127.0.0.1:50061`**) or use **`-grpc-addr`** on **`training-wui`**.
+3. Or use **`scripts/start-training-stack.sh`** / **`scripts/start-training-stack.ps1`** from the repo root: they **CMake-build** the C++ server when its binary is missing, then start it and the WUI (see **`cpp/training/README.md`** if configure fails).
 
 Telemetry shape and Mission Control columns are described in [Architecture & Vision](#architecture--vision).
 
@@ -188,7 +210,7 @@ The dashboard can run **`apply`** before training and **`destroy`** when the job
 
 ### Sync, tools, and artifacts
 
-The WUI host needs **`ssh`**, **`tar`**, and **`scp`** on **`PATH`** (`scp` when the server uses a generated temp config). Optional **`RUNPOD_SSH_USER`**, **`RUNPOD_REMOTE_DIR`**, **`RUNPOD_SSH_KEY`** in `.env` ([`.env.example`](../.env.example)); per-target SSH user can live in the **warm-target** registry. The repo **`.env`** is included in the sync so Hub and IBM tokens work on the remote.
+The WUI host needs **`ssh`**, **`tar`**, and **`scp`** on **`PATH`** (`scp` when the server uses a generated temp config). Default SSH user, remote directory, and optional key path come from **`configs/wui.toml`** **`[wui.runpod]`** (not from `RUNPOD_SSH_*` env); per-target SSH user can override via the **warm-target** registry. The repo **`.env`** is included in the sync so Hub and IBM tokens work on the remote.
 
 **Artifacts** land under the synced tree on the pod (e.g. **`artifacts/models/...`**). Copy checkpoints back with **scp** or **rsync** if you need them locally. **Stop** ends the local **ssh** session; the remote process may continue until the pod is destroyed or you intervene over SSH.
 

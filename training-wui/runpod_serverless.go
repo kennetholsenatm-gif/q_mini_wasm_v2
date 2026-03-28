@@ -369,21 +369,17 @@ func appendRuntimeEnvDefaults(extraEnv []string) []string {
 			existing[strings.TrimSpace(kv[:i])] = true
 		}
 	}
-	for _, k := range []string{
-		"QMINIWASM_TRAINING_RUNTIME_MODE",
-		"QMINIWASM_TERNARY_IMPL",
-		"QMINIWASM_TRIT_PACK_IMPL",
-		"QMINIWASM_MEMORY_ENCODE_IMPL",
-		"QMINIWASM_WASM_EXEC_IMPL",
-		"QMINIWASM_CASCADE_RL_IMPL",
-		"QMINIWASM_NATIVE_STRICT",
-	} {
+	for _, kv := range wuiRuntimeEnvForPython() {
+		idx := strings.Index(kv, "=")
+		if idx <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(kv[:idx])
 		if existing[k] {
 			continue
 		}
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			extraEnv = append(extraEnv, k+"="+v)
-		}
+		existing[k] = true
+		extraEnv = append(extraEnv, kv)
 	}
 	return extraEnv
 }

@@ -5,16 +5,16 @@ It uses a real SYCL backend when available, falling back to stubs when not.
 """
 
 import logging
-import os
 from typing import List, Optional
 
+from qminiwasm.runtime_modes import strict_sycl_helper, sycl_backend_name
 from qminiwasm.wasm_host.trit_pack import pack_ternary_list, unpack_ternary_list
 
 # Try to import the real SYCL implementation
 try:
     from qminiwasm.hardware.sycl_hardware import SYCLHardware as RealSYCLHardware
 
-    SYCL_BACKEND = os.getenv("SYCL_BACKEND", "sycl").lower()
+    SYCL_BACKEND = sycl_backend_name()
     if SYCL_BACKEND == "sycl":
         SYCL_AVAILABLE = True
         logger = logging.getLogger(__name__)
@@ -59,12 +59,7 @@ class SYCLHardware:
         else:
             self.logger.info("Initialized SYCLHardware with stubs")
             self._backend = None
-        self._strict_helper = os.getenv("QMINIWASM_STRICT_SYCL_HELPER", "0").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
+        self._strict_helper = strict_sycl_helper()
         self._fallback_warned = False
         if self._strict_helper and not self.is_backend_active():
             st = self.backend_status()

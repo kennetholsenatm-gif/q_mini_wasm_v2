@@ -18,16 +18,40 @@ message TrainingConfig {
   uint64 seed = 11;
   string taxonomy_tier = 12;
   string precision_policy = 13;
+  // Absolute repo paths (WUI resolves TOML-relative paths). With LibTorch, native checkpoints are
+  // trainable TPEM interchange v2 (QMWTPEM2 + safetensors); load via load_trainable_tpem_into_model.
+  string checkpoint_save_path = 14;
+  string checkpoint_best_path = 15;
+  string checkpoint_latest_path = 16;
+  // Cold-start native LibTorch geometry when model_uri is empty (0 = unset).
+  uint32 d_model = 17;
+  uint32 io_d_model = 18;
+  uint32 num_ternary_blocks = 19;
 }
 
 message StartTrainingRequest {
   TrainingConfig config = 1;
 }
 
+// Order-of-magnitude native LibTorch TPEM cold-start memory (dense FP32 weights + Adam hint + activation scratch).
+// Informational only: the engine does not reject runs based on these values.
+message NativeColdStartMemoryEstimate {
+  uint64 parameter_bytes_fp32 = 1;
+  uint64 adam_state_bytes_fp32 = 2; // typical Adam: 2x parameter tensor count in FP32 (m and v)
+  uint64 activation_scratch_bytes_hint = 3; // rough forward/backward scratch vs batch (see formula_summary)
+  string formula_summary = 4;
+  uint32 effective_d_model = 5;
+  uint32 effective_io_d_model = 6;
+  uint32 effective_num_ternary_blocks = 7;
+  uint32 batch_size = 8;
+  bool model_uri_checkpoint_load = 9; // if true, interchange may override geometry; estimate uses proto for planning
+}
+
 message StartTrainingResponse {
   bool accepted = 1;
   string message = 2;
   string run_id = 3;
+  NativeColdStartMemoryEstimate memory_estimate = 4;
 }
 
 message StopTrainingRequest {
@@ -90,6 +114,15 @@ message TelemetryEvent {
   string enclave_state = 19;
   string attestation_state = 20;
   double decoherence_score = 21;
+  // Epoch summary (native engine); set together for event_type "epoch_throughput".
+  double epoch_wall_s = 22;
+  uint32 epoch_batch_count = 23;
+  uint64 epoch_sample_count = 24;
+  double epoch_mean_samples_per_s = 25;
+  double host_rss_mib = 26;
+  // Enclave / footprint hints (e.g. event_type "enclave_summary").
+  double estimated_tpem_mib = 27;
+  double tier_cap_mib = 28;
 }
 
 service TrainingEngineService {

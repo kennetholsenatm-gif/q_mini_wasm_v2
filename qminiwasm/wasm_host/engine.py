@@ -28,7 +28,11 @@ import wasmtime
 
 from .memory_encode import D_MODEL, encode_linear_memory
 from ..native_bridge import load_native_lib, native_capabilities
-from qminiwasm.runtime_modes import strict_native_enabled
+from qminiwasm.runtime_modes import (
+    enclave_adapter_enabled,
+    strict_native_enabled,
+    wasm_exec_impl_mode,
+)
 from .wasi_link import build_clang_wasm_compile_command, instantiate_wasmtime_module
 
 # Wasmtime Store max linear memory (bytes): ~1e6 rows × d_model (encode_linear_memory width).
@@ -407,7 +411,7 @@ class WasmEngine:
         Returns:
             (output, hidden_state, target_state, pre_memory_bytes, post_memory_bytes)
         """
-        exec_impl = os.getenv("QMINIWASM_WASM_EXEC_IMPL", "auto").strip().lower()
+        exec_impl = wasm_exec_impl_mode()
         if exec_impl not in {"auto", "python", "native"}:
             exec_impl = "auto"
 
@@ -526,8 +530,7 @@ class WasmEngine:
     def _execute_enclave_adapter(
         self, module: Optional[Any], func_name: str, args: List[int]
     ) -> Optional[Tuple[int, Optional[torch.Tensor], Optional[torch.Tensor], bytes, bytes]]:
-        enabled = os.getenv("QMINIWASM_ENCLAVE_ADAPTER", "0").strip().lower()
-        if enabled not in {"1", "true", "yes", "on"}:
+        if not enclave_adapter_enabled():
             self.logger.info(
                 "enclave_adapter backend selected but adapter feature flag is off; "
                 "falling back to wasmtime."

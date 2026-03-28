@@ -105,7 +105,7 @@ if(QMINIWASM_WITH_AVX512)
     target_sources(qminiwasm_core PRIVATE $<TARGET_OBJECTS:qminiwasm_avx512>)
 endif()
 
-# NLopt for COBYLA
+# NLopt for COBYLA (v2.10.1+ for cmake_minimum_required >= 3.18; required for CMake 4.x / recent VS bundles)
 if(QMINIWASM_WITH_NLOPT)
     set(NLOPT_FORTRAN OFF CACHE BOOL "" FORCE)
     set(NLOPT_SWIG OFF CACHE BOOL "" FORCE)
@@ -113,9 +113,11 @@ if(QMINIWASM_WITH_NLOPT)
     set(NLOPT_OCTAVE OFF CACHE BOOL "" FORCE)
     set(NLOPT_MATLAB OFF CACHE BOOL "" FORCE)
     set(NLOPT_TESTS OFF CACHE BOOL "" FORCE)
+    set(NLOPT_GUILE OFF CACHE BOOL "" FORCE)
+    set(NLOPT_JAVA OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(nlopt
         GIT_REPOSITORY https://github.com/stevengj/nlopt.git
-        GIT_TAG v2.7.1
+        GIT_TAG v2.10.1
     )
     FetchContent_MakeAvailable(nlopt)
     target_link_libraries(qminiwasm_core PRIVATE nlopt)
@@ -190,6 +192,7 @@ endif()
 
 # Optional C++20 training engine foundation with gRPC telemetry service
 if(QMINIWASM_WITH_TRAINING_ENGINE)
+    option(QMINIWASM_TRAINING_WITH_LIBTORCH "Link LibTorch for real TPEM (ternary STE + interchange v2)" ON)
     find_package(Protobuf CONFIG REQUIRED)
     find_package(gRPC CONFIG REQUIRED)
     find_package(Threads REQUIRED)
@@ -216,8 +219,34 @@ if(QMINIWASM_WITH_TRAINING_ENGINE)
         VERBATIM
     )
 
-    add_library(qminiwasm_training_engine STATIC
+    if(QMINIWASM_TRAINING_WITH_LIBTORCH)
+        if(DEFINED ENV{LIBTORCH_ROOT} AND NOT "$ENV{LIBTORCH_ROOT}" STREQUAL "")
+            file(TO_CMAKE_PATH "$ENV{LIBTORCH_ROOT}" _qmw_libtorch_root)
+            list(PREPEND CMAKE_PREFIX_PATH "${_qmw_libtorch_root}")
+            message(STATUS "LIBTORCH_ROOT -> CMAKE_PREFIX_PATH: ${_qmw_libtorch_root}")
+        endif()
+        include(FetchContent)
+        FetchContent_Declare(
+            nlohmann_json
+            GIT_REPOSITORY https://github.com/nlohmann/json.git
+            GIT_TAG v3.11.3
+        )
+        FetchContent_MakeAvailable(nlohmann_json)
+        find_package(Torch REQUIRED)
+    endif()
+
+    # Protobuf/gRPC generated sources: isolated from LibTorch includes (LibTorch ships google/protobuf
+    # headers that conflict with vcpkg protobuf PROTOBUF_VERSION macros).
+    add_library(qminiwasm_training_proto STATIC ${TRAINING_PB_CC} ${TRAINING_GRPC_CC})
+    target_include_directories(qminiwasm_training_proto PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/training/include
+        ${TRAINING_PROTO_GEN_DIR}
+    )
+    target_link_libraries(qminiwasm_training_proto PUBLIC protobuf::libprotobuf gRPC::grpc++)
+
+    set(_QMW_TRAINING_RUNTIME_SRCS
         training/src/training_engine.cpp
+        training/src/native_checkpoint.cpp
         training/src/training_tracker.cpp
         training/src/balanced_sampler.cpp
         training/src/taxonomy_policy.cpp
@@ -226,26 +255,65 @@ if(QMINIWASM_WITH_TRAINING_ENGINE)
         training/src/adapters/sycl_adapter.cpp
         training/src/adapters/avx512_adapter.cpp
         training/src/adapters/wasmedge_adapter.cpp
-        training/src/grpc/training_engine_service.cpp
-        ${TRAINING_PB_CC}
-        ${TRAINING_GRPC_CC}
     )
-    target_include_directories(qminiwasm_training_engine PUBLIC
+    if(QMINIWASM_TRAINING_WITH_LIBTORCH)
+        list(APPEND _QMW_TRAINING_RUNTIME_SRCS
+            training/src/safetensors_f32.cpp
+            training/src/libtorch_ternary_trainer.cpp
+        )
+    endif()
+
+    add_library(qminiwasm_training_runtime STATIC ${_QMW_TRAINING_RUNTIME_SRCS})
+    target_include_directories(qminiwasm_training_runtime PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/training/include
+    )
+    target_link_libraries(qminiwasm_training_runtime PUBLIC Threads::Threads)
+    if(QMINIWASM_TRAINING_WITH_LIBTORCH)
+        target_compile_definitions(qminiwasm_training_runtime PRIVATE QMINIWASM_HAS_LIBTORCH_TRAINING=1)
+        target_link_libraries(qminiwasm_training_runtime PRIVATE ${TORCH_LIBRARIES} nlohmann_json::nlohmann_json)
+        if(DEFINED TORCH_INCLUDE_DIRS)
+            target_include_directories(qminiwasm_training_runtime PRIVATE "${TORCH_INCLUDE_DIRS}")
+        endif()
+        if(TORCH_CXX_FLAGS)
+            separate_arguments(_qmw_torch_cxx_flags_root NATIVE_COMMAND "${TORCH_CXX_FLAGS}")
+            target_compile_options(qminiwasm_training_runtime PRIVATE ${_qmw_torch_cxx_flags_root})
+        endif()
+    endif()
+
+    add_library(qminiwasm_training_grpcsvc STATIC training/src/grpc/training_engine_service.cpp)
+    target_include_directories(qminiwasm_training_grpcsvc PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/training/include
         ${TRAINING_PROTO_GEN_DIR}
     )
-    target_link_libraries(qminiwasm_training_engine PUBLIC gRPC::grpc++ protobuf::libprotobuf Threads::Threads)
+    target_link_libraries(qminiwasm_training_grpcsvc PUBLIC qminiwasm_training_proto PRIVATE qminiwasm_training_runtime)
+
     if(MSVC)
-        target_compile_options(qminiwasm_training_engine PRIVATE /W4 /permissive-)
+        target_compile_options(qminiwasm_training_runtime PRIVATE /W4 /permissive-)
+        target_compile_options(qminiwasm_training_grpcsvc PRIVATE /W4 /permissive-)
+        if(QMINIWASM_TRAINING_WITH_LIBTORCH)
+            target_compile_options(qminiwasm_training_runtime PRIVATE /wd4702)
+        endif()
     else()
-        target_compile_options(qminiwasm_training_engine PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(qminiwasm_training_runtime PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(qminiwasm_training_grpcsvc PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+
+    add_library(qminiwasm_training_engine INTERFACE)
+    target_link_libraries(qminiwasm_training_engine INTERFACE
+        qminiwasm_training_grpcsvc
+        qminiwasm_training_runtime
+    )
 
     add_executable(qminiwasm_training_engine_server
         training/src/grpc/training_engine_server_main.cpp
     )
     target_link_libraries(qminiwasm_training_engine_server PRIVATE qminiwasm_training_engine)
+
+    if(QMINIWASM_TRAINING_WITH_LIBTORCH)
+        add_executable(qminiwasm_tpem_roundtrip training/src/tpem_roundtrip_cli.cpp)
+        target_link_libraries(qminiwasm_tpem_roundtrip PRIVATE qminiwasm_training_runtime)
+    endif()
 endif()
 
 # Tests executable
@@ -266,7 +334,7 @@ endif()
 if(QMINIWASM_BUILD_PYBIND)
     FetchContent_Declare(pybind11
         GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v2.11.1
+        GIT_TAG v2.13.6
     )
     FetchContent_MakeAvailable(pybind11)
     pybind11_add_module(qminiwasm_cpp_native MODULE

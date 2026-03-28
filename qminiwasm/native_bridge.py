@@ -9,6 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
+from qminiwasm.runtime_modes import strict_native_enabled
+
 
 @lru_cache(maxsize=1)
 def load_native_lib() -> Optional[ctypes.CDLL]:
@@ -65,10 +67,5 @@ def native_capabilities() -> dict[str, Any]:
     except Exception:
         caps["pybind_loaded"] = False
         caps["pybind_symbols"] = {}
-    caps["strict_native"] = os.getenv("QMINIWASM_NATIVE_STRICT", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    caps["strict_native"] = strict_native_enabled()
     return caps

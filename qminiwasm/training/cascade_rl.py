@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ctypes
-import os
 from typing import Any, Callable, Protocol
 
 import torch
@@ -17,7 +16,7 @@ import torch.nn.functional as F
 
 from ..rl.cascade_grpo import CascadeGRPO
 from ..native_bridge import load_native_lib
-from qminiwasm.runtime_modes import resolve_impl_mode
+from qminiwasm.runtime_modes import native_rl_runtime_enabled, resolve_impl_mode
 from .distillation import MOPDLoss
 
 
@@ -124,13 +123,7 @@ def cascade_rl_train_step(
     dev = _policy_device(policy_logits_fn)
 
     impl_mode = _cascade_rl_impl_mode()
-    use_native_rollout = os.getenv("QMINIWASM_NATIVE_RL_RUNTIME", "0").strip().lower() not in {
-        "",
-        "0",
-        "false",
-        "off",
-        "no",
-    }
+    use_native_rollout = native_rl_runtime_enabled()
     if impl_mode == "python":
         use_native_rollout = False
     if impl_mode == "native":

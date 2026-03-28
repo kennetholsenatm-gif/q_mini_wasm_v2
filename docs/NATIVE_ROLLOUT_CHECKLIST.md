@@ -5,6 +5,7 @@ This artifact captures a staged rollout plan using the latest native pipeline ou
 ## Snapshot (Current Evidence)
 
 - Run status: `python`, `native`, `auto` all gate-pass.
+- Training WUI: **`configs/wui.toml`** defaults to **`training_runtime_mode = "native"`** (C++ gRPC); set **`auto`** or **`python`** when you need fallback or the full PyTorch loop.
 - Native readiness snapshot:
   - `ctypes_lib_loaded=false`
   - `pybind_loaded=true`
@@ -25,7 +26,7 @@ This artifact captures a staged rollout plan using the latest native pipeline ou
 - [ ] `fallback_count == 0` for normal local run; any fallback includes explicit reason code.
 - [ ] `python -m pytest tests/test_ab_runtime_toggles.py -q` passes.
 - [ ] `go test ./...` in `training-wui` passes.
-- [ ] WUI local start in `auto` mode routes deterministically (native if reachable, else python).
+- [ ] WUI local start in `auto` mode routes deterministically (native if reachable, else python). With default **`native`** mode, gRPC is required unless the operator switches to **`auto`** / **`python`**.
 
 ## Staging (strict gate enabled)
 
@@ -35,16 +36,16 @@ This artifact captures a staged rollout plan using the latest native pipeline ou
 - [ ] Validate serving `/health` and training telemetry emit mode/fallback details.
 - [ ] No silent downgrade from strict-native intent.
 
-## Production (auto-fallback + strict canary lane)
+## Production (native default + optional auto-fallback)
 
-- [ ] Keep user traffic on `auto` defaults.
+- [ ] Default **`native`** in **`configs/wui.toml`** for laptop/edge training; use fleet-wide **`auto`** only where Python fallback is an explicit SLO.
 - [ ] Keep strict canary jobs scheduled (non-blocking for user traffic).
 - [ ] Alert on fallback reason spikes and native readiness regressions.
 - [ ] Block promotion if parity fails or unexplained fallback volume increases.
 
 ## Recommended Strict Canary Env Matrix
 
-Use these lanes as a minimum matrix.
+Use these lanes as a minimum matrix. **Local default behavior** should match **`configs/runtime.toml`** and **`configs/wui.toml`**; the table lists **process environment** overrides for CI (non-empty env wins over TOML in `qminiwasm.runtime_modes`).
 
 | Lane | Purpose | Core env |
 |---|---|---|
@@ -52,6 +53,8 @@ Use these lanes as a minimum matrix.
 | `strict-kernels` | Enforce native kernel hotpaths | `QMINIWASM_NATIVE_STRICT=1`, `QMINIWASM_TERNARY_IMPL=native`, `QMINIWASM_TRIT_PACK_IMPL=native`, `QMINIWASM_MEMORY_ENCODE_IMPL=native`, `QMINIWASM_CASCADE_RL_IMPL=native`, `QMINIWASM_TPEM_NATIVE_BUNDLE=0` |
 | `strict-wasm` | Enforce native wasm host path correctness | `QMINIWASM_NATIVE_STRICT=1`, `QMINIWASM_WASM_EXEC_IMPL=native`, `QMINIWASM_TRAINING_RUNTIME_MODE=cpp` |
 | `python-baseline` | Regression control baseline | `QMINIWASM_NATIVE_STRICT=0`, `QMINIWASM_TERNARY_IMPL=python`, `QMINIWASM_TRIT_PACK_IMPL=python`, `QMINIWASM_MEMORY_ENCODE_IMPL=python`, `QMINIWASM_WASM_EXEC_IMPL=python`, `QMINIWASM_CASCADE_RL_IMPL=python`, `QMINIWASM_TRAINING_RUNTIME_MODE=python` |
+
+**Local stack:** `scripts/start-training-stack.sh` or `scripts/start-training-stack.ps1` builds the C++ gRPC server when needed, starts it, and runs **`training-wui`**.
 
 ## Promotion Criteria
 

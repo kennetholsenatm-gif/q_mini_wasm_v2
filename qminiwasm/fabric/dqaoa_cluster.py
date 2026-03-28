@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ctypes
-import os
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
 from qminiwasm.native_bridge import load_native_lib
+from qminiwasm.runtime_modes import native_dqaoa_routing_enabled
 
 
 @dataclass
@@ -42,13 +42,7 @@ def spectral_partition(
     """Partition nodes via spectral clustering (``sklearn`` if available, else degree fallback)."""
     n = adjacency.shape[0]
     k = max(2, min(int(num_clusters), n))
-    use_native = os.getenv("QMINIWASM_NATIVE_DQAOA_ROUTING", "0").strip().lower() not in {
-        "",
-        "0",
-        "false",
-        "off",
-        "no",
-    }
+    use_native = native_dqaoa_routing_enabled()
     if use_native:
         lib = load_native_lib()
         if lib is not None and hasattr(lib, "qmw_route_assign_clusters"):

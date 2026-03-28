@@ -17,6 +17,11 @@ terraform.tfstate.backup
 # Encrypted Secrets
 secrets.enc.json
 
+# Local LibTorch (scripts/install-libtorch*.sh|.ps1)
+cpp/.deps/
+# Preset / ad-hoc CMake build tree for cpp training engine (local only)
+cpp/build-training-engine/
+
 # Build Artifacts
 artifacts/
 
@@ -36,6 +41,7 @@ configs/training/.wui_edge_*.toml
 # IDE Configuration
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 
@@ -235,6 +241,7 @@ wheels/
 !scripts/runpod_prereqs.sh
 !scripts/runpod_bootstrap.sh
 !scripts/runpod_destroy.sh
+!scripts/rebuild-training-wui.sh
 
 # Unit test / coverage reports
 htmlcov/

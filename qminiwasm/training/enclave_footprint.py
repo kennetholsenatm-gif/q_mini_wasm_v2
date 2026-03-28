@@ -38,5 +38,14 @@ def estimate_trainable_tpem_size_mb(
         block = payload.get(key)
         if isinstance(block, dict):
             raw += _state_dict_tensor_bytes(block)
+    tb = payload.get("ternary_blocks")
+    if isinstance(tb, list):
+        for block in tb:
+            if isinstance(block, dict):
+                raw += _state_dict_tensor_bytes(block)
+    for key in ("input_stem", "output_head"):
+        block = payload.get(key)
+        if isinstance(block, dict):
+            raw += _state_dict_tensor_bytes(block)
     mib = raw / (1024 * 1024)
     return float(mib * (1.0 + _TPEM_SAVE_OVERHEAD_RATIO))

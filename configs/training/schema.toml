@@ -2,6 +2,10 @@
 # Validated by qminiwasm.engine.training_schema.TrainingConfig (Pydantic).
 # Do not put secrets here — use HUGGING_FACE_HUB_TOKEN / HF_TOKEN in the environment.
 #
+# Process-wide runtime toggles (impl selectors, fabric routing budget, SYCL strict helper, etc.)
+# live in configs/runtime.toml — see qminiwasm.runtime_modes and docs/CONFIGURATION_POLICY.md.
+# Training WUI server settings (gRPC addr, engine mode, RunPod SSH defaults) live in configs/wui.toml.
+#
 # Operational sizing uses Enclave Footprint (EF) tiers (see Concepts-Explained.md), not informal “model size” alone.
 
 [hardware]
@@ -28,6 +32,21 @@
 # log_xpu_memory = false              # qmw_xpu_mem lines (XPU); configure in WUI schema / TOML
 # log_xpu_memory_reset_peak = false   # per-epoch torch.xpu peak reset (with log_xpu_memory)
 # log_train_throughput = false        # qmw_train_throughput (supervised wall time, samples/s, RSS)
+# dataloader_num_workers = 4          # host DataLoader workers (0 = main process only); overlaps batch prep with device
+# auto_stabilize = false              # XPU/SYCL: if grad_clip_norm / lr_plateau_patience unset, apply 1.0 clip + plateau patience 2
+
+[model]
+# d_model = 4096                      # internal width (ternary stack, adapter)
+# num_ternary_blocks = 1              # residual PreNorm + ternary experts
+# io_d_model = 4096                   # mesh/HF vector width; stem/head when != d_model
+# tropical_attn_per_block = false     # residual tropical attention after ternary stack in hybrid_inference
+
+[distributed]
+# gradient_checkpointing = false
+# gradient_accumulation_steps = 1
+# amp = false                         # torch.autocast on cuda/xpu/cpu when supported
+# fsdp = false                        # not applied (QMiniWASM is not nn.Module); reserved
+# ddp = false                         # same as fsdp; use Python multi-process future work
 
 [data]
 # source = "mesh" | "corpus" | "hf_tabular"
@@ -45,7 +64,7 @@
 # wasi_max_scan = 100
 # mesh_blend_fraction = 0.0
 # extra_specs = [ { path = "openai/gsm8k" }, { path = "wikitext", dataset_config = "wikitext-2-raw-v1" } ]
-# (optional) With a normal primary path: up to 8 extras (9 Hub datasets total). With path=qminiwasm/hf-multi: up to 9 extras only.
+# (optional) Any number of extra Hub datasets (deduped by path+config); merged with [data].path when not qminiwasm/hf-multi.
 
 [checkpoint]
 # Convention: artifacts/models/<slug>/final.pt, best.pt, latest.pt (matches training WUI)
@@ -118,6 +137,9 @@
 
 [serve]
 # Used when loading configs/serve/*.toml (inference). Optional in training files.
+# d_model = 4096                      # optional override if checkpoint lacks geometry
+# num_ternary_blocks = 1
+# io_d_model = 4096
 # checkpoint = "path/to.ckpt"
 # hybrid_adapter = false
 # hybrid_adapter_hidden = 1024

@@ -407,6 +407,27 @@
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: var(--space-md);
     }
+    /* Step 4: keep [model] vector widths full-width so floating/wide layouts do not hide them in a skinny column. */
+    .lego-train-layout {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+    }
+    .lego-train-vector-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--space-md);
+      padding-bottom: var(--space-md);
+      border-bottom: 1px solid var(--surface-interface-gray);
+    }
+    .lego-train-vector-row .hint {
+      grid-column: 1 / -1;
+    }
+    .lego-train-hparams {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-md);
+    }
     /* 8-point spacing utilities (replaces inline margins) */
     .mt-md { margin-top: var(--space-md); }
     .mt-lg { margin-top: var(--space-lg); }
@@ -1282,7 +1303,7 @@
     <div class="topbar">
       <div>
         <h1>QMiniWASM training dashboard</h1>
-        <p class="sub">Runs <code>python -m qminiwasm.engine --config …</code> from repo root with preflight checks and live logs.</p>
+        <p class="sub">Default: <strong>native</strong> LibTorch TPEM over gRPC (<code>configs/wui.toml</code>). Optional <code>python -m qminiwasm.engine</code> for the full PyTorch loop; preflight and Mission Control prioritize native/ternary.</p>
         <p class="sub" id="serverBindBanner" style="cursor:pointer;text-decoration:underline dotted;" title="Click to copy bind address">Server bind: detecting...</p>
         <p class="sub" id="serverBindCopyStatus"></p>
       </div>
@@ -1331,8 +1352,13 @@
       </div>
     </div>
   </header>
-  <div id="missionStickyBar" style="position:sticky;top:0;z-index:12;background:var(--surface-interface-gray);border-bottom:1px solid var(--surface-interface-gray);padding:8px 16px;display:flex;gap:12px;align-items:center;">
-    <button type="button" class="danger" id="btnAbortSticky" disabled>Emergency Abort</button>
+  <div id="missionStickyBar" style="position:sticky;top:0;z-index:12;background:var(--surface-interface-gray);border-bottom:1px solid var(--surface-interface-gray);padding:8px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+    <div class="row" style="flex-wrap:wrap;gap:6px;align-items:center" role="group" aria-label="Stop and kill training">
+      <button type="button" class="danger" id="btnStopSticky" disabled title="SIGINT: finish current batch, then exit">Stop (graceful)</button>
+      <button type="button" class="danger ghost" id="btnStopForceSticky" disabled title="Immediate process kill — may lose in-epoch work">Force kill</button>
+      <button type="button" class="ghost" id="btnCoopStopSticky" disabled title="Writes the WUI stop file at the next batch boundary (Windows GUI / SSH pod)">Cooperative stop (file)</button>
+      <button type="button" class="primary ghost" id="btnStopAndDataSticky" disabled title="Graceful stop, then Training tab · step 3 (Data source)">Stop → edit data (step 3)</button>
+    </div>
     <div class="hint" id="stickyEpochLabel" style="margin:0;">Epoch: -- / --</div>
     <progress id="stickyEpochProgress" max="100" value="0" style="width:260px;"></progress>
     <span id="stickyGrpcTelemetryLabel" class="hint" style="margin:0;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Latest C++ engine telemetry (step, lr, throughput)">gRPC: —</span>
@@ -1376,6 +1402,19 @@
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </div>
       <div class="training-grid-wrap lego-flow">
+      <section class="dash-card" data-card-id="run-controls" data-col="1">
+        <h2>Run controls</h2>
+        <p class="hint" style="margin:0 0 var(--space-sm)">
+          Stop or kill the active training run from any tab (mirrors the log toolbar on Mission Control). Use <strong>Cooperative stop</strong> when <strong>Stop</strong> cannot deliver SIGINT (common on Windows when the WUI was launched from a GUI).
+        </p>
+        <div class="log-toolbar" style="margin:0">
+          <button type="button" class="danger" id="btnStopRc" disabled title="SIGINT to the training process: finish current batch, write latest.pt, then exit">Stop (graceful)</button>
+          <button type="button" class="danger ghost" id="btnStopForceRc" disabled title="Immediate process kill — may lose in-epoch work">Force kill</button>
+          <button type="button" class="ghost" id="btnCoopStopRc" disabled title="Writes the WUI stop file at the next batch boundary">Cooperative stop (file)</button>
+          <button type="button" class="primary ghost" id="btnStopAndDataRc" disabled title="Graceful stop, then Training tab · step 3 (Data source)">Stop → edit data (step 3)</button>
+        </div>
+        <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
+      </section>
       <section class="dash-card" data-card-id="quick-metrics" data-col="1">
         <h2>Quick metrics</h2>
         <div class="metrics">
@@ -1399,12 +1438,12 @@
         <p id="telemetryWarning" class="status error" style="display:none;font-weight:700;">
           WARNING: Hardware Accelerator Offline or WASM OOM - Falling back to degraded mode.
         </p>
-        <div class="hint">Streaming over WebSocket from training stdout/stderr metrics and alerts. Python <code>qmw_metric</code> rows usually appear <strong>at the end of each epoch</strong> (a long first epoch can look quiet). Match the filter to your run: <strong>All</strong>, <strong>C++ gRPC stream</strong> for native engine, or <strong>Python loop</strong> for <code>python -m qminiwasm.engine</code>.</div>
+        <div class="hint"><strong>Default path:</strong> <strong>C++ gRPC</strong> / LibTorch TPEM — filter <strong>C++ gRPC stream</strong> to see step, LR, σ/s, and queue columns. <strong>Python loop</strong> is secondary (stdout <code>qmw_metric</code>, often at epoch end). <strong>All</strong> merges both. Same WebSocket: epoch charts, throughput/XPU tables when enabled, enclave, quantum routing, lifecycle. Native runs honor full <code>[training].epochs</code>; gRPC <strong>epoch</strong> in the main table is shown <strong>1-based</strong> for readability (internal index is 0-based). Use sticky <strong>Epoch: cur / total</strong> if LR looks flat.</div>
         <div class="telemetry-filter-row" role="group" aria-label="Telemetry stream filter">
           <span class="label-like" style="margin:0">Show metrics:</span>
           <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="all" checked /> All</label>
-          <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="grpc" /> C++ gRPC stream</label>
-          <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="python" /> Python loop</label>
+          <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="grpc" /> C++ gRPC (native / default)</label>
+          <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="python" /> Python loop (optional)</label>
         </div>
         <div id="telemetryStatus" class="status">No run selected.</div>
         <canvas id="chartReturn" height="220" class="stack-sm"></canvas>
@@ -1449,16 +1488,97 @@
             <tbody id="telemetryMetricBody"></tbody>
           </table>
         </div>
+        <h3 style="font-size:var(--text-md);margin:var(--space-md) 0 var(--space-sm);font-weight:600;">
+          Train throughput
+          <span class="hint" style="font-weight:400">
+            (<code>qmw_train_throughput</code> Python stdout or native gRPC <code>epoch_throughput</code>)
+          </span>
+        </h3>
+        <div class="telemetry-metric-table-wrap">
+          <table class="telemetry-full-metrics">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Epoch</th>
+                <th>Samples/s</th>
+                <th>Wall s</th>
+                <th>Batches</th>
+                <th>Cascade s</th>
+                <th>RSS MiB</th>
+              </tr>
+            </thead>
+            <tbody id="telemetryThroughputBody"></tbody>
+          </table>
+        </div>
+        <h3 style="font-size:var(--text-md);margin:var(--space-md) 0 var(--space-sm);font-weight:600;">
+          XPU memory
+          <span class="hint" style="font-weight:400">
+            (<code>qmw_xpu_mem</code> Python or native placeholder row; full device MiB on native is not wired yet)
+          </span>
+        </h3>
+        <div class="telemetry-metric-table-wrap">
+          <table class="telemetry-full-metrics">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Phase</th>
+                <th>Epoch</th>
+                <th>Alloc MiB</th>
+                <th>Peak MiB</th>
+                <th>Device</th>
+              </tr>
+            </thead>
+            <tbody id="telemetryXpuBody"></tbody>
+          </table>
+        </div>
+        <h3 style="font-size:var(--text-md);margin:var(--space-md) 0 var(--space-sm);font-weight:600;">
+          Enclave / TEE
+          <span class="hint" style="font-weight:400">
+            (<code>qmw_enclave_telemetry</code> Python or native gRPC <code>enclave_summary</code>)
+          </span>
+        </h3>
+        <div class="telemetry-metric-table-wrap">
+          <table class="telemetry-full-metrics">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>TPEM est. MiB</th>
+                <th>Tier cap MiB</th>
+                <th>Tier</th>
+                <th>Mem64</th>
+              </tr>
+            </thead>
+            <tbody id="telemetryEnclaveBody"></tbody>
+          </table>
+        </div>
+        <h3 style="font-size:var(--text-md);margin:var(--space-md) 0 var(--space-sm);font-weight:600;">
+          Run lifecycle
+          <span class="hint" style="font-weight:400">
+            (start, stop, finish — native: graceful Stop calls gRPC StopTraining first, then telemetry stream drains)
+          </span>
+        </h3>
+        <div class="telemetry-metric-table-wrap">
+          <table class="telemetry-full-metrics">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>State</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody id="telemetryLifecycleBody"></tbody>
+          </table>
+        </div>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
       </section>
       <section class="dash-card" data-card-id="dataset-builder" data-col="1" data-lego-step="1">
         <h2>1 · Dataset mix</h2>
         <p class="hint hint-block" style="margin-top:0">
-          Pick Hugging Face datasets to combine (max <strong>9</strong>). Step <strong>3 · Data source</strong> reads this mix when <code>data.path</code> is <code>qminiwasm/hf-multi</code>. <strong>Apply mix &amp; save</strong> writes the working TOML and jumps to step 2 — you can also use <strong>Next</strong> and save from step 5. Skip this step if you use a single dataset preset in step 3.
+          Pick Hugging Face datasets to combine (no fixed cap). Step <strong>3 · Data source</strong> reads this mix when <code>data.path</code> is <code>qminiwasm/hf-multi</code>. <strong>Apply mix &amp; save</strong> writes the working TOML and jumps to step 2 — you can also use <strong>Next</strong> and save from step 5. Skip this step if you use a single dataset preset in step 3.
         </p>
         <div class="grid mt-md">
           <div>
-            <label for="datasetTargetSamples">Max Hub rows to load this run (split across mix)</label>
+            <label for="datasetTargetSamples">Max Hub rows / row vectors to load this run (split across mix)</label>
             <select id="datasetTargetSamples">
               <option value="25000">25,000 (small diet)</option>
               <option value="50000">50,000</option>
@@ -1577,7 +1697,7 @@
             <div class="hint">Choose a preset to auto-fill dataset id and config. If step 1 has a dataset mix, prefer <strong>Multi-dataset</strong> or leave primary empty / <code>qminiwasm/hf-multi</code>.</div>
           </div>
           <div id="hfExtraWrap">
-            <span class="label-like">Additional HF datasets (optional; max 8 with a normal primary, or 9 in extras-only mode)</span>
+            <span class="label-like">Additional HF datasets (optional; any number combined with the primary path)</span>
             <p id="hfExtraMixHint" class="hint stack-sm" hidden>
               Mix is defined in <strong>1 · Dataset mix</strong> — the checkboxes below are hidden so you do not configure two different lists. Clear step 1 or use a single-dataset primary to use these extras again.
             </p>
@@ -1607,9 +1727,9 @@
               <input id="bBlend" type="text" value="0.20" />
             </div>
             <div id="hfNumSamplesWrap">
-              <label for="bHfNumSamples">HF max rows (num_samples)</label>
+              <label for="bHfNumSamples">HF max rows / row vectors (num_samples)</label>
               <input id="bHfNumSamples" type="text" placeholder="auto (32k–300k)" />
-              <div class="hint">Hard cap on Hub rows loaded <strong>once per run</strong> (split across merged datasets / mix). Syncs from step 1 row budget when using a mix. Leave blank for automatic sizing. Env <code>HF_NUM_SAMPLES</code> or TOML <code>[huggingface] num_samples</code> also apply.</div>
+              <div class="hint">Hard cap on how many <strong>row vectors</strong> load from Hub <strong>once per run</strong> (split across merged datasets / mix). Syncs from step 1 row budget when using a mix. Leave blank for automatic sizing. Env <code>HF_NUM_SAMPLES</code> or TOML <code>[huggingface] num_samples</code> also apply.</div>
             </div>
           </div>
         </details>
@@ -1618,29 +1738,84 @@
       <section class="dash-card" data-card-id="lego-train" data-col="1" data-lego-step="4">
         <h2>4 · Training &amp; every TOML field</h2>
         <p class="hint hint-block" style="margin-top:0">
+          <strong>Native LibTorch TPEM (default):</strong> <code>d_model</code> and <code>num_ternary_blocks</code> size the <strong>ternary STE stack</strong>; <code>io_d_model</code> is encoder / mesh–HF row width. Saved under <code>[model]</code> — gRPC <code>StartTraining</code> uses these for <strong>cold start</strong> when no checkpoint/tpem load path is set (stem/head when <code>io_d_model ≠ d_model</code>).
+        </p>
+        <p class="hint hint-block" style="margin-top:0">
+          <strong>Optional Python loop:</strong> the same TOML drives <code>EngineConfig</code> if you run <code>python -m qminiwasm.engine</code> instead of native.
+        </p>
+        <p class="hint hint-block" style="margin-top:0">
           <strong>Epochs / batch / LR</strong> and <strong>data paths</strong> are set in steps 1–3 and the quick grid above — the schema list below skips those keys so you do not edit them twice.
           Use <strong>Save working config</strong> (wizard or schema) to write the same file.
         </p>
-        <div class="grid">
-          <div>
-            <label for="bEpochs">Epochs</label>
-            <input id="bEpochs" type="text" value="25" />
+        <p class="hint hint-block" style="margin-top:0">
+          <strong>Row vectors — where to set counts vs width:</strong>
+          <strong>Width of each input row</strong> (how many numbers per mesh/HF vector, often 4096) → <code>io_d_model</code> below.
+          <strong>Internal / hidden width</strong> after stem → <code>d_model</code> below.
+          <strong>How many row vectors per training step</strong> → <strong>Batch size</strong> below (<code>[training].batch_size</code>).
+          <strong>How many rows total</strong> loaded from Hub for the run → <strong>1 · Dataset mix</strong> → <em>Max Hub rows to load</em>, or <strong>3 · Data</strong> → <em>Advanced data options</em> → <em>HF max rows (num_samples)</em>.
+        </p>
+        <h3 class="stack-md" style="margin:var(--space-md) 0 var(--space-sm);font-size:var(--text-sm);font-weight:600">Training steps &amp; vector geometry</h3>
+        <div class="lego-train-layout">
+          <div class="lego-train-vector-row" aria-label="Model vector widths ([model] in TOML)">
+            <div>
+              <label for="bDModel">d_model (hidden / internal vector width)</label>
+              <input id="bDModel" type="text" value="" placeholder="default 4096" title="TOML [model].d_model; omit when empty" />
+            </div>
+            <div>
+              <label for="bNumTernaryBlocks">num_ternary_blocks (stack depth)</label>
+              <input id="bNumTernaryBlocks" type="text" value="" placeholder="default 1" title="Stacked residual ternary experts" />
+            </div>
+            <div>
+              <label for="bIoDModel">io_d_model (features per row vector)</label>
+              <input id="bIoDModel" type="text" value="4096" placeholder="e.g. 4096 — must match mesh/HF row width" title="TOML [model].io_d_model — size of each input row vector; clear to omit and fall back to engine default" />
+            </div>
+            <div class="hint" style="margin-top:0">
+              These three fields set <strong>vector geometry</strong> for native <code>StartTraining</code> cold start and the Python engine. Step 5 <strong>Refresh preflight</strong> shows them under native preview first.
+            </div>
           </div>
-          <div>
-            <label for="bBatch">Batch size</label>
-            <input id="bBatch" type="text" value="32" />
-          </div>
-          <div>
-            <label for="bLR">Learning rate</label>
-            <input id="bLR" type="text" value="0.0001" />
-            <label class="checkline">
-              <input id="bLRTrialMode" type="checkbox" />
-              Treat as LR trial run
-            </label>
-            <div id="bLRTrialWrap" class="stack-sm" style="display:none">
-              <label for="bLRTrialEpochs">Trial epochs</label>
-              <input id="bLRTrialEpochs" type="text" value="2" />
-              <div class="hint">Runs short and adds per-epoch eval logging for LR comparison.</div>
+          <div class="lego-train-hparams">
+            <div>
+              <label for="bEpochs">Epochs</label>
+              <input id="bEpochs" type="text" value="25" />
+              <label for="bBatch">Batch size (row vectors per step)</label>
+              <input id="bBatch" type="text" value="32" title="TOML [training].batch_size — how many dataset rows per forward/backward step" />
+              <label class="checkline">
+                <input id="bTropicalAttnHybrid" type="checkbox" />
+                Tropical attention after ternary stack
+              </label>
+              <label for="bGradAccum">Gradient accumulation steps</label>
+              <input id="bGradAccum" type="text" value="" placeholder="1" />
+              <label class="checkline">
+                <input id="bGradCkpt" type="checkbox" />
+                Gradient checkpointing (ternary stack)
+              </label>
+              <label class="checkline">
+                <input id="bAmp" type="checkbox" />
+                AMP (autocast cuda/xpu/cpu)
+              </label>
+            </div>
+            <div>
+              <label for="bLR">Learning rate</label>
+              <input id="bLR" type="text" value="0.0001" />
+              <label for="bDataloaderWorkers">DataLoader workers</label>
+              <input id="bDataloaderWorkers" type="text" value="4" title="Host workers for batch collation; 0 = main process only" />
+              <label for="bLrPlateauPatience">LR plateau patience (epochs)</label>
+              <input id="bLrPlateauPatience" type="text" value="2" title="ReduceLROnPlateau patience; leave blank in custom API to omit" />
+              <label for="bLrPlateauFactor">LR plateau factor</label>
+              <input id="bLrPlateauFactor" type="text" value="0.5" />
+              <label class="checkline">
+                <input id="bAutoStabilize" type="checkbox" />
+                Auto-stabilize on XPU/SYCL (clip + plateau when unset in TOML)
+              </label>
+              <label class="checkline">
+                <input id="bLRTrialMode" type="checkbox" />
+                Treat as LR trial run
+              </label>
+              <div id="bLRTrialWrap" class="stack-sm" style="display:none">
+                <label for="bLRTrialEpochs">Trial epochs</label>
+                <input id="bLRTrialEpochs" type="text" value="2" />
+                <div class="hint">Runs short and adds per-epoch eval logging for LR comparison.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1762,6 +1937,9 @@
       <section class="dash-card" data-card-id="start-config" data-col="1" data-lego-step="5">
         <h2>Launch training</h2>
         <p class="hint hint-block" style="margin-top:0">
+          <strong>Default path is the native C++ engine</strong> (LibTorch over gRPC at <code>configs/wui.toml</code> <code>grpc_addr</code>). Start <code>qminiwasm_training_engine_server</code> first (e.g. <code>scripts/start-training-stack.ps1</code>). For the full Python PyTorch loop instead, set <code>training_runtime_mode = &quot;python&quot;</code> in <code>configs/wui.toml</code> or use <code>auto</code> to fall back to Python if gRPC is down.
+        </p>
+        <p class="hint hint-block" style="margin-top:0">
           <strong>Only this button starts the engine.</strong> Pick the TOML (usually <code>wui_working.toml</code>). Quantum settings come from <strong>step 2</strong>; <strong>execution target</strong> from the header — you confirm both in the launch dialog.
           <strong>RunPod Serverless:</strong> if no endpoint id is set in header Target options, launch can create a short-lived template and endpoint.
         </p>
@@ -1812,7 +1990,7 @@
       </section>
       <section class="dash-card" data-card-id="preflight" data-col="1" data-lego-step="5">
         <h2>Preflight <span id="preflightBadge" class="badge">UNKNOWN</span></h2>
-        <p class="hint hint-block">Uses the <strong>config file</strong> from the launch card. After saving the wizard, select <code>wui_working.toml</code> and refresh. Preflight <strong>accelerator</strong> can follow <code>?accelerator=</code> from step 2 when you refresh after save.</p>
+        <p class="hint hint-block">Uses the <strong>config path</strong> on the launch card. After <strong>Apply build &amp; save</strong> (or custom save), that path is selected for you; if you refreshed before saving, pick <code>configs/training/wui_working.toml</code> and click <strong>Refresh preflight</strong>. Changing step 2 accelerator updates the URL so a full reload keeps it (<code>?accelerator=cuda</code> etc.); you can also set <code>config=</code> in the query string to match the launch card.</p>
         <p class="status stack-md" id="preflightMsg" aria-live="polite"></p>
         <div class="kv" id="preflightKv"></div>
         <p class="hint hint-block-md"><strong>IBM pending jobs</strong> is that backend’s <em>queue length</em> (jobs waiting to run there). <strong>0</strong> is normal when nothing is queued—your training may use the simulator first, or you haven’t submitted IBM Runtime jobs yet.</p>
@@ -1905,6 +2083,7 @@
           <button type="button" class="ghost" id="btnClearLog">Clear view</button>
         </div>
         <p class="log-hint" style="font-size:var(--text-sm);color:var(--text-secondary);margin:6px 0 0 0;">
+          <strong>Select a run</strong> under <strong>Active / recent runs</strong> (here or on Mission Control) so <strong>Stop (graceful)</strong>, <strong>Force kill</strong>, <strong>Cooperative stop</strong>, and <strong>Stop → edit data</strong> unlock. <strong>Clear view</strong> only clears the log pane.
           Graceful stop works for local and RunPod SSH runs (serverless uses cancel). If <strong>Stop (graceful)</strong> cannot deliver SIGINT (common when the WUI is started from a GUI on Windows), use <strong>Cooperative stop (file)</strong> instead. Use <strong>Stop → edit data</strong> to jump to the wizard after stopping, keep <strong>Resume latest</strong> if you want the same weights, then launch again. Multi-dataset mix lives in <strong>step 1</strong> (rail).
         </p>
         <p class="log-legend" id="logLegend" aria-hidden="true">
@@ -2314,10 +2493,14 @@
     let combinatorialWallMarkerDone = false;
     let schemaFields = [];
     let telemetryMetricCount = 0;
+    /** Any WebSocket telemetry message handled (metrics, XPU, throughput, lifecycle, …). */
+    let telemetryStreamEventCount = 0;
     let telemetryIdleTimer = null;
     /** Mission Control filter: all | grpc | python */
     let telemetryStreamFilter = "all";
     const TELEMETRY_ROW_CAP = 200;
+    const TELEMETRY_AUX_ROW_CAP = 80;
+    const TELEMETRY_LIFECYCLE_CAP = 40;
     const TELEMETRY_SOURCE_CPP = "Source: gRPC C++";
     const TELEMETRY_SOURCE_PY = "Source: Python VNV";
 
@@ -2710,6 +2893,100 @@
       if (tb) tb.innerHTML = "";
     }
 
+    function clearTelemetryAuxRows() {
+      for (const id of ["telemetryThroughputBody", "telemetryXpuBody", "telemetryEnclaveBody", "telemetryLifecycleBody"]) {
+        const tb = $(id);
+        if (tb) tb.innerHTML = "";
+      }
+    }
+
+    function wsRunIdMatches(msg, runId) {
+      return String(msg && msg.run_id != null ? msg.run_id : "") === String(runId != null ? runId : "");
+    }
+
+    function lifecycleDetailText(msg) {
+      if (msg.exit_code !== undefined && msg.exit_code !== null)
+        return `exit_code=${escapeHtml(String(msg.exit_code))}`;
+      if (msg.mode != null && typeof msg.mode === "object")
+        return escapeHtml(JSON.stringify(msg.mode).slice(0, 120));
+      return "—";
+    }
+
+    function appendTelemetryThroughputRow(msg) {
+      const tb = $("telemetryThroughputBody");
+      if (!tb) return;
+      const tr = document.createElement("tr");
+      tr.dataset.telemetrySource =
+        msg.telemetry_source != null ? String(msg.telemetry_source) : TELEMETRY_SOURCE_PY;
+      tr.innerHTML =
+        `<td>${escapeHtml(String(msg.ts || "").slice(11, 19) || "—")}</td>` +
+        `<td>${escapeHtml(String(msg.epoch ?? "—"))}</td>` +
+        `<td>${escapeHtml(String(msg.samples_per_s ?? "—"))}</td>` +
+        `<td>${escapeHtml(String(msg.wall_s ?? "—"))}</td>` +
+        `<td>${escapeHtml(String(msg.batches ?? "—"))}</td>` +
+        `<td>${escapeHtml(String(msg.cascade_s ?? "—"))}</td>` +
+        `<td>${escapeHtml(msg.host_rss_mib != null ? String(msg.host_rss_mib) : "—")}</td>`;
+      tr.style.display = telemetryFilterAllowsMetric(msg) ? "" : "none";
+      tb.insertBefore(tr, tb.firstChild);
+      while (tb.rows.length > TELEMETRY_AUX_ROW_CAP) tb.removeChild(tb.lastChild);
+    }
+
+    function appendTelemetryXpuRow(msg) {
+      const tb = $("telemetryXpuBody");
+      if (!tb) return;
+      const phase = String(msg.phase || "—");
+      const epoch = msg.epoch !== undefined && msg.epoch !== null ? String(msg.epoch) : "—";
+      const alloc = msg.allocated_mib != null ? String(msg.allocated_mib) : "—";
+      const peak = msg.max_allocated_mib != null ? String(msg.max_allocated_mib) : "—";
+      let dev = "—";
+      if (msg.device) dev = String(msg.device);
+      else if (msg.xpu_index !== undefined && msg.xpu_index !== null) dev = `xpu:${msg.xpu_index}`;
+      const tr = document.createElement("tr");
+      tr.dataset.telemetrySource =
+        msg.telemetry_source != null ? String(msg.telemetry_source) : TELEMETRY_SOURCE_PY;
+      tr.innerHTML =
+        `<td>${escapeHtml(String(msg.ts || "").slice(11, 19) || "—")}</td>` +
+        `<td>${escapeHtml(phase)}</td>` +
+        `<td>${escapeHtml(epoch)}</td>` +
+        `<td>${escapeHtml(alloc)}</td>` +
+        `<td>${escapeHtml(peak)}</td>` +
+        `<td>${escapeHtml(dev)}</td>`;
+      tr.style.display = telemetryFilterAllowsMetric(msg) ? "" : "none";
+      tb.insertBefore(tr, tb.firstChild);
+      while (tb.rows.length > TELEMETRY_AUX_ROW_CAP) tb.removeChild(tb.lastChild);
+    }
+
+    function appendTelemetryEnclaveRow(msg) {
+      const tb = $("telemetryEnclaveBody");
+      if (!tb) return;
+      const tr = document.createElement("tr");
+      tr.dataset.telemetrySource =
+        msg.telemetry_source != null ? String(msg.telemetry_source) : TELEMETRY_SOURCE_PY;
+      tr.title = msg.line ? String(msg.line) : "";
+      tr.innerHTML =
+        `<td>${escapeHtml(String(msg.ts || "").slice(11, 19) || "—")}</td>` +
+        `<td>${escapeHtml(String(msg.estimated_tpem_mb ?? "—"))}</td>` +
+        `<td>${escapeHtml(String(msg.tier_cap_mb ?? "—"))}</td>` +
+        `<td>${escapeHtml(String(msg.enclave_tier ?? "—"))}</td>` +
+        `<td>${escapeHtml(String(msg.use_memory64 ?? "—"))}</td>`;
+      tr.style.display = telemetryFilterAllowsMetric(msg) ? "" : "none";
+      tb.insertBefore(tr, tb.firstChild);
+      while (tb.rows.length > TELEMETRY_AUX_ROW_CAP) tb.removeChild(tb.lastChild);
+    }
+
+    function appendTelemetryLifecycleRow(msg) {
+      const tb = $("telemetryLifecycleBody");
+      if (!tb) return;
+      const tr = document.createElement("tr");
+      tr.dataset.telemetryLifecycle = "1";
+      tr.innerHTML =
+        `<td>${escapeHtml(String(msg.ts || "").slice(11, 19) || "—")}</td>` +
+        `<td>${escapeHtml(String(msg.state || "—"))}</td>` +
+        `<td>${lifecycleDetailText(msg)}</td>`;
+      tb.insertBefore(tr, tb.firstChild);
+      while (tb.rows.length > TELEMETRY_LIFECYCLE_CAP) tb.removeChild(tb.lastChild);
+    }
+
     function refreshTelemetryRowVisibility() {
       const tb = $("telemetryMetricBody");
       if (!tb) return;
@@ -2717,6 +2994,18 @@
         const pill = tr.querySelector(".telemetry-pill");
         const src = pill ? pill.textContent : TELEMETRY_SOURCE_PY;
         tr.style.display = telemetryFilterAllowsMetric({ telemetry_source: src }) ? "" : "none";
+      }
+      refreshTelemetryAuxRowVisibility();
+    }
+
+    function refreshTelemetryAuxRowVisibility() {
+      for (const id of ["telemetryThroughputBody", "telemetryXpuBody", "telemetryEnclaveBody"]) {
+        const tb = $(id);
+        if (!tb) continue;
+        for (const tr of tb.querySelectorAll("tr")) {
+          const src = tr.dataset.telemetrySource || TELEMETRY_SOURCE_PY;
+          tr.style.display = telemetryFilterAllowsMetric({ telemetry_source: src }) ? "" : "none";
+        }
       }
     }
 
@@ -2777,6 +3066,16 @@
       );
     }
 
+    /** gRPC streams use 0-based epoch in proto; show 1-based in the main table for operators. */
+    function telemetryGrpcEpochDisplay(metric) {
+      const isGrpc = metric.engine === "grpc" || metric.telemetry_source === TELEMETRY_SOURCE_CPP;
+      const e0 = Number(metric.epoch);
+      if (isGrpc && Number.isFinite(e0)) {
+        return { text: String(e0 + 1), title: `gRPC internal epoch (0-based): ${e0}` };
+      }
+      return { text: String(metric.epoch ?? ""), title: "" };
+    }
+
     function appendTelemetryMetricRow(metric) {
       const tb = $("telemetryMetricBody");
       if (!tb) return;
@@ -2784,8 +3083,9 @@
         metric.telemetry_source != null ? String(metric.telemetry_source) : TELEMETRY_SOURCE_PY;
       const tr = document.createElement("tr");
       const pillClass = src === TELEMETRY_SOURCE_CPP ? "telemetry-pill telemetry-pill-cpp" : "telemetry-pill telemetry-pill-py";
+      const ep = telemetryGrpcEpochDisplay(metric);
       tr.innerHTML =
-        `<td>${escapeHtml(String(metric.epoch ?? ""))}</td>` +
+        `<td title="${escapeHtml(ep.title)}">${escapeHtml(ep.text)}</td>` +
         `<td>${escapeHtml(String(metric.mean_loss ?? ""))}</td>` +
         `<td>${escapeHtml(String(metric.mean_return ?? ""))}</td>` +
         `<td>${escapeHtml(String(metric.mean_mse ?? ""))}</td>` +
@@ -2816,6 +3116,8 @@
       telemetryMetricCount = 0;
       /** #region agent log */ telemetryMsgCount = 0; telemetryLogT0 = 0; /** #endregion agent log */
       clearTelemetryMetricRows();
+      clearTelemetryAuxRows();
+      telemetryStreamEventCount = 0;
       const sg = $("stickyGrpcTelemetryLabel");
       if (sg) {
         sg.textContent = "gRPC: —";
@@ -2852,13 +3154,14 @@
       }
       /** #endregion agent log */
       telemetryMetricCount += 1;
+      telemetryStreamEventCount += 1;
       const st = $("telemetryStatus");
       if (st) {
         st.textContent = `Receiving telemetry (${telemetryMetricCount} points)`;
         st.className = "status done";
       }
       const allowCharts = telemetryFilterAllowsMetric(metric);
-      const label = String(metric.epoch ?? "");
+      const label = telemetryGrpcEpochDisplay(metric).text;
       if (allowCharts && chartReturn) {
         chartReturn.data.labels.push(label);
         chartReturn.data.datasets[0].data.push(Number(metric.mean_return || 0));
@@ -2929,14 +3232,17 @@
         } catch (_) {
           return;
         }
-        if (!msg || msg.run_id !== runId) return;
+        if (!msg || !wsRunIdMatches(msg, runId)) return;
         if (msg.type === "metric") {
           pushTelemetryPoint(msg);
         } else if (msg.type === "routing_telemetry") {
+          telemetryStreamEventCount += 1;
           pushRoutingTelemetrySample(msg);
         } else if (msg.type === "routing_handoff") {
+          telemetryStreamEventCount += 1;
           onRoutingHandoffWS(msg);
         } else if (msg.type === "backend_status") {
+          telemetryStreamEventCount += 1;
           const st = $("telemetryStatus");
           if (st) {
             const req = String(msg.requested_accelerator || "auto");
@@ -2945,27 +3251,54 @@
             st.textContent = `Backend status: requested=${req} selected=${sel} SYCL=${sy}`;
             st.className = msg.sycl_active ? "status done" : "status";
           }
-        } else if (msg.type === "alert" && msg.severity === "critical") {
-          $("telemetryWarning").style.display = "block";
+        } else if (msg.type === "alert") {
+          telemetryStreamEventCount += 1;
+          if (msg.severity === "critical") $("telemetryWarning").style.display = "block";
+        } else if (msg.type === "train_throughput") {
+          telemetryStreamEventCount += 1;
+          appendTelemetryThroughputRow(msg);
+        } else if (msg.type === "xpu_mem") {
+          telemetryStreamEventCount += 1;
+          appendTelemetryXpuRow(msg);
+        } else if (msg.type === "enclave_telemetry") {
+          telemetryStreamEventCount += 1;
+          appendTelemetryEnclaveRow(msg);
+        } else if (msg.type === "lifecycle") {
+          telemetryStreamEventCount += 1;
+          appendTelemetryLifecycleRow(msg);
+        }
+      };
+      telemetryWS.onerror = () => {
+        const st = $("telemetryStatus");
+        if (st) {
+          st.textContent =
+            "WebSocket error (telemetry). If the WUI uses a token, open with ?wui_token=… or set session token; check network and proxy.";
+          st.className = "status error";
         }
       };
       telemetryWS.onopen = () => {
         $("telemetryStatus").textContent =
-          "Connected. Python runs emit qmw_metric at epoch end. C++ gRPC runs send full TelemetryEvent (step, LR, queues, …) without log-line parsing. Use the stream filter (All / C++ / Python) to match your run.";
+          "Connected. Prefer filter C++ gRPC (native LibTorch TPEM) for step/LR/throughput. Python loop: qmw_metric at epoch end; enable log_xpu_memory / log_train_throughput in TOML for extra rows. All shows both.";
         $("telemetryStatus").className = "status";
         if (telemetryIdleTimer) clearTimeout(telemetryIdleTimer);
         telemetryIdleTimer = setTimeout(() => {
-          if (telemetryMetricCount === 0 && telemetryWS) {
-            $("telemetryStatus").textContent = "No telemetry parsed yet. Check training logs for exact metric format.";
+          if (telemetryStreamEventCount === 0 && telemetryWS) {
+            $("telemetryStatus").textContent =
+              "No WebSocket events yet. Select the active run, confirm training is running, and check auth (?wui_token) if the server requires it.";
             $("telemetryStatus").className = "status error";
           }
         }, 10000);
       };
-      telemetryWS.onclose = () => {
+      telemetryWS.onclose = (ev) => {
         telemetryWS = null;
-        if (telemetryMetricCount === 0) {
-          $("telemetryStatus").textContent = "Telemetry disconnected before first metric.";
-          $("telemetryStatus").className = "status error";
+        const st = $("telemetryStatus");
+        if (!st) return;
+        if (telemetryStreamEventCount === 0) {
+          st.textContent = `Telemetry disconnected (code ${ev.code}) before any events.`;
+          st.className = "status error";
+        } else if (telemetryMetricCount === 0) {
+          st.textContent = `Telemetry disconnected (code ${ev.code}). Lifecycle/aux rows above may still show activity without epoch metrics yet.`;
+          st.className = "status";
         }
       };
     }
@@ -3264,7 +3597,7 @@
         $("serverBindBanner").textContent = `Server bind: ${addr}`;
         $("serverBindBanner").dataset.addr = addr;
         const rp = (data && data.runtime_profile) || {};
-        const mode = rp.training_runtime_mode || "auto";
+        const mode = rp.training_runtime_mode || "native";
         const strict = rp.native_strict_enabled ? "on" : "off";
         const profile = rp.default_profile || "optimized_auto";
         $("serverBindCopyStatus").textContent = `Runtime: ${profile} | training_mode=${mode} | native_strict=${strict}`;
@@ -3369,7 +3702,6 @@
         if (seen.has(k)) continue;
         seen.add(k);
         out.push(row);
-        if (out.length >= 9) break;
       }
       return out;
     }
@@ -3391,7 +3723,7 @@
     /** Prefer persisted Apply-mix override; else live Dataset Builder selection (catalog + custom). */
     function resolveDatasetMixSpecsForSchema() {
       if (datasetMixExtraSpecsOverride && datasetMixExtraSpecsOverride.length > 0) {
-        return dedupeHfSpecs(datasetMixExtraSpecsOverride.slice(0, 9));
+        return dedupeHfSpecs(datasetMixExtraSpecsOverride);
       }
       return collectDatasetBuilderSpecs();
     }
@@ -3509,11 +3841,7 @@
         inp.id = id;
         inp.value = item.value;
         inp.addEventListener("change", () => {
-          const specs = collectDatasetBuilderSpecs();
-          if (specs.length > 9) {
-            inp.checked = false;
-            addToast("At most 9 Hub datasets per run.", "error");
-          }
+          collectDatasetBuilderSpecs();
           updateDatasetMixStatus();
         });
         lab.appendChild(inp);
@@ -3604,7 +3932,7 @@
         );
         if (opt) preset.value = opt.value;
       }
-      datasetMixExtraSpecsOverride = specs.slice(0, 9);
+      datasetMixExtraSpecsOverride = specs;
       persistDatasetMixOverride(datasetMixExtraSpecsOverride);
       document.querySelectorAll('input[name="hfExtra"]').forEach((x) => {
         x.checked = false;
@@ -3666,17 +3994,7 @@
       try {
         localStorage.setItem(DATASET_MIX_CUSTOM_KEY, JSON.stringify(datasetBuilderCustomRows));
       } catch (_) {}
-      const specs = collectDatasetBuilderSpecs();
-      if (specs.length > 9) {
-        datasetBuilderCustomRows.pop();
-        try {
-          localStorage.setItem(DATASET_MIX_CUSTOM_KEY, JSON.stringify(datasetBuilderCustomRows));
-        } catch (_) {}
-        renderDatasetBuilderCustomList();
-        updateDatasetMixStatus();
-        addToast("At most 9 datasets in one mix (catalog + custom).", "error");
-        return;
-      }
+      collectDatasetBuilderSpecs();
       $("datasetCustomPath").value = "";
       $("datasetCustomConfig").value = "";
       renderDatasetBuilderCustomList();
@@ -3686,14 +4004,14 @@
 
     function getHfExtraSpecs() {
       if (datasetMixExtraSpecsOverride && datasetMixExtraSpecsOverride.length > 0) {
-        return datasetMixExtraSpecsOverride.slice(0, 9);
+        return datasetMixExtraSpecsOverride;
       }
       const primary = $("bDataPath").value.trim();
       const primaryCfg = ($("bDatasetConfig").value || "").trim();
       if (isHFMultiPrimaryPath(primary)) {
         const fromBuilder = collectDatasetBuilderSpecs();
         if (fromBuilder.length > 0) {
-          return fromBuilder.slice(0, 9);
+          return fromBuilder;
         }
       }
       const boxes = document.querySelectorAll('input[name="hfExtra"]:checked');
@@ -3707,15 +4025,12 @@
         const row = { path: ds };
         if (cfg) row.dataset_config = cfg;
         out.push(row);
-        if (out.length >= 8) break;
       }
       return out;
     }
 
     function syncHfExtraLimit() {
-      const boxes = Array.from(document.querySelectorAll('input[name="hfExtra"]:checked'));
-      if (boxes.length <= 8) return;
-      boxes[boxes.length - 1].checked = false;
+      /* No cap on HF extra checkboxes; placeholder for callers after mix changes. */
     }
 
     const LAYOUT_TRAIN = "qmw_training_layout_v1";
@@ -4007,7 +4322,7 @@
       const missionGrid = $("missionGrid");
       const missionLogHost = $("missionLogHost");
       if (!missionGrid || !missionLogHost) return;
-      const missionCardIds = ["quick-metrics", "live-telemetry", "runs"];
+      const missionCardIds = ["run-controls", "quick-metrics", "live-telemetry", "runs"];
       for (const id of missionCardIds) {
         const card = document.querySelector(`[data-card-id="${id}"]`);
         if (card) missionGrid.appendChild(card);
@@ -4076,10 +4391,19 @@
       const qpol = $("bQuantumPolicy").selectedOptions[0]?.textContent || $("bQuantumPolicy").value;
       const qb = ($("bQuantumBackend").value || "").trim() || "auto";
       const ibm = ($("bIBMBackendName").value || "").trim() || "(none)";
+      const pGeom = buildPayload();
+      const dm = Number.isFinite(pGeom.d_model) && pGeom.d_model > 0 ? String(pGeom.d_model) : "4096 (default)";
+      const nb =
+        Number.isFinite(pGeom.num_ternary_blocks) && pGeom.num_ternary_blocks > 0
+          ? String(pGeom.num_ternary_blocks)
+          : "1 (default)";
+      const iod =
+        Number.isFinite(pGeom.io_d_model) && pGeom.io_d_model > 0 ? String(pGeom.io_d_model) : "4096 (default)";
       host.innerHTML =
         `<p style="margin:0 0 var(--space-sm)"><strong>Header target</strong> — <strong>Deploy</strong>: ${escapeHtml(rtLabel)}` +
         (podNote ? ` (${escapeHtml(podNote)})` : "") +
         `. <strong>Quantum</strong> (step 2): ${escapeHtml(qpol)}. <strong>Backend id</strong>: ${escapeHtml(qb)}. <strong>IBM override</strong>: ${escapeHtml(ibm)}.</p>` +
+        `<p style="margin:0 0 var(--space-sm)"><strong>Model geometry</strong> (step 4): <code>d_model</code>=${escapeHtml(dm)}, <code>num_ternary_blocks</code>=${escapeHtml(nb)}, <code>io_d_model</code>=${escapeHtml(iod)}.</p>` +
         `<button type="button" class="ghost" id="btnEditExecStep">Edit execution target in header</button>`;
       const btn = $("btnEditExecStep");
       if (btn)
@@ -4103,6 +4427,7 @@
       await loadConfigs();
       const sel = $("cfg");
       if (sel && data.config) sel.value = data.config;
+      syncTrainingWuiQueryToURL();
       updateLaunchExecSummary();
       return data;
     }
@@ -4125,7 +4450,39 @@
         hf_extra_specs: getHfExtraSpecs(),
         epochs: Number($("bEpochs").value || "25"),
         batch_size: Number($("bBatch").value || "32"),
+        ...(() => {
+          const dm = parseInt(String($("bDModel")?.value || "").trim(), 10);
+          const nb = parseInt(String($("bNumTernaryBlocks")?.value || "").trim(), 10);
+          const iod = parseInt(String($("bIoDModel")?.value || "").trim(), 10);
+          const ga = parseInt(String($("bGradAccum")?.value || "").trim(), 10);
+          const o = {};
+          if (Number.isFinite(dm) && dm > 0) o.d_model = dm;
+          if (Number.isFinite(nb) && nb > 0) o.num_ternary_blocks = nb;
+          if (Number.isFinite(iod) && iod > 0) o.io_d_model = iod;
+          if ($("bTropicalAttnHybrid")?.checked) o.tropical_attn_per_block = true;
+          if (Number.isFinite(ga) && ga > 1) o.gradient_accumulation_steps = ga;
+          if ($("bGradCkpt")?.checked) o.gradient_checkpointing = true;
+          if ($("bAmp")?.checked) o.amp = true;
+          return o;
+        })(),
         learning_rate: Number($("bLR").value || "0.0001"),
+        dataloader_num_workers: (() => {
+          const n = parseInt(String($("bDataloaderWorkers")?.value || "4").trim(), 10);
+          return Number.isFinite(n) && n >= 0 ? n : 4;
+        })(),
+        lr_plateau_patience: (() => {
+          const raw = String($("bLrPlateauPatience")?.value || "").trim();
+          if (raw === "") return undefined;
+          const n = parseInt(raw, 10);
+          return Number.isFinite(n) && n >= 0 ? n : undefined;
+        })(),
+        lr_plateau_factor: (() => {
+          const raw = String($("bLrPlateauFactor")?.value || "").trim();
+          if (raw === "") return undefined;
+          const x = parseFloat(raw);
+          return Number.isFinite(x) && x > 0 ? x : undefined;
+        })(),
+        ...( $("bAutoStabilize")?.checked ? { auto_stabilize: true } : {}),
         quantum_backend: $("bQuantumBackend").value.trim(),
         quantum_policy: $("bQuantumPolicy").value,
         ibm_backend_name: $("bIBMBackendName").value.trim(),
@@ -4408,18 +4765,32 @@
     function renderModelFactsFallback() {
       const p = buildPayload();
       const slug = modelSlugFromName(p.name);
+      const pf = (window.__qmwLastPreflight && window.__qmwLastPreflight.preflight) || {};
+      const rtMode = pf.training_runtime_mode || "native";
+      const geomBits = [];
+      if (p.d_model) geomBits.push(`d_model=${p.d_model}`);
+      if (p.io_d_model) geomBits.push(`io_d_model=${p.io_d_model}`);
+      if (p.num_ternary_blocks) geomBits.push(`blocks=${p.num_ternary_blocks}`);
       const lines = [
         ["Model name", p.name || "(auto-generated from timestamp)"],
         ["Artifact base", slug],
         ["Accelerator", p.accelerator],
         ["Data source", p.data_source],
         ["Learning rate", String(p.learning_rate)],
+        ["Epochs / batch (wizard)", `${p.epochs} / ${p.batch_size}`],
+        ["Geometry (wizard)", geomBits.length ? geomBits.join(", ") : "(defaults)"],
+        ["Preflight runtime mode (last refresh)", rtMode],
         ["Output checkpoint", `artifacts/models/${slug}/final.pt`],
         ["Best checkpoint", `artifacts/models/${slug}/best.pt`],
         ["Latest checkpoint", `artifacts/models/${slug}/latest.pt`],
         ["Serve config (agents)", `artifacts/models/${slug}/serve.toml`],
         ["Agent bundle (JSON)", `artifacts/models/${slug}/agent_bundle.json`],
         ["Resume latest", p.resume_latest ? "on" : "off"],
+        ["__sep__", ""],
+        [
+          "Native gRPC note",
+          "C++ gRPC training uses a synthetic balanced sampler; HF/tabular paths in TOML are not loaded by the native engine yet. Use Python loop for dataset-faithful runs.",
+        ],
       ];
       if (p.data_source === "hf_tabular" || p.data_source === "hybrid_mesh_hf_tabular") {
         const lrIdx = lines.findIndex((row) => row[0] === "Learning rate");
@@ -4487,7 +4858,14 @@
         if (ewpPath && lastLatestCheckpointPath && !String(ewpPath.value || "").trim()) {
           ewpPath.value = lastLatestCheckpointPath.replace(/\\/g, "/");
         }
-        setModelFactsKV([
+        const pf = (window.__qmwLastPreflight && window.__qmwLastPreflight.preflight) || {};
+        const rtMode = pf.training_runtime_mode || "native";
+        const p = buildPayload();
+        const geomBits = [];
+        if (p.d_model) geomBits.push(`d_model=${p.d_model}`);
+        if (p.io_d_model) geomBits.push(`io_d_model=${p.io_d_model}`);
+        if (p.num_ternary_blocks) geomBits.push(`blocks=${p.num_ternary_blocks}`);
+        const mfLines = [
           ["Model name", f.model_name || "(unknown)"],
           ["Architecture", f.architecture || "QMiniWASM"],
           ["Requested accelerator", f.requested_accelerator || "auto"],
@@ -4523,7 +4901,16 @@
           ["Agent bundle", a.agent_bundle || "(none)"],
           ["Resume requested", resumeRequested ? "yes" : "no"],
           ["Resume available", resumeAvailable ? "yes" : "no"],
-        ]);
+          ["__sep__", ""],
+          ["Launch wizard: epochs / batch / LR", `${p.epochs} / ${p.batch_size} / ${p.learning_rate}`],
+          ["Launch wizard: geometry", geomBits.length ? geomBits.join(", ") : "(defaults from TOML)"],
+          ["Preflight: training runtime mode (last refresh)", rtMode],
+        ];
+        if (data.native_dataset_note && data.native_dataset_parity === false) {
+          mfLines.push(["__sep__", ""]);
+          mfLines.push(["Native gRPC vs this panel", String(data.native_dataset_note)]);
+        }
+        setModelFactsKV(mfLines);
         const msg = $("buildMsg");
         if (resumeRequested && !resumeAvailable) {
           msg.textContent = `Resume latest is on, but no file yet at ${lastLatestCheckpointPath || "(unknown)"}. Save is allowed; launch will ask to train from scratch.`;
@@ -4559,11 +4946,18 @@
         `<strong>Quantum backend</strong>: ${escapeHtml(p.quantum_backend || "auto")}<br/>` +
         `<strong>IBM backend override</strong>: ${escapeHtml(p.ibm_backend_name || "auto-select")}<br/>` +
         `<strong>Dataset</strong>: ${escapeHtml(p.data_path || "(n/a)")}<br/>` +
-        `<strong>HF extras / mix</strong>: ${escapeHtml(String((p.hf_extra_specs && p.hf_extra_specs.length) || 0))} source(s) (up to 9 with <code>hf-multi</code>)<br/>` +
+        `<strong>HF extras / mix</strong>: ${escapeHtml(String((p.hf_extra_specs && p.hf_extra_specs.length) || 0))} Hub source(s)<br/>` +
         `<strong>HF config/split</strong>: ${escapeHtml(p.hf_dataset_config || "(none)")} / ${escapeHtml(p.hf_split)}<br/>` +
         `<strong>HF max rows</strong>: ${escapeHtml(p.hf_num_samples > 0 ? String(p.hf_num_samples) : "auto (≤300k)")}<br/>` +
         `<strong>Mesh blend</strong>: ${escapeHtml(String(p.hf_mesh_blend_fraction))}<br/>` +
         `<strong>Epochs / Batch / LR</strong>: ${escapeHtml(String(p.epochs))} / ${escapeHtml(String(p.batch_size))} / ${escapeHtml(String(p.learning_rate))}<br/>` +
+        `<strong>Model geometry</strong>: d_model=${escapeHtml(
+          p.d_model && p.d_model > 0 ? String(p.d_model) : "(default 4096)"
+        )}, num_ternary_blocks=${escapeHtml(
+          p.num_ternary_blocks && p.num_ternary_blocks > 0 ? String(p.num_ternary_blocks) : "(default 1)"
+        )}, io_d_model=${escapeHtml(
+          p.io_d_model && p.io_d_model > 0 ? String(p.io_d_model) : "(default 4096)"
+        )}<br/>` +
         `<strong>Execution target (header)</strong>: ${escapeHtml(hdrRt)}${
           hdrRt === "runpod"
             ? " (destroy after: " + ($("globalRunpodDestroy").checked ? "yes" : "no") + ")"
@@ -4665,7 +5059,8 @@
       b.textContent = label;
     }
 
-    function evaluatePreflightHealth(p) {
+    /** Torch / XPU / dpctl signals from the Python probe (secondary when local native gRPC is primary). */
+    function evaluatePythonProbePreflightHealth(p) {
       const resolved = String(p.resolved_torch_device || "").toLowerCase();
       const requested = String(p.requested_accelerator || "").toLowerCase();
       const syclActive = !!p.sycl_backend_active;
@@ -4686,6 +5081,39 @@
         return { kind: "err", label: "ERROR" };
       }
       return { kind: "warn", label: "CPU" };
+    }
+
+    /**
+     * Preflight badge: prefer native gRPC (WUI pick + reachability + StartTraining preview) for local runs.
+     * Python probe remains authoritative when the local engine pick is Python (auto fallback or python mode).
+     */
+    function evaluatePreflightHealth(p, wte, nativeGrpcPreviewError) {
+      wte = wte || {};
+      const pickGrpc = !!wte.pick_for_local_use_grpc;
+      const grpcReach =
+        wte.grpc_reachable === true || p.grpc_engine_reachable === true;
+      const mode = String(
+        wte.mode != null && String(wte.mode) !== "" ? wte.mode : p.training_runtime_mode || ""
+      ).toLowerCase();
+      const nativeModeForced = mode === "native" || mode === "grpc" || mode === "cpp";
+      const natErr =
+        nativeGrpcPreviewError != null && String(nativeGrpcPreviewError).trim() !== ""
+          ? String(nativeGrpcPreviewError).trim()
+          : "";
+
+      if (nativeModeForced && !grpcReach) {
+        return { kind: "err", label: "ERROR" };
+      }
+      if (pickGrpc) {
+        if (!grpcReach) {
+          return { kind: "err", label: "ERROR" };
+        }
+        if (natErr) {
+          return { kind: "warn", label: "WARN" };
+        }
+        return { kind: "ok", label: "OK" };
+      }
+      return evaluatePythonProbePreflightHealth(p);
     }
 
     function syncGlobalInfraChrome() {
@@ -4982,6 +5410,39 @@
       }
     }
 
+    /** Keep accelerator + launch config in the URL so a full page refresh matches step 2 and the launch card. */
+    function syncTrainingWuiQueryToURL() {
+      try {
+        const u = new URL(location.href);
+        const accel = $("bAccel") ? String($("bAccel").value || "").trim() : "";
+        const cfgPath = $("cfg") ? String($("cfg").value || "").trim() : "";
+        if (accel) u.searchParams.set("accelerator", accel);
+        else u.searchParams.delete("accelerator");
+        if (cfgPath) u.searchParams.set("config", cfgPath);
+        else u.searchParams.delete("config");
+        history.replaceState({}, "", u.pathname + u.search + u.hash);
+      } catch (_) {}
+    }
+
+    /** Apply ?accelerator= and ?config= after the config dropdown is populated (initial load only). */
+    function applyTrainingWuiQueryFromURL() {
+      try {
+        const u = new URL(location.href);
+        const accel = u.searchParams.get("accelerator");
+        const b = $("bAccel");
+        if (b && accel && String(accel).trim()) {
+          const v = String(accel).trim().toLowerCase();
+          if ([...b.options].some((o) => o.value === v)) b.value = v;
+        }
+        const cfgParam = u.searchParams.get("config");
+        const sel = $("cfg");
+        if (sel && cfgParam && String(cfgParam).trim()) {
+          const c = String(cfgParam).trim();
+          if ([...sel.options].some((o) => o.value === c)) sel.value = c;
+        }
+      } catch (_) {}
+    }
+
     async function loadPreflight() {
       const cfg = $("cfg").value || "";
       const qb = $("bQuantumBackend") ? $("bQuantumBackend").value.trim() : "";
@@ -5002,20 +5463,99 @@
         const r = await apiFetch("/api/preflight" + q);
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || r.statusText);
+        window.__qmwLastPreflight = data;
         const p = data.preflight || {};
-        const health = evaluatePreflightHealth(p);
+        const wte = data.wui_training_engine || {};
+        const nat = data.native_grpc_training_config || null;
+        const natErr = data.native_grpc_training_config_error;
+        const health = evaluatePreflightHealth(p, wte, natErr);
         setPreflightBadge(health.kind, health.label);
+        const natRows = [];
+        if (natErr) {
+          natRows.push(["Native StartTraining (LibTorch TPEM) — preview error", String(natErr)]);
+        } else if (nat && typeof nat === "object") {
+          natRows.push(
+            ["Native StartTraining (LibTorch TPEM): d_model (proto)", nat.d_model != null && nat.d_model !== 0 ? String(nat.d_model) : "0 (unset)"],
+            [
+              "Native StartTraining (LibTorch TPEM): io_d_model (proto)",
+              nat.io_d_model != null && nat.io_d_model !== 0 ? String(nat.io_d_model) : "0 (unset → same as d_model if d>0)",
+            ],
+            [
+              "Native StartTraining (LibTorch TPEM): num_ternary_blocks (proto)",
+              nat.num_ternary_blocks != null && nat.num_ternary_blocks !== 0 ? String(nat.num_ternary_blocks) : "0 (unset → 1)",
+            ],
+            ["Native StartTraining: checkpoint/tpem load path set", nat.model_uri_set ? "yes" : "no"],
+          );
+          if (nat.native_cold_start_note) {
+            natRows.push(["Native cold-start note", String(nat.native_cold_start_note)]);
+          }
+          if (!nat.model_uri_set && nat.native_effective_io_d_model != null) {
+            natRows.push(
+              ["Native effective cold-start d_model", String(nat.native_effective_d_model ?? "—")],
+              ["Native effective cold-start io_d_model", String(nat.native_effective_io_d_model ?? "—")],
+              ["Native effective cold-start num_ternary_blocks", String(nat.native_effective_num_ternary_blocks ?? "—")],
+            );
+          }
+          if (nat.memory_estimate && typeof nat.memory_estimate === "object") {
+            const me = nat.memory_estimate;
+            natRows.push([
+              "Native est. params (FP32, dense cold-start)",
+              me.parameter_gib != null ? `${Number(me.parameter_gib).toFixed(4)} GiB` : "—",
+            ]);
+            natRows.push([
+              "Native est. Adam m/v (FP32)",
+              me.adam_state_gib != null ? `${Number(me.adam_state_gib).toFixed(4)} GiB` : "—",
+            ]);
+            natRows.push([
+              "Native est. activation scratch hint",
+              me.activation_scratch_hint_gib != null ? `${Number(me.activation_scratch_hint_gib).toFixed(4)} GiB` : "—",
+            ]);
+            natRows.push([
+              "Native est. total (params + Adam + scratch hint)",
+              me.total_including_scratch_hint_gib != null ? `${Number(me.total_including_scratch_hint_gib).toFixed(4)} GiB` : "—",
+            ]);
+            if (me.formula_summary) {
+              natRows.push(["Native memory formula (informational)", String(me.formula_summary)]);
+            }
+          }
+          if (nat.host_physical_memory_gib != null) {
+            natRows.push(["Host physical RAM (this machine)", `${Number(nat.host_physical_memory_gib).toFixed(2)} GiB`]);
+          }
+          if (nat.host_available_physical_gib != null) {
+            natRows.push([
+              "Host available physical RAM (best-effort)",
+              `${Number(nat.host_available_physical_gib).toFixed(2)} GiB`,
+            ]);
+          }
+        } else {
+          natRows.push(["Native StartTraining (LibTorch TPEM)", "(pick a config on the launch card)"]);
+        }
         setPreflightKV([
-          ["Default runtime profile", p.default_runtime_profile || "optimized_auto"],
-          ["Training runtime mode", p.training_runtime_mode || "auto"],
-          ["Native strict mode", p.native_strict_enabled ? "on" : "off"],
-          ["Ternary impl", p.ternary_impl || "auto"],
+          ["Training runtime mode (WUI)", p.training_runtime_mode || "native"],
+          [
+            "Local engine (primary vs optional Py)",
+            wte.pick_for_local_use_grpc ? "Native: gRPC + LibTorch TPEM" : "Python: subprocess loop",
+          ],
+          ["Engine pick reason", wte.pick_reason != null && String(wte.pick_reason) !== "" ? String(wte.pick_reason) : "(n/a)"],
+          ["gRPC address (WUI)", wte.grpc_addr != null && String(wte.grpc_addr) !== "" ? String(wte.grpc_addr) : "(n/a)"],
+          ["gRPC reachable (TCP)", wte.grpc_reachable ? "yes" : "no"],
+          ...natRows,
+          ["Ternary impl (WUI / profile)", p.ternary_impl || "auto"],
           ["Trit pack impl", p.trit_pack_impl || "auto"],
           ["Memory encode impl", p.memory_encode_impl || "auto"],
           ["WASM exec impl", p.wasm_exec_impl || "auto"],
           ["Cascade RL impl", p.cascade_rl_impl || "auto"],
           ["TPEM native bundle", p.tpem_native_bundle != null ? String(p.tpem_native_bundle) : "0"],
-          ["Config", p.config || "(env/default)"],
+          ["Native strict mode", p.native_strict_enabled ? "on" : "off"],
+          ["— Python environment (reference only) —", "Same TOML; use when running python -m qminiwasm.engine"],
+          ["Default runtime profile (Python probe)", p.default_runtime_profile || "optimized_auto"],
+          ["Config file", p.config || "(env/default)"],
+          [
+            "Model geometry — Python EngineConfig (reference)",
+            [p.model_d_model, p.model_io_d_model, p.model_num_ternary_blocks].every((x) => x == null)
+              ? "(n/a)"
+              : `d=${p.model_d_model} io=${p.model_io_d_model} blocks=${p.model_num_ternary_blocks}`,
+          ],
           ["Accelerator in config file", p.accelerator_from_config_file !== undefined && p.accelerator_from_config_file !== "" ? p.accelerator_from_config_file : "(unset or default)"],
           ["Preflight accelerator (Build form)", p.preflight_accelerator_override ? String(p.preflight_accelerator_override) : "(use config file)"],
           ["Requested accelerator (device check)", p.requested_accelerator || "auto"],
@@ -5054,7 +5594,19 @@
       } catch (e) {
         setPreflightBadge("err", "ERROR");
         setPreflightKV([]);
-        msg.textContent = String(e.message || e);
+        let m = String(e.message || e);
+        const low = m.toLowerCase();
+        const configPathHint =
+          /invalid config path|config must be under configs\/training|config must be a \.toml file|config file not found/i.test(
+            m
+          ) ||
+          (low.includes("preflight failed") &&
+            /toml|engineconfig|no such file|filenotfound|errno 2/i.test(low));
+        if (configPathHint) {
+          m +=
+            " — On the launch card, choose configs/training/wui_working.toml after saving the wizard (or open this page with ?config=…&accelerator=…).";
+        }
+        msg.textContent = m;
         msg.className = "status error";
       }
     }
@@ -5063,6 +5615,26 @@
       return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
 
+    const STOP_CONTROL_IDS = [
+      "btnStop",
+      "btnStopForce",
+      "btnCoopStop",
+      "btnStopAndData",
+      "btnStopSticky",
+      "btnStopForceSticky",
+      "btnCoopStopSticky",
+      "btnStopAndDataSticky",
+      "btnStopRc",
+      "btnStopForceRc",
+      "btnCoopStopRc",
+      "btnStopAndDataRc",
+    ];
+    function setStopControlsDisabled(disabled) {
+      for (const id of STOP_CONTROL_IDS) {
+        const el = $(id);
+        if (el) el.disabled = disabled;
+      }
+    }
     function selectRun(id, configPath) {
       activeRunId = id;
       logOffset = 0;
@@ -5076,11 +5648,7 @@
       connectRunTelemetryWS(id);
       $("log").innerHTML = "";
       $("logTitle").textContent = id ? "· " + (configPath || id) : "";
-      $("btnStop").disabled = !id;
-      if ($("btnStopForce")) $("btnStopForce").disabled = !id;
-      if ($("btnCoopStop")) $("btnCoopStop").disabled = !id;
-      if ($("btnStopAndData")) $("btnStopAndData").disabled = !id;
-      $("btnAbortSticky").disabled = !id;
+      setStopControlsDisabled(!id);
       $("stickyRunLabel").textContent = id ? `Active run: ${id.slice(0,8)}` : "No active run";
       if (pollTimer) clearInterval(pollTimer);
       if (!id) return;
@@ -5150,11 +5718,7 @@
           refreshEnclaveFootprintFromLogs();
         }
         logOffset = data.next_offset || logOffset;
-        $("btnStop").disabled = !data.running;
-        if ($("btnStopForce")) $("btnStopForce").disabled = !data.running;
-        if ($("btnCoopStop")) $("btnCoopStop").disabled = !data.running;
-        if ($("btnStopAndData")) $("btnStopAndData").disabled = !data.running;
-        $("btnAbortSticky").disabled = !data.running;
+        setStopControlsDisabled(!data.running);
         if (!data.running) {
           $("stickyEpochLabel").textContent = "Epoch: -- / --";
           $("stickyEpochProgress").value = 0;
@@ -5436,11 +6000,12 @@
       addToast("Opening step 3 · Data source — adjust dataset, save, then launch.");
     }
 
-    $("btnStop").onclick = async () => {
-      await stopRun(false);
-    };
-    if ($("btnStopForce")) {
-      $("btnStopForce").onclick = async () => {
+    /** Wire log toolbar, sticky bar, and Training Run controls (after Mission split moves nodes). */
+    function wireStopControls() {
+      const onGraceful = async () => {
+        await stopRun(false);
+      };
+      const onForce = async () => {
         if (
           !window.confirm(
             "Force kill immediately? You may lose work inside the current batch. Prefer Stop (graceful) unless the process is hung.",
@@ -5450,16 +6015,28 @@
         }
         await stopRun(true);
       };
-    }
-    if ($("btnCoopStop")) {
-      $("btnCoopStop").onclick = async () => {
+      const onCoop = async () => {
         await cooperativeStopRun();
       };
+      const onStopData = () => void stopRunAndOpenDataWizard();
+
+      for (const id of ["btnStop", "btnStopSticky", "btnStopRc"]) {
+        const el = $(id);
+        if (el) el.onclick = onGraceful;
+      }
+      for (const id of ["btnStopForce", "btnStopForceSticky", "btnStopForceRc"]) {
+        const el = $(id);
+        if (el) el.onclick = onForce;
+      }
+      for (const id of ["btnCoopStop", "btnCoopStopSticky", "btnCoopStopRc"]) {
+        const el = $(id);
+        if (el) el.onclick = onCoop;
+      }
+      for (const id of ["btnStopAndData", "btnStopAndDataSticky", "btnStopAndDataRc"]) {
+        const el = $(id);
+        if (el) el.onclick = onStopData;
+      }
     }
-    if ($("btnStopAndData")) {
-      $("btnStopAndData").onclick = () => void stopRunAndOpenDataWizard();
-    }
-    $("btnAbortSticky").onclick = () => $("btnStop").click();
 
     $("btnReloadSchema").onclick = async () => {
       try {
@@ -5510,6 +6087,7 @@
         await loadConfigs();
         const sel = $("cfg");
         if (sel && data.config) sel.value = data.config;
+        syncTrainingWuiQueryToURL();
         msg.textContent =
           data.message || "Saved " + (data.config || "wui_working.toml") + " — go to step 5 and click Launch training.";
         msg.className = "status done";
@@ -6376,14 +6954,20 @@
       bRunpodDestroyEl.addEventListener("change", () => persistGlobalInfraBasics());
     }
     $("btnPreflight").onclick = loadPreflight;
-    $("cfg").onchange = loadPreflight;
+    $("cfg").onchange = () => {
+      syncTrainingWuiQueryToURL();
+      loadPreflight();
+    };
     $("bDataSource").onchange = toggleHFFields;
     $("bLRTrialMode").onchange = toggleLRTrial;
-    for (const id of ["bName", "bAccel", "bQuantumBackend", "bQuantumPolicy", "bIBMBackendName", "bDataPath", "bEpochs", "bBatch", "bLR", "bDatasetConfig", "bSplit", "bBlend", "bHfNumSamples", "bResumeLatest"]) {
+    for (const id of ["bName", "bAccel", "bQuantumBackend", "bQuantumPolicy", "bIBMBackendName", "bDataPath", "bEpochs", "bBatch", "bDModel", "bNumTernaryBlocks", "bIoDModel", "bGradAccum", "bLR", "bDataloaderWorkers", "bLrPlateauPatience", "bLrPlateauFactor", "bAutoStabilize", "bDatasetConfig", "bSplit", "bBlend", "bHfNumSamples", "bResumeLatest", "bTropicalAttnHybrid", "bGradCkpt", "bAmp"]) {
       $(id).addEventListener("input", refreshModelFacts);
       $(id).addEventListener("change", refreshModelFacts);
     }
-    $("bAccel").addEventListener("change", loadPreflight);
+    $("bAccel").addEventListener("change", () => {
+      syncTrainingWuiQueryToURL();
+      loadPreflight();
+    });
     $("btnModelFacts").onclick = refreshModelFacts;
     $("bDatasetPreset").onchange = applyDatasetPreset;
     $("btnAutoLR").onclick = async () => {
@@ -6447,6 +7031,7 @@
     };
 
     splitLaunchpadMissionCards();
+    wireStopControls();
     initDashboardLayouts();
     initTelemetryCharts();
     initHfExtraCheckboxes();
@@ -6476,7 +7061,12 @@
       ept.addEventListener("change", syncEdgeProfileReadouts);
       syncEdgeProfileReadouts();
     }
-    loadConfigs().then(() => { loadPreflight(); loadRunpodStatus(); });
+    loadConfigs().then(() => {
+      applyTrainingWuiQueryFromURL();
+      syncTrainingWuiQueryToURL();
+      loadPreflight();
+      loadRunpodStatus();
+    });
     loadRuns();
     loadServerMeta();
     loadSchemaForm().catch(() => {});

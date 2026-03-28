@@ -19,7 +19,7 @@ from .secret_sanitize import sanitize_api_key_like
 
 
 def _normalize_hf_extra_specs(items: Any) -> List[Dict[str, Any]]:
-    """List of {path, dataset_config?} for additional HF datasets (max 8)."""
+    """List of {path, dataset_config?} for additional HF datasets."""
     if not items:
         return []
     out: List[Dict[str, Any]] = []
@@ -36,8 +36,6 @@ def _normalize_hf_extra_specs(items: Any) -> List[Dict[str, Any]]:
             out.append({"path": path, "dataset_config": str(dc).strip()})
         else:
             out.append({"path": path})
-        if len(out) >= 8:
-            break
     return out
 
 
@@ -92,6 +90,7 @@ class EngineConfig:
         log_xpu_memory: Optional[bool] = None,
         log_xpu_memory_reset_peak: Optional[bool] = None,
         log_train_throughput: Optional[bool] = None,
+        auto_stabilize: Optional[bool] = None,
         checkpoint_load_path: Optional[str] = None,
         checkpoint_save_path: Optional[str] = None,
         checkpoint_best_path: Optional[str] = None,
@@ -141,6 +140,15 @@ class EngineConfig:
         max_linear_memory_pages: Optional[int] = None,
         wasm_memory64_max_mb: Optional[float] = None,
         use_memory64: Optional[bool] = None,
+        d_model: Optional[int] = None,
+        num_ternary_blocks: Optional[int] = None,
+        io_d_model: Optional[int] = None,
+        tropical_attn_per_block: Optional[bool] = None,
+        gradient_checkpointing: Optional[bool] = None,
+        gradient_accumulation_steps: Optional[int] = None,
+        amp_enabled: Optional[bool] = None,
+        fsdp_enabled: Optional[bool] = None,
+        ddp_enabled: Optional[bool] = None,
     ):
         apply_optimized_auto_defaults()
         self.accelerator = accelerator
@@ -254,6 +262,9 @@ class EngineConfig:
 
         self.seed = seed if seed is not None else None
 
+        _grad_clip_arg = grad_clip_norm
+        _lr_plateau_patience_arg = lr_plateau_patience
+
         if grad_clip_norm is not None:
             self.grad_clip_norm = grad_clip_norm if grad_clip_norm > 0 else None
         elif _tds == "hf_tabular":
@@ -267,6 +278,14 @@ class EngineConfig:
             self.lr_plateau_patience = 2
         else:
             self.lr_plateau_patience = None
+
+        self.auto_stabilize = bool(auto_stabilize) if auto_stabilize is not None else False
+        _acc = (self.accelerator or "").strip().lower()
+        if self.auto_stabilize and _acc in ("xpu", "sycl"):
+            if _grad_clip_arg is None:
+                self.grad_clip_norm = 1.0
+            if _lr_plateau_patience_arg is None:
+                self.lr_plateau_patience = 2
 
         self.lr_plateau_factor = float(lr_plateau_factor) if lr_plateau_factor is not None else 0.5
         self.lr_plateau_min_lr = float(lr_plateau_min_lr) if lr_plateau_min_lr is not None else 1e-7
@@ -478,6 +497,27 @@ class EngineConfig:
             float(wasm_memory64_max_mb) if wasm_memory64_max_mb is not None else None
         )
         self.use_memory64 = bool(use_memory64) if use_memory64 is not None else None
+
+        self.d_model = int(d_model) if d_model is not None else 4096
+        self.d_model = max(32, self.d_model)
+        self.num_ternary_blocks = int(num_ternary_blocks) if num_ternary_blocks is not None else 1
+        self.num_ternary_blocks = max(1, self.num_ternary_blocks)
+        self.io_d_model = int(io_d_model) if io_d_model is not None else 4096
+        self.io_d_model = max(8, self.io_d_model)
+        self.tropical_attn_per_block = (
+            bool(tropical_attn_per_block) if tropical_attn_per_block is not None else False
+        )
+
+        self.gradient_checkpointing = (
+            bool(gradient_checkpointing) if gradient_checkpointing is not None else False
+        )
+        if gradient_accumulation_steps is not None:
+            self.gradient_accumulation_steps = max(1, int(gradient_accumulation_steps))
+        else:
+            self.gradient_accumulation_steps = 1
+        self.amp_enabled = bool(amp_enabled) if amp_enabled is not None else False
+        self.fsdp_enabled = bool(fsdp_enabled) if fsdp_enabled is not None else False
+        self.ddp_enabled = bool(ddp_enabled) if ddp_enabled is not None else False
 
     def wasm_runtime_kwargs(self) -> Dict[str, Any]:
         """Build kwargs for :class:`qminiwasm.wasm_host.engine.WasmRuntimeConfig`."""

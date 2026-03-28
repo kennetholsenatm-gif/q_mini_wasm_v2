@@ -28,6 +28,17 @@ struct TrainingConfig {
   double learning_rate = 1e-3;
   TaxonomyTier taxonomy_tier = TaxonomyTier::kEdgeConstrained;
   bool enable_enclave_adapter = false;
+  /// Optional path to trainable TPEM **interchange v2** (``QMWTPEM2`` + safetensors). Empty: random init
+  /// at default 4096/4096/1 unless ``native_*`` below are set (gRPC / TOML cold start).
+  std::string model_uri;
+  /// Native LibTorch cold-start geometry when ``model_uri`` is empty. Zero = use built-in default.
+  std::uint32_t native_d_model = 0;
+  std::uint32_t native_io_d_model = 0;
+  std::uint32_t native_num_ternary_blocks = 0;
+  /// Absolute paths for checkpoints. With LibTorch enabled, native engine writes interchange v2 (``.pt``).
+  std::string checkpoint_save_path;
+  std::string checkpoint_best_path;
+  std::string checkpoint_latest_path;
 };
 
 enum class EngineState {
@@ -61,6 +72,15 @@ struct TelemetryEvent {
   std::string enclave_state;
   std::string attestation_state;
   double decoherence_score = 0.0;
+  /// Epoch summary (native); used when ``event_type`` is ``epoch_throughput``.
+  double epoch_wall_s = 0.0;
+  std::uint32_t epoch_batch_count = 0;
+  std::uint64_t epoch_sample_count = 0;
+  double epoch_mean_samples_per_s = 0.0;
+  double host_rss_mib = 0.0;
+  /// Enclave / footprint (e.g. ``enclave_summary``).
+  double estimated_tpem_mib = 0.0;
+  double tier_cap_mib = 0.0;
 };
 
 struct EngineStatus {
