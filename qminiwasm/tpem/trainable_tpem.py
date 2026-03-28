@@ -27,7 +27,7 @@ CHECKPOINT_FORMAT_VERSION = TRAINABLE_TPEM_FORMAT_VERSION
 D_MODEL = 4096
 WLES_TRAINING_SIDE_VERSION = TRAINABLE_TPEM_FORMAT_VERSION
 
-# Native C++ engine interchange (magic + JSON envelope + safetensors blob). See cpp/training/README.md.
+# Native C++ engine interchange: magic + JSON envelope + safetensors. See cpp/training/README.md.
 TPEM_INTERCHANGE_MAGIC = b"QMWTPEM2"
 TRAINABLE_TPEM_INTERCHANGE_VERSION = 2
 
@@ -235,7 +235,7 @@ def _load_interchange_v2_from_bytes(model: Any, raw: bytes, map_location: Any) -
 
 
 def peek_trainable_tpem_geometry(path: str | Path) -> Dict[str, Any]:
-    """Read ``d_model`` / block count / ``io_d_model`` from a trainable TPEM artifact without full init.
+    """Read ``d_model``, block count, and ``io_d_model`` from a trainable TPEM file (no full init).
 
     Supports interchange v2 (``QMWTPEM2``) and pickle v1 payloads.
     """

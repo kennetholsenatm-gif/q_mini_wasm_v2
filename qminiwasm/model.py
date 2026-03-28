@@ -113,8 +113,8 @@ class QMiniWASM:
             hybrid_adapter_hidden: Bottleneck width for the adapter (default 1024).
             tequila_deadzone: Tequila deadzone fraction for ``TernaryWASMExpert`` (0 disables).
             lota_rank: If > 0, add a LoRA side branch on the ternary expert path (LoTA-QAF).
-            use_cascade_router: If True, attach :class:`CascadeRouter` (io_d_model→latent→logits) for
-                cascade RL / escalation hints; trained via cascade optimizer, not main MSE Adam.
+            use_cascade_router: If True, attach :class:`CascadeRouter` (io_d_model→latent→logits)
+                for cascade RL / escalation hints; trained via cascade optimizer, not main MSE Adam.
             cascade_state_dim / cascade_num_actions / cascade_router_hidden: Router shape.
             qaoa_execution_mode: ``pennylane`` (identity path), ``qiskit_statevector`` (exact),
                 or ``qiskit_ibm`` (IBM Runtime Estimator; no grad through device).
@@ -128,7 +128,8 @@ class QMiniWASM:
                 trainable linear stem/head map between I/O and the core.
             tropical_attn_per_block: If True, add a residual tropical attention step on the core
                 (single seq_len=1 attention inside ``hybrid_inference``).
-            use_gradient_checkpointing: Recompute ternary stack activations during training backward.
+            use_gradient_checkpointing:
+                Recompute ternary stack activations during backward (training).
         """
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
@@ -215,7 +216,7 @@ class QMiniWASM:
         self.sycl_hardware = SYCLHardware()
         self.data_pipeline = DataPipeline(wasm_runtime=wasm_runtime)
         self.state_migration = StateMigrationInterconnect()
-        # Edge profiling: QMW_DISABLE_TROPICAL_ATTN=1 or QMW_TROPICAL_ATTN_HEADS=N (d_model % N == 0).
+        # Edge profiling: QMW_DISABLE_TROPICAL_ATTN and QMW_TROPICAL_ATTN_HEADS (d_model % N == 0).
         heads_s = (os.environ.get("QMW_TROPICAL_ATTN_HEADS") or "").strip()
         env_nh = int(heads_s) if heads_s.isdigit() else None
         nh = _pick_tropical_heads(self.d_model, env_nh)

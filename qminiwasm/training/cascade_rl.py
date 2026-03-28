@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import ctypes
+import os
 from typing import Any, Callable, Protocol
 
 import torch

@@ -60,7 +60,7 @@ class TrainingSection(BaseModel):
     log_xpu_memory_reset_peak: Optional[bool] = None
     #: ``qmw_train_throughput`` line after each supervised phase (wall time, samples/s, host RSS).
     log_train_throughput: Optional[bool] = None
-    #: When True on XPU/SYCL, apply grad clip 1.0 and LR plateau patience 2 if those keys are omitted in TOML.
+    #: On XPU/SYCL when True: grad clip 1.0 and LR plateau patience 2 if TOML omits them.
     auto_stabilize: Optional[bool] = None
 
 
@@ -97,7 +97,7 @@ class HuggingFaceSection(BaseModel):
     wasi_slice_only: Optional[bool] = None
     wasi_max_scan: Optional[int] = None
     mesh_blend_fraction: Optional[float] = None
-    #: Any number of extra Hub sources (deduped); merged with primary ``[data].path`` when not a placeholder.
+    #: Extra Hub datasets (deduped, unbounded); merged with primary ``[data].path`` when applicable.
     extra_specs: Optional[List[HFExtraSpec]] = None
     streaming: Optional[bool] = None
     max_scan_rows: Optional[int] = None
@@ -150,7 +150,7 @@ class ModelSection(BaseModel):
     d_model: Optional[int] = Field(None, ge=32, le=1_048_576)
     #: Stacked residual ternary experts (each d_model→d_model).
     num_ternary_blocks: Optional[int] = Field(None, ge=1, le=1024)
-    #: Training vector width from mesh/HF encoders (default 4096). When != d_model, stem/head Linears map I/O.
+    #: Mesh/HF encoder width (default 4096). When != ``d_model``, stem/head Linears map I/O.
     io_d_model: Optional[int] = Field(None, ge=8, le=1_048_576)
     #: When True, apply one TropicalAttention after the ternary stack inside hybrid_inference.
     tropical_attn_per_block: Optional[bool] = None
