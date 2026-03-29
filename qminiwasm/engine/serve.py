@@ -112,6 +112,7 @@ def get_model():
         from qminiwasm.hardware.device import get_device
         from qminiwasm.hardware.device import resolve_backend_policy
         from qminiwasm.model import QMiniWASM
+        from qminiwasm.tpem.trainable_tpem import peek_trainable_tpem_geometry
 
         dev = get_device()
         s, enclave = _serve_sides()
@@ -123,17 +124,6 @@ def get_model():
         crh = _pick_int("CASCADE_ROUTER_HIDDEN", s.cascade_router_hidden if s else None, 32)
         hier = _hierarchical_config_for_serve(enclave)
         w_rt = _wasm_runtime_from_enclave(enclave)
-        _model = QMiniWASM(
-            device=dev,
-            use_hybrid_adapter=use_adapt,
-            hybrid_adapter_hidden=adapt_h,
-            use_cascade_router=use_cr,
-            cascade_state_dim=csd,
-            cascade_num_actions=cna,
-            cascade_router_hidden=crh,
-            wasm_runtime=w_rt,
-            hierarchical_config=hier,
-        )
         ckpt = ""
         if s is not None:
             if getattr(s, "tpem", None) and str(s.tpem).strip():
@@ -145,6 +135,33 @@ def get_model():
                 os.environ.get("QMINIWASM_CHECKPOINT", "").strip()
                 or os.environ.get("CHECKPOINT_LOAD_PATH", "").strip()
             )
+        geom: dict = {}
+        if ckpt:
+            geom = peek_trainable_tpem_geometry(ckpt) or {}
+        d_model = int(geom.get("d_model", 4096)) if geom else 4096
+        n_blk = int(geom.get("num_ternary_blocks", 1)) if geom else 1
+        io_dm = int(geom.get("io_d_model", d_model)) if geom else 4096
+        if s is not None:
+            if getattr(s, "d_model", None) is not None:
+                d_model = int(s.d_model)
+            if getattr(s, "num_ternary_blocks", None) is not None:
+                n_blk = int(s.num_ternary_blocks)
+            if getattr(s, "io_d_model", None) is not None:
+                io_dm = int(s.io_d_model)
+        _model = QMiniWASM(
+            device=dev,
+            use_hybrid_adapter=use_adapt,
+            hybrid_adapter_hidden=adapt_h,
+            use_cascade_router=use_cr,
+            cascade_state_dim=csd,
+            cascade_num_actions=cna,
+            cascade_router_hidden=crh,
+            wasm_runtime=w_rt,
+            hierarchical_config=hier,
+            d_model=d_model,
+            num_ternary_blocks=max(1, n_blk),
+            io_d_model=max(8, io_dm),
+        )
         if ckpt:
             _model.load_trainable_checkpoint(ckpt, map_location=dev)
         _model._backend_policy = resolve_backend_policy()

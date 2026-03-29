@@ -1,6 +1,6 @@
 # Environment variables (secrets and APIs)
 
-**Policy:** Variables documented here are **credentials and API keys** loaded from `.env` (or the process environment). They are **not** how you configure training, inference, accelerators, WASM limits, or feature toggles — use **`configs/training/*.toml`**, **`configs/serve/*.toml`**, and the **[Training WUI](../training-wui/README.md)** for that.
+**Policy:** Variables documented here are **credentials and API keys** loaded from `.env` (or the process environment). They are **not** how you configure training, inference, accelerators, WASM limits, or feature toggles — use **`configs/training/*.toml`**, **`configs/serve/*.toml`**, **`configs/wui.toml`** (Training WUI process settings), and the **[Training WUI](../training-wui/README.md)** for that. See **[CONFIGURATION_POLICY.md](CONFIGURATION_POLICY.md)**.
 
 For **CI, Docker, serverless, and toolchain** variables that may still be read by the codebase, see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)**.
 
@@ -38,6 +38,7 @@ For **CI, Docker, serverless, and toolchain** variables that may still be read b
 - Treat variables marked with 🔒 as **secrets**: never commit real values; use a secrets manager in production where applicable.
 - Copy **[.env.example](../.env.example)** to `.env` for local development (`.env` is gitignored).
 - **Do not** add training hyperparameters or runtime toggles to `.env` — add them to TOML or use the WUI.
+- The **Training WUI** loads `.env` with an **allowlist** (secrets + `RUNPOD_SERVERLESS_ENDPOINT_ID`); other keys are ignored so configuration stays in **`configs/wui.toml`** / **`configs/runtime.toml`**.
 
 ## Related documentation
 

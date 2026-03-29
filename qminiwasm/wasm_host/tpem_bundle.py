@@ -8,7 +8,6 @@ from __future__ import annotations
 import argparse
 import ctypes
 import hashlib
-import os
 import struct
 import sys
 from dataclasses import dataclass
@@ -16,19 +15,13 @@ from pathlib import Path
 from typing import Union
 
 from qminiwasm.native_bridge import load_native_lib
+from qminiwasm.runtime_modes import tpem_native_bundle_enabled
 from .trit_pack import PACK_ENCODING_VERSION
 
 MAGIC = b"QMWTPEM1"
 HEADER_STRUCT = struct.Struct("<8sIIQ32s")
 BUNDLE_FORMAT_VERSION = 1
 HEADER_SIZE = HEADER_STRUCT.size  # 56
-
-
-def _native_tpem_bundle_enabled() -> bool:
-    raw = os.getenv("QMINIWASM_TPEM_NATIVE_BUNDLE", "").strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return True
 
 
 @dataclass(frozen=True)
@@ -58,7 +51,7 @@ def write_tpem_bundle(
     pe = int(PACK_ENCODING_VERSION if pack_encoding_version is None else pack_encoding_version)
     payload_mv = memoryview(payload)
     digest = hashlib.sha256(payload_mv).digest()
-    lib = load_native_lib() if _native_tpem_bundle_enabled() else None
+    lib = load_native_lib() if tpem_native_bundle_enabled() else None
     if lib is not None and hasattr(lib, "qmw_tpem_build_bundle"):
         fn = lib.qmw_tpem_build_bundle
         fn.argtypes = [

@@ -9,9 +9,13 @@
 # Usage:
 #   .\scripts\start_cpp_training_engine.ps1
 #   .\scripts\start_cpp_training_engine.ps1 -Listen '0.0.0.0:50061'
+#   .\scripts\start_cpp_training_engine.ps1 -SkipLibTorch   # no LibTorch (synthetic loss / JSON checkpoints)
+#
+# LibTorch: install with .\scripts\install-libtorch.ps1 (cpp\.deps\libtorch) or set LIBTORCH_ROOT.
 #
 param(
-    [string]$Listen = '127.0.0.1:50061'
+    [string]$Listen = '127.0.0.1:50061',
+    [switch]$SkipLibTorch
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,14 +73,53 @@ try {
     }
 }
 
+function Test-LibTorchRoot {
+    param([string]$Root)
+    if ([string]::IsNullOrWhiteSpace($Root)) { return $false }
+    $cfg = Join-Path $Root 'share\cmake\Torch\TorchConfig.cmake'
+    return (Test-Path -LiteralPath $cfg)
+}
+
+$libTorchCMakeArgs = @()
+if ($SkipLibTorch) {
+    $libTorchCMakeArgs += @('-DQMINIWASM_TRAINING_WITH_LIBTORCH=OFF')
+    Write-Host 'LibTorch disabled (-SkipLibTorch): native engine uses synthetic loss + JSON checkpoints.'
+} else {
+    $lt = $null
+    if (Test-LibTorchRoot $env:LIBTORCH_ROOT) {
+        $lt = $env:LIBTORCH_ROOT
+        Write-Host "Using LIBTORCH_ROOT: $lt"
+    } else {
+        $defaultLt = Join-Path $CppDir '.deps\libtorch'
+        if (Test-LibTorchRoot $defaultLt) {
+            $lt = $defaultLt
+            Write-Host "Using LibTorch from install script: $lt"
+        }
+    }
+    if ($lt) {
+        # find_package(Torch) needs this on the prefix path (LIBTORCH_ROOT is also read in cpp/CMakeLists.txt).
+        $env:LIBTORCH_ROOT = $lt
+        $libTorchCMakeArgs += @('-DCMAKE_PREFIX_PATH=' + $lt)
+    } else {
+        Write-Warning @'
+LibTorch not found (expected cpp\.deps\libtorch after install-libtorch.ps1, or valid LIBTORCH_ROOT).
+Configuring with -DQMINIWASM_TRAINING_WITH_LIBTORCH=OFF. For real TPEM weights run:
+  .\scripts\install-libtorch.ps1
+Then re-run this script.
+'@
+        $libTorchCMakeArgs += @('-DQMINIWASM_TRAINING_WITH_LIBTORCH=OFF')
+    }
+}
+
 $cmakeConfigure = @(
     '-S', $CppDir,
     '-B', $BuildDir,
     '-G', $generator,
     '-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
     '-DQMINIWASM_WITH_TRAINING_ENGINE=ON',
-    '-DQMINIWASM_WITH_GRPC=ON'
-) + $toolchainArgs
+    '-DQMINIWASM_WITH_GRPC=ON',
+    '-DQMINIWASM_BUILD_PYBIND=OFF'
+) + $libTorchCMakeArgs + $toolchainArgs
 
 if ($generator -eq 'Ninja') {
     $cmakeConfigure += @('-DCMAKE_BUILD_TYPE=Release')
@@ -97,6 +140,21 @@ $candidates = @(
 $exe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $exe) {
     throw "Could not find qminiwasm_training_engine_server.exe under $BuildDir"
+}
+
+# LibTorch DLLs load from PATH or the exe directory; official zips keep them in <libtorch>\lib.
+$ltLib = $null
+if (-not $SkipLibTorch -and (Test-LibTorchRoot $env:LIBTORCH_ROOT)) {
+    $ltLib = Join-Path $env:LIBTORCH_ROOT 'lib'
+} elseif (-not $SkipLibTorch) {
+    $def = Join-Path $CppDir '.deps\libtorch'
+    if (Test-LibTorchRoot $def) {
+        $ltLib = Join-Path $def 'lib'
+    }
+}
+if ($ltLib -and (Test-Path (Join-Path $ltLib 'torch_cpu.dll'))) {
+    $env:PATH = "${ltLib};${env:PATH}"
+    Write-Host "Prepended LibTorch to PATH: $ltLib" -ForegroundColor DarkGray
 }
 
 Write-Host "Starting $exe $Listen"

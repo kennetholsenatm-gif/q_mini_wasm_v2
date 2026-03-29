@@ -25,12 +25,18 @@ This document defines the required methodology for Python-to-C++ runtime A/B tes
 
 ## Environment Matrix
 
+**Revision-controlled defaults** live in **`configs/runtime.toml`** (`[runtime]`, `[runtime.impl]`, `[training]`, `[fabric]`, `[hardware]`, `[loader]`, `[native]`). The Training WUI sets matching `QMINIWASM_*` variables for child processes from **`configs/wui.toml`** for engine mode and gRPC address.
+
+For **CI and A/B scripts**, you may still **export** the following so they override file defaults when non-empty:
+
 - `QMINIWASM_TERNARY_IMPL=python|native|auto`
 - `QMINIWASM_TRIT_PACK_IMPL=python|native|auto`
 - `QMINIWASM_MEMORY_ENCODE_IMPL=python|native|auto`
 - `QMINIWASM_WASM_EXEC_IMPL=python|native|auto`
 - `QMINIWASM_CASCADE_RL_IMPL=python|native|auto`
-- `QMINIWASM_TRAINING_RUNTIME_MODE=python|cpp|auto`
+- `QMINIWASM_TRAINING_RUNTIME_MODE=python|cpp|auto` (WUI / subprocess; not in `runtime.toml`)
+
+See **`docs/CONFIGURATION_POLICY.md`**.
 
 ## Default Optimized Profile
 

@@ -45,6 +45,17 @@ def _qmw_env_on(name: str) -> bool:
     return v in ("1", "true", "yes", "on")
 
 
+def _pick_tropical_heads(d_model: int, env_heads: Optional[int]) -> int:
+    if env_heads is not None and env_heads > 0 and d_model % env_heads == 0:
+        return int(env_heads)
+    if d_model % 8 == 0:
+        return 8
+    for h in (4, 2, 1):
+        if d_model % h == 0:
+            return h
+    return 1
+
+
 class QMiniWASM:
     """QMiniWASM: Top-Level Model Interface for Q-Mini-WASM Architecture
 
@@ -87,18 +98,23 @@ class QMiniWASM:
         qaoa_warm_start_cache_ttl: int = 128,
         wasm_runtime: Optional[WasmRuntimeConfig] = None,
         hierarchical_config: Optional[HierarchicalConfig] = None,
+        d_model: int = 4096,
+        num_ternary_blocks: int = 1,
+        io_d_model: int = 4096,
+        tropical_attn_per_block: bool = False,
+        use_gradient_checkpointing: bool = False,
     ):
         """Initialize the QMiniWASM model.
 
         Args:
             device: Optional torch.device; if None, uses Intel XPU when available else CPU.
             use_hybrid_adapter: If True, add a trainable residual MLP after the ternary expert
-                (4096 → hidden → 4096) to increase capacity for low-MSE fits on real data.
+                (d_model → hidden → d_model) to increase capacity for low-MSE fits on real data.
             hybrid_adapter_hidden: Bottleneck width for the adapter (default 1024).
             tequila_deadzone: Tequila deadzone fraction for ``TernaryWASMExpert`` (0 disables).
             lota_rank: If > 0, add a LoRA side branch on the ternary expert path (LoTA-QAF).
-            use_cascade_router: If True, attach :class:`CascadeRouter` (4096→latent→logits) for
-                cascade RL / escalation hints; trained via cascade optimizer, not main MSE Adam.
+            use_cascade_router: If True, attach :class:`CascadeRouter` (io_d_model→latent→logits)
+                for cascade RL / escalation hints; trained via cascade optimizer, not main MSE Adam.
             cascade_state_dim / cascade_num_actions / cascade_router_hidden: Router shape.
             qaoa_execution_mode: ``pennylane`` (identity path), ``qiskit_statevector`` (exact),
                 or ``qiskit_ibm`` (IBM Runtime Estimator; no grad through device).
@@ -106,11 +122,24 @@ class QMiniWASM:
             ibm_qaoa_shots: Shot budget hint for IBM Estimator (precision).
             quantum_backend: Engine / TOML logical backend; ``ibm_*`` picks IBM device if env unset.
             hierarchical_config: Tier-1 ECL/CGE/TPEM; default ``DEFAULT_HIERARCHICAL_CONFIG``.
+            d_model: Internal width for ternary stack, adapter, and Qiskit router projections.
+            num_ternary_blocks: Number of residual PreNorm + TernaryWASMExpert blocks.
+            io_d_model: Mesh/HF encoder width (typically 4096). When different from ``d_model``,
+                trainable linear stem/head map between I/O and the core.
+            tropical_attn_per_block: If True, add a residual tropical attention step on the core
+                (single seq_len=1 attention inside ``hybrid_inference``).
+            use_gradient_checkpointing:
+                Recompute ternary stack activations during backward (training).
         """
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         self.device = device if device is not None else get_device()
         self.hierarchical_config = hierarchical_config or DEFAULT_HIERARCHICAL_CONFIG
+        self.d_model = max(32, int(d_model))
+        self.io_d_model = max(8, int(io_d_model))
+        self.num_ternary_blocks = max(1, int(num_ternary_blocks))
+        self._apply_tropical_in_hybrid = bool(tropical_attn_per_block)
+        self._use_gradient_checkpointing = bool(use_gradient_checkpointing)
         qaoa_cfg: Optional[QAOAConfig] = None
         mode = (qaoa_execution_mode or "pennylane").strip().lower()
         if mode in ("qiskit_statevector", "qiskit_ibm"):
@@ -142,15 +171,36 @@ class QMiniWASM:
         self.quantum_router = HybridQuantumMoE(
             qaoa_config=qaoa_cfg,
             num_qubits=int(num_qubits),
+            d_model=self.d_model,
         ).to(self.device)
-        self.ternary_expert = TernaryWASMExpert(
-            4096,
-            4096,
-            tequila_deadzone=float(tequila_deadzone),
+        if self.io_d_model != self.d_model:
+            self.input_stem = nn.Linear(self.io_d_model, self.d_model).to(self.device)
+            self.output_head = nn.Linear(self.d_model, self.io_d_model).to(self.device)
+            nn.init.kaiming_uniform_(self.input_stem.weight, a=math.sqrt(5))
+            nn.init.zeros_(self.input_stem.bias)
+            nn.init.kaiming_uniform_(self.output_head.weight, a=math.sqrt(5))
+            nn.init.zeros_(self.output_head.bias)
+        else:
+            self.input_stem = nn.Identity()
+            self.output_head = None
+        self.block_norms = nn.ModuleList(
+            [nn.LayerNorm(self.d_model) for _ in range(self.num_ternary_blocks)]
         ).to(self.device)
+        self.ternary_blocks = nn.ModuleList(
+            [
+                TernaryWASMExpert(
+                    self.d_model,
+                    self.d_model,
+                    tequila_deadzone=float(tequila_deadzone),
+                ).to(self.device)
+                for _ in range(self.num_ternary_blocks)
+            ]
+        )
         self.lota_branch: Optional[LoRALinearSide] = None
         if int(lota_rank) > 0:
-            self.lota_branch = LoRALinearSide(4096, 4096, int(lota_rank)).to(self.device)
+            self.lota_branch = LoRALinearSide(self.d_model, self.d_model, int(lota_rank)).to(
+                self.device
+            )
             self.logger.info("LoTA-QAF LoRA branch enabled (rank=%s)", int(lota_rank))
         self._ptqtp_linear: Optional[PTQTPLinear] = None
         self._use_ptqtp_inference: bool = False
@@ -166,22 +216,18 @@ class QMiniWASM:
         self.sycl_hardware = SYCLHardware()
         self.data_pipeline = DataPipeline(wasm_runtime=wasm_runtime)
         self.state_migration = StateMigrationInterconnect()
-        # Edge profiling: QMW_DISABLE_TROPICAL_ATTN=1 or QMW_TROPICAL_ATTN_HEADS=N (4096 % N == 0).
+        # Edge profiling: QMW_DISABLE_TROPICAL_ATTN and QMW_TROPICAL_ATTN_HEADS (d_model % N == 0).
         heads_s = (os.environ.get("QMW_TROPICAL_ATTN_HEADS") or "").strip()
+        env_nh = int(heads_s) if heads_s.isdigit() else None
+        nh = _pick_tropical_heads(self.d_model, env_nh)
         if _qmw_env_on("QMW_DISABLE_TROPICAL_ATTN"):
             self.tropical_attention = None
-        elif heads_s.isdigit():
-            nh = int(heads_s)
-            if nh <= 0 or (4096 % nh) != 0:
-                self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
-            else:
-                self.tropical_attention = TropicalAttention(4096, num_heads=nh).to(self.device)
         else:
-            self.tropical_attention = TropicalAttention(4096, num_heads=8).to(self.device)
+            self.tropical_attention = TropicalAttention(self.d_model, num_heads=nh).to(self.device)
         self.cascade_router: Optional[CascadeRouter] = None
         if bool(use_cascade_router):
             self.cascade_router = CascadeRouter(
-                d_model=4096,
+                d_model=self.io_d_model,
                 state_dim=int(cascade_state_dim),
                 num_actions=int(cascade_num_actions),
                 hidden=max(8, int(cascade_router_hidden)),
@@ -191,14 +237,35 @@ class QMiniWASM:
                 int(cascade_state_dim),
                 int(cascade_num_actions),
             )
-        self.logger.info("QMiniWASM model initialized on %s", self.device)
+        self.logger.info(
+            "QMiniWASM model initialized on %s (d_model=%s io_d_model=%s ternary_blocks=%s)",
+            self.device,
+            self.d_model,
+            self.io_d_model,
+            self.num_ternary_blocks,
+        )
+
+    @property
+    def ternary_expert(self) -> TernaryWASMExpert:
+        """First ternary block (backward compatible with single-block checkpoints)."""
+        return self.ternary_blocks[0]
+
+    def ternary_latent_weights(self) -> List[torch.nn.Parameter]:
+        """Continuous latent weights for all ternary blocks (e.g. T-Sign optimizer)."""
+        return [b.weight for b in self.ternary_blocks]
+
+    def _forward_ternary_stack(self, routed: torch.Tensor) -> torch.Tensor:
+        y = routed
+        for norm, blk in zip(self.block_norms, self.ternary_blocks):
+            y = y + blk(norm(y))
+        return y
 
     def _build_hybrid_adapter(self, hidden: int) -> None:
         """Residual branch: Linear → GELU → Linear; last layer zero-init (ternary-only start)."""
         m = nn.Sequential(
-            nn.Linear(4096, hidden),
+            nn.Linear(self.d_model, hidden),
             nn.GELU(),
-            nn.Linear(hidden, 4096),
+            nn.Linear(hidden, self.d_model),
         ).to(self.device)
         nn.init.kaiming_uniform_(m[0].weight, a=math.sqrt(5))
         nn.init.zeros_(m[0].bias)
@@ -221,7 +288,12 @@ class QMiniWASM:
         """Parameters stepped by the engine training loop (router + ternary + optional adapter)."""
         params: List[torch.nn.Parameter] = []
         params.extend(self.quantum_router.parameters())
-        params.extend(self.ternary_expert.parameters())
+        if isinstance(self.input_stem, nn.Linear):
+            params.extend(self.input_stem.parameters())
+        for blk in self.ternary_blocks:
+            params.extend(blk.parameters())
+        if self.output_head is not None:
+            params.extend(self.output_head.parameters())
         if self.lota_branch is not None:
             params.extend(self.lota_branch.parameters())
         if self.hybrid_adapter is not None:
@@ -236,8 +308,13 @@ class QMiniWASM:
             return self.trainable_hybrid_backbone_parameters()
         out: List[torch.nn.Parameter] = []
         out.extend(self.quantum_router.parameters())
-        if self.ternary_expert.bias is not None:
-            out.append(self.ternary_expert.bias)
+        if isinstance(self.input_stem, nn.Linear):
+            out.extend(self.input_stem.parameters())
+        for blk in self.ternary_blocks:
+            if blk.bias is not None:
+                out.append(blk.bias)
+        if self.output_head is not None:
+            out.extend(self.output_head.parameters())
         if self.lota_branch is not None:
             out.extend(self.lota_branch.parameters())
         if self.hybrid_adapter is not None:
@@ -259,8 +336,10 @@ class QMiniWASM:
         """Per-row logits ``[B, num_actions]`` if ``cascade_router`` is set; else ``None``."""
         if self.cascade_router is None:
             return None
-        if hidden_batch.dim() != 2 or hidden_batch.shape[1] != 4096:
-            raise ValueError(f"Expected hidden [B, 4096], got {tuple(hidden_batch.shape)}")
+        if hidden_batch.dim() != 2 or hidden_batch.shape[1] != self.io_d_model:
+            raise ValueError(
+                f"Expected hidden [B, {self.io_d_model}], got {tuple(hidden_batch.shape)}"
+            )
         cr = self.cascade_router
         s = cr.projector(hidden_batch.detach())
         return cr.body(s)
@@ -421,7 +500,7 @@ class QMiniWASM:
                 self.inference_from_escalation(payload, continuation_hidden_states)
             elif payload is not None:
                 dev = self.device
-                dummy = torch.zeros(1, 4096, device=dev, dtype=torch.float32)
+                dummy = torch.zeros(1, self.io_d_model, device=dev, dtype=torch.float32)
                 self.inference_from_escalation(payload, dummy)
         return result, outcome, num_loops, last_state
 
@@ -466,18 +545,39 @@ class QMiniWASM:
             Output tensor of shape (batch_size, d_model)
         """
         try:
-            hidden_states = hidden_states.to(self.device)
-            # QAHR / neural QAOA mix (Ternary expert path)
-            routed_output = self.quantum_router(hidden_states)
+            x = hidden_states.to(self.device)
+            if x.dim() != 2 or x.shape[1] != self.io_d_model:
+                raise ValueError(
+                    f"Expected hidden_states [batch, {self.io_d_model}], got {tuple(x.shape)}"
+                )
+            h = self.input_stem(x)
+            routed_output = self.quantum_router(h)
 
             if self._use_ptqtp_inference and self._ptqtp_linear is not None:
                 ternary_output = self._ptqtp_linear(routed_output)
+            elif self._use_gradient_checkpointing and self.training:
+                ternary_output = torch.utils.checkpoint.checkpoint(
+                    self._forward_ternary_stack,
+                    routed_output,
+                    use_reentrant=False,
+                )
             else:
-                ternary_output = self.ternary_expert(routed_output)
+                ternary_output = self._forward_ternary_stack(routed_output)
+
+            if (
+                self._apply_tropical_in_hybrid
+                and self.tropical_attention is not None
+                and not self._use_ptqtp_inference
+            ):
+                t2 = ternary_output.unsqueeze(1)
+                ternary_output = ternary_output + self.tropical_attention(t2).squeeze(1)
+
             if self.lota_branch is not None and not self._use_ptqtp_inference:
                 ternary_output = ternary_output + self.lota_branch(routed_output)
             if self.hybrid_adapter is not None:
                 ternary_output = ternary_output + self.hybrid_adapter(ternary_output)
+            if self.output_head is not None:
+                ternary_output = self.output_head(ternary_output)
 
             self.logger.debug("Completed hybrid inference")
             return ternary_output

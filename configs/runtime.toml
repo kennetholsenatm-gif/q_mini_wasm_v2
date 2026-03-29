@@ -1,0 +1,37 @@
+# Python runtime toggles (revision-controlled). Loaded by qminiwasm.runtime_modes.
+# Do not use process environment for these — see docs/CONFIGURATION_POLICY.md
+
+[runtime]
+native_strict = false
+
+[runtime.impl]
+ternary_impl = "auto"
+trit_pack_impl = "auto"
+memory_encode_impl = "auto"
+wasm_exec_impl = "auto"
+cascade_rl_impl = "auto"
+tpem_native_bundle = "0"
+
+[training]
+enclave_adapter = false
+strict_xpu = false
+strict_config_validation = false
+tpem_latest_every_n_epochs = 1
+strict_enclave_footprint = false
+native_rollout = false
+strict_mock_gate = false
+
+[fabric]
+taxonomy_tier = "edge_constrained"
+native_dqaoa_routing = false
+routing_latency_budget_ms = 50.0
+
+[hardware]
+sycl_backend = "sycl"
+strict_sycl_helper = false
+
+[loader]
+hf_loader_impl = "auto"
+
+[native]
+native_lota_qaf = false

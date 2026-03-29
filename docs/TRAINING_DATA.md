@@ -108,6 +108,8 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 
 [`qminiwasm/wasm_host/memory_encode.py`](../qminiwasm/wasm_host/memory_encode.py) maps bytes + scalars to a **4096-float** vector (stable layout: metadata slots + byte-derived floats). Training expects **hidden** and **target** each shaped `(4096,)`.
 
+**Model `io_d_model`:** the default encoder width is **4096**; `[model].io_d_model` in TOML (and the Training WUI) must match that vector size for `hybrid_inference`. If you change `io_d_model`, use a matching encoder or a custom encoding pipeline—otherwise shape errors occur at the stem. The native LibTorch trainer uses the same `io_d_model` for synthetic MSE batches so its checkpoint geometry stays aligned with Python exports.
+
 **Important:** only the first **~4088 UTF-8 bytes** of each row’s blob affect the embedding (the rest is unused). In **auto** HF mode (no `HF_TEXT_FIELDS`), the loader prepends a short labeled **`[context]`** block (`language`, `func_name`, `repo`, `path` when present) so that window mixes repository metadata with the **start** of the function body. Disable with `HF_CONTEXT_FIELDS=0`, or set `HF_CONTEXT_FIELDS=key1,key2` to override.
 
 ## Environment reference (engine / training loop)

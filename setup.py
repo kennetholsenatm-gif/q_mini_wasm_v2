@@ -74,6 +74,7 @@ _setup_kw = dict(
             "datasets>=2.14.0",
             "python-dotenv>=1.0.0",
             "pydantic>=2.5.0",
+            "safetensors>=0.4.0",
             "tomli>=2.0.0; python_version<'3.11'",
             "tomli-w>=1.0.0",
         ],

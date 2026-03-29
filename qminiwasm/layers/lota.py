@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import ctypes
-import os
 import torch
 import torch.nn as nn
 from qminiwasm.native_bridge import load_native_lib
+from qminiwasm.runtime_modes import native_lota_qaf_enabled
 
 
 class LoRALinearSide(nn.Module):
@@ -21,13 +21,7 @@ class LoRALinearSide(nn.Module):
         nn.init.zeros_(self.lora_b.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        use_native = os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower() not in {
-            "",
-            "0",
-            "false",
-            "off",
-            "no",
-        }
+        use_native = native_lota_qaf_enabled()
         if (
             use_native
             and x.device.type == "cpu"
@@ -80,13 +74,7 @@ def merge_lora_into_linear_weight(
 ) -> None:
     """Add ``B @ A`` to ``base_weight`` (in-place) and reset ``lora_b`` to zero."""
     with torch.no_grad():
-        use_native = os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower() not in {
-            "",
-            "0",
-            "false",
-            "off",
-            "no",
-        }
+        use_native = native_lota_qaf_enabled()
         if (
             use_native
             and base_weight.device.type == "cpu"

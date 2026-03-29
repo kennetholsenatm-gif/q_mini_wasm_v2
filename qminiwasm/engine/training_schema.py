@@ -60,6 +60,8 @@ class TrainingSection(BaseModel):
     log_xpu_memory_reset_peak: Optional[bool] = None
     #: ``qmw_train_throughput`` line after each supervised phase (wall time, samples/s, host RSS).
     log_train_throughput: Optional[bool] = None
+    #: On XPU/SYCL when True: grad clip 1.0 and LR plateau patience 2 if TOML omits them.
+    auto_stabilize: Optional[bool] = None
 
 
 class DataSection(BaseModel):
@@ -95,7 +97,7 @@ class HuggingFaceSection(BaseModel):
     wasi_slice_only: Optional[bool] = None
     wasi_max_scan: Optional[int] = None
     mesh_blend_fraction: Optional[float] = None
-    #: Up to 8 extras; combined with primary ``[data].path`` must be ≤ 9 Hub datasets per run.
+    #: Extra Hub datasets (deduped, unbounded); merged with primary ``[data].path`` when applicable.
     extra_specs: Optional[List[HFExtraSpec]] = None
     streaming: Optional[bool] = None
     max_scan_rows: Optional[int] = None
@@ -137,6 +139,36 @@ class EvalSection(BaseModel):
     early_stop_patience: Optional[int] = None
     target_mean_mse: Optional[float] = None
     stop_on_target_mse: Optional[bool] = None
+
+
+class ModelSection(BaseModel):
+    """QMiniWASM geometry: internal width/depth and WASM/HF I/O width (memory_encode)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Internal hidden width (ternary blocks, adapter, tropical attention).
+    d_model: Optional[int] = Field(None, ge=32, le=1_048_576)
+    #: Stacked residual ternary experts (each d_model→d_model).
+    num_ternary_blocks: Optional[int] = Field(None, ge=1, le=1024)
+    #: Mesh/HF encoder width (default 4096). When != ``d_model``, stem/head Linears map I/O.
+    io_d_model: Optional[int] = Field(None, ge=8, le=1_048_576)
+    #: When True, apply one TropicalAttention after the ternary stack inside hybrid_inference.
+    tropical_attn_per_block: Optional[bool] = None
+
+
+class DistributedSection(BaseModel):
+    """Optional large-model training toggles (Python loop)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gradient_checkpointing: Optional[bool] = None
+    gradient_accumulation_steps: Optional[int] = Field(None, ge=1)
+    #: torch.autocast float16/bfloat16 on CUDA/XPU when True (CPU: no-op).
+    amp: Optional[bool] = None
+    #: Wrap model in FSDP when torch.distributed is initialized (multi-process).
+    fsdp: Optional[bool] = None
+    #: Wrap model in DDP when torch.distributed is initialized.
+    ddp: Optional[bool] = None
 
 
 class AdapterSection(BaseModel):
@@ -194,6 +226,11 @@ class ServeSection(BaseModel):
     """Inference server (optional; used by configs/serve/*.toml)."""
 
     model_config = ConfigDict(extra="forbid")
+
+    #: Optional overrides when checkpoint omits geometry (prefer checkpoint meta when present).
+    d_model: Optional[int] = Field(None, ge=32, le=1_048_576)
+    num_ternary_blocks: Optional[int] = Field(None, ge=1, le=1024)
+    io_d_model: Optional[int] = Field(None, ge=8, le=1_048_576)
 
     checkpoint: Optional[str] = Field(None, description="QMINIWASM_CHECKPOINT (legacy TOML key)")
     tpem: Optional[str] = Field(
@@ -274,6 +311,8 @@ class TrainingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     hardware: HardwareSection = Field(default_factory=HardwareSection)
+    model: ModelSection = Field(default_factory=ModelSection)
+    distributed: DistributedSection = Field(default_factory=DistributedSection)
     training: TrainingSection = Field(default_factory=TrainingSection)
     data: DataSection = Field(default_factory=DataSection)
     huggingface: HuggingFaceSection = Field(default_factory=HuggingFaceSection)
@@ -290,6 +329,28 @@ class TrainingConfig(BaseModel):
     def to_engine_kwargs(self) -> dict[str, Any]:
         """Map nested sections to EngineConfig keyword argument names (omit None)."""
         out: dict[str, Any] = {}
+        m = self.model.model_dump(exclude_none=True)
+        if "d_model" in m:
+            out["d_model"] = m["d_model"]
+        if "num_ternary_blocks" in m:
+            out["num_ternary_blocks"] = m["num_ternary_blocks"]
+        if "io_d_model" in m:
+            out["io_d_model"] = m["io_d_model"]
+        if "tropical_attn_per_block" in m:
+            out["tropical_attn_per_block"] = m["tropical_attn_per_block"]
+
+        dist = self.distributed.model_dump(exclude_none=True)
+        if "gradient_checkpointing" in dist:
+            out["gradient_checkpointing"] = dist["gradient_checkpointing"]
+        if "gradient_accumulation_steps" in dist:
+            out["gradient_accumulation_steps"] = dist["gradient_accumulation_steps"]
+        if "amp" in dist:
+            out["amp_enabled"] = dist["amp"]
+        if "fsdp" in dist:
+            out["fsdp_enabled"] = dist["fsdp"]
+        if "ddp" in dist:
+            out["ddp_enabled"] = dist["ddp"]
+
         h = self.hardware.model_dump(exclude_none=True)
         if "accelerator" in h:
             out["accelerator"] = h["accelerator"]

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import ctypes
-import os
 import torch
 from qminiwasm.native_bridge import load_native_lib
+from qminiwasm.runtime_modes import native_lota_qaf_enabled
 
 
 class TSignSGD(torch.optim.Optimizer):
@@ -17,13 +17,7 @@ class TSignSGD(torch.optim.Optimizer):
 
     @torch.no_grad()
     def step(self, closure=None):  # noqa: ARG002
-        use_native = os.getenv("QMINIWASM_NATIVE_LOTA_QAF", "0").strip().lower() not in {
-            "",
-            "0",
-            "false",
-            "off",
-            "no",
-        }
+        use_native = native_lota_qaf_enabled()
         lib = load_native_lib() if use_native else None
         fn = None
         if lib is not None and hasattr(lib, "qmw_tsign_update_f32"):

@@ -119,4 +119,13 @@ def main(config: EngineConfig | None = None, *, wui_stop_file: str | None = None
         log_xpu_memory_reset_peak=bool(getattr(config, "log_xpu_memory_reset_peak", False)),
         log_train_throughput=bool(getattr(config, "log_train_throughput", False)),
         wui_stop_file=wui_stop_file,
+        d_model=int(getattr(config, "d_model", 4096) or 4096),
+        num_ternary_blocks=int(getattr(config, "num_ternary_blocks", 1) or 1),
+        io_d_model=int(getattr(config, "io_d_model", 4096) or 4096),
+        tropical_attn_per_block=bool(getattr(config, "tropical_attn_per_block", False)),
+        gradient_checkpointing=bool(getattr(config, "gradient_checkpointing", False)),
+        gradient_accumulation_steps=int(getattr(config, "gradient_accumulation_steps", 1) or 1),
+        amp_enabled=bool(getattr(config, "amp_enabled", False)),
+        fsdp_enabled=bool(getattr(config, "fsdp_enabled", False)),
+        ddp_enabled=bool(getattr(config, "ddp_enabled", False)),
     )

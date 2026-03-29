@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"encoding/hex"
@@ -35,6 +36,19 @@ import (
 
 //go:embed web/*
 var webFS embed.FS
+
+// embeddedIndexSHA256Hex is the SHA-256 of embedded web/index.html (hex, lowercase). Used to verify the binary matches your checkout.
+var embeddedIndexSHA256Hex string
+
+func init() {
+	b, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		embeddedIndexSHA256Hex = ""
+		return
+	}
+	sum := sha256.Sum256(b)
+	embeddedIndexSHA256Hex = hex.EncodeToString(sum[:])
+}
 
 var (
 	repoRoot          string
@@ -166,9 +180,6 @@ func trimHFExtraSpecs(in []hfExtraSpec) []hfExtraSpec {
 		}
 		seen[key] = struct{}{}
 		out = append(out, hfExtraSpec{Path: p, DatasetConfig: c})
-		if len(out) >= 9 {
-			break
-		}
 	}
 	return out
 }
@@ -257,6 +268,10 @@ func main() {
 	root := flag.String("root", ".", "repository root")
 	py := flag.String("python", "python", "Python executable name or path on PATH")
 	token := flag.String("token", "", "If set, require this token (Bearer / X-QMW-WUI-Token / ?wui_token=) on all routes including WebSocket")
+	strictAddr := flag.Bool("strict-addr", false, "Exit if -addr cannot be bound; do not try the next port (avoids a stale UI when an old process still holds the default port)")
+	wuiConfigPath := flag.String("wui-config", "", "Path to WUI settings TOML (default: configs/wui.toml under -root)")
+	trainingRuntimeFlag := flag.String("training-runtime", "", "Override [wui] training_runtime_mode from TOML (native|grpc|cpp|auto|python|optimized)")
+	grpcAddrFlag := flag.String("grpc-addr", "", "Override [wui] grpc_addr (host:port for C++ TrainingEngineService)")
 	flag.Parse()
 	// Go's log defaults to stderr; Windows PowerShell treats native stderr as ErrorRecord
 	// (NativeCommandError) even for informational lines—use stdout for operator messages.
@@ -272,9 +287,6 @@ func main() {
 	// Load repo .env (e.g. /opt/qmw/.env from bind mount) so IBM/HF tokens are visible
 	// to this process and subprocesses (python -m qminiwasm.engine).
 	loadDotenvFromRepo(repoRoot)
-	if _, ok := os.LookupEnv("QMINIWASM_TRAINING_RUNTIME_MODE"); !ok {
-		_ = os.Setenv("QMINIWASM_TRAINING_RUNTIME_MODE", "auto")
-	}
 
 	pythonExe = resolvePythonExecutable(*py)
 
@@ -289,6 +301,17 @@ func main() {
 		} else {
 			log.Printf("warning: %q missing or not a directory (set -root to repo root)", trainingDir)
 		}
+	}
+
+	var modeOverride, grpcOverride *string
+	if s := strings.TrimSpace(*trainingRuntimeFlag); s != "" {
+		modeOverride = trainingRuntimeFlag
+	}
+	if s := strings.TrimSpace(*grpcAddrFlag); s != "" {
+		grpcOverride = grpcAddrFlag
+	}
+	if err := loadWUIConfig(repoRoot, *wuiConfigPath, modeOverride, grpcOverride); err != nil {
+		log.Fatal(err)
 	}
 
 	agentDebugLogPath = filepath.Join(repoRoot, "training-wui", "debug-4b1a8d.log")
@@ -336,12 +359,22 @@ func main() {
 	}
 	mux.Handle("/", noCache(http.FileServer(http.FS(sub))))
 
-	actualAddr, ln, err := listenWithPortFallback(*addr, 10)
+	maxPortTries := 10
+	if *strictAddr {
+		maxPortTries = 1
+	}
+	actualAddr, ln, err := listenWithPortFallback(*addr, maxPortTries)
 	if err != nil {
 		log.Fatal(err)
 	}
 	serverAddr = actualAddr
 	log.Printf("training-wui listening on %s (repo root %s, python %q)", actualAddr, repoRoot, pythonExe)
+	log.Printf("training-wui UI: %s", wuiBrowseURL(actualAddr))
+	if embeddedIndexSHA256Hex != "" {
+		log.Printf("embedded web/index.html sha256=%s (GET /api/meta -> embedded_web_index_sha256)", embeddedIndexSHA256Hex)
+	} else {
+		log.Printf("warning: embedded web/index.html missing from binary")
+	}
 	// #region agent log
 	{
 		ln, _ := json.Marshal(map[string]any{
@@ -399,63 +432,23 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"server_addr": serverAddr,
-		"repo_root":   repoRoot,
-		"python":      pythonExe,
+		"server_addr":                 serverAddr,
+		"repo_root":                   repoRoot,
+		"python":                      pythonExe,
+		"embedded_web_index_sha256":   embeddedIndexSHA256Hex,
 		"runtime_profile": map[string]any{
-			"default_profile": "optimized_auto",
-			"training_runtime_mode": strings.TrimSpace(func() string {
-				v := os.Getenv("QMINIWASM_TRAINING_RUNTIME_MODE")
-				if strings.TrimSpace(v) == "" {
-					return "auto"
-				}
-				return v
-			}()),
-			"native_strict_enabled": strings.TrimSpace(os.Getenv("QMINIWASM_NATIVE_STRICT")) != "" && strings.TrimSpace(os.Getenv("QMINIWASM_NATIVE_STRICT")) != "0",
-			"ternary_impl": strings.TrimSpace(func() string {
-				v := os.Getenv("QMINIWASM_TERNARY_IMPL")
-				if strings.TrimSpace(v) == "" {
-					return "auto"
-				}
-				return v
-			}()),
-			"trit_pack_impl": strings.TrimSpace(func() string {
-				v := os.Getenv("QMINIWASM_TRIT_PACK_IMPL")
-				if strings.TrimSpace(v) == "" {
-					return "auto"
-				}
-				return v
-			}()),
-			"memory_encode_impl": strings.TrimSpace(func() string {
-				v := os.Getenv("QMINIWASM_MEMORY_ENCODE_IMPL")
-				if strings.TrimSpace(v) == "" {
-					return "auto"
-				}
-				return v
-			}()),
-			"wasm_exec_impl": strings.TrimSpace(func() string {
-				v := os.Getenv("QMINIWASM_WASM_EXEC_IMPL")
-				if strings.TrimSpace(v) == "" {
-					return "auto"
-				}
-				return v
-			}()),
-			"cascade_rl_impl": strings.TrimSpace(func() string {
-				v := os.Getenv("QMINIWASM_CASCADE_RL_IMPL")
-				if strings.TrimSpace(v) == "" {
-					return "auto"
-				}
-				return v
-			}()),
-			"tpem_native_bundle": strings.TrimSpace(func() string {
-				v := os.Getenv("QMINIWASM_TPEM_NATIVE_BUNDLE")
-				if strings.TrimSpace(v) == "" {
-					return "0"
-				}
-				return v
-			}()),
+			"default_profile":       "optimized_auto",
+			"wui_config_path":       wuiResolved.ConfigPath,
+			"training_runtime_mode": trainingRuntimeModeRaw(),
+			"native_strict_enabled": wuiResolved.RuntimeProfile.NativeStrictEnabled,
+			"ternary_impl":          wuiResolved.RuntimeProfile.TernaryImpl,
+			"trit_pack_impl":        wuiResolved.RuntimeProfile.TritPackImpl,
+			"memory_encode_impl":    wuiResolved.RuntimeProfile.MemoryEncodeImpl,
+			"wasm_exec_impl":        wuiResolved.RuntimeProfile.WasmExecImpl,
+			"cascade_rl_impl":       wuiResolved.RuntimeProfile.CascadeRLImpl,
+			"tpem_native_bundle":    wuiResolved.RuntimeProfile.TPEMNativeBundle,
 			"grpc_engine_reachable": trainingGRPCReachable(600 * time.Millisecond),
-			"grpc_engine_addr":      trainingGRPCAddress(),
+			"grpc_engine_addr":      trainingGRPCAddressResolved(),
 		},
 		"runpod_remote": map[string]any{
 			"ssh_user":    runpodSSHUser(),
@@ -476,6 +469,25 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 			"default_container_disk_gb": runpodServerlessDefaultContainerDiskGB(),
 		},
 	})
+}
+
+// wuiBrowseURL returns a stable http URL operators can open in a browser (127.0.0.1 for wildcard binds).
+func wuiBrowseURL(listenHostPort string) string {
+	host, port, err := net.SplitHostPort(listenHostPort)
+	if err != nil || port == "" {
+		return "http://127.0.0.1:8765/"
+	}
+	hnorm := host
+	if strings.HasPrefix(hnorm, "[") && strings.HasSuffix(hnorm, "]") {
+		hnorm = hnorm[1 : len(hnorm)-1]
+	}
+	if hnorm == "" || hnorm == "0.0.0.0" || hnorm == "::" {
+		return fmt.Sprintf("http://127.0.0.1:%s/", port)
+	}
+	if strings.Contains(hnorm, ":") {
+		return fmt.Sprintf("http://[%s]:%s/", hnorm, port)
+	}
+	return fmt.Sprintf("http://%s:%s/", hnorm, port)
 }
 
 func listenWithPortFallback(addr string, maxAttempts int) (string, net.Listener, error) {
@@ -509,7 +521,8 @@ func listenWithPortFallback(addr string, maxAttempts int) (string, net.Listener,
 		ln, lerr := net.Listen("tcp", tryAddr)
 		if lerr == nil {
 			if i > 0 {
-				log.Printf("warning: %s busy; using %s", addr, tryAddr)
+				log.Printf("warning: requested listen address %q was busy; bound to %q instead", addr, tryAddr)
+				log.Printf("warning: open the Training WUI at %s - traffic on the original port may still be an older process (stale UI)", wuiBrowseURL(tryAddr))
 			}
 			return tryAddr, ln, nil
 		}
@@ -968,6 +981,7 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "hardware.diff_method", Section: "hardware", Key: "diff_method", Type: "string", Default: defaults["hardware.diff_method"]},
 		{ID: "training.epochs", Section: "training", Key: "epochs", Type: "int", Required: true, Default: defaults["training.epochs"]},
 		{ID: "training.batch_size", Section: "training", Key: "batch_size", Type: "int", Required: true, Default: defaults["training.batch_size"]},
+		{ID: "training.dataloader_num_workers", Section: "training", Key: "dataloader_num_workers", Type: "int", Default: defaults["training.dataloader_num_workers"], Description: "Host DataLoader workers for supervised batch collation (0 = main process only)."},
 		{ID: "training.learning_rate", Section: "training", Key: "learning_rate", Type: "float", Required: true, Default: defaults["training.learning_rate"], Description: "Seed learning rate. Adaptive per-epoch scheduling can update this during training."},
 		{ID: "training.seed", Section: "training", Key: "seed", Type: "int", Default: defaults["training.seed"]},
 		{ID: "training.grad_clip_norm", Section: "training", Key: "grad_clip_norm", Type: "float", Default: defaults["training.grad_clip_norm"]},
@@ -978,6 +992,7 @@ func curatedSchemaFields(defaults map[string]string) []schemaField {
 		{ID: "training.log_xpu_memory", Section: "training", Key: "log_xpu_memory", Type: "bool", Default: defaults["training.log_xpu_memory"], Description: "Emit qmw_xpu_mem lines on XPU (saved in working TOML; no env vars)."},
 		{ID: "training.log_xpu_memory_reset_peak", Section: "training", Key: "log_xpu_memory_reset_peak", Type: "bool", Default: defaults["training.log_xpu_memory_reset_peak"], Description: "Reset XPU peak memory stats each epoch (with log_xpu_memory)."},
 		{ID: "training.log_train_throughput", Section: "training", Key: "log_train_throughput", Type: "bool", Default: defaults["training.log_train_throughput"], Description: "Emit qmw_train_throughput after each supervised phase (wall_s, samples/s, host RSS if psutil)."},
+		{ID: "training.auto_stabilize", Section: "training", Key: "auto_stabilize", Type: "bool", Default: defaults["training.auto_stabilize"], Description: "On XPU/SYCL, if grad_clip_norm and lr_plateau_patience are unset, apply clip 1.0 and plateau patience 2."},
 		{ID: "data.source", Section: "data", Key: "source", Type: "enum", Options: []string{"mesh", "corpus", "hf_tabular", "hybrid_mesh_hf_tabular"}, Required: true, Default: defaults["data.source"], Description: "Data scheme: mesh generation, Hugging Face tabular, or hybrid blend."},
 		{ID: "data.path", Section: "data", Key: "path", Type: "string", Default: defaults["data.path"], Description: "Dataset id/path. For Hugging Face use owner/dataset. Use qminiwasm/hf-multi for extras-only mode."},
 		{ID: "data.mesh_algorithms", Section: "data", Key: "mesh_algorithms", Type: "string", Default: defaults["data.mesh_algorithms"]},
@@ -1083,9 +1098,6 @@ func buildCustomRunToml(values map[string]any) (string, error) {
 		fieldByID[f.ID] = f
 	}
 	extraSpecs := parseExtraSpecsFromValues(values)
-	if len(extraSpecs) > 9 {
-		return "", fmt.Errorf("huggingface.extra_specs: at most 9 Hub datasets")
-	}
 	dpRaw := rawDataPathFromSchemaValues(values)
 	if isHFMultiPrimaryPlaceholder(dpRaw) && countNonEmptyHFExtraSpecs(extraSpecs) == 0 {
 		return "", fmt.Errorf(
@@ -1689,12 +1701,28 @@ type buildRunRequest struct {
 	Epochs              int           `json:"epochs"`
 	BatchSize           int           `json:"batch_size"`
 	LearningRate        float64       `json:"learning_rate"`
+	// Optional training hyperparameters for generated TOML (nil = omit key).
+	DataloaderNumWorkers *int     `json:"dataloader_num_workers,omitempty"`
+	LrPlateauPatience    *int     `json:"lr_plateau_patience,omitempty"`
+	LrPlateauFactor      *float64 `json:"lr_plateau_factor,omitempty"`
+	GradClipNorm         *float64 `json:"grad_clip_norm,omitempty"`
+	AutoStabilize        *bool    `json:"auto_stabilize,omitempty"`
 	LRTrialMode         bool          `json:"lr_trial_mode"`
 	LRTrialEpochs       int           `json:"lr_trial_epochs"`
 	ResumeLatest        bool          `json:"resume_latest"`
 	RunTarget           string        `json:"run_target"`
 	RunpodDestroyOnExit *bool         `json:"runpod_destroy_on_exit"`
 	RunpodVarFile       string        `json:"runpod_var_file"`
+	// Optional [model] / [distributed] for generated training TOML (0 / false = omit).
+	ModelDModel                 int  `json:"d_model,omitempty"`
+	ModelNumTernaryBlocks       int  `json:"num_ternary_blocks,omitempty"`
+	ModelIoDModel               int  `json:"io_d_model,omitempty"`
+	ModelTropicalAttnPerBlock   bool `json:"tropical_attn_per_block,omitempty"`
+	DistGradientCheckpointing   bool `json:"gradient_checkpointing,omitempty"`
+	DistGradientAccumulation    int  `json:"gradient_accumulation_steps,omitempty"`
+	DistAmp                     bool `json:"amp,omitempty"`
+	DistFsdp                    bool `json:"fsdp,omitempty"`
+	DistDdp                     bool `json:"ddp,omitempty"`
 }
 
 func handleRunBuild(w http.ResponseWriter, r *http.Request) {
@@ -1746,19 +1774,6 @@ func handleRunBuild(w http.ResponseWriter, r *http.Request) {
 				http.StatusBadRequest,
 				"hf_extra_specs must list at least one Hub dataset when data_path is qminiwasm/hf-multi (extras-only mode)",
 			)
-			return
-		}
-		if nExtras > 9 {
-			jsonErr(w, http.StatusBadRequest, "hf_extra_specs: at most 9 Hub datasets in extras-only mode")
-			return
-		}
-	} else {
-		if nExtras > 8 {
-			jsonErr(w, http.StatusBadRequest, "hf_extra_specs: at most 8 additional datasets (9 HF datasets total with primary)")
-			return
-		}
-		if dp != "" && nExtras+1 > 9 {
-			jsonErr(w, http.StatusBadRequest, "maximum 9 Hugging Face datasets per run (primary + hf_extra_specs)")
 			return
 		}
 	}
@@ -1927,6 +1942,11 @@ m = QMiniWASM(
     cascade_num_actions=int(getattr(cfg, "cascade_num_actions", 4) or 4),
     cascade_router_hidden=int(getattr(cfg, "cascade_router_hidden", 32) or 32),
     wasm_runtime=wasm_rt,
+    d_model=int(getattr(cfg, "d_model", 4096) or 4096),
+    num_ternary_blocks=int(getattr(cfg, "num_ternary_blocks", 1) or 1),
+    io_d_model=int(getattr(cfg, "io_d_model", 4096) or 4096),
+    tropical_attn_per_block=bool(getattr(cfg, "tropical_attn_per_block", False)),
+    use_gradient_checkpointing=bool(getattr(cfg, "gradient_checkpointing", False)),
 )
 
 def count_params(obj):
@@ -1936,7 +1956,9 @@ def count_params(obj):
 
 parts = {
     "quantum_router": count_params(m.quantum_router),
-    "ternary_expert": count_params(m.ternary_expert),
+    "ternary_stack": sum(count_params(b) for b in m.ternary_blocks),
+    "io_stem": count_params(m.input_stem),
+    "io_head": count_params(m.output_head) if m.output_head is not None else 0,
     "lota_branch": count_params(m.lota_branch),
     "hybrid_adapter": count_params(m.hybrid_adapter),
     "cascade_router": count_params(m.cascade_router),
@@ -2016,7 +2038,13 @@ print(json.dumps(out))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "facts": parsed})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok": true,
+		"facts": parsed,
+		// Python QMiniWASM facts; native gRPC engine does not load HF/tabular dataset_uri yet.
+		"native_dataset_parity": false,
+		"native_dataset_note": "The native gRPC C++ training engine uses a fixed synthetic balanced sampler; Hugging Face / tabular paths in TOML are not consumed by the C++ path yet. Parameter counts and sizes below are from the Python reference model.",
+	})
 }
 
 func handleAutoLR(w http.ResponseWriter, r *http.Request) {
@@ -2234,7 +2262,24 @@ func buildGeneratedTOML(body buildRunRequest, accel, src, srcRaw, modelStem stri
 	b.WriteString("epochs = " + strconv.Itoa(body.Epochs) + "\n")
 	b.WriteString("batch_size = " + strconv.Itoa(body.BatchSize) + "\n")
 	b.WriteString("learning_rate = " + strconv.FormatFloat(body.LearningRate, 'g', -1, 64) + "\n")
-	b.WriteString("grad_clip_norm = 1.0\n\n")
+	gcn := 1.0
+	if body.GradClipNorm != nil && *body.GradClipNorm > 0 {
+		gcn = *body.GradClipNorm
+	}
+	b.WriteString("grad_clip_norm = " + strconv.FormatFloat(gcn, 'g', -1, 64) + "\n")
+	if body.DataloaderNumWorkers != nil {
+		b.WriteString("dataloader_num_workers = " + strconv.Itoa(*body.DataloaderNumWorkers) + "\n")
+	}
+	if body.LrPlateauPatience != nil {
+		b.WriteString("lr_plateau_patience = " + strconv.Itoa(*body.LrPlateauPatience) + "\n")
+	}
+	if body.LrPlateauFactor != nil {
+		b.WriteString("lr_plateau_factor = " + strconv.FormatFloat(*body.LrPlateauFactor, 'g', -1, 64) + "\n")
+	}
+	if body.AutoStabilize != nil && *body.AutoStabilize {
+		b.WriteString("auto_stabilize = true\n")
+	}
+	b.WriteString("\n")
 	finalRel, bestRel, latestRel := checkpointPathsInModelDir(modelStem)
 	b.WriteString("[checkpoint]\n")
 	b.WriteString("save_path = " + strconv.Quote(finalRel) + "\n")
@@ -2315,7 +2360,98 @@ func buildGeneratedTOML(body buildRunRequest, accel, src, srcRaw, modelStem stri
 	b.WriteString("enabled = true\n")
 	b.WriteString("steps_per_epoch = 2\n")
 	b.WriteString("group_size = 4\n")
+	if body.ModelDModel > 0 || body.ModelNumTernaryBlocks > 0 || body.ModelIoDModel > 0 ||
+		body.ModelTropicalAttnPerBlock {
+		b.WriteString("\n[model]\n")
+		if body.ModelDModel > 0 {
+			b.WriteString("d_model = " + strconv.Itoa(body.ModelDModel) + "\n")
+		}
+		if body.ModelNumTernaryBlocks > 0 {
+			b.WriteString("num_ternary_blocks = " + strconv.Itoa(body.ModelNumTernaryBlocks) + "\n")
+		}
+		if body.ModelIoDModel > 0 {
+			b.WriteString("io_d_model = " + strconv.Itoa(body.ModelIoDModel) + "\n")
+		}
+		if body.ModelTropicalAttnPerBlock {
+			b.WriteString("tropical_attn_per_block = true\n")
+		}
+	}
+	if body.DistGradientCheckpointing || body.DistGradientAccumulation > 0 || body.DistAmp ||
+		body.DistFsdp || body.DistDdp {
+		b.WriteString("\n[distributed]\n")
+		if body.DistGradientCheckpointing {
+			b.WriteString("gradient_checkpointing = true\n")
+		}
+		if body.DistGradientAccumulation > 0 {
+			b.WriteString("gradient_accumulation_steps = " + strconv.Itoa(body.DistGradientAccumulation) + "\n")
+		}
+		if body.DistAmp {
+			b.WriteString("amp = true\n")
+		}
+		if body.DistFsdp {
+			b.WriteString("fsdp = true\n")
+		}
+		if body.DistDdp {
+			b.WriteString("ddp = true\n")
+		}
+	}
 	return b.String()
+}
+
+// buildNativeGRPCTrainingConfigPreview maps the selected training TOML to the same TrainingConfig
+// fields StartTraining sends (proto d_model / io_d_model / num_ternary_blocks / model_uri).
+func buildNativeGRPCTrainingConfigPreview(absConfig string) (map[string]any, string) {
+	if strings.TrimSpace(absConfig) == "" {
+		return nil, ""
+	}
+	cfg, err := TrainingTOMLToProto(absConfig, "preflight", repoRoot)
+	if err != nil {
+		return nil, err.Error()
+	}
+	d := cfg.GetDModel()
+	io := cfg.GetIoDModel()
+	nb := cfg.GetNumTernaryBlocks()
+	modelURISet := strings.TrimSpace(cfg.GetModelUri()) != ""
+
+	out := map[string]any{
+		"d_model":            d,
+		"io_d_model":         io,
+		"num_ternary_blocks": nb,
+		"model_uri_set":      modelURISet,
+	}
+	if modelURISet {
+		out["native_cold_start_note"] = "Checkpoint/tpem load path set: native engine loads weights/geometry from interchange; proto d/io/N are secondary."
+	} else {
+		var effD, effIO, effNB uint32
+		if d > 0 {
+			effD = d
+			if io > 0 {
+				effIO = io
+			} else {
+				effIO = d
+			}
+			if nb > 0 {
+				effNB = nb
+			} else {
+				effNB = 1
+			}
+		} else {
+			effD, effIO, effNB = 4096, 4096, 1
+		}
+		out["native_effective_d_model"] = effD
+		out["native_effective_io_d_model"] = effIO
+		out["native_effective_num_ternary_blocks"] = effNB
+	}
+	out["memory_estimate"] = computeNativeColdStartMemoryEstimateMap(cfg)
+	if total, avail, ok := hostMemoryForPreflight(); ok {
+		out["host_physical_memory_bytes"] = total
+		out["host_available_physical_bytes"] = avail
+		out["host_physical_memory_gib"] = float64(total) / (1024 * 1024 * 1024)
+		if avail > 0 {
+			out["host_available_physical_gib"] = float64(avail) / (1024 * 1024 * 1024)
+		}
+	}
+	return out, ""
 }
 
 func handlePreflight(w http.ResponseWriter, r *http.Request) {
@@ -2404,7 +2540,7 @@ out = {
     "quantum_backend_from_config": (cfg.quantum_backend or ""),
     "quantum_policy": (os.environ.get("QUANTUM_EXECUTION_POLICY", "").strip() or "prefer_hardware_fallback"),
     "default_runtime_profile": "optimized_auto",
-    "training_runtime_mode": (os.environ.get("QMINIWASM_TRAINING_RUNTIME_MODE", "").strip() or "auto"),
+    "training_runtime_mode": (os.environ.get("QMINIWASM_TRAINING_RUNTIME_MODE", "").strip() or "native"),
     "native_strict_enabled": os.environ.get("QMINIWASM_NATIVE_STRICT", "").strip().lower() in ("1", "true", "yes", "on"),
     "ternary_impl": (os.environ.get("QMINIWASM_TERNARY_IMPL", "").strip() or "auto"),
     "trit_pack_impl": (os.environ.get("QMINIWASM_TRIT_PACK_IMPL", "").strip() or "auto"),
@@ -2412,6 +2548,9 @@ out = {
     "wasm_exec_impl": (os.environ.get("QMINIWASM_WASM_EXEC_IMPL", "").strip() or "auto"),
     "cascade_rl_impl": (os.environ.get("QMINIWASM_CASCADE_RL_IMPL", "").strip() or "auto"),
     "tpem_native_bundle": (os.environ.get("QMINIWASM_TPEM_NATIVE_BUNDLE", "").strip() or "0"),
+    "model_d_model": int(cfg.d_model),
+    "model_io_d_model": int(cfg.io_d_model),
+    "model_num_ternary_blocks": int(cfg.num_ternary_blocks),
 }
 
 vi = sys.version_info
@@ -2569,11 +2708,38 @@ print(json.dumps(out))
 		jsonErr(w, http.StatusInternalServerError, "preflight failed: invalid JSON output")
 		return
 	}
+	rp := wuiResolved.RuntimeProfile
+	parsed["training_runtime_mode"] = trainingRuntimeModeRaw()
+	parsed["native_strict_enabled"] = rp.NativeStrictEnabled
+	parsed["ternary_impl"] = rp.TernaryImpl
+	parsed["trit_pack_impl"] = rp.TritPackImpl
+	parsed["memory_encode_impl"] = rp.MemoryEncodeImpl
+	parsed["wasm_exec_impl"] = rp.WasmExecImpl
+	parsed["cascade_rl_impl"] = rp.CascadeRLImpl
+	parsed["tpem_native_bundle"] = rp.TPEMNativeBundle
+	grpcOK := trainingGRPCReachable(600 * time.Millisecond)
+	parsed["grpc_engine_reachable"] = grpcOK
+	parsed["grpc_engine_addr"] = trainingGRPCAddressResolved()
+	useG, pickReason := trainingEnginePickLocal()
+	wuiTE := map[string]any{
+		"mode":                    trainingRuntimeModeRaw(),
+		"grpc_addr":               trainingGRPCAddressResolved(),
+		"grpc_reachable":          grpcOK,
+		"pick_for_local_use_grpc": useG,
+		"pick_reason":             pickReason,
+	}
+	resp := map[string]any{
+		"ok":                  true,
+		"preflight":           parsed,
+		"wui_training_engine": wuiTE,
+	}
+	if natPreview, natErr := buildNativeGRPCTrainingConfigPreview(configAbs); natErr != "" {
+		resp["native_grpc_training_config_error"] = natErr
+	} else if natPreview != nil {
+		resp["native_grpc_training_config"] = natPreview
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":        true,
-		"preflight": parsed,
-	})
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func handleRunsItem(w http.ResponseWriter, r *http.Request) {
@@ -2754,9 +2920,10 @@ func newRunWSHub() *runWSHub {
 }
 
 func (h *runWSHub) subscribe(runID string, conn *websocket.Conn) *runWSSub {
+	// Large buffer: gRPC C++ emits multiple telemetry rows per step/epoch; a small buffer caused constant drops.
 	sub := &runWSSub{
 		conn: conn,
-		send: make(chan []byte, 64),
+		send: make(chan []byte, 2048),
 		done: make(chan struct{}),
 	}
 	h.mu.Lock()
@@ -2794,6 +2961,38 @@ func (h *runWSHub) unsubscribe(runID string, sub *runWSSub) {
 	_ = sub.conn.Close()
 }
 
+// noteWSBackpressure aggregates drops and logs at most once per window to avoid flooding the training log.
+func (m *manager) noteWSBackpressure(runID string, dropped int) {
+	if dropped <= 0 {
+		return
+	}
+	const window = 10 * time.Second
+	m.mu.Lock()
+	r := m.byID[runID]
+	if r == nil {
+		m.mu.Unlock()
+		return
+	}
+	r.wsBackpressureAccum += dropped
+	r.WSDroppedMessages += dropped
+	shouldEmit := r.lastWSBackpressureLog.IsZero() || time.Since(r.lastWSBackpressureLog) >= window
+	var n int
+	if shouldEmit && r.wsBackpressureAccum > 0 {
+		n = r.wsBackpressureAccum
+		r.wsBackpressureAccum = 0
+		r.lastWSBackpressureLog = time.Now()
+	}
+	m.mu.Unlock()
+	if n == 0 {
+		return
+	}
+	msg := fmt.Sprintf(
+		"ws backpressure: dropped %d websocket message(s) in ~%ds (client slower than telemetry); server buffer is large — if this repeats, reduce Live telemetry traffic (filter) or browser load\n",
+		n, int(window/time.Second))
+	log.Printf("run %s %s", runID, strings.TrimSpace(msg))
+	m.appendLog(runID, []byte(msg), "stderr")
+}
+
 func (h *runWSHub) broadcast(runID string, payload map[string]any) {
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -2812,13 +3011,22 @@ func (h *runWSHub) broadcast(runID string, payload map[string]any) {
 		case <-sub.done:
 		case sub.send <- b:
 		default:
-			dropped++
+			// Prefer newest telemetry: drop one buffered message and retry once.
+			select {
+			case <-sub.done:
+			case <-sub.send:
+			default:
+			}
+			select {
+			case <-sub.done:
+			case sub.send <- b:
+			default:
+				dropped++
+			}
 		}
 	}
 	if dropped > 0 {
-		msg := fmt.Sprintf("ws backpressure: dropped %d message(s)", dropped)
-		log.Printf("run %s %s", runID, msg)
-		runManager.appendLog(runID, []byte(msg+"\n"), "stderr")
+		runManager.noteWSBackpressure(runID, dropped)
 	}
 }
 
@@ -2854,6 +3062,8 @@ type runRecord struct {
 	QAOASimMS             float64
 	QPUEstMS              float64
 	WSDroppedMessages     int
+	lastWSBackpressureLog time.Time // rate-limit backpressure lines in the run log
+	wsBackpressureAccum   int
 	BackendRequested      string
 	BackendSelected       string
 	BackendReasonCode     string
@@ -2867,7 +3077,8 @@ type runRecord struct {
 	LastAssignmentMS      float64
 	RoutingBudgetMS       float64
 	maxRuns               int                // ring of finished ids for list
-	trainCancel           context.CancelFunc // native gRPC training + telemetry stream
+	trainCancel           context.CancelFunc // native gRPC: cancels StartTraining/dial ctx only (not telemetry stream)
+	nativeStreamCancel    context.CancelFunc // native gRPC: cancel StreamTelemetry recv (force stop)
 	wuiStopFile           string             // local abs path, or remote abs path for cooperative stop
 	runpodCoopHost        string             // SSH host when training on RunPod pod (cooperative stop via touch)
 	runpodCoopUser        string
@@ -3039,14 +3250,17 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 	}
 
 	if useNativeTrainingEngineGRPC(opts) {
-		cfg, err := TrainingTOMLToProto(absConfig, id)
+		cfg, err := TrainingTOMLToProto(absConfig, id, repoRoot)
 		if err != nil {
 			return nil, fmt.Errorf("map training TOML to gRPC config: %w", err)
 		}
+		// Python runs populate TotalEpochs from log lines; gRPC streams never hit that path — set from TOML so
+		// /api/node/health and the sticky bar show "epoch / total" instead of looking hung at high epoch.
+		rec.TotalEpochs = int(cfg.GetEpochs())
 		ctxTrain, cancelTrain := context.WithCancel(context.Background())
 		rec.procExited = make(chan struct{})
 		rec.trainCancel = cancelTrain
-		rec.logBuf.WriteString("=== training: native gRPC TrainingEngineService (C++ engine on " + trainingGRPCAddress() + ") ===\n")
+		rec.logBuf.WriteString("=== training: native gRPC TrainingEngineService (C++ engine on " + trainingGRPCAddressResolved() + ") ===\n")
 		m.byID[id] = rec
 		m.ordered = append([]string{id}, m.ordered...)
 		if len(m.ordered) > 32 {
@@ -3062,6 +3276,14 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		registered = true
 		return rec, nil
 	}
+
+	if trainingRuntimeModeRaw() == "auto" {
+		_, reason := trainingEnginePickLocal()
+		rec.logBuf.WriteString("=== training: " + reason + " ===\n")
+	}
+
+	runtimeEnv := wuiRuntimeEnvForPython()
+	trainEnv := append(append([]string(nil), runtimeEnv...), extraEnv...)
 
 	var cmd *exec.Cmd
 	if opts.RunTarget == "runpod" && opts.RunpodTrainOnPod {
@@ -3109,7 +3331,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 			}
 		}
 		wuiStopRel := ".wui/stop_" + id
-		rTrainCmd, rCmdErr := runpodRemoteTrainCmd(ip, user, key, rdir, remoteConfigRel, extraEnv, wuiStopRel)
+		rTrainCmd, rCmdErr := runpodRemoteTrainCmd(ip, user, key, rdir, remoteConfigRel, trainEnv, wuiStopRel)
 		if rCmdErr != nil {
 			return nil, rCmdErr
 		}
@@ -3130,7 +3352,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		rec.logBuf.WriteString("=== training: python -u -m qminiwasm.engine (local WUI host) ===\n")
 		cmd = exec.Command(pythonExe, "-u", "-m", "qminiwasm.engine", "--config", absConfig, "--wui-stop-file", stopAbs)
 		cmd.Dir = repoRoot
-		cmd.Env = append(os.Environ(), extraEnv...)
+		cmd.Env = append(os.Environ(), trainEnv...)
 	}
 
 	stdout, err := cmd.StdoutPipe()
@@ -3795,12 +4017,25 @@ func (m *manager) stop(id string, force bool) error {
 				"ts":     time.Now().UTC().Format(time.RFC3339),
 			})
 		}
-		trainCancel()
+		// Ask the C++ engine to stop first so it can emit checkpoint + completed telemetry; then drain
+		// StreamTelemetry on a context that is not cancelled by trainCancel (see runNativeGRPCTraining).
 		sctx, scancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer scancel()
-		if err := m.grpcCallStopTraining(sctx, id); err != nil {
-			m.appendLogSubprocessAware(id, []byte("\n=== gRPC StopTraining: "+err.Error()+" ===\n"), "stderr")
+		stopErr := m.grpcCallStopTraining(sctx, id)
+		scancel()
+		if stopErr != nil {
+			m.appendLogSubprocessAware(id, []byte("\n=== gRPC StopTraining: "+stopErr.Error()+" ===\n"), "stderr")
+		} else {
+			m.appendLogSubprocessAware(id, []byte("\n=== gRPC StopTraining: ok (draining telemetry stream) ===\n"), "stderr")
 		}
+		if force {
+			time.Sleep(400 * time.Millisecond)
+			m.mu.Lock()
+			if r := m.byID[id]; r != nil && r.nativeStreamCancel != nil {
+				r.nativeStreamCancel()
+			}
+			m.mu.Unlock()
+		}
+		trainCancel()
 		return nil
 	}
 	if rec.cmd.Process == nil {

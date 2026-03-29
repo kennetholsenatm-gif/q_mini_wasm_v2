@@ -33,11 +33,11 @@ Runbook (CodeSearchNet Python example, after ``pip install -e ".[training]"``):
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 import torch
 
+from qminiwasm.runtime_modes import hf_loader_impl
 from qminiwasm.wasm_host.memory_encode import BODY_SLOTS, encode_linear_memory
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ _CONTEXT_VALUE_MAX_CHARS = 220
 
 
 def _hf_loader_impl() -> str:
-    impl = os.getenv("QMINIWASM_HF_LOADER_IMPL", "auto").strip().lower()
+    impl = hf_loader_impl()
     if impl in {"auto", "python", "native"}:
         return impl
     return "auto"

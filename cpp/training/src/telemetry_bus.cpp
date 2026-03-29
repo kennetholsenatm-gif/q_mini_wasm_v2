@@ -33,4 +33,13 @@ void TelemetryBus::close() {
   cv_.notify_all();
 }
 
+void TelemetryBus::reopen() {
+  {
+    std::lock_guard<std::mutex> lock(mu_);
+    closed_ = false;
+    queue_.clear();
+  }
+  cv_.notify_all();
+}
+
 }  // namespace qminiwasm::training::internal

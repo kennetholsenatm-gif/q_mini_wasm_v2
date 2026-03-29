@@ -60,6 +60,13 @@ func TestBuildGRPCMetricWebSocketPayload_fullEvent(t *testing.T) {
 	expectStr(t, m, "attestation_state", "verified")
 	expectFloat(t, m, "decoherence_score", 0.001)
 	expectStr(t, m, "grpc_message", "ok")
+	expectFloat(t, m, "epoch_wall_s", 0)
+	expectUint32(t, m, "epoch_batch_count", 0)
+	expectUint64(t, m, "epoch_sample_count", 0)
+	expectFloat(t, m, "epoch_mean_samples_per_s", 0)
+	expectFloat(t, m, "host_rss_mib", 0)
+	expectFloat(t, m, "estimated_tpem_mib", 0)
+	expectFloat(t, m, "tier_cap_mib", 0)
 }
 
 func TestBuildGRPCMetricWebSocketPayload_nilEvent(t *testing.T) {

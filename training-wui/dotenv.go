@@ -44,9 +44,27 @@ func loadDotenvFromRepo(repoRoot string) {
 		if shouldSanitizeEnvKey(key) {
 			val = sanitizeSecretValue(val)
 		}
+		if !dotenvKeyAllowed(key) {
+			continue
+		}
 		if os.Getenv(key) == "" {
 			_ = os.Setenv(key, val)
 		}
+	}
+}
+
+// dotenvKeyAllowed restricts .env to secrets and a small set of deployment hints.
+// Product configuration belongs in configs/*.toml (see docs/CONFIGURATION_POLICY.md).
+func dotenvKeyAllowed(key string) bool {
+	if shouldSanitizeEnvKey(key) {
+		return true
+	}
+	k := strings.ToUpper(strings.TrimSpace(key))
+	switch k {
+	case "RUNPOD_SERVERLESS_ENDPOINT_ID":
+		return true
+	default:
+		return false
 	}
 }
 

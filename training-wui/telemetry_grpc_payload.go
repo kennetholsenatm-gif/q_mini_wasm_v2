@@ -50,5 +50,12 @@ func buildGRPCMetricWebSocketPayload(runID string, ev *trainingrpc.TelemetryEven
 		"attestation_state":    ev.GetAttestationState(),
 		"decoherence_score":    ev.GetDecoherenceScore(),
 		"grpc_message":         msg,
+		"epoch_wall_s":         ev.GetEpochWallS(),
+		"epoch_batch_count":    ev.GetEpochBatchCount(),
+		"epoch_sample_count":   ev.GetEpochSampleCount(),
+		"epoch_mean_samples_per_s": ev.GetEpochMeanSamplesPerS(),
+		"host_rss_mib":         ev.GetHostRssMib(),
+		"estimated_tpem_mib":   ev.GetEstimatedTpemMib(),
+		"tier_cap_mib":         ev.GetTierCapMib(),
 	}
 }

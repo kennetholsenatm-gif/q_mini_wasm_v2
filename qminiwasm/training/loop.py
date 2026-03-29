@@ -12,6 +12,7 @@ import inspect
 import logging
 import math
 import os
+from contextlib import nullcontext
 import random
 import signal
 import threading
@@ -34,6 +35,14 @@ from ..hardware.device import (
 from ..hardware.sycl_stubs import SYCLHardware
 from ..model import QMiniWASM
 from qminiwasm.config import get_enclave_tier_preset
+from qminiwasm.runtime_modes import (
+    assert_zero_mock_ratio_gate_enabled,
+    enclave_adapter_enabled,
+    strict_config_validation,
+    strict_enclave_footprint,
+    strict_xpu_training,
+    tpem_latest_every_n_epochs,
+)
 from ..wasm_host.engine import WasmRuntimeConfig
 from .cascade_mopd_teacher import build_noise_state_mopd_fns
 from .enclave_footprint import estimate_trainable_tpem_size_mb
@@ -57,8 +66,6 @@ from ..rl.cascade_grpo import CascadeGRPO, CascadeGRPOConfig
 
 logger = logging.getLogger(__name__)
 
-_D_MODEL = 4096
-
 
 def _normalize_cascade_mopd_feat_loss(name: str) -> str:
     v = (name or "mse").strip().lower()
@@ -73,15 +80,16 @@ def _cascade_digest_from_blend(
     cascade_policy: nn.Module,
     state_dim: int,
     device: torch.device,
+    io_dim: int,
 ) -> torch.Tensor:
-    """Map a single 4096-d blend vector (e.g. input/output mean mix) to toy MDP state."""
+    """Map a single io_d_model-wide blend vector (input/output mean mix) to toy MDP state."""
     v = blend_1d.detach()
     if isinstance(cascade_policy, CascadeRouter):
         return cascade_policy.project_hidden(v).detach()
     return hidden_digest_for_cascade(
         v,
         state_dim=int(state_dim),
-        d_model=_D_MODEL,
+        d_model=int(io_dim),
         device=device,
     )
 
@@ -107,8 +115,6 @@ def _clip_grad_norm_xpu_safe(
 _HF_AUTO_SAMPLES_FLOOR = 32_768
 _HF_AUTO_SAMPLES_CEIL = 300_000
 _HF_AUTO_SAMPLES_BATCH_MULT = 512
-
-_HF_MAX_DATASETS_PER_RUN = 9
 
 # Reserved ``data.path`` / ``DATA_PATH`` values: do not call ``load_dataset`` on these; merge only
 # ``[huggingface].extra_specs`` (multi-dataset / extras-only mode). Case-insensitive.
@@ -154,14 +160,14 @@ def _validate_training_sample(sample: Dict[str, Any]) -> TrainingSample:
     return cast(TrainingSample, sample)
 
 
-def _as_d_model_1d(name: str, t: torch.Tensor) -> torch.Tensor:
+def _as_io_1d(name: str, t: torch.Tensor, io_dim: int) -> torch.Tensor:
     """Validate shape and dtype for a single training row (host-side; used by DataLoader workers)."""
     if not isinstance(t, torch.Tensor):
         raise TypeError(f"Expected {name} to be torch.Tensor, got {type(t).__name__}")
-    if t.dim() != 1 or t.shape[0] != _D_MODEL:
+    if t.dim() != 1 or t.shape[0] != io_dim:
         raise ValueError(
-            f"Expected {name} shape ({_D_MODEL},), got {tuple(t.shape)}; "
-            "regenerate data or fix encoder."
+            f"Expected {name} shape ({io_dim},), got {tuple(t.shape)}; "
+            "regenerate data, fix encoder, or set [model].io_d_model to match vectors."
         )
     return t.to(dtype=torch.float32)
 
@@ -169,10 +175,11 @@ def _as_d_model_1d(name: str, t: torch.Tensor) -> torch.Tensor:
 class _TrainingSampleListDataset(torch.utils.data.Dataset):
     """Picklable dataset over in-memory training rows (for ``DataLoader`` workers)."""
 
-    __slots__ = ("_samples",)
+    __slots__ = ("_samples", "_io_dim")
 
-    def __init__(self, samples: List[Dict[str, Any]]):
+    def __init__(self, samples: List[Dict[str, Any]], io_dim: int):
         self._samples = samples
+        self._io_dim = int(io_dim)
 
     def __len__(self) -> int:
         return len(self._samples)
@@ -180,8 +187,8 @@ class _TrainingSampleListDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         b = _validate_training_sample(self._samples[idx])
         return (
-            _as_d_model_1d("hidden", b["hidden"]),
-            _as_d_model_1d("target", b["target"]),
+            _as_io_1d("hidden", b["hidden"], self._io_dim),
+            _as_io_1d("target", b["target"], self._io_dim),
         )
 
 
@@ -356,7 +363,7 @@ def _merge_hf_dataset_specs(
     primary_config: Optional[str],
     extras: Optional[List[Dict[str, Any]]],
 ) -> List[Tuple[str, Optional[str]]]:
-    """Primary first, then extras; dedupe by (id, config); cap at :data:`_HF_MAX_DATASETS_PER_RUN`.
+    """Primary first, then extras; dedupe by (id, config). No fixed cap on source count.
 
     If ``primary_id`` is a :data:`_HF_MULTI_PRIMARY_PLACEHOLDERS` entry, the primary slot does not
     load from the Hub; only ``extras`` are used (multi-dataset runs without a "main" dataset id).
@@ -389,14 +396,6 @@ def _merge_hf_dataset_specs(
         raw = row.get("dataset_config")
         ecfg = (str(raw).strip() or None) if raw is not None else None
         add(eid, ecfg)
-        if len(out) >= _HF_MAX_DATASETS_PER_RUN:
-            break
-    if len(out) > _HF_MAX_DATASETS_PER_RUN:
-        logger.warning(
-            "HF multi: truncating to %s datasets (had more in config)",
-            _HF_MAX_DATASETS_PER_RUN,
-        )
-        return out[:_HF_MAX_DATASETS_PER_RUN]
     return out
 
 
@@ -447,9 +446,10 @@ def _mean_mse_on_batches(
         return float("nan")
     # QMiniWASM is not an nn.Module; only trainable submodules have .train() / .training.
     was_qr = model.quantum_router.training
-    was_te = model.ternary_expert.training
+    was_blocks = [b.training for b in model.ternary_blocks]
     model.quantum_router.eval()
-    model.ternary_expert.eval()
+    for b in model.ternary_blocks:
+        b.eval()
     total = 0.0
     n_batches = 0
     with torch.no_grad():
@@ -466,8 +466,8 @@ def _mean_mse_on_batches(
             n_batches += 1
     if was_qr:
         model.quantum_router.train()
-    if was_te:
-        model.ternary_expert.train()
+    for b, prev in zip(model.ternary_blocks, was_blocks):
+        b.train(prev)
     return total / n_batches if n_batches else float("nan")
 
 
@@ -542,6 +542,15 @@ def run_training_loop(
     qaoa_prune_min_nodes: int = 4,
     qaoa_warm_start_cache_ttl: int = 128,
     hf_dataset_revision: str = "main",
+    d_model: int = 4096,
+    num_ternary_blocks: int = 1,
+    io_d_model: int = 4096,
+    tropical_attn_per_block: bool = False,
+    gradient_checkpointing: bool = False,
+    gradient_accumulation_steps: int = 1,
+    amp_enabled: bool = False,
+    fsdp_enabled: bool = False,
+    ddp_enabled: bool = False,
     wasm_runtime: Optional[WasmRuntimeConfig] = None,
     enclave_tier: str | None = None,
     enclave_footprint_mb: float | None = None,
@@ -580,7 +589,7 @@ def run_training_loop(
             uses defaults in auto mode; ``[]`` disables; non-empty list selects keys (e.g. CodeSearchNet).
         hf_token: Optional Hugging Face Hub token for ``load_dataset`` (rate limits / gated data).
         hf_extra_specs: Optional list of ``{"path": "org/ds", "dataset_config": "..."}`` entries merged
-            with ``data_path`` / ``hf_dataset_config`` (max 9 Hub datasets total including primary).
+            with ``data_path`` / ``hf_dataset_config`` (any number of Hub sources; deduped by id+config).
         hf_wasi_slice_only: If True (env ``HF_WASI_SLICE_ONLY``), stream HF split and keep only rows
             whose encoded text references WASI (see ``hf_loader.encoded_blob_references_wasi``).
         hf_wasi_max_scan: Optional max source rows to scan when ``hf_wasi_slice_only`` (env
@@ -662,14 +671,17 @@ def run_training_loop(
     """
     if seed is not None:
         set_training_seed(int(seed))
+    io_dm = max(8, int(io_d_model))
+    d_m = max(32, int(d_model))
+    n_blk = max(1, int(num_ternary_blocks))
+    g_accum = max(1, int(gradient_accumulation_steps))
+    if fsdp_enabled or ddp_enabled:
+        logger.info(
+            "fsdp/ddp requested but QMiniWASM is not an nn.Module; ignoring distributed wrap. "
+            "Use gradient_accumulation_steps, amp, and gradient_checkpointing for memory."
+        )
     if wasm_runtime is not None and getattr(wasm_runtime, "backend", "") == "enclave_adapter":
-        enabled = os.getenv("QMINIWASM_ENCLAVE_ADAPTER", "0").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-        if not enabled:
+        if not enclave_adapter_enabled():
             logger.info(
                 "wasm backend=enclave_adapter requested but feature flag is disabled; runtime will fall back."
             )
@@ -747,7 +759,7 @@ def run_training_loop(
         int(bool(xpu_status.get("available"))),
         str(xpu_status.get("support_class")),
         str(xpu_status.get("device_name", "")).replace(" ", "_"),
-        int(os.getenv("QMINIWASM_STRICT_XPU", "0").strip().lower() in {"1", "true", "yes", "on"}),
+        int(strict_xpu_training()),
         str(xpu_status.get("reason", "")).replace(" ", "_"),
         int(bool(sycl_status.get("active"))),
         str(sycl_status.get("backend", "")).replace(" ", "_"),
@@ -780,10 +792,15 @@ def run_training_loop(
         qaoa_prune_min_nodes=max(1, int(qaoa_prune_min_nodes)),
         qaoa_warm_start_cache_ttl=max(1, int(qaoa_warm_start_cache_ttl)),
         wasm_runtime=wasm_runtime,
+        d_model=d_m,
+        num_ternary_blocks=n_blk,
+        io_d_model=io_dm,
+        tropical_attn_per_block=bool(tropical_attn_per_block),
+        use_gradient_checkpointing=bool(gradient_checkpointing),
     )
     model.quantum_router.train()
-    if hasattr(model, "ternary_expert"):
-        model.ternary_expert.train()
+    for blk in model.ternary_blocks:
+        blk.train()
 
     checkpoint_saved: str | None = None
     checkpoint_best_saved: str | None = None
@@ -813,7 +830,7 @@ def run_training_loop(
     optimizer = torch.optim.AdamW(adam_params, lr=learning_rate)
     tsign_opt: Optional[TSignSGD] = None
     if use_tsign:
-        tsign_opt = TSignSGD([model.ternary_expert.weight], lr=float(tsign_learning_rate))
+        tsign_opt = TSignSGD(model.ternary_latent_weights(), lr=float(tsign_learning_rate))
 
     scheduler: Optional[torch.optim.lr_scheduler.ReduceLROnPlateau] = None
     if lr_plateau_patience is not None and lr_plateau_patience > 0:
@@ -831,12 +848,7 @@ def run_training_loop(
         else DataPipeline(wasm_runtime=wasm_runtime)
     )
     source = (training_data_source or "mesh").strip().lower()
-    strict_cfg = os.getenv("QMINIWASM_STRICT_CONFIG_VALIDATION", "0").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    strict_cfg = strict_config_validation()
     if strict_cfg and source not in {"mesh", "corpus", "hf_tabular"}:
         raise ValueError(f"Unsupported training_data_source={source!r} under strict validation.")
     num_samples = max(1, batch_size * 4)
@@ -952,8 +964,8 @@ def run_training_loop(
             g.manual_seed(int(seed))
         processed_data = [
             {
-                "hidden": torch.randn(_D_MODEL, generator=g),
-                "target": torch.randn(_D_MODEL, generator=g),
+                "hidden": torch.randn(io_dm, generator=g),
+                "target": torch.randn(io_dm, generator=g),
             }
             for _ in range(max(batch_size * 2, 8))
         ]
@@ -969,7 +981,7 @@ def run_training_loop(
         eval_samples = []
 
     def _as_d_model(name: str, t: torch.Tensor) -> torch.Tensor:
-        return _as_d_model_1d(name, t)
+        return _as_io_1d(name, t, io_dm)
 
     wasm_origin_counts = {"real": 0, "mock": 0, "error": 0, "unknown": 0}
     for row in processed_data:
@@ -980,9 +992,7 @@ def run_training_loop(
         if wasm_sample_total > 0
         else 0.0
     )
-    strict_mock_gate_enabled = os.getenv(
-        "QMINIWASM_ASSERT_ZERO_MOCK_RATIO", "0"
-    ).strip().lower() in {"1", "true", "yes", "on"}
+    strict_mock_gate_enabled = assert_zero_mock_ratio_gate_enabled()
     if strict_mock_gate_enabled and wasm_origin_counts["mock"] > 0:
         raise RuntimeError(
             "Strict WASM integration gate failed: mock sample ratio is non-zero "
@@ -1004,9 +1014,7 @@ def run_training_loop(
     stopped_on_eval_plateau = False
     stopped_on_target_mse = False
     target_mse_stop_train_metric_warned = False
-    latest_every_n_epochs = max(
-        1, int(os.getenv("QMINIWASM_TPEM_LATEST_EVERY_N_EPOCHS", "1") or "1")
-    )
+    latest_every_n_epochs = tpem_latest_every_n_epochs()
 
     cascade_policy: nn.Module | None = None
     cascade_optimizer: torch.optim.Optimizer | None = None
@@ -1025,7 +1033,7 @@ def run_training_loop(
             cascade_policy_mode = "model_router"
         elif bool(cascade_learned_projector):
             cascade_policy = CascadeRouter(
-                d_model=_D_MODEL,
+                d_model=io_dm,
                 state_dim=int(cascade_state_dim),
                 num_actions=int(cascade_num_actions),
                 hidden=max(8, int(cascade_router_hidden)),
@@ -1089,12 +1097,7 @@ def run_training_loop(
             u64,
         )
 
-    strict_fp = os.getenv("QMINIWASM_STRICT_ENCLAVE_FOOTPRINT", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    strict_fp = strict_enclave_footprint()
     if tier_preset is not None and tier_preset.tier == "micro" and tier_cap_mb is not None:
         est0 = _telemetry_est_mb()
         if est0 > tier_cap_mb * 1.15:
@@ -1125,7 +1128,7 @@ def run_training_loop(
                     tsign_opt = None
                     if use_tsign_local:
                         tsign_opt = TSignSGD(
-                            [model.ternary_expert.weight],
+                            model.ternary_latent_weights(),
                             lr=float(tsign_learning_rate),
                         )
                     if lr_plateau_patience is not None and lr_plateau_patience > 0:
@@ -1162,7 +1165,7 @@ def run_training_loop(
             pin_memory,
         )
         train_loader = DataLoader(
-            _TrainingSampleListDataset(train_samples),
+            _TrainingSampleListDataset(train_samples, io_dm),
             batch_size=batch_size,
             shuffle=False,
             num_workers=dl_workers,
@@ -1212,6 +1215,7 @@ def run_training_loop(
                         cascade_policy=cascade_policy,
                         state_dim=int(cascade_state_dim),
                         device=device,
+                        io_dim=io_dm,
                     )
             c_loss_acc = 0.0
             c_ret_acc = 0.0
@@ -1299,6 +1303,18 @@ def run_training_loop(
         supervised_sample_count = 0
         user_stop_mid_epoch = False
         t_supervised0 = time.perf_counter()
+        micro_step = [0]
+
+        def _autocast_cm():
+            if not amp_enabled:
+                return nullcontext()
+            dt = device.type
+            if dt not in ("cuda", "xpu", "cpu"):
+                return nullcontext()
+            try:
+                return torch.autocast(device_type=dt, enabled=True)
+            except Exception:
+                return nullcontext()
 
         def _supervised_one_batch(
             hidden_states: torch.Tensor,
@@ -1306,20 +1322,26 @@ def run_training_loop(
             batch_start_index: int,
         ) -> None:
             nonlocal epoch_loss, n_batches, skipped_nonfinite_batches, supervised_sample_count
-            optimizer.zero_grad()
-            if tsign_opt is not None:
-                tsign_opt.zero_grad()
-            out = model.hybrid_inference(hidden_states)
-            if use_cascade_rl and cascade_seed_from_hidden:
-                hm = hidden_states.mean(0).detach()
-                blend = 0.5 * (hm + out.detach().mean(0)) if cascade_couple_forward else hm
-                digest_holder[0] = _cascade_digest_from_blend(
-                    blend,
-                    cascade_policy=cascade_policy,
-                    state_dim=int(cascade_state_dim),
-                    device=device,
-                )
-            loss = torch.nn.functional.mse_loss(out, targets)
+            idx = micro_step[0]
+            micro_step[0] = idx + 1
+            if idx % g_accum == 0:
+                optimizer.zero_grad()
+                if tsign_opt is not None:
+                    tsign_opt.zero_grad()
+            with _autocast_cm():
+                out = model.hybrid_inference(hidden_states)
+                if use_cascade_rl and cascade_seed_from_hidden:
+                    hm = hidden_states.mean(0).detach()
+                    blend = 0.5 * (hm + out.detach().mean(0)) if cascade_couple_forward else hm
+                    digest_holder[0] = _cascade_digest_from_blend(
+                        blend,
+                        cascade_policy=cascade_policy,
+                        state_dim=int(cascade_state_dim),
+                        device=device,
+                        io_dim=io_dm,
+                    )
+                loss_full = torch.nn.functional.mse_loss(out, targets)
+                loss = loss_full / float(g_accum)
             if not torch.isfinite(loss):
                 skipped_nonfinite_batches += 1
                 logger.error(
@@ -1329,12 +1351,14 @@ def run_training_loop(
                 )
                 return
             loss.backward()
-            if grad_clip_norm is not None and grad_clip_norm > 0:
-                _clip_grad_norm_xpu_safe(adam_params, grad_clip_norm, device)
-            optimizer.step()
-            if tsign_opt is not None:
-                tsign_opt.step()
-            epoch_loss += loss.item()
+            at_boundary = (idx + 1) % g_accum == 0
+            if at_boundary:
+                if grad_clip_norm is not None and grad_clip_norm > 0:
+                    _clip_grad_norm_xpu_safe(adam_params, grad_clip_norm, device)
+                optimizer.step()
+                if tsign_opt is not None:
+                    tsign_opt.step()
+            epoch_loss += float(loss_full.detach().item())
             n_batches += 1
             supervised_sample_count += int(hidden_states.shape[0])
 
@@ -1380,6 +1404,14 @@ def run_training_loop(
                 hidden_states = torch.stack(hidden_list).to(device)
                 targets = torch.stack(target_list).to(device)
                 _supervised_one_batch(hidden_states, targets, i)
+
+        rem = micro_step[0] % g_accum
+        if rem != 0:
+            if grad_clip_norm is not None and grad_clip_norm > 0:
+                _clip_grad_norm_xpu_safe(adam_params, grad_clip_norm, device)
+            optimizer.step()
+            if tsign_opt is not None:
+                tsign_opt.step()
 
         supervised_wall_s = time.perf_counter() - t_supervised0
         if n_batches > 0:

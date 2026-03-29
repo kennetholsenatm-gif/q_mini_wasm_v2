@@ -20,6 +20,38 @@ def test_load_training_toml_mesh_cpu():
     assert cfg.training.epochs == 25
 
 
+def test_model_and_distributed_sections_roundtrip_engine(tmp_path):
+    from qminiwasm.engine.config import EngineConfig
+
+    f = tmp_path / "m.toml"
+    f.write_text(
+        '[hardware]\naccelerator = "cpu"\n\n'
+        '[data]\nsource = "mesh"\n\n'
+        "[model]\n"
+        "d_model = 512\n"
+        "num_ternary_blocks = 2\n"
+        "io_d_model = 4096\n"
+        "tropical_attn_per_block = true\n\n"
+        "[distributed]\n"
+        "gradient_checkpointing = true\n"
+        "gradient_accumulation_steps = 4\n"
+        "amp = true\n"
+        "fsdp = true\n"
+        "ddp = false\n",
+        encoding="utf-8",
+    )
+    c = EngineConfig.from_training_toml(f)
+    assert c.d_model == 512
+    assert c.num_ternary_blocks == 2
+    assert c.io_d_model == 4096
+    assert c.tropical_attn_per_block is True
+    assert c.gradient_checkpointing is True
+    assert c.gradient_accumulation_steps == 4
+    assert c.amp_enabled is True
+    assert c.fsdp_enabled is True
+    assert c.ddp_enabled is False
+
+
 def test_load_training_toml_missing_file():
     from qminiwasm.engine.training_schema import load_training_toml
 
@@ -54,6 +86,43 @@ def test_runpod_serverless_section_parses(tmp_path):
     assert cfg.runpod_serverless.worker_image == "docker.io/example/worker:v1"
 
     EngineConfig.from_training_toml(f)
+
+
+def test_engine_config_auto_stabilize_xpu_sets_clip_and_plateau_when_omitted(tmp_path):
+    """[training].auto_stabilize on xpu/sycl applies defaults only when keys are omitted."""
+    from qminiwasm.engine.config import EngineConfig
+
+    f = tmp_path / "x.toml"
+    f.write_text(
+        '[hardware]\naccelerator = "xpu"\n\n'
+        '[data]\nsource = "mesh"\n\n'
+        "[training]\nepochs = 3\nauto_stabilize = true\n",
+        encoding="utf-8",
+    )
+    c = EngineConfig.from_training_toml(f)
+    assert c.auto_stabilize is True
+    assert c.grad_clip_norm == 1.0
+    assert c.lr_plateau_patience == 2
+
+    f2 = tmp_path / "x2.toml"
+    f2.write_text(
+        '[hardware]\naccelerator = "xpu"\n\n'
+        '[data]\nsource = "mesh"\n\n'
+        "[training]\nepochs = 3\nauto_stabilize = true\n"
+        "grad_clip_norm = 2.0\nlr_plateau_patience = 5\n",
+        encoding="utf-8",
+    )
+    c2 = EngineConfig.from_training_toml(f2)
+    assert c2.grad_clip_norm == 2.0
+    assert c2.lr_plateau_patience == 5
+
+    c_cpu = EngineConfig(
+        accelerator="cpu",
+        training_data_source="mesh",
+        auto_stabilize=True,
+    )
+    assert c_cpu.grad_clip_norm is None
+    assert c_cpu.lr_plateau_patience is None
 
 
 def test_engine_config_from_toml_merges_hf_token_from_env(monkeypatch, tmp_path):
