@@ -29,7 +29,7 @@ For **CI, Docker, serverless, and toolchain** variables that may still be read b
 | Variable | Type | Default | Required | Description |
 |----------|------|---------|----------|-------------|
 | `RUNPOD_API_KEY` 🔒 | string | `None` | No | RunPod API key (alias for account key) |
-| `RUNPOD_SERVERLESS_ENDPOINT_ID`  | string | `None` | No | RunPod serverless endpoint ID |
+| `RUNPOD_SERVERLESS_ENDPOINT_ID` | string | `None` | No | RunPod serverless endpoint ID |
 | `RUNPOD_TOKEN` 🔒 | string | `None` | No | RunPod account API key (OpenTofu / management) |
 | `RUNPOD_TOKEN_END` 🔒 | string | `None` | No | RunPod serverless endpoint API key (queue /run) |
 

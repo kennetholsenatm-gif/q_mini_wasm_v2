@@ -14,6 +14,31 @@
 
 namespace qminiwasm::training {
 
+struct HfDatasetParamsNative {
+  std::string dataset_id;
+  /// Empty: resolved at fetch time via datasets-server /info (never assume "default" for multi-config sets).
+  std::string config_name;
+  std::string split = "train";
+  std::string revision;
+  std::uint32_t num_samples = 0;
+  double mesh_blend_fraction = 0.0;
+};
+
+struct CascadeCurriculumLoopNative {
+  bool enabled = false;
+  std::uint32_t max_heal_rounds = 3;
+  std::string teacher_checkpoint_path;
+  std::uint32_t ptqtp_num_planes = 2;
+  double gate_target_val_mse = 0.0;
+  double gate_max_tpem_mib = 0.0;
+  bool run_taxonomy_linter = false;
+  double heal_learning_rate_scale = 0.5;
+  double teacher_epoch_fraction = 0.5;
+  std::uint32_t heal_epochs_per_round = 2;
+  /// Gate fail: reload teacher checkpoint and repeat PTQTP+heal (1 = single macro pass).
+  std::uint32_t max_curriculum_cycles = 1;
+};
+
 struct TrainingConfig {
   std::string run_id;
   std::size_t epochs = 1;
@@ -39,6 +64,9 @@ struct TrainingConfig {
   std::string checkpoint_save_path;
   std::string checkpoint_best_path;
   std::string checkpoint_latest_path;
+  HfDatasetParamsNative hf;
+  CascadeCurriculumLoopNative cascade_loop;
+  bool use_native_engine_only = false;
 };
 
 enum class EngineState {

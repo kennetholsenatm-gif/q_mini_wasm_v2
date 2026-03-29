@@ -37,6 +37,7 @@ __pycache__/
 
 # Local WUI edge experiment configs (do not commit)
 configs/training/.wui_edge_*.toml
+configs/training/.wui_native_cascade_*.toml
 
 # IDE Configuration
 .vscode/

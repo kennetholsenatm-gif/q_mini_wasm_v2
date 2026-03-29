@@ -10,9 +10,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/kennetholsenatm-gif/qminiwasm-core/training-wui/grpcrunner"
 	"github.com/kennetholsenatm-gif/qminiwasm-core/training-wui/trainingrpc"
 )
 
@@ -49,6 +49,9 @@ func useNativeTrainingEngineGRPC(opts runStartOpts) bool {
 	if opts.RunTarget == "runpod" && opts.RunpodTrainOnPod {
 		return false
 	}
+	if opts.CascadeRequiresNativeGRPC {
+		return true
+	}
 	useGRPC, _ := trainingEnginePickLocal()
 	return useGRPC
 }
@@ -62,6 +65,56 @@ func trainingGRPCReachable(timeout time.Duration) bool {
 	}
 	_ = c.Close()
 	return true
+}
+
+// grpcEstimatedTotalEpochs sets a WUI progress denominator for gRPC runs. Matches native cascade
+// budgeting when cascade_loop.enabled (teacher + heal, scaled by max_curriculum_cycles); else cfg.epochs.
+func grpcEstimatedTotalEpochs(cfg *trainingrpc.TrainingConfig) int {
+	if cfg == nil {
+		return 1
+	}
+	e := int(cfg.GetEpochs())
+	if e < 1 {
+		e = 1
+	}
+	cl := cfg.GetCascadeLoop()
+	if cl == nil || !cl.GetEnabled() {
+		return e
+	}
+	frac := cl.GetTeacherEpochFraction()
+	if frac < 0.05 {
+		frac = 0.05
+	}
+	teacher := int(math.Max(1, math.Ceil(float64(e)*frac)))
+	maxHeal := cl.GetMaxHealRounds()
+	if maxHeal < 1 {
+		maxHeal = 1
+	}
+	hpr := cl.GetHealEpochsPerRound()
+	if hpr < 1 {
+		hpr = 1
+	}
+	healTotal := e - teacher
+	if healTotal < 1 || e <= teacher {
+		healTotal = int(hpr) * int(maxHeal)
+		if healTotal < 1 {
+			healTotal = 1
+		}
+	}
+	mc := cl.GetMaxCurriculumCycles()
+	if mc < 1 {
+		mc = 1
+	}
+	return teacher + healTotal*int(mc)
+}
+
+func appendNativeGRPCLogLine(rec *runRecord, line string) {
+	if rec == nil || rec.cmd != nil {
+		return
+	}
+	rec.logMu.Lock()
+	rec.logBuf.WriteString(line)
+	rec.logMu.Unlock()
 }
 
 func (m *manager) broadcastTelemetryProto(runID string, ev *trainingrpc.TelemetryEvent) {
@@ -127,13 +180,40 @@ func (m *manager) broadcastTelemetryProto(runID string, ev *trainingrpc.Telemetr
 	}
 
 	m.mu.Lock()
-	if rec := m.byID[runID]; rec != nil {
-		rec.LastEpoch = int(epoch)
+	rec := m.byID[runID]
+	if rec != nil {
+		eph := int(epoch)
+		if eventType == "epoch_throughput" {
+			alt := int(ev.GetEpoch()) + 1
+			if alt > eph {
+				eph = alt
+			}
+		}
+		if eph > rec.LastEpoch {
+			rec.LastEpoch = eph
+		}
 		rec.LastMeanLoss = trainLoss
 		rec.LastMeanMSE = valLoss
 		rec.LastMeanReturn = 0.0
 	}
 	m.mu.Unlock()
+
+	if rec != nil && rec.cmd == nil {
+		safeMsg := strings.ReplaceAll(strings.TrimSpace(msg), "\n", " ")
+		if len(safeMsg) > 160 {
+			safeMsg = safeMsg[:160] + "..."
+		}
+		stage := strings.TrimSpace(ev.GetStage())
+		line := fmt.Sprintf(
+			"[native:telemetry] stage=%s event=%s epoch=%d train=%.6g val=%.6g",
+			stage, eventType, ev.GetEpoch(), trainLoss, valLoss,
+		)
+		if safeMsg != "" {
+			line += fmt.Sprintf(" msg=%q", safeMsg)
+		}
+		line += "\n"
+		appendNativeGRPCLogLine(rec, line)
+	}
 
 	if eventType == "error" || strings.Contains(strings.ToLower(msg), "fallback") {
 		wsHub.broadcast(runID, map[string]any{
@@ -185,7 +265,7 @@ func (m *manager) grpcCallStopTraining(ctx context.Context, runID string) error 
 	return err
 }
 
-// runNativeGRPCTraining runs StartTraining + StreamTelemetry until the stream ends or ctx is cancelled.
+// runNativeGRPCTraining runs StreamTelemetry concurrently with StartTraining (see grpcrunner).
 func (m *manager) runNativeGRPCTraining(ctx context.Context, id string, cfg *trainingrpc.TrainingConfig, rec *runRecord) {
 	exitCode := 0
 	runErr := false
@@ -231,41 +311,14 @@ func (m *manager) runNativeGRPCTraining(ctx context.Context, id string, cfg *tra
 
 	conn, err := trainingGRPCEnsureConn(ctx)
 	if err != nil {
-		m.appendLogSubprocessAware(id, []byte("=== gRPC: dial failed: "+err.Error()+" ===\n"), "stderr")
+		m.appendLogSubprocessAware(id, []byte("[native:gRPC] dial failed: "+err.Error()+"\n"), "stderr")
 		exitCode = 1
 		runErr = true
 		return
 	}
-	cli := trainingrpc.NewTrainingEngineServiceClient(conn)
 
-	m.appendLogSubprocessAware(id, []byte("=== gRPC: StartTraining "+trainingGRPCAddressResolved()+" ===\n"), "stderr")
-	stResp, err := cli.StartTraining(ctx, &trainingrpc.StartTrainingRequest{Config: cfg})
-	if err != nil {
-		m.appendLogSubprocessAware(id, []byte("=== gRPC StartTraining error: "+err.Error()+" ===\n"), "stderr")
-		exitCode = 1
-		runErr = true
-		return
-	}
-	if logMem := formatStartTrainingMemoryLog(stResp.GetMemoryEstimate()); logMem != "" {
-		m.appendLogSubprocessAware(id, []byte(logMem), "stderr")
-	}
-	if !stResp.GetAccepted() {
-		m.appendLogSubprocessAware(id, []byte("=== gRPC StartTraining rejected: "+stResp.GetMessage()+" ===\n"), "stderr")
-		exitCode = 1
-		runErr = true
-		return
-	}
-	m.appendLogSubprocessAware(id, []byte("=== gRPC: training accepted ===\n"), "stderr")
+	m.appendLogSubprocessAware(id, []byte("[native:gRPC] StartTraining "+trainingGRPCAddressResolved()+"\n"), "stderr")
 
-	// StreamTelemetry uses its own context so Stop does not cancel the client RPC before the server
-	// flushes checkpoint + completed events (trainCancel only wraps StartTraining/dial ctx).
-	streamCtx, streamCancel := context.WithCancel(context.Background())
-	defer streamCancel()
-	m.mu.Lock()
-	if r := m.byID[id]; r != nil {
-		r.nativeStreamCancel = streamCancel
-	}
-	m.mu.Unlock()
 	defer func() {
 		m.mu.Lock()
 		if r := m.byID[id]; r != nil {
@@ -274,56 +327,42 @@ func (m *manager) runNativeGRPCTraining(ctx context.Context, id string, cfg *tra
 		m.mu.Unlock()
 	}()
 
-	stream, err := cli.StreamTelemetry(streamCtx, &trainingrpc.TelemetryRequest{RunId: id, IncludeDebug: true})
-	if err != nil {
-		m.appendLogSubprocessAware(id, []byte("=== gRPC StreamTelemetry error: "+err.Error()+" ===\n"), "stderr")
-		exitCode = 1
-		runErr = true
-		return
-	}
-
-	wsHub.broadcast(id, map[string]any{
-		"type":             "xpu_mem",
-		"run_id":           id,
-		"ts":               time.Now().UTC().Format(time.RFC3339),
-		"phase":            "native_engine",
-		"epoch":            0,
-		"epochs_total":     int(cfg.GetEpochs()),
-		"batches":          0,
-		"device":           "C++ gRPC (Python qmw_xpu_mem not emitted on native path)",
-		"telemetry_source": telemetrySourceGRPCCPP,
-	})
-
-	for {
-		ev, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				m.appendLogSubprocessAware(id, []byte("=== gRPC telemetry: stream cancelled (force stop) ===\n"), "stderr")
-			} else {
-				m.appendLogSubprocessAware(id, []byte("=== gRPC telemetry recv: "+err.Error()+" ===\n"), "stderr")
-				runErr = true
-				exitCode = 1
+	hooks := &grpcrunner.Hooks{
+		RunID: id,
+		OnLog: func(msg string) {
+			m.appendLogSubprocessAware(id, []byte(msg), "stderr")
+		},
+		OnTelemetry: func(ev *trainingrpc.TelemetryEvent) {
+			m.broadcastTelemetryProto(id, ev)
+		},
+		OnStartResponse: func(st *trainingrpc.StartTrainingResponse) {
+			if logMem := formatStartTrainingMemoryLog(st.GetMemoryEstimate()); logMem != "" {
+				m.appendLogSubprocessAware(id, []byte(logMem), "stderr")
 			}
-			break
-		}
-		m.broadcastTelemetryProto(id, ev)
+		},
+		OnTrainingAccepted: func(cfg *trainingrpc.TrainingConfig) {
+			wsHub.broadcast(id, map[string]any{
+				"type":             "xpu_mem",
+				"run_id":           id,
+				"ts":               time.Now().UTC().Format(time.RFC3339),
+				"phase":            "native_engine",
+				"epoch":            0,
+				"epochs_total":     int(cfg.GetEpochs()),
+				"batches":          0,
+				"device":           "C++ gRPC",
+				"telemetry_source": telemetrySourceGRPCCPP,
+			})
+		},
+		RegisterStreamCancel: func(cancel context.CancelFunc) {
+			m.mu.Lock()
+			if r := m.byID[id]; r != nil {
+				r.nativeStreamCancel = cancel
+			}
+			m.mu.Unlock()
+		},
 	}
 
-	st, serr := cli.GetStatus(context.Background(), &trainingrpc.StatusRequest{RunId: id})
-	if serr == nil && st != nil {
-		switch st.GetState() {
-		case trainingrpc.StatusResponse_ENGINE_STATE_FAILED:
-			runErr = true
-			exitCode = 1
-		case trainingrpc.StatusResponse_ENGINE_STATE_STOPPED, trainingrpc.StatusResponse_ENGINE_STATE_IDLE:
-			if exitCode == 0 {
-				exitCode = 0
-			}
-		}
-	}
+	exitCode, runErr = grpcrunner.RunTrainingSession(ctx, conn, cfg, hooks)
 }
 
 func (m *manager) appendLogSubprocessAware(id string, p []byte, stream string) {

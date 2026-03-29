@@ -69,3 +69,7 @@ Or let your editor use LF for `*.py` (this repo includes [`.editorconfig`](.edit
 - All changes must go through pull requests
 - Minimum 1 reviewer required for all pull requests
 - Branch names must follow the specified conventions
+
+## CI and stacked pull requests (this repository)
+
+Default development uses **`main`**. GitHub Actions runs the full lint/test/security suite on pull requests whose **base** is **`main`** or a branch under **`pr/`** (for example stacked work: a small PR into `pr/feature-x`, then a PR from that branch into `main`). If required checks never start, confirm the PR base and see **Pull request targets and required checks** in [docs/ENV_CI_OVERRIDES.md](docs/ENV_CI_OVERRIDES.md).

@@ -260,6 +260,7 @@ if(QMINIWASM_WITH_TRAINING_ENGINE)
         list(APPEND _QMW_TRAINING_RUNTIME_SRCS
             training/src/safetensors_f32.cpp
             training/src/libtorch_ternary_trainer.cpp
+            training/src/hf_datasets_rows.cpp
         )
     endif()
 

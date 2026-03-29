@@ -309,6 +309,8 @@ func runpodServerlessGraphQLSaveInput(body map[string]any, name, imageName strin
 	if disk < 1 {
 		disk = 50
 	}
+	// Default matches serverless/Dockerfile CMD for the reference Python worker image.
+	// Override dockerArgs when using a native/Go worker image.
 	dockerArgs := "python /app/serverless/handler.py"
 	if v, ok := body["dockerArgs"]; ok {
 		if s := strings.TrimSpace(fmt.Sprint(v)); s != "" {

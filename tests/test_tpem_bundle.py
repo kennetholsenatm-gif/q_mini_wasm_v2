@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from qminiwasm.runtime_modes import reset_runtime_config_cache, tpem_native_bundle_enabled
 from qminiwasm.wasm_host.trit_pack import PACK_ENCODING_VERSION, pack_ternary_list
-from qminiwasm.wasm_host.tpem_bundle import (
-    _native_tpem_bundle_enabled,
-    read_tpem_bundle,
-    write_tpem_bundle,
-)
+from qminiwasm.wasm_host.tpem_bundle import read_tpem_bundle, write_tpem_bundle
 
 
 class TestTpemBundle(unittest.TestCase):
@@ -46,15 +44,32 @@ class TestTpemBundle(unittest.TestCase):
         for v in ("0", "false", "no", "off"):
             with self.subTest(v=v):
                 with patch.dict("os.environ", {"QMINIWASM_TPEM_NATIVE_BUNDLE": v}):
-                    self.assertFalse(_native_tpem_bundle_enabled())
+                    reset_runtime_config_cache()
+                    try:
+                        self.assertFalse(tpem_native_bundle_enabled())
+                    finally:
+                        reset_runtime_config_cache()
 
-    def test_native_toggle_enabled_default_and_true_values(self):
-        with patch.dict("os.environ", {}, clear=True):
-            self.assertTrue(_native_tpem_bundle_enabled())
+    def test_native_toggle_enabled_when_unset_and_no_toml_override(self):
+        """Env unset + no runtime.toml impl entry => enabled (legacy default)."""
+        env_copy = {k: v for k, v in os.environ.items() if k != "QMINIWASM_TPEM_NATIVE_BUNDLE"}
+        with patch("qminiwasm.runtime_modes._load_runtime_toml", return_value={}):
+            reset_runtime_config_cache()
+            try:
+                with patch.dict(os.environ, env_copy, clear=True):
+                    self.assertTrue(tpem_native_bundle_enabled())
+            finally:
+                reset_runtime_config_cache()
+
+    def test_native_toggle_enabled_explicit_env_values(self):
         for v in ("1", "true", "yes", "on", "auto", "unexpected"):
             with self.subTest(v=v):
                 with patch.dict("os.environ", {"QMINIWASM_TPEM_NATIVE_BUNDLE": v}):
-                    self.assertTrue(_native_tpem_bundle_enabled())
+                    reset_runtime_config_cache()
+                    try:
+                        self.assertTrue(tpem_native_bundle_enabled())
+                    finally:
+                        reset_runtime_config_cache()
 
 
 if __name__ == "__main__":

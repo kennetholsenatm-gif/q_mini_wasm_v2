@@ -190,13 +190,13 @@ func trainingEnginePickLocal() (useGRPC bool, reason string) {
 	case "cpp", "grpc", "native":
 		return true, "mode forces C++ gRPC training engine (foundation)"
 	case "python":
-		return false, "mode forces Python engine"
+		return false, "training_runtime_mode=python is no longer supported"
 	case "auto":
 		if !trainingGRPCReachable(600 * time.Millisecond) {
-			return false, "auto: gRPC endpoint not reachable at " + trainingGRPCAddressResolved() + " — using Python"
+			return false, "auto: gRPC endpoint not reachable at " + trainingGRPCAddressResolved()
 		}
-		return true, "auto: gRPC reachable — using C++ foundation engine (not full PyTorch curriculum)"
+		return true, "auto: gRPC reachable — using C++ TrainingEngineService"
 	default:
-		return false, "unknown mode — using Python"
+		return false, "unknown training_runtime_mode"
 	}
 }

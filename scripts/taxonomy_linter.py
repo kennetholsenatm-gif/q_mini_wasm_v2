@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Edge AI taxonomy linter — fail CI when legacy ML vocabulary appears in gated paths.
 
+Deprecated for CI: GitHub Actions use the Go implementation instead::
+
+    cd training-wui && go run ./cmd/qmw-taxonomy-linter --root .. --config ../configs/ci/taxonomy_linter.json --diff-base REF
+
+This Python script remains for local use or tooling that cannot run Go.
+
 Designed for GitHub Actions (diff of added lines) or external orchestrators (N8N, Gitea hooks):
 
     # Pull request / branch delta (recommended for CI)

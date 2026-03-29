@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """Build edge artifacts: trit kernels (.wasm) + TPEM sidecar (.tpem) + optional zip bundle.
 
+CI and the Training WUI use the Go builder (``wat2wasm`` + Go)::
+
+  cd training-wui && go run ./cmd/qmw-build-edge-artifacts --repo-root .. --out-dir ../dist/edge-artifacts --tier 2
+
+With a checkpoint, pass ``--checkpoint`` and ``--python``; Go calls
+``scripts/checkpoint_tpem_payload.py`` for the packed payload only.
+
+This Python script remains for local parity checks and environments that already
+have the full ``qminiwasm`` package importable.
+
 Outputs under ``--out-dir``:
   - ``qminiwasm-kernels.wasm`` — wat2wasm (+ optional ``wasm-opt`` for tier 1, default ``-O3``)
   - ``qminiwasm-weights.tpem`` — packed trits (checkpoint or deterministic synthetic)
@@ -236,8 +246,6 @@ def main() -> int:
     }
     manifest_path = out / "artifact_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    verify_artifact_contract(out)
-
     verify_artifact_contract(out)
 
     print(f"Wrote {wasm_path} ({len(wasm_bytes)} bytes, sha256={wasm_digest})")

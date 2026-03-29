@@ -15,7 +15,9 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - "pr/**"
   schedule:
     - cron: "40 17 * * 4"
 

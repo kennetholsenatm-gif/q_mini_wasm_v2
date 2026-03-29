@@ -1,0 +1,27 @@
+# Native cascade overlay — WUI tier 1 (edge_constrained / micro taxonomy). Production run defaults.
+
+[enclave]
+enclave_tier = 1
+
+[training]
+epochs = 480
+
+[huggingface]
+num_samples = 32768
+
+[model]
+d_model = 256
+io_d_model = 256
+num_ternary_blocks = 1
+
+[cascade_curriculum_loop]
+gate_max_tpem_mib = 1024
+teacher_checkpoint_path = "artifacts/models/cascade_native_edge/teacher.pt"
+max_heal_rounds = 8
+heal_epochs_per_round = 8
+max_curriculum_cycles = 2
+
+[checkpoint]
+save_path = "artifacts/models/cascade_native_edge/final.pt"
+best_path = "artifacts/models/cascade_native_edge/best.pt"
+latest_path = "artifacts/models/cascade_native_edge/latest.pt"
