@@ -18,6 +18,10 @@ The framework targets continuous trust through the **Cognitive Provenance Ledger
 - **LCI**: local containment effectiveness
 - **EM** (and ESI fidelity): reconstruction correctness under inversion
 
+## Platform direction
+
+- **Training and WUI orchestration** target **Go plus C++ (LibTorch over gRPC)**; Python remains for tests, WASM artifact tooling, and workflows where no practical Go or C++ replacement exists yet.
+
 ## Success criteria (definition of done)
 
 - Documentation and artifacts consistently use the unified vocabulary (TPEM/EF/ECL/ESI/WLES/ZTEE/CPL).

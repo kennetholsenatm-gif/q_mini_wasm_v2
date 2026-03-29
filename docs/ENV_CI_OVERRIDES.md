@@ -47,7 +47,7 @@ Various toggles (`QMW_DISABLE_TROPICAL_ATTN`, `QMW_ROUTING_LATENCY_BUDGET_MS`, `
 
 **Operator config** for engine mode, gRPC address, RunPod SSH defaults, and runtime-profile mirrors lives in **`configs/wui.toml`** (and optional **`-wui-config` / `-training-runtime` / `-grpc-addr`** flags). The repo default is **`training_runtime_mode = "native"`** (C++ gRPC). The WUI injects matching **`QMINIWASM_*`** vars into Python children so `qminiwasm.engine` stays aligned without relying on the shell environment.
 
-Preflight and subprocess code may pass **secrets** (IBM token, quantum backend name) into a Python probe; **training** still comes from the selected TOML file. Internal keys like `QMW_HF_*` / `QMW_FACTS_*` are script helpers, not user configuration.
+Preflight runs a **Python torch/SYCL/IBM probe** when available; if it fails or returns invalid JSON, the WUI falls back to a **Go-only** preflight (TOML + gRPC reachability, no live IBM or torch device). Set **`QMW_WUI_PREFLIGHT_GO_ONLY=1`** on the WUI process to skip the Python probe entirely (hosts without the Python training stack). Subprocess code may pass **secrets** into the Python probe; **training** still comes from the selected TOML file. Internal keys like `QMW_HF_*` / `QMW_FACTS_*` are script helpers, not user configuration.
 
 ## Serverless / containers
 
@@ -67,6 +67,14 @@ Preflight and subprocess code may pass **secrets** (IBM token, quantum backend n
 ## CI workflows
 
 `.github/workflows/ci.yml` may set `QMINIWASM_WASM_FALLBACK_POLICY=error` for strict WASM behavior. Prefer aligning CI with TOML fixtures where possible.
+
+### Pull request targets and required checks
+
+Core workflows (`.github/workflows/ci.yml`, `security-scans.yml`, `semgrep.yml`, `codeql.yml`) run on **`pull_request`** when the PR **base** branch is **`main`** or matches **`pr/**`** (e.g. `pr/native-grpc-training-wui`). That way **stacked PRs** (fix branch → integration branch → `main`) still execute the same **lint-and-test**, **build-artifacts**, **training-wui (Go)**, and security jobs that branch protection expects.
+
+If you open a PR whose **base** is something else (for example a personal fork default branch) and those workflows never appear, either retarget the PR to `main` or to a branch under `pr/` that you intend to merge through, or add the base pattern to the workflow `on.pull_request.branches` list.
+
+Workflow files must be present on the **default branch** for GitHub to schedule runs reliably; after changing triggers, merge that update to `main` first, then push or **Reopen** the stacked PR so Actions picks up the new configuration.
 
 ---
 

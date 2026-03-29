@@ -34,6 +34,35 @@ qminiwasm::training::TrainingConfig map_config(const qminiwasm::trainingrpc::Sta
   out.native_d_model = cfg.d_model();
   out.native_io_d_model = cfg.io_d_model();
   out.native_num_ternary_blocks = cfg.num_ternary_blocks();
+  out.use_native_engine_only = cfg.use_native_engine_only();
+  if (!cfg.hf().dataset_id().empty()) {
+    const auto& h = cfg.hf();
+    out.hf.dataset_id = h.dataset_id();
+    out.hf.config_name = h.config_name();
+    out.hf.split = h.split();
+    if (out.hf.split.empty()) {
+      out.hf.split = "train";
+    }
+    out.hf.revision = h.revision();
+    out.hf.num_samples = h.num_samples();
+    out.hf.mesh_blend_fraction = h.mesh_blend_fraction();
+  }
+  if (cfg.cascade_loop().enabled()) {
+    const auto& c = cfg.cascade_loop();
+    out.cascade_loop.enabled = c.enabled();
+    out.cascade_loop.max_heal_rounds = c.max_heal_rounds() > 0 ? c.max_heal_rounds() : 3;
+    out.cascade_loop.teacher_checkpoint_path = c.teacher_checkpoint_path();
+    out.cascade_loop.ptqtp_num_planes = c.ptqtp_num_planes() > 0 ? c.ptqtp_num_planes() : 2;
+    out.cascade_loop.gate_target_val_mse = c.gate_target_val_mse();
+    out.cascade_loop.gate_max_tpem_mib = c.gate_max_tpem_mib();
+    out.cascade_loop.run_taxonomy_linter = c.run_taxonomy_linter();
+    out.cascade_loop.heal_learning_rate_scale =
+        c.heal_learning_rate_scale() > 0 ? c.heal_learning_rate_scale() : 0.5;
+    out.cascade_loop.teacher_epoch_fraction =
+        c.teacher_epoch_fraction() > 0 ? c.teacher_epoch_fraction() : 0.5;
+    out.cascade_loop.heal_epochs_per_round = c.heal_epochs_per_round() > 0 ? c.heal_epochs_per_round() : 2;
+    out.cascade_loop.max_curriculum_cycles = c.max_curriculum_cycles() > 0 ? c.max_curriculum_cycles() : 1;
+  }
   return out;
 }
 
@@ -160,8 +189,15 @@ class TrainingEngineService final : public qminiwasm::trainingrpc::TrainingEngin
       if (!engine_.pop_telemetry(&event, 200)) {
         const auto st = engine_.status();
         if (st.state == qminiwasm::training::EngineState::kStopped ||
-            st.state == qminiwasm::training::EngineState::kFailed ||
-            st.state == qminiwasm::training::EngineState::kIdle) {
+            st.state == qminiwasm::training::EngineState::kFailed) {
+          break;
+        }
+        // kIdle: without run_id the stream ends (legacy unfiltered client). With run_id the client may
+        // have opened StreamTelemetry before StartTraining; keep waiting until terminal state or cancel.
+        if (st.state == qminiwasm::training::EngineState::kIdle) {
+          if (!request->run_id().empty()) {
+            continue;
+          }
           break;
         }
         continue;

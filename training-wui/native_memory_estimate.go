@@ -101,7 +101,7 @@ func formatStartTrainingMemoryLog(est *trainingrpc.NativeColdStartMemoryEstimate
 	m := nativeMemoryEstimateProtoToMap(est)
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf(
-		"=== gRPC StartTraining memory_estimate: params %.4f GiB | Adam m/v ~%.4f GiB | scratch hint ~%.4f GiB | total(params+Adam) ~%.4f GiB | d=%d io=%d nb=%d batch=%d ===\n",
+		"[native:gRPC] cold-start estimate: params %.4f GiB · adam≈%.4f GiB · scratch≈%.4f GiB · params+adam %.4f GiB · d=%d io=%d nb=%d batch=%d\n",
 		m["parameter_gib"],
 		m["adam_state_gib"],
 		m["activation_scratch_hint_gib"],
@@ -112,7 +112,7 @@ func formatStartTrainingMemoryLog(est *trainingrpc.NativeColdStartMemoryEstimate
 		est.GetBatchSize(),
 	))
 	if est.GetModelUriCheckpointLoad() {
-		b.WriteString("=== (model_uri set: live checkpoint may differ from this cold-start estimate) ===\n")
+		b.WriteString("[native:gRPC] model_uri set: on-disk tensors may differ from this geometry-based estimate\n")
 	}
 	return b.String()
 }

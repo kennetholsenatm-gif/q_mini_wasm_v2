@@ -183,6 +183,24 @@ class AdapterSection(BaseModel):
     lota_merge_every_epoch: Optional[bool] = None
 
 
+class CascadeCurriculumLoopSection(BaseModel):
+    """Native C++ automated cascade curriculum (WUI maps this to gRPC; Python engine ignores)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: Optional[bool] = None
+    max_heal_rounds: Optional[int] = None
+    teacher_checkpoint_path: Optional[str] = None
+    ptqtp_num_planes: Optional[int] = None
+    gate_target_val_mse: Optional[float] = None
+    gate_max_tpem_mib: Optional[float] = None
+    run_taxonomy_linter: Optional[bool] = None
+    heal_learning_rate_scale: Optional[float] = None
+    teacher_epoch_fraction: Optional[float] = None
+    heal_epochs_per_round: Optional[int] = None
+    max_curriculum_cycles: Optional[int] = None
+
+
 class CascadeSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -321,6 +339,9 @@ class TrainingConfig(BaseModel):
     eval: EvalSection = Field(default_factory=EvalSection)
     adapter: AdapterSection = Field(default_factory=AdapterSection)
     cascade: CascadeSection = Field(default_factory=CascadeSection)
+    cascade_curriculum_loop: CascadeCurriculumLoopSection = Field(
+        default_factory=CascadeCurriculumLoopSection
+    )
     wasm: WasmSection = Field(default_factory=WasmSection)
     serve: ServeSection = Field(default_factory=ServeSection)
     enclave: EnclaveSection = Field(default_factory=EnclaveSection)

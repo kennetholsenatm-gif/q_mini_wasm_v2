@@ -94,6 +94,31 @@
 # tsign_learning_rate = 0.001
 # lota_merge_every_epoch = false
 
+# Native C++ automated cascade (WUI → gRPC TrainingEngineService; not CASCADE_RL).
+# [cascade_curriculum_loop]
+# enabled = true
+# max_heal_rounds = 2
+# teacher_checkpoint_path = "artifacts/models/.../teacher.pt"   # required for max_curriculum_cycles > 1
+# ptqtp_num_planes = 2
+# gate_target_val_mse = 0          # 0 = disable absolute val-MSE gate; >0 = pass only if native val_loss <= this
+# gate_max_tpem_mib = 0            # 0 = disable TPEM MiB cap gate; >0 = pass only if estimate <= this
+# run_taxonomy_linter = false
+# heal_learning_rate_scale = 0.5
+# teacher_epoch_fraction = 0.5      # phase-1 teacher gets ceil(epochs * fraction) epochs
+# heal_epochs_per_round = 2         # fallback when training.epochs <= teacher epochs (see below)
+# max_curriculum_cycles = 1         # on gate fail: reload teacher ckpt and repeat PTQTP+heal
+#
+# Tier-matched native cascade (training WUI): POST /api/training/native_cascade_apply merges
+# configs/training/cascade_curriculum_native.toml with configs/training/native_cascade/tier_*.toml
+# (edge_constrained, fog_node, xpu_cluster) using Enclave tier 1–5. Dataset id in [data] / [huggingface]
+# stays from the base unless you change it in the wizard. After a run, GET /api/runs/{id}/artifacts_validate
+# checks QMWTPEM2 interchange on checkpoint paths; GET /api/runs also embeds artifact_validation for finished runs.
+#
+# Epoch budget (Option B): training.epochs caps the whole native cascade run. Teacher uses the
+# fraction above; remaining epochs are heal steps split across max_heal_rounds (at least one heal
+# epoch total). If training.epochs <= teacher epochs, heal count falls back to
+# heal_epochs_per_round * max_heal_rounds.
+
 [cascade]
 # enabled = true                    # CASCADE_RL
 # policy_lr = 1.0e-4

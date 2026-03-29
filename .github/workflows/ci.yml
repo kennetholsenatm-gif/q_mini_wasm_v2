@@ -9,7 +9,10 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # Stacked PRs (e.g. base = pr/feature-branch) must still run the same gates as main.
+    branches:
+      - main
+      - "pr/**"
   workflow_dispatch:
 
 env:
@@ -27,6 +30,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
 
       - name: Taxonomy gate (changed lines only)
         shell: bash
@@ -48,31 +55,33 @@ jobs:
             echo "No parent commit; skipping taxonomy diff (first commit or shallow)."
             exit 0
           fi
-          python3 scripts/taxonomy_linter.py --diff-base "$BASE"
+          cd training-wui && go run ./cmd/qmw-taxonomy-linter --root .. --config ../configs/ci/taxonomy_linter.json --diff-base "$BASE"
 
-  # Deterministic trit kernels (.wasm) + TPEM sidecar for CI consumers.
+  # Deterministic trit kernels (.wasm) + TPEM sidecar for CI consumers (Go + wabt; no Python on this job).
   build-artifacts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
         with:
-          python-version: "3.11"
+          go-version: "1.22"
 
-      - name: Install Python deps (CI profile)
+      - name: Install wat2wasm (wabt)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/ci.txt
+          sudo apt-get update
+          sudo apt-get install -y wabt
 
-      - name: Build WASM + TPEM
-        run: python scripts/build_tpem_wasm_artifacts.py --out-dir dist/edge-artifacts
+      - name: Build WASM + TPEM (Go)
+        run: |
+          mkdir -p dist/edge-artifacts
+          cd training-wui && go run ./cmd/qmw-build-edge-artifacts --repo-root .. --out-dir ../dist/edge-artifacts --tier 2
 
       - name: Verify TPEM bundle header + digest
-        run: python -m qminiwasm.wasm_host.tpem_bundle verify dist/edge-artifacts/qminiwasm-weights.tpem
+        run: cd training-wui && go run ./cmd/qmw-build-edge-artifacts --verify-tpem ../dist/edge-artifacts/qminiwasm-weights.tpem
 
       - name: Verify artifact contract manifest + checksums
-        run: python -m qminiwasm.wasm_host.artifact_contract verify dist/edge-artifacts
+        run: cd training-wui && go run ./cmd/qmw-build-edge-artifacts --verify-contract ../dist/edge-artifacts
 
       - name: Upload edge artifacts
         uses: actions/upload-artifact@v7
@@ -92,6 +101,13 @@ jobs:
       QMINIWASM_WASM_FALLBACK_POLICY: "error"
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: training-wui Go unit tests
+        run: cd training-wui && go test ./...
 
       - name: CI version (confirm this is v4, host Python 3.11)
         run: echo "CI workflow v4 | host Python 3.11 | sha=${{ github.sha }} | ref=${{ github.ref }}"
@@ -133,7 +149,7 @@ jobs:
         continue-on-error: true
 
       - name: Generate environment variables documentation
-        run: python scripts/generate_env_docs.py
+        run: cd training-wui && go run ./cmd/qmw-generate-env-docs --root ..
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7

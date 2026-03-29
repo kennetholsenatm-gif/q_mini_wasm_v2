@@ -2,7 +2,7 @@
 
 The **Training WUI** is a Go-based web interface for configuring, launching, and monitoring **hybrid quantum–classical** training jobs against this repository. **What the model learns** (architecture, data mix, epochs, checkpoints, accelerators, and related TOML fields) lives in **`configs/training/*.toml`** and the in-app wizard. **Secrets and provider credentials**—RunPod, Hugging Face, IBM Quantum, and similar—belong in the repo **`.env`** file; they are not training hyperparameters. See [`.env.example`](../.env.example) and [docs/environment-variables.md](../docs/environment-variables.md) for the full variable map.
 
-How telemetry reaches the browser, and how Python subprocess training differs from the native C++ gRPC engine, is explained in **[Architecture & Vision](#architecture--vision)** below.
+How telemetry reaches the browser from the native C++ gRPC engine is explained in **[Architecture & Vision](#architecture--vision)** below.
 
 > **SECURITY & OPERATIONAL LIMITATIONS**
 >
@@ -11,18 +11,17 @@ How telemetry reaches the browser, and how Python subprocess training differs fr
 
 ## Architecture & Vision
 
-The WUI sits between you and training backends with **native LibTorch TPEM over gRPC** as the **default local foundation**: the C++ **`TrainingEngineService`** (`StartTraining` / `StreamTelemetry` at `grpc_addr` from **`configs/wui.toml`**). **Ternary / runtime profile** choices in TOML and the wizard align with that path first. The **Python** engine (`python -m qminiwasm.engine`) remains important for **remote pod** and **serverless** runs, for **auto-fallback** when gRPC is unreachable, and as a **reference** full training loop—but it is not the primary story for local Mission Control. Optional **cloud** backends (RunPod pod, RunPod serverless) complement this. **Local** training and **cloud GPU with “train on WUI host”** use the Go gRPC client when the C++ server is up; **train on the remote pod** and **serverless** still drive Python over SSH or async jobs. The UI maps wizard and TOML selections into `TrainingConfig` fields that exist in [`proto/training_engine.proto`](../proto/training_engine.proto); keys without a proto counterpart are ignored until a backend loads the full TOML server-side.
+The WUI drives **native LibTorch TPEM over gRPC** only: the C++ **`TrainingEngineService`** (`StartTraining` / `StreamTelemetry` at `grpc_addr` from **`configs/wui.toml`**). **Local** training and **cloud GPU with “train on WUI host”** use the Go gRPC client (start `qminiwasm_training_engine_server` first). **Train on the remote RunPod** syncs the repo over SSH and runs **`go run ./cmd/qmw-grpc-train`** plus the C++ server on the pod (Go + LibTorch required on the image). **RunPod serverless** may still use the Python `serverless/handler.py` container entrypoint until replaced by a native image. There is **no Python fallback** when gRPC is unreachable: fix the server or address. The UI maps wizard and TOML selections into `TrainingConfig` fields in [`proto/training_engine.proto`](../proto/training_engine.proto); keys without a proto counterpart are ignored until the C++ backend loads the full TOML server-side.
 
 **Mission Control** is the live operator surface: metrics and logs stream over per-run **WebSockets**. Two telemetry backends feed the same **`type: "metric"`** message shape, distinguished by `telemetry_source` (and, for gRPC, `engine: "grpc"`).
 
-### Mission Control telemetry contract (Python vs gRPC)
+### Mission Control telemetry contract (gRPC)
 
 | Surface | How data arrives | What the operator sees |
 |--------|------------------|-------------------------|
-| **Python** (`python -m qminiwasm.engine`) | Stdout/stderr lines parsed by the WUI (e.g. **`qmw_metric`** at epoch end, **`qmw_train_throughput`**, **`qmw_xpu_mem`**) | WebSocket **`metric`** with `telemetry_source` = Python VNV; table cells for step/LR/queues stay empty unless future Python emits matching fields |
-| **C++ gRPC** | **`StreamTelemetry`** → `TelemetryEvent` in `proto/training_engine.proto` | Same **`metric`** type with `telemetry_source` = gRPC C++, **`engine`**: `"grpc"`, and populated **Step**, **LR**, **σ/s**, **Q**, **Tier**, **Stage**, **Dec**, **TEE** columns in Mission Control |
+| **C++ gRPC** | **`StreamTelemetry`** → `TelemetryEvent` in `proto/training_engine.proto` | WebSocket **`metric`** with `telemetry_source` = gRPC C++, **`engine`**: `"grpc"`, and populated **Step**, **LR**, **σ/s**, **Q**, **Tier**, **Stage**, **Dec**, **TEE** columns in Mission Control |
 
-**Default: native C++ gRPC training.** The revision-controlled default in **`configs/wui.toml`** is **`training_runtime_mode = "native"`** (LibTorch `TrainingEngineService` at **`grpc_addr`**, default **`127.0.0.1:50061`**). Start the server first (e.g. **`scripts/start-training-stack.ps1`** / **`.sh`**, or run **`qminiwasm_training_engine_server`** yourself). Override with **`training-wui -training-runtime`** or TOML: use **`auto`** to probe gRPC and **fall back to Python** if the port is closed; use **`python`** to force the full PyTorch training loop. **Preflight** orders rows for operators: **WUI runtime mode**, **local engine pick** and **gRPC reachability**, **native `StartTraining` (LibTorch TPEM) geometry** (proto `d_model` / `io_d_model` / `num_ternary_blocks`, load path, effective cold-start when unset), then **ternary / impl / bundle** lines, then a **Python environment (reference only)** block (merged `EngineConfig` geometry string, torch/XPU/IBM, etc.). See [docs/CONFIGURATION_POLICY.md](../docs/CONFIGURATION_POLICY.md).
+**Default: native C++ gRPC training.** The revision-controlled default in **`configs/wui.toml`** is **`training_runtime_mode = "native"`** (LibTorch `TrainingEngineService` at **`grpc_addr`**, default **`127.0.0.1:50061`**). Start the server first (e.g. **`scripts/start-training-stack.ps1`** / **`.sh`**, or run **`qminiwasm_training_engine_server`** yourself). Use **`auto`** to require gRPC reachability (no Python fallback). **`python`** mode is **removed** from the WUI training path. **Preflight** tries a **Python torch/XPU/IBM probe** when the interpreter works; otherwise (or with **`QMW_WUI_PREFLIGHT_GO_ONLY=1`**) it uses a **Go-only** probe (TOML + gRPC; torch/IBM rows show as unavailable). The UI still labels the Python block as reference-only for native training. See [docs/CONFIGURATION_POLICY.md](../docs/CONFIGURATION_POLICY.md) and [docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md).
 
 **`StreamTelemetry` lifecycle:** After the run finishes, the server closes the stream so the WUI client sees a normal end (EOF). If the stream were opened with no matching active run, it may end quickly while the engine is **idle**.
 
@@ -98,7 +97,8 @@ Follow these steps in order the first time you run the WUI on your machine.
 ### 1. Dependencies
 
 - [Go](https://go.dev/dl/) **1.22+**
-- **Python** with the package installed: `pip install -e ".[training]"` from the **repository root**, and `python` on `PATH`
+- **`wat2wasm`** from [WABT](https://github.com/WebAssembly/wabt) on `PATH` if you use **Build / edge artifacts** in the WUI (`corpus/trit_kernels.wat` → `qminiwasm-kernels.wasm`). Tier **1** builds optionally use **`wasm-opt`** (Binaryen) when present.
+- **Python** with the package installed: `pip install -e ".[training]"` from the **repository root**, and `python` on `PATH` (preflight, checkpoint → packed payload for edge builds, and other tooling)
 - **Optional (cloud only):** [OpenTofu](https://opentofu.org/docs/intro/install/) **`tofu`** or a **Terraform-compatible** CLI on `PATH` for [`infra/runpod`](../infra/runpod). End-to-end checklist: [docs/RUNPOD_QUICKSTART.md](../docs/RUNPOD_QUICKSTART.md). Host automation with Incus is documented in the separate ops runbook (see [Appendix](#appendix-troubleshooting--edge-cases)).
 
 ### 2. Environment setup

@@ -113,6 +113,19 @@ struct CoreModuleImpl : torch::nn::Module {
 
 TORCH_MODULE(CoreModule);
 
+torch::Tensor reconstruct_ptqtp_weight(const torch::Tensor& W, int num_planes) {
+  torch::Tensor r = W.detach().clone();
+  torch::Tensor acc = torch::zeros_like(r);
+  const double eps = 1e-8;
+  for (int p = 0; p < num_planes; ++p) {
+    auto s = r.abs().mean(1, true).clamp_min(eps);
+    auto tern = (r / s).round().clamp(-1.0, 1.0);
+    acc = acc + s * tern;
+    r = r - s * tern;
+  }
+  return acc;
+}
+
 bool read_file_all(const std::string& path, std::string* out, std::string* error_message) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
@@ -144,6 +157,7 @@ bool write_file_all(const std::string& path, std::string_view data, std::string*
     return false;
   }
   out.write(data.data(), static_cast<std::streamsize>(data.size()));
+  out.flush();
   if (!out) {
     set_err(error_message, "failed to write file: " + path);
     return false;
@@ -173,6 +187,8 @@ bool copy_linear_weight_bias(torch::nn::Linear& lin, const torch::Tensor& w,
 
 struct LibTorchTpemTrainer::Impl {
   CoreModule core_{nullptr};
+  CoreModule teacher_{nullptr};
+  bool has_teacher_ = false;
   std::unique_ptr<torch::optim::Adam> optim_;
   std::map<std::string, torch::Tensor> frozen_router_;
   double last_lr_ = 1e-3;
@@ -193,6 +209,8 @@ struct LibTorchTpemTrainer::Impl {
   void rebuild_core(std::int64_t d_model, std::int64_t io_d_model, int num_blocks) {
     torch::manual_seed(seed_);
     core_ = CoreModule(d_model, io_d_model, num_blocks);
+    teacher_ = nullptr;
+    has_teacher_ = false;
     rebuild_optim();
     frozen_router_.clear();
   }
@@ -313,6 +331,109 @@ struct LibTorchTpemTrainer::Impl {
     auto out = core_->forward(x);
     return torch::mse_loss(out, target).item<double>();
   }
+
+  double train_step_supervised(std::size_t batch_size, std::int64_t io_dim, const float* x_rm,
+                               const float* t_rm, std::uint64_t step_mix) {
+    (void)step_mix;
+    const auto b = static_cast<std::int64_t>(std::max<std::size_t>(1, batch_size));
+    auto x = torch::from_blob(const_cast<float*>(x_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                 .clone();
+    auto tgt = torch::from_blob(const_cast<float*>(t_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                   .clone();
+    core_->train();
+    optim_->zero_grad();
+    auto out = core_->forward(x);
+    auto loss = torch::mse_loss(out, tgt);
+    loss.backward();
+    optim_->step();
+    return loss.item<double>();
+  }
+
+  double eval_step_supervised(std::size_t batch_size, std::int64_t io_dim, const float* x_rm, const float* t_rm,
+                              std::uint64_t step_mix) {
+    (void)step_mix;
+    const auto b = static_cast<std::int64_t>(std::max<std::size_t>(1, batch_size));
+    auto x = torch::from_blob(const_cast<float*>(x_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                 .clone();
+    auto tgt = torch::from_blob(const_cast<float*>(t_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                   .clone();
+    core_->eval();
+    torch::NoGradGuard guard;
+    auto out = core_->forward(x);
+    return torch::mse_loss(out, tgt).item<double>();
+  }
+
+  bool clone_teacher_from_core(std::string* error_message) {
+    (void)error_message;
+    const std::int64_t d = core_->d_model();
+    const std::int64_t io = core_->io_d_model();
+    const int nb = core_->num_blocks();
+    teacher_ = CoreModule(d, io, nb);
+    torch::NoGradGuard g;
+    const auto ps = core_->parameters();
+    const auto pt = teacher_->parameters();
+    if (ps.size() != pt.size()) {
+      set_err(error_message, "teacher clone: parameter count mismatch");
+      return false;
+    }
+    for (std::size_t i = 0; i < ps.size(); ++i) {
+      pt[i].copy_(ps[i]);
+      pt[i].set_requires_grad(false);
+    }
+    teacher_->eval();
+    has_teacher_ = true;
+    return true;
+  }
+
+  void reset_teacher() {
+    teacher_ = nullptr;
+    has_teacher_ = false;
+  }
+
+  bool apply_ptqtp_reconstruct_experts(int num_planes, std::string* error_message) {
+    if (num_planes < 1) {
+      set_err(error_message, "ptqtp: num_planes must be >= 1");
+      return false;
+    }
+    torch::NoGradGuard g;
+    const int nb = core_->num_blocks();
+    for (int i = 0; i < nb; ++i) {
+      auto& w = core_->experts_[static_cast<std::size_t>(i)]->weight_;
+      auto recon = reconstruct_ptqtp_weight(w, num_planes);
+      if (!recon.sizes().equals(w.sizes())) {
+        set_err(error_message, "ptqtp: bad expert weight shape");
+        return false;
+      }
+      w.copy_(recon);
+    }
+    rebuild_optim();
+    return true;
+  }
+
+  double train_step_distill(std::size_t batch_size, std::int64_t io_dim, const float* x_rm, const float* t_rm,
+                            double lambda_teacher, std::uint64_t step_mix) {
+    (void)step_mix;
+    if (!has_teacher_ || !teacher_) {
+      return train_step_supervised(batch_size, io_dim, x_rm, t_rm, step_mix);
+    }
+    const auto b = static_cast<std::int64_t>(std::max<std::size_t>(1, batch_size));
+    auto x = torch::from_blob(const_cast<float*>(x_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                 .clone();
+    auto tgt = torch::from_blob(const_cast<float*>(t_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                   .clone();
+    core_->train();
+    optim_->zero_grad();
+    torch::Tensor teach_out;
+    {
+      torch::NoGradGuard ng;
+      teach_out = teacher_->forward(x);
+    }
+    auto stu_out = core_->forward(x);
+    auto loss = torch::mse_loss(stu_out, teach_out) + static_cast<float>(lambda_teacher) * torch::mse_loss(stu_out, tgt);
+    loss.backward();
+    optim_->step();
+    return loss.item<double>();
+  }
 };
 
 std::unique_ptr<LibTorchTpemTrainer> LibTorchTpemTrainer::create(double learning_rate, std::uint64_t seed,
@@ -414,9 +535,19 @@ bool LibTorchTpemTrainer::load_interchange(const std::string& path, std::string*
   return impl_->load_flat_tensors(tensors, error_message);
 }
 
-bool LibTorchTpemTrainer::save_interchange(const std::string& path, const std::string& run_id,
-                                           std::size_t epoch_1based, double train_loss, double val_loss,
-                                           double learning_rate, std::string* error_message) {
+InterchangeTensorSnapshot LibTorchTpemTrainer::capture_interchange_tensors() const {
+  InterchangeTensorSnapshot s;
+  s.d_model = impl_->core_->d_model();
+  s.io_d_model = impl_->core_->io_d_model();
+  s.num_ternary_blocks = impl_->core_->num_blocks();
+  s.tensors = impl_->tensors_for_save();
+  return s;
+}
+
+bool LibTorchTpemTrainer::write_interchange_to_path(const std::string& path, const std::string& run_id,
+                                                    std::size_t epoch_1based, double train_loss, double val_loss,
+                                                    double learning_rate, InterchangeTensorSnapshot snap,
+                                                    std::string* error_message) {
   try {
     const std::filesystem::path p(path);
     if (p.has_parent_path()) {
@@ -429,9 +560,9 @@ bool LibTorchTpemTrainer::save_interchange(const std::string& path, const std::s
 
   nlohmann::json env;
   env["format_version"] = kTrainableTpemFormatVersionV2;
-  env["d_model"] = impl_->core_->d_model();
-  env["num_ternary_blocks"] = impl_->core_->num_blocks();
-  env["io_d_model"] = impl_->core_->io_d_model();
+  env["d_model"] = snap.d_model;
+  env["num_ternary_blocks"] = snap.num_ternary_blocks;
+  env["io_d_model"] = snap.io_d_model;
   env["tensor_layout"] = "safetensors_f32";
   env["meta"] = nlohmann::json::object();
   env["training_meta"] = {
@@ -443,7 +574,7 @@ bool LibTorchTpemTrainer::save_interchange(const std::string& path, const std::s
   };
 
   const std::string env_str = env.dump();
-  auto st = encode_safetensors_f32(impl_->tensors_for_save(), error_message);
+  auto st = encode_safetensors_f32(snap.tensors, error_message);
   if (!st.has_value()) {
     return false;
   }
@@ -463,6 +594,14 @@ bool LibTorchTpemTrainer::save_interchange(const std::string& path, const std::s
   return true;
 }
 
+bool LibTorchTpemTrainer::save_interchange(const std::string& path, const std::string& run_id,
+                                           std::size_t epoch_1based, double train_loss, double val_loss,
+                                           double learning_rate, std::string* error_message) {
+  InterchangeTensorSnapshot snap = capture_interchange_tensors();
+  return write_interchange_to_path(path, run_id, epoch_1based, train_loss, val_loss, learning_rate, std::move(snap),
+                                   error_message);
+}
+
 double LibTorchTpemTrainer::train_step(std::size_t batch_size, std::uint64_t step_mix) {
   return impl_->train_step(batch_size, step_mix);
 }
@@ -472,6 +611,34 @@ double LibTorchTpemTrainer::eval_step(std::size_t batch_size, std::uint64_t step
 }
 
 void LibTorchTpemTrainer::set_learning_rate(double lr) { impl_->set_learning_rate(lr); }
+
+double LibTorchTpemTrainer::train_step_supervised(std::size_t batch_size, std::int64_t io_dim,
+                                                  const float* x_row_major, const float* target_row_major,
+                                                  std::uint64_t step_mix) {
+  return impl_->train_step_supervised(batch_size, io_dim, x_row_major, target_row_major, step_mix);
+}
+
+double LibTorchTpemTrainer::eval_step_supervised(std::size_t batch_size, std::int64_t io_dim,
+                                                 const float* x_row_major, const float* target_row_major,
+                                                 std::uint64_t step_mix) {
+  return impl_->eval_step_supervised(batch_size, io_dim, x_row_major, target_row_major, step_mix);
+}
+
+bool LibTorchTpemTrainer::clone_teacher_from_core(std::string* error_message) {
+  return impl_->clone_teacher_from_core(error_message);
+}
+
+void LibTorchTpemTrainer::reset_teacher() { impl_->reset_teacher(); }
+
+bool LibTorchTpemTrainer::apply_ptqtp_reconstruct_experts(int num_planes, std::string* error_message) {
+  return impl_->apply_ptqtp_reconstruct_experts(num_planes, error_message);
+}
+
+double LibTorchTpemTrainer::train_step_distill(std::size_t batch_size, std::int64_t io_dim,
+                                               const float* x_row_major, const float* target_row_major,
+                                               double lambda_teacher, std::uint64_t step_mix) {
+  return impl_->train_step_distill(batch_size, io_dim, x_row_major, target_row_major, lambda_teacher, step_mix);
+}
 
 LibTorchTpemTrainer::~LibTorchTpemTrainer() = default;
 

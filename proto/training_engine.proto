@@ -4,10 +4,39 @@ package qminiwasm.trainingrpc;
 
 option go_package = "github.com/kennetholsenatm-gif/qminiwasm-core/training-wui/trainingrpc;trainingrpc";
 
+// Hugging Face tabular fetch + encoding hints for the native C++ training engine.
+message HfDatasetParams {
+  string dataset_id = 1;       // e.g. code-search-net/code_search_net
+  string config_name = 2;      // e.g. python
+  string split = 3;            // e.g. train
+  string revision = 4;         // optional Hub revision (branch/tag/commit)
+  uint32 num_samples = 5;      // max rows to pull (0 = engine default cap)
+  double mesh_blend_fraction = 6; // 0..1 extra synthetic mesh-like rows mixed in (deterministic hash)
+}
+
+// Automated cascade curriculum: teacher fit → PTQTP on student → heal vs frozen teacher → optional gate.
+message CascadeCurriculumLoopParams {
+  bool enabled = 1;
+  uint32 max_heal_rounds = 2;
+  // Absolute path: teacher checkpoint after phase 1 (interchange v2).
+  string teacher_checkpoint_path = 3;
+  uint32 ptqtp_num_planes = 4;
+  double gate_target_val_mse = 5;
+  double gate_max_tpem_mib = 6;
+  bool run_taxonomy_linter = 7;
+  double heal_learning_rate_scale = 8;
+  // Fraction of total epochs for phase-1 teacher (0 = use half of epochs).
+  double teacher_epoch_fraction = 9;
+  uint32 heal_epochs_per_round = 10;
+  // Outer curriculum: on gate fail, reload teacher checkpoint and repeat PTQTP+heal (1 = single pass).
+  uint32 max_curriculum_cycles = 11;
+}
+
 message TrainingConfig {
   string run_id = 1;
   string dataset_uri = 2;
   string model_uri = 3;
+  // Supervised / generic runs: epoch cap. Native cascade: caps teacher+heal budget (see cascade_loop).
   uint32 epochs = 4;
   uint32 batch_size = 5;
   uint32 micro_batch_size = 6;
@@ -27,6 +56,10 @@ message TrainingConfig {
   uint32 d_model = 17;
   uint32 io_d_model = 18;
   uint32 num_ternary_blocks = 19;
+  HfDatasetParams hf = 20;
+  CascadeCurriculumLoopParams cascade_loop = 21;
+  // When true, WUI must not fall back to Python for this run (Go-side hint).
+  bool use_native_engine_only = 22;
 }
 
 message StartTrainingRequest {

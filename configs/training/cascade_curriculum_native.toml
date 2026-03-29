@@ -1,0 +1,47 @@
+# Native C++ automated cascade curriculum (TrainingEngineService + LibTorch).
+# Production-oriented defaults for merge with configs/training/native_cascade/tier_*.toml.
+# WUI: requires gRPC training server (qminiwasm_training_engine_server); no Python training fallback.
+
+[hardware]
+accelerator = "cpu"
+
+[training]
+# Total epochs budget: teacher (~teacher_epoch_fraction) + heal (remainder across max_heal_rounds).
+epochs = 480
+# batch_size ignored for gRPC native cascade — Training WUI infers batch from [model] (activation scratch budget).
+batch_size = 8
+learning_rate = 0.0001
+seed = 42
+
+[data]
+source = "hf_tabular"
+path = "code-search-net/code_search_net"
+
+[huggingface]
+dataset_config = "python"
+split = "train"
+num_samples = 65536
+mesh_blend_fraction = 0.05
+
+[model]
+d_model = 128
+io_d_model = 128
+num_ternary_blocks = 1
+
+[cascade_curriculum_loop]
+enabled = true
+max_heal_rounds = 8
+teacher_checkpoint_path = "artifacts/models/cascade_native/teacher.pt"
+ptqtp_num_planes = 2
+gate_target_val_mse = 0
+gate_max_tpem_mib = 512
+run_taxonomy_linter = false
+heal_learning_rate_scale = 0.8
+teacher_epoch_fraction = 0.5
+heal_epochs_per_round = 8
+max_curriculum_cycles = 2
+
+[checkpoint]
+save_path = "artifacts/models/cascade_native/final.pt"
+best_path = "artifacts/models/cascade_native/best.pt"
+latest_path = "artifacts/models/cascade_native/latest.pt"

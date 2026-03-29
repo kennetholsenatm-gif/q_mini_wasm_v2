@@ -177,6 +177,11 @@
       display: flex;
       flex-direction: column;
       gap: var(--space-md);
+      max-width: min(72rem, 100%);
+      margin-left: auto;
+      margin-right: auto;
+      width: 100%;
+      box-sizing: border-box;
     }
     #trainingCanvas.floating .training-body {
       display: contents;
@@ -553,7 +558,7 @@
     }
     .training-grid-wrap.lego-flow {
       grid-template-columns: 1fr;
-      max-width: 52rem;
+      max-width: min(72rem, 100%);
       margin-left: auto;
       margin-right: auto;
     }
@@ -1009,8 +1014,16 @@
     }
     #panelMission #missionGrid {
       grid-template-columns: minmax(340px, 420px) 1fr;
-      gap: var(--space-lg);
+      gap: var(--space-md);
       align-items: start;
+    }
+    #panelMission [data-card-id="cascade-native-hint"] {
+      grid-column: 1 / -1;
+      max-width: none;
+      margin-bottom: var(--space-sm);
+    }
+    #panelMission [data-card-id="run-controls"] {
+      grid-column: 1;
     }
     #panelMission h2 {
       letter-spacing: 0.06em;
@@ -1028,7 +1041,7 @@
     }
     #panelMission [data-card-id="live-telemetry"] {
       grid-column: 2;
-      min-height: 520px;
+      min-height: min(420px, 55vh);
     }
     #panelMission #missionLogHost [data-card-id="training-log"] {
       min-height: 420px;
@@ -1303,7 +1316,7 @@
     <div class="topbar">
       <div>
         <h1>QMiniWASM training dashboard</h1>
-        <p class="sub">Default: <strong>native</strong> LibTorch TPEM over gRPC (<code>configs/wui.toml</code>). Optional <code>python -m qminiwasm.engine</code> for the full PyTorch loop; preflight and Mission Control prioritize native/ternary.</p>
+        <p class="sub">Default: <strong>native</strong> LibTorch TPEM over gRPC (<code>configs/wui.toml</code>). Training from the WUI does not spawn Python; RunPod-on-pod uses <code>qmw-grpc-train</code> + the C++ server on the GPU host.</p>
         <p class="sub" id="serverBindBanner" style="cursor:pointer;text-decoration:underline dotted;" title="Click to copy bind address">Server bind: detecting...</p>
         <p class="sub" id="serverBindCopyStatus"></p>
       </div>
@@ -1363,6 +1376,7 @@
     <progress id="stickyEpochProgress" max="100" value="0" style="width:260px;"></progress>
     <span id="stickyGrpcTelemetryLabel" class="hint" style="margin:0;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Latest C++ engine telemetry (step, lr, throughput)">gRPC: —</span>
     <span id="stickyRunLabel" class="hint" style="margin:0;">No active run</span>
+    <span id="stickyRunPhase" class="hint" style="margin:0;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Latest training stage from telemetry"></span>
   </div>
   <nav class="app-tabs" role="tablist" aria-label="Main views">
     <button type="button" class="app-tab active" id="tabBtnTraining" role="tab" aria-selected="true">Training</button>
@@ -1444,6 +1458,7 @@
           <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="all" checked /> All</label>
           <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="grpc" /> C++ gRPC (native / default)</label>
           <label class="checkline mb-0"><input type="radio" name="telemetryFilter" value="python" /> Python loop (optional)</label>
+          <label class="checkline mb-0"><input type="checkbox" id="telemetryCascadeOnly" /> <code>cascade_*</code> stages only</label>
         </div>
         <div id="telemetryStatus" class="status">No run selected.</div>
         <canvas id="chartReturn" height="220" class="stack-sm"></canvas>
@@ -1647,9 +1662,9 @@
           <div>
             <label for="bQuantumPolicy">Quantum execution mode</label>
             <select id="bQuantumPolicy">
+              <option value="simulator_only" selected>Simulator only</option>
               <option value="prefer_hardware_fallback">Auto: hardware preferred, fallback to simulator</option>
               <option value="hardware_only">Hardware only (fail if unavailable)</option>
-              <option value="simulator_only">Simulator only</option>
             </select>
           </div>
           <div>
@@ -1741,7 +1756,7 @@
           <strong>Native LibTorch TPEM (default):</strong> <code>d_model</code> and <code>num_ternary_blocks</code> size the <strong>ternary STE stack</strong>; <code>io_d_model</code> is encoder / mesh–HF row width. Saved under <code>[model]</code> — gRPC <code>StartTraining</code> uses these for <strong>cold start</strong> when no checkpoint/tpem load path is set (stem/head when <code>io_d_model ≠ d_model</code>).
         </p>
         <p class="hint hint-block" style="margin-top:0">
-          <strong>Optional Python loop:</strong> the same TOML drives <code>EngineConfig</code> if you run <code>python -m qminiwasm.engine</code> instead of native.
+          <strong>Native only from the WUI:</strong> the same TOML maps to <code>TrainingConfig</code> for the C++ engine; run <code>python -m qminiwasm.engine</code> only manually outside the WUI if you need the legacy loop.
         </p>
         <p class="hint hint-block" style="margin-top:0">
           <strong>Epochs / batch / LR</strong> and <strong>data paths</strong> are set in steps 1–3 and the quick grid above — the schema list below skips those keys so you do not edit them twice.
@@ -1937,7 +1952,7 @@
       <section class="dash-card" data-card-id="start-config" data-col="1" data-lego-step="5">
         <h2>Launch training</h2>
         <p class="hint hint-block" style="margin-top:0">
-          <strong>Default path is the native C++ engine</strong> (LibTorch over gRPC at <code>configs/wui.toml</code> <code>grpc_addr</code>). Start <code>qminiwasm_training_engine_server</code> first (e.g. <code>scripts/start-training-stack.ps1</code>). For the full Python PyTorch loop instead, set <code>training_runtime_mode = &quot;python&quot;</code> in <code>configs/wui.toml</code> or use <code>auto</code> to fall back to Python if gRPC is down.
+          <strong>Default path is the native C++ engine</strong> (LibTorch over gRPC at <code>configs/wui.toml</code> <code>grpc_addr</code>). Start <code>qminiwasm_training_engine_server</code> first (e.g. <code>scripts/start-training-stack.ps1</code>). <code>auto</code> requires gRPC to be reachable (no Python fallback). <code>training_runtime_mode = &quot;python&quot;</code> is not supported for WUI-started runs.
         </p>
         <p class="hint hint-block" style="margin-top:0">
           <strong>Only this button starts the engine.</strong> Pick the TOML (usually <code>wui_working.toml</code>). Quantum settings come from <strong>step 2</strong>; <strong>execution target</strong> from the header — you confirm both in the launch dialog.
@@ -1946,9 +1961,9 @@
         <label for="cfg">Config file to run</label>
         <select id="cfg"></select>
         <div class="model-card stack-md" id="edgeDeploymentProfileCard" style="margin-top:var(--space-md)">
-          <h3 style="margin-top:0">Edge deployment profile</h3>
+          <h3 style="margin-top:0">Step 1 — Enclave tier for this automated job</h3>
           <p class="hint" style="margin:0 0 var(--space-sm)">
-            Sent with training start (<code>POST /api/runs</code> or <code>/api/training/start</code>) as <code>enclave_tier</code>, <code>memory_limit_mb</code>, and <code>hardware_accelerator</code>.
+            Choose the tier <strong>before</strong> you click “Apply tier-matched native cascade”. The same values are sent with <code>POST /api/runs</code> as <code>enclave_tier</code>, <code>memory_limit_mb</code>, and <code>hardware_accelerator</code>. <strong>Launch training</strong> does not guess tier — it runs the <strong>selected config file</strong>; use Step 2 to bake this tier into a new <code>.wui_native_cascade_*.toml</code>.
           </p>
           <label for="edgeProfileTier">Enclave tier</label>
           <select id="edgeProfileTier" style="max-width:100%;box-sizing:border-box">
@@ -1977,13 +1992,34 @@
             </div>
           </fieldset>
         </div>
+        <div id="autotrainConfirmPanel" class="review-box stack-sm" style="margin-top:var(--space-md);border-left:4px solid var(--accent-primary,#3b82f6);font-size:var(--text-sm)" aria-live="polite">
+          <strong>Autotrain job (this launch)</strong>
+          <div id="autotrainConfirmBody" class="hint" style="margin:var(--space-sm) 0 0;line-height:1.55">
+            Choose enclave tier above, then apply tier-matched cascade or pick a config and refresh preflight.
+          </div>
+        </div>
+        <div class="review-box stack-sm" style="margin-top:var(--space-md);font-size:var(--text-sm)">
+          <strong>Step 2 — Bake tier into working TOML (native cascade)</strong> (C++ / gRPC): teacher fit → PTQTP → distillation heal → gate.
+          Requires <code>qminiwasm_training_engine_server</code>, HF tabular data (or synthetic fallback), and optional <code>HF_TOKEN</code> for private Hub sets.
+          <div class="hint" style="margin-top:6px">
+            Merges <code>cascade_curriculum_native.toml</code> with <code>configs/training/native_cascade/tier_*.toml</code> for the <strong>Enclave tier</strong> in Step 1 (samples, batch/epochs, model dims, checkpoints, <code>gate_max_tpem_mib</code>). <strong>Hub data</strong> comes from <strong>Step 1 · Dataset mix</strong> when you check datasets there (and Step 1 target samples cap <code>num_samples</code> vs tier). If Step 1 has <strong>no</strong> checkboxes, the base preset dataset (CodeSearchNet) stays.             <strong>Native C++ / gRPC</strong> loads <strong>one</strong> Hub dataset only: the <strong>first</strong> row in the mix if you selected several (full mix is kept in TOML for Python).
+          </div>
+          <p class="hint" style="margin-top:6px">
+            <strong>Production wall-clock:</strong> merged tier defaults use long curricula and large sample budgets—runs are <strong>supposed</strong> to take <strong>hours</strong> (often many hours on CPU, especially tiers 3–5). That is normal, not a hang.
+            <strong>Batch size</strong> for native cascade is <strong>automatic</strong> from model geometry when you launch over gRPC (wizard Step 4 batch is ignored for that path); preflight shows the value the engine will use.
+          </p>
+          <div class="row stack-sm align-center flex-wrap" style="margin-top:6px;gap:8px">
+            <button type="button" class="ghost" id="btnSelectCascadeNative">Apply tier-matched native cascade</button>
+            <a class="hint" href="?config=configs/training/cascade_curriculum_native.toml" id="linkCascadeNativeQuery">Open base only (<code>?config=…</code>)</a>
+          </div>
+        </div>
         <div id="enclaveFootprintBanner" class="review-box stack-sm" style="margin-top:var(--space-md);display:none;font-size:var(--text-sm)" aria-live="polite">
           <strong>Enclave footprint (live)</strong>
           <div id="enclaveFootprintBannerText">—</div>
         </div>
         <div id="launchExecSummary" class="hint hint-block stack-sm mt-md" style="margin-top:var(--space-md)"></div>
         <div class="row mt-md">
-            <button type="button" class="primary" id="btnStart" title="Starts training; cloud targets may incur cost">Launch training</button>
+            <button type="button" class="primary" id="btnStart" title="Starts the process for the selected config only; tier dropdown alone does not change the TOML">Launch training</button>
         </div>
         <p class="status stack-md" id="msg" aria-live="polite"></p>
         <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
@@ -2108,11 +2144,17 @@
             Floating panels
           </label>
           <button type="button" class="ghost" id="btnResetMissionLayout">Reset layout</button>
-          <span class="hint" style="margin:0">Drag Mission Control cards by title; resize from the corner grip.</span>
+          <span class="hint" style="margin:0">
+            <strong>Mission Control</strong> — telemetry, alerts, and logs; the <strong>Training</strong> tab holds the wizard. Drag cards by title; resize from the corner grip.
+          </span>
         </div>
-        <section>
-          <h2>Mission Control</h2>
-          <p class="hint">Active runtime telemetry, alerts, and logs are consolidated here while the <strong>Training</strong> tab holds the setup wizard.</p>
+        <section class="dash-card" data-card-id="cascade-native-hint" data-col="1">
+          <h2 style="font-size:var(--text-md)">Native cascade preset</h2>
+          <p class="hint" style="margin:0">Uses <strong>Training → Step 1</strong> tier and <strong>Step 1 Dataset mix</strong> when merging (same as Training tab button). Native engine uses the <strong>first</strong> mix entry only if multiple are checked. Writes <code>.wui_native_cascade_*.toml</code> and refreshes preflight. Start the gRPC training engine first. Expect <strong>hours</strong> per launch with production epoch/sample defaults.</p>
+          <div class="row stack-sm" style="margin-top:var(--space-sm)">
+            <button type="button" class="ghost" id="btnCascadePresetMission">Apply tier-matched native cascade</button>
+          </div>
+          <span class="dash-resize-handle" aria-hidden="true" title="Resize panel"></span>
         </section>
         <div class="training-grid-wrap" id="missionGrid"></div>
         <div id="missionLogHost" class="stack-md"></div>
@@ -2183,7 +2225,7 @@
         </div>
         <div class="infra-section dash-card billing-surface-warn" data-card-id="infra-tfvars">
           <h2>terraform.tfvars</h2>
-          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (header target), the engine runs on the GPU pod after SSH sync; turn that off in <strong>Execution target → Target options</strong> to run <code>python -m qminiwasm.engine</code> on the WUI host.</p>
+          <p class="hint mb-sm">Edits <code>infra/runpod/terraform.tfvars</code> on disk (gitignored). Uncomment and set variables from the example; save before <strong>plan</strong> / <strong>apply</strong>. With <strong>RunPod</strong> and <strong>train on pod</strong> (header target), the native C++ server + <code>qmw-grpc-train</code> run on the GPU pod after SSH sync; turn that off to run gRPC training on the WUI host against a local <code>qminiwasm_training_engine_server</code>.</p>
           <label for="tfvarsEditor" class="sr-only">terraform.tfvars contents</label>
           <textarea id="tfvarsEditor" spellcheck="false" wrap="off" placeholder="# Load example or paste HCL variable assignments…"></textarea>
           <div class="row stack-md align-center">
@@ -2465,6 +2507,8 @@
     let logOffset = 0;
     let activeRunId = null;
     let stickyLastEpoch = 0;
+    let stickyPhaseLastTs = 0;
+    let stickyHasSeenTrainingStep = false;
     let infraFloatPendingSnap = false;
     let legoStep = 1;
     let lastResumeAvailable = false;
@@ -2498,6 +2542,9 @@
     let telemetryIdleTimer = null;
     /** Mission Control filter: all | grpc | python */
     let telemetryStreamFilter = "all";
+    /** When true, main metrics table shows only rows whose stage starts with cascade_ */
+    let telemetryCascadeStagesOnly = false;
+    const CASCADE_NATIVE_CFG = "configs/training/cascade_curriculum_native.toml";
     const TELEMETRY_ROW_CAP = 200;
     const TELEMETRY_AUX_ROW_CAP = 80;
     const TELEMETRY_LIFECYCLE_CAP = 40;
@@ -2511,6 +2558,13 @@
       if (telemetryStreamFilter === "grpc") return src === TELEMETRY_SOURCE_CPP;
       if (telemetryStreamFilter === "python") return src === TELEMETRY_SOURCE_PY;
       return true;
+    }
+
+    function telemetryMetricRowVisible(msg) {
+      if (!telemetryFilterAllowsMetric(msg)) return false;
+      if (!telemetryCascadeStagesOnly) return true;
+      const st = msg && msg.stage != null ? String(msg.stage) : "";
+      return st.startsWith("cascade_");
     }
     const BASIC_SCHEMA_IDS = new Set([
       "hardware.accelerator",
@@ -2739,6 +2793,89 @@
       lm.value = String(row.linearMiB);
       roleEl.value = `${row.cls} · ${row.role}`;
       if (btier) btier.value = String(t);
+      updateAutotrainConfirmPanel();
+    }
+
+    function autotrainBundleRelForTier(t) {
+      if (t === 1) return "configs/training/native_cascade/tier_edge_constrained.toml";
+      if (t === 2) return "configs/training/native_cascade/tier_fog_node.toml";
+      return "configs/training/native_cascade/tier_xpu_cluster.toml";
+    }
+
+    function autotrainEngineTaxonomyExplain(t) {
+      if (t === 1) return "edge_constrained (gRPC taxonomy empty string → C++ default)";
+      if (t === 2) return "fog_node (gRPC: meso)";
+      return "xpu_cluster (gRPC: macro; tiers 3–5 share tier_xpu_cluster.toml — ~1B scalars, ternary STE + PTQTP; TOML stores your enclave_tier)";
+    }
+
+    function updateAutotrainConfirmPanel() {
+      const body = $("autotrainConfirmBody");
+      if (!body) return;
+      const t = parseInt(String($("edgeProfileTier") && $("edgeProfileTier").value ? $("edgeProfileTier").value : "2"), 10) || 2;
+      const prof = QMW_ENCLAVE_PROFILE.find((r) => r.tier === t) || QMW_ENCLAVE_PROFILE[1];
+      const cfg = ($("cfg") && $("cfg").value ? $("cfg").value : "").trim();
+      const last = window.__qmwLastPreflight || {};
+      const natErr = last.native_grpc_training_config_error;
+      const nat = last.native_grpc_training_config;
+      let h = '<ul style="margin:0;padding-left:1.25rem;line-height:1.55">';
+      h += `<li><strong>WUI enclave tier:</strong> ${t} — ${escapeHtml(prof.cls)} (~${prof.linearMiB} MiB linear hint)</li>`;
+      h += `<li><strong>Engine taxonomy:</strong> ${escapeHtml(autotrainEngineTaxonomyExplain(t))}</li>`;
+      h += `<li><strong>Overlay merged by “Apply tier-matched”:</strong> <code>${escapeHtml(autotrainBundleRelForTier(t))}</code></li>`;
+      h += `<li><strong>Config selected for Launch training:</strong> <code>${escapeHtml(cfg || "(none)")}</code></li>`;
+      let step1MixCount = 0;
+      try {
+        const mix = typeof resolveDatasetMixSpecsForSchema === "function" ? resolveDatasetMixSpecsForSchema() : [];
+        const n = Array.isArray(mix) ? mix.length : 0;
+        step1MixCount = n;
+        if (n === 0) {
+          h += `<li><strong>Step 1 Dataset mix:</strong> none checked — Apply tier-matched keeps base CodeSearchNet unless you select Hub rows in Step 1.</li>`;
+        } else {
+          const first = mix[0];
+          const rest = n > 1 ? ` (+${n - 1} more; <strong>native uses first only</strong>)` : "";
+          h += `<li><strong>Step 1 Dataset mix:</strong> ${n} source(s) — first <code>${escapeHtml(first.path || "")}</code>${rest}</li>`;
+        }
+      } catch (_) {
+        h += `<li><strong>Step 1 Dataset mix:</strong> (unable to read)</li>`;
+      }
+      h += "</ul>";
+      const nc = window.__qmwLastNativeCascadeApply;
+      if (nc && nc.native_uses_first_spec_only) {
+        h +=
+          '<p style="margin:var(--space-sm) 0 0;font-weight:600;color:var(--text-primary)">Warning: last Apply tier-matched wrote multiple Hub sources; <strong>native gRPC trains on the first only</strong>. Use Python engine for a true multi-dataset blend.</p>';
+      } else if (step1MixCount > 1) {
+        h +=
+          '<p style="margin:var(--space-sm) 0 0;font-weight:600;color:var(--text-primary)">Note: Step 1 has multiple Hub sources — <strong>native gRPC will use the first only</strong> after you Apply tier-matched (full mix stays in TOML for Python).</p>';
+      }
+      if (natErr) {
+        h += `<p style="margin:var(--space-sm) 0 0;color:var(--text-secondary)">Preflight native preview error: ${escapeHtml(String(natErr))}</p>`;
+      } else if (nat && typeof nat === "object") {
+        const tt = nat.taxonomy_tier != null && String(nat.taxonomy_tier) !== "" ? String(nat.taxonomy_tier) : "(empty → edge default)";
+        const ds = nat.dataset_uri != null && String(nat.dataset_uri) !== "" ? String(nat.dataset_uri) : "—";
+        const hf =
+          nat.hf_dataset_id != null && String(nat.hf_dataset_id) !== ""
+            ? `${nat.hf_dataset_id} · samples=${nat.hf_num_samples ?? "—"} · split=${nat.hf_split ?? "—"}`
+            : "";
+        h += '<p style="margin:var(--space-sm) 0 0"><strong>Preflight → gRPC preview</strong> (from selected config): ';
+        h += `taxonomy_tier=<code>${escapeHtml(tt)}</code>, dataset_uri=<code>${escapeHtml(ds)}</code>`;
+        if (hf) h += `, HF=<code>${escapeHtml(hf)}</code>`;
+        h += `, epochs=${nat.epochs ?? "—"}, batch=${nat.batch_size ?? "—"}. `;
+        if (nat.cascade_enabled) {
+          const off = nat.cascade_gate_mse != null && Number(nat.cascade_gate_mse) <= 0;
+          h += `<strong>Native cascade ON</strong>${off ? " · absolute MSE gate off (≤0)" : ` · MSE gate ≤ ${nat.cascade_gate_mse}`}. `;
+        } else {
+          h += "<strong>Native cascade OFF</strong> in this file. ";
+        }
+        if (nat.checkpoint_save_path) {
+          h += `Final checkpoint: <code>${escapeHtml(String(nat.checkpoint_save_path))}</code>.`;
+        }
+        h += "</p>";
+      } else {
+        h +=
+          '<p style="margin:var(--space-sm) 0 0;color:var(--text-secondary)">Refresh preflight to see dataset, samples, and taxonomy the gRPC server will receive for the selected config.</p>';
+      }
+      h +=
+        '<p style="margin:var(--space-sm) 0 0"><strong>Launch training</strong> runs only the <strong>selected config</strong> — not the tier dropdown by itself. Click <strong>Apply tier-matched native cascade</strong> first if you want this tier baked into a new working TOML. With native cascade + production defaults, a single job can run for <strong>hours</strong>; watch telemetry and logs, not the clock.</p>';
+      body.innerHTML = h;
     }
 
     function refreshEnclaveFootprintFromLogs() {
@@ -2993,7 +3130,8 @@
       for (const tr of tb.querySelectorAll("tr")) {
         const pill = tr.querySelector(".telemetry-pill");
         const src = pill ? pill.textContent : TELEMETRY_SOURCE_PY;
-        tr.style.display = telemetryFilterAllowsMetric({ telemetry_source: src }) ? "" : "none";
+        const stage = tr.dataset.telemetryStage != null ? tr.dataset.telemetryStage : "";
+        tr.style.display = telemetryMetricRowVisible({ telemetry_source: src, stage }) ? "" : "none";
       }
       refreshTelemetryAuxRowVisibility();
     }
@@ -3082,6 +3220,7 @@
       const src =
         metric.telemetry_source != null ? String(metric.telemetry_source) : TELEMETRY_SOURCE_PY;
       const tr = document.createElement("tr");
+      tr.dataset.telemetryStage = metric.stage != null ? String(metric.stage) : "";
       const pillClass = src === TELEMETRY_SOURCE_CPP ? "telemetry-pill telemetry-pill-cpp" : "telemetry-pill telemetry-pill-py";
       const ep = telemetryGrpcEpochDisplay(metric);
       tr.innerHTML =
@@ -3091,7 +3230,7 @@
         `<td>${escapeHtml(String(metric.mean_mse ?? ""))}</td>` +
         telemetryGrpcExtraCells(metric) +
         `<td><span class="${pillClass}">${escapeHtml(src)}</span></td>`;
-      tr.style.display = telemetryFilterAllowsMetric(metric) ? "" : "none";
+      tr.style.display = telemetryMetricRowVisible(metric) ? "" : "none";
       tb.insertBefore(tr, tb.firstChild);
       while (tb.rows.length > TELEMETRY_ROW_CAP) tb.removeChild(tb.lastChild);
     }
@@ -3160,7 +3299,7 @@
         st.textContent = `Receiving telemetry (${telemetryMetricCount} points)`;
         st.className = "status done";
       }
-      const allowCharts = telemetryFilterAllowsMetric(metric);
+      const allowCharts = telemetryMetricRowVisible(metric);
       const label = telemetryGrpcEpochDisplay(metric).text;
       if (allowCharts && chartReturn) {
         chartReturn.data.labels.push(label);
@@ -3207,6 +3346,13 @@
         ]
           .filter(Boolean)
           .join(" | ");
+      }
+      if (metric.engine === "grpc" || metric.telemetry_source === TELEMETRY_SOURCE_CPP) {
+        maybeUpdateStickyPhase({
+          stage: metric.stage,
+          event_type: metric.event_type,
+          message: metric.grpc_message || metric.message,
+        });
       }
     }
 
@@ -3265,6 +3411,11 @@
           appendTelemetryEnclaveRow(msg);
         } else if (msg.type === "lifecycle") {
           telemetryStreamEventCount += 1;
+          maybeUpdateStickyPhase({
+            stage: "lifecycle",
+            event_type: String(msg.state || ""),
+            message: msg.message || msg.detail || "",
+          });
           appendTelemetryLifecycleRow(msg);
         }
       };
@@ -3609,6 +3760,46 @@
       }
     }
 
+    function clearStickyRunPhase() {
+      const el = $("stickyRunPhase");
+      if (el) {
+        el.textContent = "";
+        el.title = "";
+      }
+      stickyPhaseLastTs = 0;
+      stickyHasSeenTrainingStep = false;
+    }
+
+    function maybeUpdateStickyPhase(payload) {
+      const el = $("stickyRunPhase");
+      if (!el || !payload) return;
+      const stage = payload.stage != null ? String(payload.stage).trim() : "";
+      const etRaw = payload.event_type != null ? String(payload.event_type).trim() : "";
+      if (!stage && !etRaw) return;
+      const stLower = stage.toLowerCase();
+      const etLower = etRaw.toLowerCase();
+      if (etLower === "step") stickyHasSeenTrainingStep = true;
+
+      const alwaysRefresh =
+        etLower === "epoch_throughput" ||
+        etLower === "checkpoint" ||
+        etLower === "checkpoint_begin" ||
+        etLower === "error" ||
+        etLower === "step" ||
+        stLower === "lifecycle" ||
+        stLower.includes("cascade");
+      const isSetupSummary = stLower === "training_setup" && etLower === "enclave_summary";
+      if (isSetupSummary && stickyHasSeenTrainingStep && !alwaysRefresh) return;
+
+      const now = Date.now();
+      if (!alwaysRefresh && now - stickyPhaseLastTs < 800) return;
+      stickyPhaseLastTs = now;
+      const bits = [stage, etRaw].filter(Boolean);
+      el.textContent = bits.length ? `Phase: ${bits.join(" · ")}` : "";
+      const m = payload.message != null ? String(payload.message) : "";
+      if (m) el.title = m.slice(0, 220);
+    }
+
     /** Epoch / progress only — avoids rebuilding the runs list every log poll (flicker). */
     async function refreshStickyEpochFromNodeHealth() {
       try {
@@ -3616,15 +3807,18 @@
         const nhd = await nh.json();
         const ar = nhd.node_health && nhd.node_health.active_run ? nhd.node_health.active_run : null;
         if (ar) {
-          const cur = Number(ar.epoch || 0);
-          const tot = Number(ar.total_epochs || 0);
-          $("stickyEpochLabel").textContent = `Epoch: ${cur || "--"} / ${tot || "--"}`;
-          if (tot > 0) {
-            $("stickyEpochProgress").value = Math.max(0, Math.min(100, (cur / tot) * 100));
+          const curN = Number(ar.epoch);
+          const totN = Number(ar.total_epochs);
+          const curDisp = Number.isFinite(curN) ? String(curN) : "--";
+          const totDisp = Number.isFinite(totN) && totN > 0 ? String(totN) : "--";
+          $("stickyEpochLabel").textContent = `Epoch: ${curDisp} / ${totDisp}`;
+          if (Number.isFinite(totN) && totN > 0 && Number.isFinite(curN)) {
+            const pct = Math.min(100, Math.max(0, (curN / totN) * 100));
+            $("stickyEpochProgress").value = pct;
           }
-          if (cur > stickyLastEpoch && cur > 0) {
-            addToast(`Epoch ${cur} complete`);
-            stickyLastEpoch = cur;
+          if (curN > stickyLastEpoch && curN > 0) {
+            addToast(`Epoch ${curN} complete`);
+            stickyLastEpoch = curN;
           }
         }
       } catch (_) {}
@@ -3643,15 +3837,28 @@
         $("stickyEpochLabel").textContent = "Epoch: -- / --";
         $("stickyEpochProgress").value = 0;
         $("stickyRunLabel").textContent = "No active run";
+        clearStickyRunPhase();
+        stickyLastEpoch = 0;
       } else {
-        $("stickyRunLabel").textContent = `Active run: ${active.id.slice(0,8)}`;
+        $("stickyRunLabel").textContent = `Active run: ${active.id.slice(0, 8)}`;
         await refreshStickyEpochFromNodeHealth();
       }
       for (const run of runs) {
         const li = document.createElement("li");
         const left = document.createElement("span");
         const rt = run.run_target && run.run_target !== "local" ? ` <span class="badge">${escapeHtml(run.run_target)}</span>` : "";
-        left.innerHTML = `<code>${run.id.slice(0, 8)}</code>${rt} · ${escapeHtml(run.config)}`;
+        let avSuffix = "";
+        const av = run.artifact_validation;
+        if (av && !run.running) {
+          if (av.skipped) {
+            avSuffix = ` <span class="hint" title="No local validation">artifacts: —</span>`;
+          } else if (av.ok) {
+            avSuffix = ` <span class="badge" title="${escapeHtml(String(av.summary || "TPEM interchange OK"))}">artifacts OK</span>`;
+          } else {
+            avSuffix = ` <span class="badge" title="${escapeHtml(String(av.summary || "see checks"))}">artifacts fail</span>`;
+          }
+        }
+        left.innerHTML = `<code>${run.id.slice(0, 8)}</code>${rt} · ${escapeHtml(run.config)}${avSuffix}`;
         const right = document.createElement("span");
         let st = run.running ? "running" : run.error ? "error" : "done";
         right.className = "status " + st;
@@ -3822,6 +4029,7 @@
           : "No dataset mix selected.";
       el.className = "status " + (n > 0 || ov ? "done" : "");
       syncStep3FromDatasetMix();
+      updateAutotrainConfirmPanel();
     }
 
     function renderDatasetBuilderCatalog() {
@@ -4322,7 +4530,7 @@
       const missionGrid = $("missionGrid");
       const missionLogHost = $("missionLogHost");
       if (!missionGrid || !missionLogHost) return;
-      const missionCardIds = ["run-controls", "quick-metrics", "live-telemetry", "runs"];
+      const missionCardIds = ["cascade-native-hint", "run-controls", "quick-metrics", "live-telemetry", "runs"];
       for (const id of missionCardIds) {
         const card = document.querySelector(`[data-card-id="${id}"]`);
         if (card) missionGrid.appendChild(card);
@@ -5384,8 +5592,9 @@
           const block =
             "# rsync repo to pod\n" +
             "rsync -avz --exclude .git --exclude .venv ./ root@" + ip + ":/workspace/qminiwasm-core/\n\n" +
-            "# ssh and train with CUDA\n" +
-            "ssh root@" + ip + " 'cd /workspace/qminiwasm-core && source .venv/bin/activate 2>/dev/null; export ACCELERATOR=cuda && python -m qminiwasm.engine --config configs/training/mesh_cuda.toml'\n\n" +
+            "# Prefer WUI \"Launch training\" (syncs + runs native C++ server + qmw-grpc-train on the pod).\n" +
+            "# Manual: build qminiwasm_training_engine_server, start it on :50061, then from training-wui:\n" +
+            "#   go run ./cmd/qmw-grpc-train -root .. -config configs/training/mesh_cuda.toml\n\n" +
             "# or: ./scripts/runpod_sync_and_train.example.sh configs/training/mesh_cuda.toml";
           lastInfraRemoteCmd = block;
           pre.style.display = "block";
@@ -5486,6 +5695,35 @@
             ],
             ["Native StartTraining: checkpoint/tpem load path set", nat.model_uri_set ? "yes" : "no"],
           );
+          natRows.push(
+            [
+              "Native: taxonomy_tier (gRPC)",
+              nat.taxonomy_tier != null && String(nat.taxonomy_tier) !== ""
+                ? String(nat.taxonomy_tier)
+                : "(empty → engine default edge_constrained)",
+            ],
+            [
+              "Native: dataset_uri",
+              nat.dataset_uri != null && String(nat.dataset_uri) !== "" ? String(nat.dataset_uri) : "—",
+            ],
+            ["Native: epochs / batch (proto)", `${nat.epochs ?? "—"} / ${nat.batch_size ?? "—"}`],
+          );
+          if (nat.hf_dataset_id != null && String(nat.hf_dataset_id) !== "") {
+            natRows.push([
+              "Native: HF dataset_id / samples / split",
+              `${nat.hf_dataset_id} · samples=${nat.hf_num_samples ?? "—"} · split=${nat.hf_split ?? "—"}`,
+            ]);
+          }
+          if (nat.cascade_enabled != null) {
+            const g =
+              nat.cascade_gate_mse != null && Number(nat.cascade_gate_mse) <= 0
+                ? "MSE gate off (≤0)"
+                : `MSE gate ≤ ${nat.cascade_gate_mse}`;
+            natRows.push([
+              "Native: cascade_curriculum_loop",
+              nat.cascade_enabled ? `enabled · ${g}` : "disabled in this TOML",
+            ]);
+          }
           if (nat.native_cold_start_note) {
             natRows.push(["Native cold-start note", String(nat.native_cold_start_note)]);
           }
@@ -5547,7 +5785,7 @@
           ["Cascade RL impl", p.cascade_rl_impl || "auto"],
           ["TPEM native bundle", p.tpem_native_bundle != null ? String(p.tpem_native_bundle) : "0"],
           ["Native strict mode", p.native_strict_enabled ? "on" : "off"],
-          ["— Python environment (reference only) —", "Same TOML; use when running python -m qminiwasm.engine"],
+          ["— Python environment (reference only) —", "Torch/XPU probe only; WUI training uses C++ gRPC"],
           ["Default runtime profile (Python probe)", p.default_runtime_profile || "optimized_auto"],
           ["Config file", p.config || "(env/default)"],
           [
@@ -5576,7 +5814,7 @@
           ["dpctl error", p.dpctl_error || "(none)"],
           ["Quantum backend", p.quantum_backend || "penny_lane"],
           ["Quantum backend (from config)", p.quantum_backend_from_config || "(none)"],
-          ["Quantum policy", p.quantum_policy || "prefer_hardware_fallback"],
+          ["Quantum policy", p.quantum_policy || "simulator_only"],
           ["IBM runtime available", p.ibm && p.ibm.runtime_available ? "yes" : "no"],
           ["IBM token present", p.ibm && p.ibm.token_present ? "yes" : "no"],
           ["IBM connected", p.ibm && p.ibm.connected ? "yes" : "no"],
@@ -5591,6 +5829,7 @@
         ]);
         msg.textContent = "Preflight OK";
         msg.className = "status done";
+        updateAutotrainConfirmPanel();
       } catch (e) {
         setPreflightBadge("err", "ERROR");
         setPreflightKV([]);
@@ -5608,6 +5847,7 @@
         }
         msg.textContent = m;
         msg.className = "status error";
+        updateAutotrainConfirmPanel();
       }
     }
 
@@ -5639,6 +5879,8 @@
       activeRunId = id;
       logOffset = 0;
       logPlainAccum = "";
+      stickyLastEpoch = 0;
+      clearStickyRunPhase();
       const ban = $("enclaveFootprintBanner");
       const btxt = $("enclaveFootprintBannerText");
       if (ban) ban.style.display = "none";
@@ -5722,6 +5964,7 @@
         if (!data.running) {
           $("stickyEpochLabel").textContent = "Epoch: -- / --";
           $("stickyEpochProgress").value = 0;
+          clearStickyRunPhase();
         } else {
           await refreshStickyEpochFromNodeHealth();
         }
@@ -5838,7 +6081,35 @@
       if (!path) return;
       $("btnStart").disabled = true;
       try {
+        // #region agent log
+        fetch("http://127.0.0.1:7787/ingest/72d3ff1b-d191-4e29-a95b-d7d7712944f8", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9c4017" },
+          body: JSON.stringify({
+            sessionId: "9c4017",
+            hypothesisId: "H1",
+            location: "index.html:btnStart:entry",
+            message: "Launch clicked",
+            data: { config: path },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
         const okModal = await openLaunchEnvironmentModal();
+        // #region agent log
+        fetch("http://127.0.0.1:7787/ingest/72d3ff1b-d191-4e29-a95b-d7d7712944f8", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9c4017" },
+          body: JSON.stringify({
+            sessionId: "9c4017",
+            hypothesisId: "H1",
+            location: "index.html:btnStart:after_modal",
+            message: "Launch modal result",
+            data: { okModal: !!okModal },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
         if (!okModal) {
           $("msg").textContent = "Launch cancelled.";
           $("msg").className = "status";
@@ -5917,18 +6188,60 @@
           const epId = epEl ? String(epEl.value || "").trim() : "";
           if (epId) launchBody.runpod_serverless_endpoint_id = epId;
         }
+        // #region agent log
+        fetch("http://127.0.0.1:7787/ingest/72d3ff1b-d191-4e29-a95b-d7d7712944f8", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9c4017" },
+          body: JSON.stringify({
+            sessionId: "9c4017",
+            hypothesisId: "H5",
+            location: "index.html:btnStart:before_post",
+            message: "POST /api/runs",
+            data: { config: launchBody.config, run_target: launchBody.run_target },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
         const r = await apiFetch("/api/runs", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-QMW-Source": "wizard-launch" },
           body: JSON.stringify(launchBody),
         });
         const data = await r.json();
+        // #region agent log
+        fetch("http://127.0.0.1:7787/ingest/72d3ff1b-d191-4e29-a95b-d7d7712944f8", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9c4017" },
+          body: JSON.stringify({
+            sessionId: "9c4017",
+            hypothesisId: "H2",
+            location: "index.html:btnStart:after_post",
+            message: "POST /api/runs response",
+            data: { ok: r.ok, status: r.status, err: data && data.error ? String(data.error).slice(0, 200) : "" },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
         if (!r.ok) throw new Error(data.error || r.statusText);
         $("msg").textContent = "Started " + data.id;
         $("msg").className = "status running";
         await loadRuns();
         selectRun(data.id, data.config);
       } catch (e) {
+        // #region agent log
+        fetch("http://127.0.0.1:7787/ingest/72d3ff1b-d191-4e29-a95b-d7d7712944f8", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "9c4017" },
+          body: JSON.stringify({
+            sessionId: "9c4017",
+            hypothesisId: "H5",
+            location: "index.html:btnStart:catch",
+            message: "Launch error",
+            data: { err: String(e && e.message ? e.message : e).slice(0, 300) },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion agent log
         $("msg").textContent = String(e.message || e);
         $("msg").className = "status error";
       } finally {
@@ -6956,6 +7269,7 @@
     $("btnPreflight").onclick = loadPreflight;
     $("cfg").onchange = () => {
       syncTrainingWuiQueryToURL();
+      updateAutotrainConfirmPanel();
       loadPreflight();
     };
     $("bDataSource").onchange = toggleHFFields;
@@ -7055,6 +7369,100 @@
         refreshTelemetryRowVisibility();
       });
     });
+    const tCascadeOnly = $("telemetryCascadeOnly");
+    if (tCascadeOnly) {
+      tCascadeOnly.addEventListener("change", () => {
+        telemetryCascadeStagesOnly = tCascadeOnly.checked;
+        refreshTelemetryRowVisibility();
+      });
+    }
+    async function selectCascadeNativePreset() {
+      const sel = $("cfg");
+      if (!sel) return;
+      const m = $("msg");
+      const et = parseInt(String($("edgeProfileTier") && $("edgeProfileTier").value ? $("edgeProfileTier").value : "2"), 10) || 2;
+      if (m) {
+        m.textContent = "Merging native cascade + tier " + et + "…";
+        m.className = "status";
+      }
+      let mixSpecs = [];
+      try {
+        mixSpecs = typeof resolveDatasetMixSpecsForSchema === "function" ? resolveDatasetMixSpecsForSchema() : [];
+      } catch (_) {
+        mixSpecs = [];
+      }
+      const hf_specs = (Array.isArray(mixSpecs) ? mixSpecs : [])
+        .map((s) => ({
+          path: String((s && s.path) || "").trim(),
+          dataset_config:
+            s && s.dataset_config != null && String(s.dataset_config).trim() !== "" ? String(s.dataset_config).trim() : "",
+        }))
+        .filter((s) => s.path !== "");
+      const tsEl = $("datasetTargetSamples");
+      const targetRaw = tsEl ? Number(tsEl.value) : NaN;
+      const target_samples = Number.isFinite(targetRaw) && targetRaw > 0 ? Math.floor(targetRaw) : 0;
+      const postBody = { enclave_tier: et, hf_specs };
+      if (target_samples > 0) postBody.target_samples = target_samples;
+      try {
+        const r = await apiFetch("/api/training/native_cascade_apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(postBody),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw new Error(data.error || r.statusText || "merge failed");
+        }
+        const rel = data.config;
+        if (!rel) {
+          throw new Error("server did not return config path");
+        }
+        window.__qmwLastNativeCascadeApply = {
+          native_uses_first_spec_only: !!data.native_uses_first_spec_only,
+          dataset_mix_applied: !!data.dataset_mix_applied,
+        };
+        await loadConfigs();
+        const has = [...sel.options].some((o) => o.value === rel);
+        if (!has) {
+          if (m) {
+            m.textContent = "Merged config written as " + rel + " but not listed — click refresh or reload the page.";
+            m.className = "status error";
+          }
+          return;
+        }
+        sel.value = rel;
+        syncTrainingWuiQueryToURL();
+        await loadPreflight();
+        updateAutotrainConfirmPanel();
+        if (m) {
+          let line =
+            "Tier-matched native cascade (enclave tier " +
+            et +
+            "): " +
+            String(data.tier_overlay || "") +
+            ". Preflight refreshed — confirm data.path / num_samples in summary.";
+          if (data.native_uses_first_spec_only) {
+            line +=
+              " ** Native gRPC uses the first Hub dataset in your Step 1 mix only; TOML keeps the full mix for Python.";
+          } else if (data.dataset_mix_applied) {
+            line += " Step 1 dataset mix applied to working TOML.";
+          }
+          m.textContent = line;
+          m.className = "status done";
+        }
+      } catch (e) {
+        delete window.__qmwLastNativeCascadeApply;
+        if (m) {
+          m.textContent = String(e.message || e);
+          m.className = "status error";
+        }
+        updateAutotrainConfirmPanel();
+      }
+    }
+    const btnCas = $("btnSelectCascadeNative");
+    if (btnCas) btnCas.addEventListener("click", selectCascadeNativePreset);
+    const btnCasM = $("btnCascadePresetMission");
+    if (btnCasM) btnCasM.addEventListener("click", selectCascadeNativePreset);
     updateLaunchExecSummary();
     const ept = $("edgeProfileTier");
     if (ept) {
@@ -7080,6 +7488,7 @@
     if (dts) {
       dts.addEventListener("change", () => {
         syncStep3FromDatasetMix();
+        updateAutotrainConfirmPanel();
       });
     }
     let savedTab = localStorage.getItem(ACTIVE_TAB_KEY);

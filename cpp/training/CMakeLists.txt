@@ -114,6 +114,7 @@ if(QMINIWASM_TRAINING_WITH_LIBTORCH)
   list(APPEND QMW_TRAINING_RUNTIME_SOURCES
     src/safetensors_f32.cpp
     src/libtorch_ternary_trainer.cpp
+    src/hf_datasets_rows.cpp
   )
 endif()
 

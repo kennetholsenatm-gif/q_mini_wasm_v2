@@ -32,7 +32,7 @@ For development tooling (lint, tests): `pip install -e ".[dev]"`. Optional extra
 
 ---
 
-Large machine-learning models are difficult to run on edge devices because **memory, thermal, and bandwidth budgets** are fixed while model capacity grows. **qminiwasm-core** is a **hybrid classical–quantum ML runtime** that keeps a **sandboxed WebAssembly** execution boundary on the host so inference and training orchestration stay predictable next to Python. Optional cloud backends (for example Qiskit) apply only when operational policy triggers them.
+Large machine-learning models are difficult to run on edge devices because **memory, thermal, and bandwidth budgets** are fixed while model capacity grows. **qminiwasm-core** is a **hybrid classical–quantum ML runtime** that keeps a **sandboxed WebAssembly** execution boundary on the host. **Training WUI and the default training path use Go plus the C++ LibTorch engine over gRPC**; Python remains for optional tooling, CI coverage of the legacy package, and a **quantum sidecar** when Qiskit/PennyLane are needed ([docs/TRAINING_NATIVE_PARITY.md](docs/TRAINING_NATIVE_PARITY.md), [sidecar/quantum/README.md](sidecar/quantum/README.md)).
 
 ## Ecosystem context
 
@@ -51,7 +51,7 @@ Remote edge nodes rarely fail because the math is exotic—they fail because **m
 
 Techniques for **smaller footprints**, **triggered quantum routing**, and **identity at enrollment** are summarized in the **[Glossary](docs/GLOSSARY.md)** and in depth in [docs/Q-Mini-WASM_ Edge AI Taxonomy.md](docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md). When wiring trust and identity lifecycle, start with [docs/IDENTITY_STACK_REFERENCE.md](docs/IDENTITY_STACK_REFERENCE.md).
 
-Execution stays in a **sandboxed WebAssembly module** with bounded linear memory; host-native helpers apply where available. **Routing** in `qminiwasm` can delegate to IBM Qiskit Runtime or local simulators when configured. **Inference and training orchestration stay in Python** while the edge contract stays explicit between host runtimes (`wasmtime` in development, WasmEdge-oriented paths in-tree for production-shaped deployments).
+Execution stays in a **sandboxed WebAssembly module** with bounded linear memory; host-native helpers apply where available. **Routing** can delegate to IBM Qiskit Runtime or local simulators when configured via an optional Python quantum sidecar. **Training orchestration** for Mission Control is **Go + C++ gRPC**; **inference** defaults to the Go `qmw-serve` stub (extend with C++ tensor RPC as needed). The legacy Python package still supports wasmtime-oriented workflows and tests.
 
 ## Documentation map
 
@@ -60,6 +60,7 @@ Execution stays in a **sandboxed WebAssembly module** with bounded linear memory
 - Operations: [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
 - Identity and trust lifecycle: [docs/IDENTITY_STACK_REFERENCE.md](docs/IDENTITY_STACK_REFERENCE.md)
 - Training and data: [docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)
+- Native training parity (Go/C++ vs Python): [docs/TRAINING_NATIVE_PARITY.md](docs/TRAINING_NATIVE_PARITY.md)
 - Quantum: [docs/QUANTUM_QISKIT.md](docs/QUANTUM_QISKIT.md)
 - Cascade RL / MOPD: [docs/CASCADE_AND_MOPD.md](docs/CASCADE_AND_MOPD.md)
 - Environment variables (secrets / APIs only): [docs/environment-variables.md](docs/environment-variables.md); CI and container overrides: [docs/ENV_CI_OVERRIDES.md](docs/ENV_CI_OVERRIDES.md)

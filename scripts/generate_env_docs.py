@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Environment Variables Documentation Generator
+Environment Variables Documentation Generator (legacy).
+
+Prefer the Go tool (same output shape):
+
+  cd training-wui && go run ./cmd/qmw-generate-env-docs --root ..
 
 This script reads the .env.schema file and generates a markdown documentation
 file for MkDocs. It extracts variable names, descriptions, types, and default

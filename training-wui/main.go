@@ -1,5 +1,5 @@
 // Command training-wui is a small web UI to list training TOML configs and run
-// `python -m qminiwasm.engine --config <path>` from the repository root.
+// training via the C++ TrainingEngineService (gRPC) or RunPod serverless.
 package main
 
 import (
@@ -32,6 +32,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/kennetholsenatm-gif/qminiwasm-core/training-wui/edgeartifacts"
+	"github.com/kennetholsenatm-gif/qminiwasm-core/training-wui/trainingconfig"
 )
 
 //go:embed web/*
@@ -49,6 +52,30 @@ func init() {
 	sum := sha256.Sum256(b)
 	embeddedIndexSHA256Hex = hex.EncodeToString(sum[:])
 }
+
+// #region agent log
+func agentDebugLog9c4017(hypothesisID, location, message string, data map[string]any) {
+	p := filepath.Join(repoRoot, "debug-9c4017.log")
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	payload := map[string]any{
+		"sessionId":    "9c4017",
+		"hypothesisId": hypothesisID,
+		"location":     location,
+		"message":      message,
+		"timestamp":    time.Now().UnixMilli(),
+	}
+	if data != nil {
+		payload["data"] = data
+	}
+	b, _ := json.Marshal(payload)
+	_, _ = f.Write(append(b, '\n'))
+}
+
+// #endregion agent log
 
 var (
 	repoRoot          string
@@ -232,7 +259,7 @@ func buildAgentBundleJSON(stem, trainingConfigRel, finalRel, bestRel, latestRel 
 		"inference": map[string]any{
 			"recommended_checkpoint": "best",
 			"serve": map[string]string{
-				"command":                    "uvicorn qminiwasm.engine.serve:app --host 0.0.0.0 --port 8001",
+				"command":                    "go run ./cmd/qmw-serve -listen 127.0.0.1:8001 -config " + serveRel + "  (from training-wui/)",
 				"env_qminiwasm_serve_config": "QMINIWASM_SERVE_CONFIG=" + serveRel,
 				"env_qminiwasm_checkpoint":   "QMINIWASM_CHECKPOINT=" + bestRel,
 			},
@@ -322,6 +349,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/configs", handleConfigs)
 	mux.HandleFunc("/api/preflight", handlePreflight)
+	mux.HandleFunc("/api/training/native_cascade_apply", handleNativeCascadeApply)
 	mux.HandleFunc("/api/model/facts", handleModelFacts)
 	mux.HandleFunc("/api/lr/auto", handleAutoLR)
 	mux.HandleFunc("/api/runs", handleRunsCollection)
@@ -644,7 +672,7 @@ type TrainingRequest struct {
 	AllowMissingCheckpoint     bool   `json:"allow_missing_checkpoint"`
 	EnclaveTier                int    `json:"enclave_tier"`
 	MemoryLimitMB              int    `json:"memory_limit_mb"`
-	HardwareAccelerator        string `json:"hardware_accelerator"`
+	HardwareAccelerator string `json:"hardware_accelerator"`
 }
 
 func (r *TrainingRequest) validateEdgeFields() error {
@@ -727,29 +755,26 @@ func handleBuildArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	script := filepath.Join(repoRoot, "scripts", "build_tpem_wasm_artifacts.py")
-	if _, err := os.Stat(script); err != nil {
-		jsonErr(w, http.StatusInternalServerError, "build script not found")
+	wat := filepath.Join(repoRoot, "corpus", "trit_kernels.wat")
+	if _, err := os.Stat(wat); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "corpus/trit_kernels.wat not found (need repo checkout)")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, pythonExe, script,
-		"--tier", strconv.Itoa(tier),
-		"--checkpoint", absWeights,
-		"--out-dir", outAbs,
-	)
-	cmd.Dir = repoRoot
-	var logBuf bytes.Buffer
-	cmd.Stdout = &logBuf
-	cmd.Stderr = &logBuf
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(logBuf.String())
+	buildLog, buildErr := edgeartifacts.Build(edgeartifacts.BuildOptions{
+		RepoRoot:       repoRoot,
+		OutDir:         outAbs,
+		Tier:           tier,
+		WasmOptLevel:   "O3",
+		CheckpointPath: absWeights,
+		PythonExe:      pythonExe,
+	})
+	if buildErr != nil {
+		msg := strings.TrimSpace(buildLog.String())
 		if msg == "" {
-			msg = err.Error()
+			msg = buildErr.Error()
 		} else {
-			msg = msg + ": " + err.Error()
+			msg = msg + ": " + buildErr.Error()
 		}
 		jsonErr(w, http.StatusInternalServerError, msg)
 		return
@@ -778,7 +803,7 @@ func handleBuildArtifact(w http.ResponseWriter, r *http.Request) {
 		"kernels_wasm": filepath.ToSlash(relKernels),
 		"edge_schema":  filepath.ToSlash(relSchema),
 		"enclave_tier": tier,
-		"log":          strings.TrimSpace(logBuf.String()),
+		"log":          strings.TrimSpace(buildLog.String()),
 	}
 	if relBundleTpem != "" {
 		resp["bundle_tpem"] = filepath.ToSlash(relBundleTpem)
@@ -807,6 +832,9 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			jsonErr(w, http.StatusBadRequest, "invalid JSON")
 			return
 		}
+		agentDebugLog9c4017("H4", "main.go:handleRunsCollection:post", "decoded TrainingRequest", map[string]any{
+			"config": body.Config, "run_target": body.RunTarget, "enclave_tier": body.EnclaveTier,
+		})
 		if err := body.validateEdgeFields(); err != nil {
 			jsonErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -885,6 +913,26 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		cascadeNative, cerr := trainingconfig.TrainingTomlCascadeRequiresNativeGRPC(absForEngine)
+		if cerr != nil {
+			removeCleanups()
+			jsonErr(w, http.StatusBadRequest, "training config: "+cerr.Error())
+			return
+		}
+		if cascadeNative && normalizeRunTarget(opts.RunTarget) == "local" {
+			opts.CascadeRequiresNativeGRPC = true
+			if !trainingGRPCReachable(800 * time.Millisecond) {
+				removeCleanups()
+				agentDebugLog9c4017("H2", "main.go:handleRunsCollection:grpc_unreachable", "blocked cascade native start", map[string]any{
+					"grpc_addr": trainingGRPCAddressResolved(),
+				})
+				jsonErr(w, http.StatusServiceUnavailable,
+					"cascade curriculum loop requires native TrainingEngineService at "+trainingGRPCAddressResolved()+
+						" (unreachable). Start the C++ training server (qminiwasm_training_engine_server).")
+				return
+			}
+		}
+
 		extraEnv := buildQuantumEnvOverrides(body.QuantumBackend, body.QuantumPolicy, body.IBMBackendName)
 		extraEnv = append(extraEnv, buildEdgeProfileExtraEnv(&body)...)
 
@@ -896,9 +944,15 @@ func handleRunsCollection(w http.ResponseWriter, r *http.Request) {
 		run, err := runManager.start(absForEngine, relDisplay, extraEnv, opts, cleanups, serverlessOverlay)
 		if err != nil {
 			removeCleanups()
+			agentDebugLog9c4017("H3", "main.go:handleRunsCollection:start_failed", err.Error(), map[string]any{
+				"config": relDisplay,
+			})
 			jsonErr(w, http.StatusConflict, err.Error())
 			return
 		}
+		agentDebugLog9c4017("H0", "main.go:handleRunsCollection:started", "run created", map[string]any{
+			"id": run.ID, "config": run.ConfigRel,
+		})
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -1393,40 +1447,11 @@ func handleArtifactsPushHF(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusNotFound, "artifact not found")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	script := `
-import os
-from huggingface_hub import HfApi
-path = os.environ["QMW_HF_PATH"]
-repo = os.environ["QMW_HF_REPO"]
-token = os.environ.get("QMW_HF_TOKEN", "") or None
-api = HfApi(token=token)
-api.upload_file(
-    path_or_fileobj=path,
-    path_in_repo=os.path.basename(path),
-    repo_id=repo,
-    repo_type="model",
-)
-print("ok")
-`
-	cmd := exec.CommandContext(ctx, pythonExe, "-c", script)
-	cmd.Dir = repoRoot
-	cmd.Env = append(
-		os.Environ(),
-		"QMW_HF_PATH="+abs,
-		"QMW_HF_REPO="+repo,
-		"QMW_HF_TOKEN="+strings.TrimSpace(body.Token),
-	)
-	var outb, errb bytes.Buffer
-	cmd.Stdout = &outb
-	cmd.Stderr = &errb
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(errb.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		jsonErr(w, http.StatusBadRequest, "hf push failed: "+msg)
+	pathInRepo := filepath.Base(abs)
+	if err := huggingFaceUploadModelFile(ctx, repo, strings.TrimSpace(body.Token), abs, pathInRepo); err != nil {
+		jsonErr(w, http.StatusBadRequest, "hf push failed: "+err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1434,7 +1459,7 @@ print("ok")
 		"ok":      true,
 		"path":    rel,
 		"repo":    repo,
-		"message": strings.TrimSpace(outb.String()),
+		"message": "ok",
 	})
 }
 
@@ -1615,6 +1640,7 @@ type runStartOpts struct {
 	RunpodTrainOnPod           bool   `json:"runpod_train_on_pod"`           // ssh sync + engine on pod (default true for runpod)
 	RunpodServerlessEndpointID string `json:"runpod_serverless_endpoint_id"` // optional override; else RUNPOD_SERVERLESS_ENDPOINT_ID
 	RunpodWarmTargetID         string `json:"runpod_warm_target_id"`         // optional: use registered host; skip OpenTofu apply
+	CascadeRequiresNativeGRPC bool `json:"-"`
 }
 
 func normalizeRunTarget(s string) string {
@@ -2404,7 +2430,7 @@ func buildNativeGRPCTrainingConfigPreview(absConfig string) (map[string]any, str
 	if strings.TrimSpace(absConfig) == "" {
 		return nil, ""
 	}
-	cfg, err := TrainingTOMLToProto(absConfig, "preflight", repoRoot)
+	cfg, err := trainingconfig.TrainingTOMLToProto(absConfig, "preflight", repoRoot)
 	if err != nil {
 		return nil, err.Error()
 	}
@@ -2414,10 +2440,33 @@ func buildNativeGRPCTrainingConfigPreview(absConfig string) (map[string]any, str
 	modelURISet := strings.TrimSpace(cfg.GetModelUri()) != ""
 
 	out := map[string]any{
-		"d_model":            d,
-		"io_d_model":         io,
-		"num_ternary_blocks": nb,
-		"model_uri_set":      modelURISet,
+		"d_model":                d,
+		"io_d_model":             io,
+		"num_ternary_blocks":     nb,
+		"model_uri_set":          modelURISet,
+		"taxonomy_tier":          cfg.GetTaxonomyTier(),
+		"dataset_uri":            cfg.GetDatasetUri(),
+		"epochs":                 cfg.GetEpochs(),
+		"batch_size":             cfg.GetBatchSize(),
+		"learning_rate":          cfg.GetLearningRate(),
+		"checkpoint_save_path":   cfg.GetCheckpointSavePath(),
+		"checkpoint_best_path":   cfg.GetCheckpointBestPath(),
+		"checkpoint_latest_path": cfg.GetCheckpointLatestPath(),
+		"use_native_engine_only": cfg.GetUseNativeEngineOnly(),
+	}
+	if hf := cfg.GetHf(); hf != nil {
+		out["hf_dataset_id"] = hf.GetDatasetId()
+		out["hf_num_samples"] = hf.GetNumSamples()
+		out["hf_split"] = hf.GetSplit()
+		if cn := strings.TrimSpace(hf.GetConfigName()); cn != "" {
+			out["hf_config_name"] = cn
+		}
+	}
+	if cl := cfg.GetCascadeLoop(); cl != nil {
+		out["cascade_enabled"] = cl.GetEnabled()
+		out["cascade_gate_mse"] = cl.GetGateTargetValMse()
+		out["cascade_gate_max_tpem_mib"] = cl.GetGateMaxTpemMib()
+		out["cascade_teacher_path"] = strings.TrimSpace(cl.GetTeacherCheckpointPath())
 	}
 	if modelURISet {
 		out["native_cold_start_note"] = "Checkpoint/tpem load path set: native engine loads weights/geometry from interchange; proto d/io/N are secondary."
@@ -2668,46 +2717,54 @@ except Exception as e:
 out["ibm"] = ibm
 print(json.dumps(out))
 `
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, pythonExe, "-c", probe, configAbs)
-	cmd.Dir = repoRoot
-	env := os.Environ()
-	if qbe := effectiveQuantumBackendForPolicy(quantumBackend, quantumPolicy, ibmBackendName); qbe != "" {
-		env = append(env, "QUANTUM_BACKEND="+qbe)
-	}
-	if qp := normalizeQuantumPolicy(quantumPolicy); qp != "" {
-		env = append(env, "QUANTUM_EXECUTION_POLICY="+qp)
-	}
-	if ibm := strings.TrimSpace(ibmBackendName); ibm != "" {
-		env = append(env, "IBM_BACKEND_NAME="+ibm)
-	}
-	if preflightAccel != "" {
-		env = append(env, "QMW_PREFLIGHT_ACCELERATOR="+preflightAccel)
-	}
-	cmd.Env = env
-	var outb bytes.Buffer
-	var errb bytes.Buffer
-	cmd.Stdout = &outb
-	cmd.Stderr = &errb
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(errb.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		jsonErr(w, http.StatusInternalServerError, "preflight failed: "+msg)
-		return
-	}
-	raw := strings.TrimSpace(outb.String())
-	if raw == "" {
-		jsonErr(w, http.StatusInternalServerError, "preflight failed: empty output")
-		return
-	}
+	goOnly := strings.EqualFold(strings.TrimSpace(os.Getenv("QMW_WUI_PREFLIGHT_GO_ONLY")), "1") ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("QMW_WUI_PREFLIGHT_GO_ONLY")), "true")
+
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		jsonErr(w, http.StatusInternalServerError, "preflight failed: invalid JSON output")
-		return
+	var probeSource string
+	if goOnly {
+		parsed = buildGoPreflightDegraded(configAbs, preflightAccel, quantumBackend, quantumPolicy, ibmBackendName)
+		probeSource = "go_only"
+	} else {
+		ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, pythonExe, "-c", probe, configAbs)
+		cmd.Dir = repoRoot
+		env := os.Environ()
+		if qbe := effectiveQuantumBackendForPolicy(quantumBackend, quantumPolicy, ibmBackendName); qbe != "" {
+			env = append(env, "QUANTUM_BACKEND="+qbe)
+		}
+		if qp := normalizeQuantumPolicy(quantumPolicy); qp != "" {
+			env = append(env, "QUANTUM_EXECUTION_POLICY="+qp)
+		}
+		if ibm := strings.TrimSpace(ibmBackendName); ibm != "" {
+			env = append(env, "IBM_BACKEND_NAME="+ibm)
+		}
+		if preflightAccel != "" {
+			env = append(env, "QMW_PREFLIGHT_ACCELERATOR="+preflightAccel)
+		}
+		cmd.Env = env
+		var outb bytes.Buffer
+		var errb bytes.Buffer
+		cmd.Stdout = &outb
+		cmd.Stderr = &errb
+		err := cmd.Run()
+		raw := strings.TrimSpace(outb.String())
+		var pyParsed map[string]any
+		if err == nil && raw != "" && json.Unmarshal([]byte(raw), &pyParsed) == nil {
+			parsed = pyParsed
+			probeSource = "python"
+		} else {
+			if err != nil {
+				log.Printf("preflight: python probe failed (%v); stderr=%q — using Go fallback", err, strings.TrimSpace(errb.String()))
+			} else {
+				log.Printf("preflight: python probe empty or invalid JSON — using Go fallback")
+			}
+			parsed = buildGoPreflightDegraded(configAbs, preflightAccel, quantumBackend, quantumPolicy, ibmBackendName)
+			probeSource = "go_fallback"
+		}
 	}
+
 	rp := wuiResolved.RuntimeProfile
 	parsed["training_runtime_mode"] = trainingRuntimeModeRaw()
 	parsed["native_strict_enabled"] = rp.NativeStrictEnabled
@@ -2732,6 +2789,7 @@ print(json.dumps(out))
 		"ok":                  true,
 		"preflight":           parsed,
 		"wui_training_engine": wuiTE,
+		"preflight_probe":     probeSource,
 	}
 	if natPreview, natErr := buildNativeGRPCTrainingConfigPreview(configAbs); natErr != "" {
 		resp["native_grpc_training_config_error"] = natErr
@@ -2750,6 +2808,10 @@ func handleRunsItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := parts[0]
+	if len(parts) == 2 && parts[1] == "artifacts_validate" && r.Method == http.MethodGet {
+		handleRunArtifactsValidate(w, r, id)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "log" && r.Method == http.MethodGet {
 		handleRunLog(w, r, id)
 		return
@@ -3064,6 +3126,9 @@ type runRecord struct {
 	WSDroppedMessages     int
 	lastWSBackpressureLog time.Time // rate-limit backpressure lines in the run log
 	wsBackpressureAccum   int
+	artifactValMu         sync.Mutex `json:"-"`
+	artifactValAt         time.Time  `json:"-"`
+	artifactVal           map[string]any
 	BackendRequested      string
 	BackendSelected       string
 	BackendReasonCode     string
@@ -3250,13 +3315,13 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 	}
 
 	if useNativeTrainingEngineGRPC(opts) {
-		cfg, err := TrainingTOMLToProto(absConfig, id, repoRoot)
+		cfg, err := trainingconfig.TrainingTOMLToProto(absConfig, id, repoRoot)
 		if err != nil {
 			return nil, fmt.Errorf("map training TOML to gRPC config: %w", err)
 		}
 		// Python runs populate TotalEpochs from log lines; gRPC streams never hit that path — set from TOML so
 		// /api/node/health and the sticky bar show "epoch / total" instead of looking hung at high epoch.
-		rec.TotalEpochs = int(cfg.GetEpochs())
+		rec.TotalEpochs = grpcEstimatedTotalEpochs(cfg)
 		ctxTrain, cancelTrain := context.WithCancel(context.Background())
 		rec.procExited = make(chan struct{})
 		rec.trainCancel = cancelTrain
@@ -3277,13 +3342,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		return rec, nil
 	}
 
-	if trainingRuntimeModeRaw() == "auto" {
-		_, reason := trainingEnginePickLocal()
-		rec.logBuf.WriteString("=== training: " + reason + " ===\n")
-	}
-
-	runtimeEnv := wuiRuntimeEnvForPython()
-	trainEnv := append(append([]string(nil), runtimeEnv...), extraEnv...)
+	trainEnv := append([]string(nil), extraEnv...)
 
 	var cmd *exec.Cmd
 	if opts.RunTarget == "runpod" && opts.RunpodTrainOnPod {
@@ -3331,7 +3390,7 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 			}
 		}
 		wuiStopRel := ".wui/stop_" + id
-		rTrainCmd, rCmdErr := runpodRemoteTrainCmd(ip, user, key, rdir, remoteConfigRel, trainEnv, wuiStopRel)
+		rTrainCmd, rCmdErr := runpodRemoteTrainCmd(ip, user, key, rdir, remoteConfigRel, trainEnv, wuiStopRel, id)
 		if rCmdErr != nil {
 			return nil, rCmdErr
 		}
@@ -3340,19 +3399,13 @@ func (m *manager) start(absConfig, relDisplay string, extraEnv []string, opts ru
 		rec.runpodCoopHost = ip
 		rec.runpodCoopUser = user
 		rec.runpodCoopKeyPath = key
-		rec.logBuf.WriteString(fmt.Sprintf("=== training: remote python -u -m qminiwasm.engine (ssh %s@%s) ===\n", user, ip))
+		rec.logBuf.WriteString(fmt.Sprintf("=== training: remote native gRPC via SSH (%s@%s: qmw-grpc-train + C++ server) ===\n", user, ip))
 	} else {
-		wuiDir := filepath.Join(repoRoot, ".wui")
-		if mkErr := os.MkdirAll(wuiDir, 0o755); mkErr != nil {
-			return nil, fmt.Errorf("wui stop dir: %w", mkErr)
+		_, reason := trainingEnginePickLocal()
+		if strings.EqualFold(trainingRuntimeModeRaw(), "python") {
+			return nil, fmt.Errorf("training_runtime_mode python is no longer supported; set [wui] training_runtime_mode to native/grpc in configs/wui.toml and run qminiwasm_training_engine_server (%s)", trainingGRPCAddressResolved())
 		}
-		stopAbs := filepath.Join(wuiDir, "stop_"+id)
-		_ = os.Remove(stopAbs)
-		rec.wuiStopFile = stopAbs
-		rec.logBuf.WriteString("=== training: python -u -m qminiwasm.engine (local WUI host) ===\n")
-		cmd = exec.Command(pythonExe, "-u", "-m", "qminiwasm.engine", "--config", absConfig, "--wui-stop-file", stopAbs)
-		cmd.Dir = repoRoot
-		cmd.Env = append(os.Environ(), trainEnv...)
+		return nil, fmt.Errorf("C++ training engine (gRPC) required: %s — start qminiwasm_training_engine_server on %s (see docs and scripts/start-training-stack.ps1)", reason, trainingGRPCAddressResolved())
 	}
 
 	stdout, err := cmd.StdoutPipe()
@@ -3914,6 +3967,9 @@ func (m *manager) list() []map[string]any {
 		if r.ServerlessEndpointID != "" {
 			row["serverless_endpoint_id"] = r.ServerlessEndpointID
 		}
+		if av := r.artifactValidationForList(); av != nil {
+			row["artifact_validation"] = av
+		}
 		if r.LastRoutingState > 0 {
 			row["routing_state"] = r.LastRoutingState
 			row["routing_assignment_ms"] = r.LastAssignmentMS
@@ -4023,9 +4079,9 @@ func (m *manager) stop(id string, force bool) error {
 		stopErr := m.grpcCallStopTraining(sctx, id)
 		scancel()
 		if stopErr != nil {
-			m.appendLogSubprocessAware(id, []byte("\n=== gRPC StopTraining: "+stopErr.Error()+" ===\n"), "stderr")
+			m.appendLogSubprocessAware(id, []byte("\n[native:gRPC] StopTraining error: "+stopErr.Error()+"\n"), "stderr")
 		} else {
-			m.appendLogSubprocessAware(id, []byte("\n=== gRPC StopTraining: ok (draining telemetry stream) ===\n"), "stderr")
+			m.appendLogSubprocessAware(id, []byte("\n[native:gRPC] StopTraining ok (draining telemetry stream)\n"), "stderr")
 		}
 		if force {
 			time.Sleep(400 * time.Millisecond)
