@@ -9,9 +9,11 @@ How telemetry reaches the browser from the native C++ gRPC engine is explained i
 > - **No built-in authentication.** The WUI does not verify clients. Treat it as a **local development** tool. Do **not** bind `-addr` to a public interface or untrusted network without placing it behind a **reverse proxy** and **proper authentication**; otherwise anyone who can reach the port can start long-running training workloads.
 > - **Single training process.** The server allows **only one active training run at a time**. Start another job only after the current run finishes or you use **Stop** (or equivalent) to clear the slot.
 
+This binary is where **LibTorch-backed training** is orchestrated for production runs; **edge inference** and serve paths assume **artifacts produced here** (or via **`qmw-grpc-train`** / RunPod flows documented in this file).
+
 ## Architecture & Vision
 
-The WUI drives **native LibTorch TPEM over gRPC** only: the C++ **`TrainingEngineService`** (`StartTraining` / `StreamTelemetry` at `grpc_addr` from **`configs/wui.toml`**). **Local** training and **cloud GPU with “train on WUI host”** use the Go gRPC client (start `qminiwasm_training_engine_server` first). **Train on the remote RunPod** syncs the repo over SSH and runs **`go run ./cmd/qmw-grpc-train`** plus the C++ server on the pod (Go + LibTorch required on the image). **RunPod serverless** may still use the Python `serverless/handler.py` container entrypoint until replaced by a native image. There is **no Python fallback** when gRPC is unreachable: fix the server or address. The UI maps wizard and TOML selections into `TrainingConfig` fields in [`proto/training_engine.proto`](../proto/training_engine.proto); keys without a proto counterpart are ignored until the C++ backend loads the full TOML server-side.
+The WUI drives **native LibTorch TPEM over gRPC** only: the C++ **`TrainingEngineService`** (`StartTraining` / `StreamTelemetry` at `grpc_addr` from **`configs/wui.toml`**). **Local** training and **cloud GPU with “train on WUI host”** use the Go gRPC client (start `qminiwasm_training_engine_server` first). **Train on the remote RunPod** syncs the repo over SSH and runs **`go run ./cmd/qmw-grpc-train`** plus the C++ server on the pod (Go + LibTorch required on the image). **RunPod serverless** uses `serverless/handler.py`, which runs **`qmw-grpc-train`** against the C++ **`TrainingEngineService`** (install the Go binary and server in the worker image). There is **no Python training fallback** when gRPC is unreachable: fix the server or address. The UI maps wizard and TOML selections into `TrainingConfig` fields in [`proto/training_engine.proto`](../proto/training_engine.proto); keys without a proto counterpart are ignored until the C++ backend loads the full TOML server-side.
 
 **Mission Control** is the live operator surface: metrics and logs stream over per-run **WebSockets**. Two telemetry backends feed the same **`type: "metric"`** message shape, distinguished by `telemetry_source` (and, for gRPC, `engine: "grpc"`).
 
@@ -22,6 +24,8 @@ The WUI drives **native LibTorch TPEM over gRPC** only: the C++ **`TrainingEngin
 | **C++ gRPC** | **`StreamTelemetry`** → `TelemetryEvent` in `proto/training_engine.proto` | WebSocket **`metric`** with `telemetry_source` = gRPC C++, **`engine`**: `"grpc"`, and populated **Step**, **LR**, **σ/s**, **Q**, **Tier**, **Stage**, **Dec**, **TEE** columns in Mission Control |
 
 **Default: native C++ gRPC training.** The revision-controlled default in **`configs/wui.toml`** is **`training_runtime_mode = "native"`** (LibTorch `TrainingEngineService` at **`grpc_addr`**, default **`127.0.0.1:50061`**). Start the server first (e.g. **`scripts/start-training-stack.ps1`** / **`.sh`**, or run **`qminiwasm_training_engine_server`** yourself). Use **`auto`** to require gRPC reachability (no Python fallback). **`python`** mode is **removed** from the WUI training path. **Preflight** tries a **Python torch/XPU/IBM probe** when the interpreter works; otherwise (or with **`QMW_WUI_PREFLIGHT_GO_ONLY=1`**) it uses a **Go-only** probe (TOML + gRPC; torch/IBM rows show as unavailable). The UI still labels the Python block as reference-only for native training. See [docs/CONFIGURATION_POLICY.md](../docs/CONFIGURATION_POLICY.md) and [docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md).
+
+When **`StartTraining` is rejected**, the gRPC `message` often ends with a **`Hint:`** block pointing at [cpp/training/README.md](../cpp/training/README.md) (interchange tensors / Bloch keys) and the theory-vs-native table in [docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md).
 
 **`StreamTelemetry` lifecycle:** After the run finishes, the server closes the stream so the WUI client sees a normal end (EOF). If the stream were opened with no matching active run, it may end quickly while the engine is **idle**.
 
@@ -46,24 +50,20 @@ The architecture is still designed so **Stateful Operational Autonomy (SOA)** ca
 
 ```mermaid
 flowchart LR
-  subgraph sources [Training backends]
-    Py["Python engine<br/>qmw_* stdout/stderr"]
+  subgraph sources [Training backend]
     CPP["C++ engine<br/>StreamTelemetry"]
   end
   subgraph bridge [training-wui]
-    Parse["parseAndBroadcastTelemetry"]
     GRPC["buildGRPCMetricWebSocketPayload"]
     WS["wsHub.broadcast"]
-    Py --> Parse
     CPP --> GRPC
-    Parse --> WS
     GRPC --> WS
   end
   MC["Browser: Mission Control<br/>WebSocket metric rows"]
   WS --> MC
 ```
 
-Use the **Live telemetry** stream filter (**All** / **C++ gRPC** / **Python**) so the table matches how your run was started. A long **first epoch** on Python still means **no `qmw_metric` row** until that epoch completes.
+Mission Control shows **C++ gRPC** telemetry for normal WUI training. A long **first epoch** can look quiet until the engine emits the next **`qmw_metric`**-equivalent row.
 
 #### `TelemetryEvent` field groups (what to watch)
 
@@ -86,7 +86,7 @@ flowchart TB
 
 **Quantum routing (Python, Qiskit QAOA path):** With `qaoa_execution_mode` **`qiskit_statevector`** or **`qiskit_ibm`**, the router may emit **`qmw_routing_telemetry`** and **`qmw_routing_handoff`** lines. The WUI forwards them as WebSocket **`routing_telemetry`** / **`routing_handoff`** for Mission Control (latency budget default **50 ms**; override with **`QMW_ROUTING_LATENCY_BUDGET_MS`**—see [Appendix](#appendix-troubleshooting--edge-cases)).
 
-**C++ engine reference:** Telemetry is pushed over **`StreamTelemetry`** and re-broadcast as WebSocket **`metric`** / **`alert`** (no `grpcurl`). The **`metric`** object keeps legacy keys (`epoch`, `mean_loss`, `mean_mse`, `mean_return`, `line`) for charts and adds the full proto field set in snake_case plus **`engine`: `"grpc"`**. See [`cpp/training/README.md`](../cpp/training/README.md).
+**C++ engine reference:** Telemetry is pushed over **`StreamTelemetry`** and re-broadcast as WebSocket **`metric`** / **`alert`** (no `grpcurl`). The **`metric`** object keeps chart-stable keys (`epoch`, `mean_loss`, `mean_mse`, `mean_return`, `line`) and adds the full proto field set in snake_case plus **`engine`: `"grpc"`**. See [`cpp/training/README.md`](../cpp/training/README.md).
 
 Regenerate Go stubs after editing the proto (from **`training-wui/`**): `go generate ./...` (requires `protoc` plus `protoc-gen-go` and `protoc-gen-go-grpc` on `PATH`).
 
@@ -181,11 +181,11 @@ flowchart LR
   D["Force kill"] --> E["Immediate process Kill"]
 ```
 
-- **Stop (graceful)** — **SIGINT** to the local Python child (or cancel serverless job). Stops after the current batch when possible.
+- **Stop (graceful)** — **SIGINT** to the local training subprocess where applicable (or cancel serverless job). Stops after the current batch when possible.
 - **Cooperative stop (file)** — `POST /api/runs/<id>/cooperative-stop` creates a sentinel file the Python loop polls (same boundary as SIGINT). The UI exposes **Cooperative stop (file)** beside other stop controls. **RunPod SSH** runs use remote **`.wui/stop_<runId>`**. Not available for **native gRPC** or **RunPod serverless** (use **Stop** / cancel). For **Windows GUI–launched WUI**, SIGINT often fails; see [Appendix: Windows and cooperative stop](#windows-and-cooperative-stop).
 - **Force kill** — immediate `Kill()`; may lose in-epoch work.
 
-**Logs and metrics cadence:** Local training uses **`python -u -m qminiwasm.engine`** so stdout is line-oriented for the WUI. **`qmw_metric`** appears at **epoch end** (and on partial epoch after graceful stop), so a long first epoch can look quiet until it completes.
+**Logs and metrics cadence:** Native training streams **gRPC telemetry** into Mission Control. **`qmw_metric`**-style rows appear at **epoch end** (and on partial epoch after cooperative stop), so a long first epoch can look quiet until it completes.
 
 ## Path B: Advanced cloud deployment
 
@@ -203,7 +203,7 @@ The dashboard can run **`apply`** before training and **`destroy`** when the job
 
 ### Train on pod vs train on WUI host
 
-- **Train on the pod (default for RunPod):** Set **Execution target** to RunPod and leave **Train on cloud GPU** checked. **Launch training** runs **`tofu apply`** (unless skipped or warm target), waits for **`public_ip`** (or uses the warm host), **tar-syncs** the repo over **SSH**, then runs **`python -u -m qminiwasm.engine`** on the pod (venv + `pip install -e ".[training]"` each run) with **`--wui-stop-file .wui/stop_<runId>`** for cooperative stop.
+- **Train on the pod (default for RunPod):** Set **Execution target** to RunPod and leave **Train on cloud GPU** checked. **Launch training** runs **`tofu apply`** (unless skipped or warm target), waits for **`public_ip`** (or uses the warm host), **tar-syncs** the repo over **SSH**, then runs the **native** remote script: start **`qminiwasm_training_engine_server`** on the pod and **`go run ./cmd/qmw-grpc-train`** under **`training-wui/`** (optional **`-stop-file`** for cooperative stop). Requires **Go**, a **built** C++ training server, and **LibTorch** on the pod—see [`runpod_remote.go`](runpod_remote.go) and [docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md).
 - **Train on the WUI host:** Uncheck **Train on cloud GPU**. The pod may still be provisioned, but training runs **locally** via **gRPC** to the C++ engine, same idea as a pure local run.
 
 **CUDA:** Pods default to **`ACCELERATOR=cuda`** in container env. See [`infra/runpod/CLOUD_ACCELERATOR.md`](../infra/runpod/CLOUD_ACCELERATOR.md).
@@ -239,11 +239,11 @@ Each run writes checkpoints under **`artifacts/models/<model-slug>/`** (repo roo
 | `best.pt` | Best training MSE so far (`CHECKPOINT_BEST_PATH`) — **default for serving** |
 | `latest.pt` | Last epoch (`CHECKPOINT_LATEST_PATH`) — used for **resume** |
 | `serve.toml` | Minimal `[serve]` table; load with **`QMINIWASM_SERVE_CONFIG=artifacts/models/<slug>/serve.toml`** |
-| `agent_bundle.json` | Machine-readable paths + **`uvicorn qminiwasm.engine.serve:app`** hint + HTTP API summary |
+| `agent_bundle.json` | Machine-readable paths + HTTP API summary + **`qmw-serve`** command hint |
 
-After training, point tools at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn qminiwasm.engine.serve:app`** with **`pip install -e ".[serve]"`**. Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle for the exact contract.
+**HTTP inference:** use **`serve.toml`** / **`agent_bundle.json`** with Go **`qmw-serve`** (from **`training-wui/cmd/qmw-serve`**) or the WUI embedded server below. Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors) when implemented in your stack; see the bundle for the contract. See **[docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md)**.
 
-**From the WUI:** After **`agent_bundle.json`** exists, **`POST /api/serve/start`** with body `{ "model_stem": "<slug>", "port": 8001 }` starts **`uvicorn`** on **`127.0.0.1`**, sets **`QMINIWASM_SERVE_CONFIG`**, and writes **`artifacts/models/<slug>/docker-compose.serve.yaml`**. **`POST /api/serve/stop`** stops it; **`GET /api/serve/status`** returns running flag, pid, and log tail. **Training and serve cannot run at the same time** in one WUI process.
+**From the WUI:** After **`agent_bundle.json`** exists, **`POST /api/serve/start`** with body `{ "model_stem": "<slug>", "port": 8001 }` starts the **embedded Go HTTP** server on **`127.0.0.1`**, sets **`QMINIWASM_SERVE_CONFIG`**, and writes **`artifacts/models/<slug>/docker-compose.serve.yaml`**. **`POST /api/serve/stop`** stops it; **`GET /api/serve/status`** returns running flag and log tail. **Training and serve cannot run at the same time** in one WUI process.
 
 ## Appendix: Troubleshooting & edge cases
 

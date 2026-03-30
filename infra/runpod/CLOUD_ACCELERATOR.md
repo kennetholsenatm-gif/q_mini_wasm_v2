@@ -2,7 +2,7 @@
 
 Setup checklist: [docs/RUNPOD_QUICKSTART.md](../../docs/RUNPOD_QUICKSTART.md).
 
-The **training WUI** can perform this flow for you: **Infra & RunPod** for OpenTofu, then **Launch training** with **RunPod** + **Train on RunPod GPU** (default) to sync over SSH and run `python -m qminiwasm.engine` on the pod.
+The **training WUI** can perform this flow for you: **Infra & RunPod** for OpenTofu, then **Launch training** with **RunPod** + **Train on RunPod GPU** (default) to sync over SSH and run the **native** stack on the pod (**`qminiwasm_training_engine_server`** + **`go run ./cmd/qmw-grpc-train`**). See [`training-wui/runpod_remote.go`](../../training-wui/runpod_remote.go).
 
 The Runpod pod uses a **CUDA PyTorch** image by default (`image_name` in `variables.tf`) and injects:
 
@@ -30,7 +30,22 @@ Training still **defaults to CPU** if you override `env` and drop `ACCELERATOR`,
    ssh root@${RUNPOD_IP}
    ```
 
-4. On the pod:
+4. On the pod, pick **one** path:
+
+   **A — Native training (matches WUI “train on pod”):** Install **Go**, build **`qminiwasm_training_engine_server`** and LibTorch per [`cpp/training/README.md`](../../cpp/training/README.md), set `ACCELERATOR=cuda` and `LD_LIBRARY_PATH` to LibTorch `lib` if needed, then:
+
+   ```bash
+   cd /workspace/qminiwasm-core
+   export ACCELERATOR=cuda
+   ./build/cpp/training/qminiwasm_training_engine_server 127.0.0.1:50061 &   # or Release path — see runpod_remote.go search paths
+   sleep 2
+   ROOT="$(pwd)"
+   (cd training-wui && go run ./cmd/qmw-grpc-train -root "$ROOT" -config configs/training/mesh_cuda.toml -grpc 127.0.0.1:50061)
+   ```
+
+   Adjust the server binary path to match your CMake output directory.
+
+   **B — Legacy Python engine (optional, not WUI default):** ad hoc supervised loop only:
 
    ```bash
    cd /workspace/qminiwasm-core
@@ -39,14 +54,16 @@ Training still **defaults to CPU** if you override `env` and drop `ACCELERATOR`,
    pip install -e ".[training]"
    export ACCELERATOR=cuda
    python -c "import torch; print('cuda:', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
-   python -m qminiwasm.engine --config configs/training/mesh_cuda.toml
+   # After building the C++ training server and LibTorch deps:
+   ./build/cpp/training/qminiwasm_training_engine_server 127.0.0.1:50061 &
+   (cd training-wui && go run ./cmd/qmw-grpc-train -root .. -config configs/training/mesh_cuda.toml -grpc 127.0.0.1:50061)
    ```
 
    Use a config whose `[hardware]` section sets `accelerator = "cuda"` **or** rely on `ACCELERATOR` in the environment (see `qminiwasm/engine/config.py`).
 
 ## Training WUI
 
-The dashboard can **provision** the pod (`run_target: runpod`) but still runs `python -m qminiwasm.engine` on the **machine hosting the WUI**. For GPU training, run the WUI on your laptop and execute the engine **on the pod** via SSH/rsync as above, or run the WUI **inside** the same pod (then local training uses that pod’s GPU).
+With **RunPod** + **Train on cloud GPU**, the WUI runs **native** training **on the pod** over SSH (see above). If you **uncheck** train on pod, the WUI runs **gRPC training on the machine hosting the WUI** (local C++ engine), while the pod may still be provisioned. For GPU-native training, either use the default (train on pod) or run the WUI **inside** the pod and use the **local** target so the engine and GPU share the same host.
 
 ## See also
 

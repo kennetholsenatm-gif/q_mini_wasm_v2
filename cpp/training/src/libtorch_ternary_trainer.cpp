@@ -1,5 +1,6 @@
 #include "qminiwasm/training/libtorch_ternary_trainer.hpp"
 
+#include "qminiwasm/training/bloch_attention.hpp"
 #include "qminiwasm/training/safetensors_f32.hpp"
 #include "qminiwasm/training/tpem_constants.hpp"
 
@@ -24,6 +25,20 @@ void set_err(std::string* error_message, std::string_view text) {
   if (error_message != nullptr) {
     *error_message = std::string(text);
   }
+}
+
+/// Appended to interchange/geometry errors so Mission Control and logs point operators at one doc.
+constexpr std::string_view kNativeInterchangeHint =
+    " Hint: cpp/training/README.md (Checkpoints / interchange v2). Align TOML [model] "
+    "attention_backend, native_bloch_seq_len, native_bloch_num_heads with the file envelope "
+    "(native_bloch_*) and safetensors keys (bloch.*, ternary_*, input_stem.*, output_head.*).";
+
+void set_err_interchange(std::string* error_message, std::string_view text) {
+  if (error_message == nullptr) {
+    return;
+  }
+  error_message->assign(std::string(text));
+  error_message->append(kNativeInterchangeHint);
 }
 
 std::uint64_t read_u64_le(const unsigned char* p) {
@@ -69,13 +84,22 @@ struct CoreModuleImpl : torch::nn::Module {
   std::int64_t io_d_model_{};
   int num_blocks_{};
   bool stem_head_{false};
+  int bloch_seq_len_{0};
+  int bloch_num_heads_{0};
   torch::nn::Linear stem_{nullptr};
   torch::nn::Linear head_{nullptr};
   std::vector<torch::nn::LayerNorm> norms_;
   std::vector<TernaryExpert> experts_;
+  torch::Tensor pos_embed_;
+  BlochSphereAttention bloch_{nullptr};
 
-  CoreModuleImpl(std::int64_t d_model, std::int64_t io_d_model, int num_blocks)
-      : d_model_(d_model), io_d_model_(io_d_model), num_blocks_(num_blocks) {
+  CoreModuleImpl(std::int64_t d_model, std::int64_t io_d_model, int num_blocks, int bloch_seq_len = 0,
+                 int bloch_num_heads = 0)
+      : d_model_(d_model),
+        io_d_model_(io_d_model),
+        num_blocks_(num_blocks),
+        bloch_seq_len_(bloch_seq_len),
+        bloch_num_heads_(bloch_num_heads) {
     TORCH_CHECK(num_blocks >= 1 && num_blocks <= 1024, "num_ternary_blocks must be in [1,1024]");
     stem_head_ = (io_d_model_ != d_model_);
     if (stem_head_) {
@@ -87,6 +111,17 @@ struct CoreModuleImpl : torch::nn::Module {
       torch::nn::init::zeros_(stem_->bias);
       torch::nn::init::kaiming_uniform_(head_->weight, std::sqrt(5.0));
       torch::nn::init::zeros_(head_->bias);
+    }
+    if (bloch_seq_len_ > 0) {
+      TORCH_CHECK(bloch_num_heads_ > 0, "native Bloch: num_heads must be positive when seq_len > 0");
+      TORCH_CHECK(d_model_ % bloch_num_heads_ == 0,
+                  "native Bloch: d_model must be divisible by num_heads (d_model=", d_model_,
+                  ", num_heads=", bloch_num_heads_, ")");
+      pos_embed_ = register_parameter(
+          "bloch_pos_embed",
+          torch::empty({bloch_seq_len_, d_model_}, torch::dtype(torch::kFloat32).device(torch::kCPU)));
+      torch::nn::init::normal_(pos_embed_, 0.0, 0.02);
+      bloch_ = register_module("bloch", BlochSphereAttention(d_model_, bloch_num_heads_));
     }
     for (int i = 0; i < num_blocks_; ++i) {
       norms_.push_back(register_module(
@@ -101,9 +136,18 @@ struct CoreModuleImpl : torch::nn::Module {
   std::int64_t io_d_model() const { return io_d_model_; }
   int num_blocks() const { return num_blocks_; }
   bool stem_head() const { return stem_head_; }
+  int native_bloch_seq_len() const { return bloch_seq_len_; }
+  int native_bloch_num_heads() const { return bloch_num_heads_; }
 
   torch::Tensor forward(torch::Tensor x) {
     torch::Tensor y = stem_head_ ? stem_->forward(x) : x;
+    if (bloch_seq_len_ > 0 && bloch_) {
+      const auto b = y.size(0);
+      auto pos = pos_embed_.unsqueeze(0).expand({b, bloch_seq_len_, d_model_});
+      auto yb = y.unsqueeze(1).expand_as(pos);
+      auto seq_in = yb + pos;
+      y = bloch_->forward(seq_in).mean(1);
+    }
     for (int i = 0; i < num_blocks_; ++i) {
       y = y + experts_[i]->forward(norms_[i]->forward(y));
     }
@@ -187,7 +231,7 @@ bool copy_linear_weight_bias(torch::nn::Linear& lin, const torch::Tensor& w,
                              const torch::Tensor* bias_opt, std::string* error_message) {
   auto wt = w.detach().cpu().to(torch::kFloat32).contiguous();
   if (!wt.sizes().equals(lin->weight.sizes())) {
-    set_err(error_message, "linear weight: shape mismatch vs checkpoint");
+    set_err_interchange(error_message, "linear weight: shape mismatch vs checkpoint");
     return false;
   }
   torch::NoGradGuard guard;
@@ -217,7 +261,7 @@ struct LibTorchTpemTrainer::Impl {
   Impl(double learning_rate, std::uint64_t seed)
       : last_lr_(learning_rate), seed_(seed) {
     torch::manual_seed(seed_);
-    core_ = CoreModule(kTpemDModel, kTpemDModel, 1);
+    core_ = CoreModule(kTpemDModel, kTpemDModel, 1, 0, 0);
     rebuild_optim();
   }
 
@@ -226,9 +270,10 @@ struct LibTorchTpemTrainer::Impl {
                                                   torch::optim::AdamOptions(last_lr_));
   }
 
-  void rebuild_core(std::int64_t d_model, std::int64_t io_d_model, int num_blocks) {
+  void rebuild_core(std::int64_t d_model, std::int64_t io_d_model, int num_blocks, int bloch_seq_len,
+                    int bloch_num_heads) {
     torch::manual_seed(seed_);
-    core_ = CoreModule(d_model, io_d_model, num_blocks);
+    core_ = CoreModule(d_model, io_d_model, num_blocks, bloch_seq_len, bloch_num_heads);
     teacher_ = nullptr;
     has_teacher_ = false;
     rebuild_optim();
@@ -265,6 +310,18 @@ struct LibTorchTpemTrainer::Impl {
 
   std::map<std::string, torch::Tensor> tensors_for_save() const {
     std::map<std::string, torch::Tensor> m;
+    if (core_->native_bloch_seq_len() > 0) {
+      m.emplace("bloch.pos_embed", core_->pos_embed_.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.q_proj.weight", core_->bloch_->q_proj_->weight.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.q_proj.bias", core_->bloch_->q_proj_->bias.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.k_proj.weight", core_->bloch_->k_proj_->weight.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.k_proj.bias", core_->bloch_->k_proj_->bias.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.v_proj.weight", core_->bloch_->v_proj_->weight.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.v_proj.bias", core_->bloch_->v_proj_->bias.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.out_proj.weight",
+                core_->bloch_->out_proj_->weight.detach().cpu().contiguous().to(torch::kFloat32));
+      m.emplace("bloch.out_proj.bias", core_->bloch_->out_proj_->bias.detach().cpu().contiguous().to(torch::kFloat32));
+    }
     if (core_->stem_head()) {
       m.emplace("input_stem.weight", core_->stem_->weight.detach().cpu().contiguous().to(torch::kFloat32));
       m.emplace("input_stem.bias", core_->stem_->bias.detach().cpu().contiguous().to(torch::kFloat32));
@@ -299,7 +356,7 @@ struct LibTorchTpemTrainer::Impl {
     if (core_->stem_head()) {
       auto it_w = flat.find("input_stem.weight");
       if (it_w == flat.end()) {
-        set_err(error_message, "missing input_stem.weight (io_d_model != d_model in envelope)");
+        set_err_interchange(error_message, "missing input_stem.weight (io_d_model != d_model in envelope)");
         return false;
       }
       auto it_b = flat.find("input_stem.bias");
@@ -309,7 +366,7 @@ struct LibTorchTpemTrainer::Impl {
       }
       auto ow = flat.find("output_head.weight");
       if (ow == flat.end()) {
-        set_err(error_message, "missing output_head.weight");
+        set_err_interchange(error_message, "missing output_head.weight");
         return false;
       }
       auto ob = flat.find("output_head.bias");
@@ -329,17 +386,56 @@ struct LibTorchTpemTrainer::Impl {
         it = flat.find("ternary_blocks.0.weight");
       }
       if (it == flat.end()) {
-        set_err(error_message, "missing " + wkey + " in interchange payload");
+        set_err_interchange(error_message, "missing " + wkey + " in interchange payload");
         return false;
       }
       auto t = it->second.detach().cpu().to(torch::kFloat32).contiguous();
       auto& ex = core_->experts_[static_cast<std::size_t>(i)];
       if (t.dim() != 2 || t.size(0) != core_->d_model() || t.size(1) != core_->d_model()) {
-        set_err(error_message, "ternary block weight: bad shape vs d_model");
+        set_err_interchange(error_message, "ternary block weight: bad shape vs d_model");
         return false;
       }
       torch::NoGradGuard guard;
       ex->weight_.copy_(t);
+    }
+
+    if (core_->native_bloch_seq_len() > 0 && core_->bloch_) {
+      auto itp = flat.find("bloch.pos_embed");
+      if (itp != flat.end()) {
+        auto te = itp->second.detach().cpu().to(torch::kFloat32).contiguous();
+        if (!te.sizes().equals(core_->pos_embed_.sizes())) {
+          set_err_interchange(error_message, "bloch.pos_embed: shape mismatch vs native core");
+          return false;
+        }
+        torch::NoGradGuard g;
+        core_->pos_embed_.copy_(te);
+      }
+      auto load_lin = [&](std::string_view base, torch::nn::Linear& lin) -> bool {
+        const std::string wkey = std::string(base) + ".weight";
+        auto iw = flat.find(wkey);
+        if (iw == flat.end()) {
+          return true;
+        }
+        const torch::Tensor* pb = nullptr;
+        const std::string bkey = std::string(base) + ".bias";
+        auto ib = flat.find(bkey);
+        if (ib != flat.end()) {
+          pb = &ib->second;
+        }
+        return copy_linear_weight_bias(lin, iw->second, pb, error_message);
+      };
+      if (!load_lin("bloch.q_proj", core_->bloch_->q_proj_)) {
+        return false;
+      }
+      if (!load_lin("bloch.k_proj", core_->bloch_->k_proj_)) {
+        return false;
+      }
+      if (!load_lin("bloch.v_proj", core_->bloch_->v_proj_)) {
+        return false;
+      }
+      if (!load_lin("bloch.out_proj", core_->bloch_->out_proj_)) {
+        return false;
+      }
     }
 
     rebuild_optim();
@@ -409,7 +505,7 @@ struct LibTorchTpemTrainer::Impl {
     const std::int64_t d = core_->d_model();
     const std::int64_t io = core_->io_d_model();
     const int nb = core_->num_blocks();
-    teacher_ = CoreModule(d, io, nb);
+    teacher_ = CoreModule(d, io, nb, core_->native_bloch_seq_len(), core_->native_bloch_num_heads());
     torch::NoGradGuard g;
     const auto ps = core_->parameters();
     const auto pt = teacher_->parameters();
@@ -481,10 +577,8 @@ struct LibTorchTpemTrainer::Impl {
   static constexpr int kCascadeMaxSteps = 16;
   static constexpr double kGrpoEps = 1e-8;
 
-  double train_step_cascade_grpo(std::size_t group_size, std::uint64_t step_mix) {
-    ensure_cascade_policy();
+  torch::Tensor cascade_grpo_loss_tensor(std::size_t group_size, std::uint64_t step_mix) {
     const auto gsz = static_cast<std::int64_t>(std::max<std::size_t>(1, group_size));
-    cascade_policy_->train();
     std::vector<torch::Tensor> logprob_sums;
     logprob_sums.reserve(static_cast<std::size_t>(gsz));
     std::vector<torch::Tensor> returns_list;
@@ -520,19 +614,13 @@ struct LibTorchTpemTrainer::Impl {
       auto st = centered.pow(2).mean().sqrt();
       adv = centered / (st + kGrpoEps);
     }
-    auto loss = -(adv * logprob_tensor).mean();
-    cascade_optim_->zero_grad();
-    loss.backward();
-    cascade_optim_->step();
-    return loss.item<double>();
+    return -(adv * logprob_tensor).mean();
   }
 
-  double train_step_cascade_cispo(std::size_t group_size, double epsilon, std::uint64_t step_mix) {
-    ensure_cascade_policy();
+  torch::Tensor cascade_cispo_loss_tensor(std::size_t group_size, double epsilon, std::uint64_t step_mix) {
     const auto gsz = static_cast<std::int64_t>(std::max<std::size_t>(1, group_size));
     const double low = 1.0 - epsilon;
     const double high = 1.0 + epsilon;
-    cascade_policy_->train();
     std::vector<torch::Tensor> new_sums;
     std::vector<torch::Tensor> old_sums;
     std::vector<torch::Tensor> returns_list;
@@ -597,11 +685,53 @@ struct LibTorchTpemTrainer::Impl {
       adv = centered / (st + kGrpoEps);
     }
     auto coeff = clipped.detach();
-    auto loss = -(coeff * adv * logprob_tensor).mean();
+    return -(coeff * adv * logprob_tensor).mean();
+  }
+
+  double train_step_cascade_grpo(std::size_t group_size, std::uint64_t step_mix) {
+    ensure_cascade_policy();
+    cascade_policy_->train();
+    auto loss = cascade_grpo_loss_tensor(group_size, step_mix);
     cascade_optim_->zero_grad();
     loss.backward();
     cascade_optim_->step();
     return loss.item<double>();
+  }
+
+  double train_step_cascade_cispo(std::size_t group_size, double epsilon, std::uint64_t step_mix) {
+    ensure_cascade_policy();
+    cascade_policy_->train();
+    auto loss = cascade_cispo_loss_tensor(group_size, epsilon, step_mix);
+    cascade_optim_->zero_grad();
+    loss.backward();
+    cascade_optim_->step();
+    return loss.item<double>();
+  }
+
+  double train_step_joint_supervised_cascade(std::size_t batch_size, std::size_t group_size, double cascade_lambda,
+                                             bool use_cispo, double cispo_epsilon, std::uint64_t step_mix) {
+    ensure_cascade_policy();
+    const auto b = static_cast<std::int64_t>(std::max<std::size_t>(1, batch_size));
+    const std::int64_t io = core_->io_d_model();
+    torch::manual_seed(step_mix);
+    auto x = torch::randn({b, io}, torch::dtype(torch::kFloat32));
+    auto target = torch::randn({b, io}, torch::dtype(torch::kFloat32));
+    core_->train();
+    cascade_policy_->train();
+    optim_->zero_grad();
+    cascade_optim_->zero_grad();
+    auto out = core_->forward(x);
+    auto mse = torch::mse_loss(out, target);
+    const std::uint64_t pol_mix = step_mix ^ 0xC0DEC0DEC0DEC0DEULL;
+    torch::Tensor pol =
+        use_cispo ? cascade_cispo_loss_tensor(group_size, cispo_epsilon, pol_mix)
+                  : cascade_grpo_loss_tensor(group_size, pol_mix);
+    const float lam = static_cast<float>(cascade_lambda);
+    auto total = mse + lam * pol;
+    total.backward();
+    optim_->step();
+    cascade_optim_->step();
+    return total.item<double>();
   }
 };
 
@@ -614,42 +744,60 @@ std::unique_ptr<LibTorchTpemTrainer> LibTorchTpemTrainer::create(double learning
 }
 
 bool LibTorchTpemTrainer::init_geometry(std::int64_t d_model, std::int64_t io_d_model, int num_ternary_blocks,
+                                        int native_bloch_seq_len, int native_bloch_num_heads,
                                         std::string* error_message) {
   if (d_model < 32 || d_model > 1048576) {
-    set_err(error_message, "init_geometry: d_model out of range [32,1048576]");
+    set_err_interchange(error_message, "init_geometry: d_model out of range [32,1048576]");
     return false;
   }
   if (io_d_model < 8 || io_d_model > 1048576) {
-    set_err(error_message, "init_geometry: io_d_model out of range [8,1048576]");
+    set_err_interchange(error_message, "init_geometry: io_d_model out of range [8,1048576]");
     return false;
   }
   if (num_ternary_blocks < 1 || num_ternary_blocks > 1024) {
-    set_err(error_message, "init_geometry: num_ternary_blocks out of range [1,1024]");
+    set_err_interchange(error_message, "init_geometry: num_ternary_blocks out of range [1,1024]");
     return false;
   }
-  impl_->rebuild_core(d_model, io_d_model, num_ternary_blocks);
+  int bseq = native_bloch_seq_len;
+  int bhead = native_bloch_num_heads;
+  if (bseq > 0) {
+    if (bhead <= 0) {
+      set_err_interchange(error_message, "init_geometry: native Bloch requires positive num_heads");
+      return false;
+    }
+    if (d_model % bhead != 0) {
+      set_err_interchange(error_message, "init_geometry: native Bloch requires d_model divisible by num_heads");
+      return false;
+    }
+  } else {
+    bhead = 0;
+  }
+  impl_->rebuild_core(d_model, io_d_model, num_ternary_blocks, bseq, bhead);
   return true;
 }
 
-bool LibTorchTpemTrainer::load_interchange(const std::string& path, std::string* error_message) {
+bool LibTorchTpemTrainer::load_interchange(const std::string& path, bool attention_backend_is_bloch,
+                                           std::uint32_t native_bloch_seq_len, std::uint32_t native_bloch_num_heads,
+                                           std::string* error_message) {
   std::string raw;
   if (!read_file_all(path, &raw, error_message)) {
     return false;
   }
   if (raw.size() < 8 + 8) {
-    set_err(error_message, "interchange file too small");
+    set_err_interchange(error_message, "interchange file too small");
     return false;
   }
   if (std::memcmp(raw.data(), kTpemInterchangeMagic, 8) != 0) {
-    set_err(error_message,
-            "not a native TPEM interchange file (expected magic QMWTPEM2); use Python export "
-            "save_trainable_tpem_interchange_v2 or a C++ checkpoint");
+    set_err_interchange(
+        error_message,
+        "not a native TPEM interchange file (expected magic QMWTPEM2); use Python export "
+        "save_trainable_tpem_interchange_v2 or a C++ checkpoint");
     return false;
   }
   const auto* u = reinterpret_cast<const unsigned char*>(raw.data() + 8);
   const std::uint64_t json_len = read_u64_le(u);
   if (json_len > raw.size() - 16) {
-    set_err(error_message, "interchange: invalid json length");
+    set_err_interchange(error_message, "interchange: invalid json length");
     return false;
   }
   std::string env_json(raw.substr(16, static_cast<std::size_t>(json_len)));
@@ -657,12 +805,12 @@ bool LibTorchTpemTrainer::load_interchange(const std::string& path, std::string*
   try {
     env = nlohmann::json::parse(env_json);
   } catch (const std::exception& e) {
-    set_err(error_message, std::string("interchange: envelope JSON error: ") + e.what());
+    set_err_interchange(error_message, std::string("interchange: envelope JSON error: ") + e.what());
     return false;
   }
   const int ver = env.value("format_version", 0);
   if (ver != kTrainableTpemFormatVersionV2) {
-    set_err(error_message, "interchange: unsupported format_version (expected 2)");
+    set_err_interchange(error_message, "interchange: unsupported format_version (expected 2)");
     return false;
   }
   int nblk = env.value("num_ternary_blocks", 1);
@@ -670,7 +818,7 @@ bool LibTorchTpemTrainer::load_interchange(const std::string& path, std::string*
     nblk = 1;
   }
   if (nblk > 1024) {
-    set_err(error_message, "interchange: num_ternary_blocks exceeds 1024");
+    set_err_interchange(error_message, "interchange: num_ternary_blocks exceeds 1024");
     return false;
   }
   std::int64_t dm = kTpemDModel;
@@ -680,7 +828,7 @@ bool LibTorchTpemTrainer::load_interchange(const std::string& path, std::string*
     dm = static_cast<std::int64_t>(env["d_model"].get<std::uint64_t>());
   }
   if (dm < 32 || dm > 1048576) {
-    set_err(error_message, "interchange: d_model out of supported range");
+    set_err_interchange(error_message, "interchange: d_model out of supported range");
     return false;
   }
   std::int64_t iodm = dm;
@@ -690,15 +838,61 @@ bool LibTorchTpemTrainer::load_interchange(const std::string& path, std::string*
     iodm = static_cast<std::int64_t>(env["io_d_model"].get<std::uint64_t>());
   }
   if (iodm < 8 || iodm > 1048576) {
-    set_err(error_message, "interchange: io_d_model out of supported range");
+    set_err_interchange(error_message, "interchange: io_d_model out of supported range");
     return false;
   }
 
-  impl_->rebuild_core(dm, iodm, nblk);
+  bool use_bloch = attention_backend_is_bloch;
+  std::uint32_t seq_c = native_bloch_seq_len;
+  std::uint32_t heads_c = native_bloch_num_heads;
+  if (!use_bloch) {
+    int es = 0;
+    if (env.contains("native_bloch_seq_len") && env["native_bloch_seq_len"].is_number_integer()) {
+      es = env["native_bloch_seq_len"].get<int>();
+    } else if (env.contains("native_bloch_seq_len") && env["native_bloch_seq_len"].is_number_unsigned()) {
+      es = static_cast<int>(env["native_bloch_seq_len"].get<std::uint64_t>());
+    }
+    if (es > 0) {
+      use_bloch = true;
+      if (seq_c == 0) {
+        seq_c = static_cast<std::uint32_t>(es);
+      }
+      if (heads_c == 0 && env.contains("native_bloch_num_heads")) {
+        if (env["native_bloch_num_heads"].is_number_integer()) {
+          heads_c = static_cast<std::uint32_t>(std::max(1, env["native_bloch_num_heads"].get<int>()));
+        } else if (env["native_bloch_num_heads"].is_number_unsigned()) {
+          heads_c = static_cast<std::uint32_t>(env["native_bloch_num_heads"].get<std::uint64_t>());
+        }
+      }
+      if (heads_c == 0) {
+        heads_c = 4;
+      }
+    }
+  }
+
+  int bloch_seq = 0;
+  int bloch_heads = 0;
+  if (use_bloch) {
+    constexpr int kDefaultSeq = 8;
+    constexpr int kDefaultHeads = 4;
+    bloch_seq = seq_c > 0 ? static_cast<int>(seq_c) : kDefaultSeq;
+    bloch_heads = heads_c > 0 ? static_cast<int>(heads_c) : kDefaultHeads;
+    while (bloch_heads > 1 && (dm % bloch_heads) != 0) {
+      --bloch_heads;
+    }
+    if (bloch_heads < 1) {
+      bloch_heads = 1;
+    }
+  }
+
+  impl_->rebuild_core(dm, iodm, nblk, bloch_seq, bloch_heads);
   const std::size_t st_begin = 16 + static_cast<std::size_t>(json_len);
   const std::string_view st_blob(raw.data() + st_begin, raw.size() - st_begin);
   std::unordered_map<std::string, torch::Tensor> tensors;
   if (!decode_safetensors_f32(st_blob, &tensors, error_message)) {
+    if (error_message != nullptr && error_message->find("Hint:") == std::string::npos) {
+      error_message->append(kNativeInterchangeHint);
+    }
     return false;
   }
   return impl_->load_flat_tensors(tensors, error_message);
@@ -709,6 +903,8 @@ InterchangeTensorSnapshot LibTorchTpemTrainer::capture_interchange_tensors() con
   s.d_model = impl_->core_->d_model();
   s.io_d_model = impl_->core_->io_d_model();
   s.num_ternary_blocks = impl_->core_->num_blocks();
+  s.native_bloch_seq_len = impl_->core_->native_bloch_seq_len();
+  s.native_bloch_num_heads = impl_->core_->native_bloch_num_heads();
   s.tensors = impl_->tensors_for_save();
   return s;
 }
@@ -732,6 +928,10 @@ bool LibTorchTpemTrainer::write_interchange_to_path(const std::string& path, con
   env["d_model"] = snap.d_model;
   env["num_ternary_blocks"] = snap.num_ternary_blocks;
   env["io_d_model"] = snap.io_d_model;
+  if (snap.native_bloch_seq_len > 0) {
+    env["native_bloch_seq_len"] = snap.native_bloch_seq_len;
+    env["native_bloch_num_heads"] = snap.native_bloch_num_heads;
+  }
   env["tensor_layout"] = "safetensors_f32";
   env["meta"] = nlohmann::json::object();
   env["training_meta"] = {
@@ -816,6 +1016,13 @@ double LibTorchTpemTrainer::train_step_cascade_grpo(std::size_t group_size, std:
 double LibTorchTpemTrainer::train_step_cascade_cispo(std::size_t group_size, double epsilon,
                                                      std::uint64_t step_mix) {
   return impl_->train_step_cascade_cispo(group_size, epsilon, step_mix);
+}
+
+double LibTorchTpemTrainer::train_step_joint_supervised_cascade(std::size_t batch_size, std::size_t group_size,
+                                                                double cascade_lambda, bool use_cispo,
+                                                                double cispo_epsilon, std::uint64_t step_mix) {
+  return impl_->train_step_joint_supervised_cascade(batch_size, group_size, cascade_lambda, use_cispo, cispo_epsilon,
+                                                      step_mix);
 }
 
 LibTorchTpemTrainer::~LibTorchTpemTrainer() = default;

@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from qminiwasm.engine.native_cli import qmw_grpc_train_argv
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -82,6 +84,7 @@ def _replace_training_scalar(toml_text: str, key: str, value: str) -> str:
 
 
 def _extract_training_result(stdout: str) -> dict[str, Any] | None:
+    # Native qmw-grpc-train does not emit this marker; kept for log compatibility.
     marker = "Training complete:"
     idx = stdout.rfind(marker)
     if idx < 0:
@@ -131,7 +134,7 @@ def _metric_from_logs(text: str) -> tuple[str, float | None]:
 
 
 def _run_trial(config_path: Path, timeout_s: int) -> tuple[int, str, str, float]:
-    cmd = [sys.executable, "-m", "qminiwasm.engine", "--config", str(config_path)]
+    cmd = qmw_grpc_train_argv(repo_root=REPO_ROOT, config_path=config_path)
     t0 = time.perf_counter()
     try:
         cp = subprocess.run(

@@ -9,12 +9,12 @@
     {"regex": "(?i)\\bmixture\\s+of\\s+experts\\b", "hint": "Prefer QAHR for Tier-3 routing narrative."},
     {
       "regex": "(?i)\\bfp16\\b",
-      "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels.",
+      "hint": "Prefer discrete trit/TPEM vocabulary; avoid non-TPEM low-precision floating-point training labels.",
       "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
     },
     {
       "regex": "(?i)\\bbf16\\b",
-      "hint": "Prefer discrete trit/TPEM vocabulary; avoid legacy low-precision floating-point training labels.",
+      "hint": "Prefer discrete trit/TPEM vocabulary; avoid non-TPEM low-precision floating-point training labels.",
       "apply_extensions": [".md", ".toml", ".yaml", ".yml"]
     },
     {

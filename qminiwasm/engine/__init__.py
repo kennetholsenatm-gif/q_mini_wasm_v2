@@ -1,6 +1,7 @@
-"""ML training / serve process layer (TOML, env, FastAPI inference).
+"""Training TOML, EngineConfig, and training loop helpers for tests and tooling.
 
-Run with ``python -m qminiwasm.engine`` (or ``python -m qminiwasm.cli train``).
+The supported operator path is the Training WUI with the C++ gRPC engine; see
+``training-wui/README.md`` and ``docs/TRAINING_NATIVE_PARITY.md``.
 """
 
 from .config import EngineConfig

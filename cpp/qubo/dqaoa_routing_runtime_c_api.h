@@ -9,4 +9,7 @@ std::size_t qmw_route_topk_l2_f64(const double* query, const double* candidates,
 
 void qmw_route_assign_clusters(const double* adjacency, std::size_t n, std::size_t num_clusters, std::size_t* labels);
 
+/** Native trinary simulator hook (OpenQASM 3 subset). err_out -1 when built without QMINIWASM_WITH_QUANTUM. */
+double qmw_routing_trinary_expval_pauli_z0(const char* openqasm, unsigned long long seed, int* err_out);
+
 }

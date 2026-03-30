@@ -16,6 +16,8 @@ struct InterchangeTensorSnapshot {
   std::int64_t d_model = 0;
   std::int64_t io_d_model = 0;
   int num_ternary_blocks = 0;
+  int native_bloch_seq_len = 0;
+  int native_bloch_num_heads = 0;
 };
 
 /// LibTorch-backed TPEM Phase-1 trainer: residual PreNorm stack of ternary STE experts
@@ -30,9 +32,14 @@ class LibTorchTpemTrainer {
   /// Cold-start geometry when no interchange file is loaded (random init). Ignored after
   /// ``load_interchange`` replaces the core.
   [[nodiscard]] bool init_geometry(std::int64_t d_model, std::int64_t io_d_model, int num_ternary_blocks,
+                                   int native_bloch_seq_len, int native_bloch_num_heads,
                                    std::string* error_message);
 
-  [[nodiscard]] bool load_interchange(const std::string& path, std::string* error_message);
+  /// Load interchange v2. When ``attention_backend_is_bloch``, ``native_bloch_*`` select Bloch geometry (defaults 8×4
+  /// when zero); otherwise the rebuilt core has no Bloch block even if the file contains Bloch tensors.
+  [[nodiscard]] bool load_interchange(const std::string& path, bool attention_backend_is_bloch,
+                                      std::uint32_t native_bloch_seq_len, std::uint32_t native_bloch_num_heads,
+                                      std::string* error_message);
   [[nodiscard]] bool save_interchange(const std::string& path, const std::string& run_id,
                                       std::size_t epoch_1based, double train_loss, double val_loss,
                                       double learning_rate, std::string* error_message);
@@ -76,6 +83,13 @@ class LibTorchTpemTrainer {
 
   /// Same MDP; CISPO clipped ratio with detached clip coefficient (Python ``CascadeCISPO``).
   [[nodiscard]] double train_step_cascade_cispo(std::size_t group_size, double epsilon, std::uint64_t step_mix);
+
+  /// Single step: MSE on ``CoreModule`` (synthetic batch, same seed contract as ``train_step``) plus
+  /// ``cascade_lambda`` times toy GRPO or CISPO loss on ``CascadeToyPolicy``; one backward each parameter set,
+  /// then both Adam steps.
+  [[nodiscard]] double train_step_joint_supervised_cascade(std::size_t batch_size, std::size_t group_size,
+                                                           double cascade_lambda, bool use_cispo, double cispo_epsilon,
+                                                           std::uint64_t step_mix);
 
   void set_learning_rate(double lr);
 

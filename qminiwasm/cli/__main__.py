@@ -1,8 +1,7 @@
-"""``python -m qminiwasm.cli`` — thin wrapper over :mod:`qminiwasm.engine` for training."""
+"""``python -m qminiwasm.cli`` — graph manifest helpers (Enclave-as-Code)."""
 
 from __future__ import annotations
 
-import runpy
 import sys
 
 from qminiwasm.engine.graph_manifest import validate_graph_manifest
@@ -10,13 +9,12 @@ from qminiwasm.engine.graph_manifest import validate_graph_manifest
 
 def _usage() -> str:
     return (
-        "usage: python -m qminiwasm.cli train [--config PATH] [--log-level LEVEL]\n"
-        "       python -m qminiwasm.cli graph validate <manifest.json>\n"
+        "usage: python -m qminiwasm.cli graph validate <manifest.json>\n"
         "       python -m qminiwasm.cli graph apply <manifest.json>\n"
         "\n"
-        "  train   Same options as ``python -m qminiwasm.engine``.\n"
         "  graph   Enclave-as-Code graph manifest flows.\n"
         "\n"
+        "Training runs via the Training WUI and C++ gRPC engine; see training-wui/README.md.\n"
         "WASM runtime code lives under ``qminiwasm.wasm_host``.\n"
     )
 
@@ -64,12 +62,8 @@ if __name__ == "__main__":
     if not argv or argv[0] in ("-h", "--help"):
         print(_usage(), end="" if argv else "\n")
         sys.exit(0 if argv else 1)
-    if argv[0] == "train":
-        sys.argv = [sys.argv[0], *argv[1:]]
-        runpy.run_module("qminiwasm.engine.__main__", run_name="__main__", alter_sys=True)
-    elif argv[0] == "graph":
+    if argv[0] == "graph":
         sys.exit(_handle_graph(argv[1:]))
-    else:
-        sys.stderr.write(_usage())
-        sys.stderr.write(f"error: unknown command {argv[0]!r}\n")
-        sys.exit(2)
+    sys.stderr.write(_usage())
+    sys.stderr.write(f"error: unknown command {argv[0]!r}\n")
+    sys.exit(2)

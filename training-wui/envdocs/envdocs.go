@@ -31,7 +31,7 @@ const docFooter = "## Usage notes\n\n" +
 	"## Related documentation\n\n" +
 	"- [README](../README.md) — project overview\n" +
 	"- [Training data](TRAINING_DATA.md)\n" +
-	"- [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md) — CI / container / legacy process env (not WUI user config)\n"
+	"- [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md) — CI / container / automation env (not WUI user config)\n"
 
 // ParseEnvSchema reads .env.schema and returns variables in file order.
 func ParseEnvSchema(schemaFile string) ([]EnvVar, error) {

@@ -17,6 +17,7 @@ option(QMINIWASM_WITH_NATIVE_DQAOA_ROUTING "Build native dQAOA routing helpers" 
 option(QMINIWASM_WITH_SYCL "Build SYCL host stub shared library (use Intel oneAPI for real kernels)" OFF)
 option(QMINIWASM_WITH_WASMEDGE "Build WasmEdge C++ host helpers (needs WasmEdge SDK)" OFF)
 option(QMINIWASM_WITH_NLOPT "Link NLopt for COBYLA QUBO solver" ON)
+option(QMINIWASM_WITH_QUANTUM "OpenQASM 3 subset + trinary LibTorch simulator (CPU; needs LibTorch)" OFF)
 option(QMINIWASM_BUILD_PYBIND "Build pybind11 qminiwasm_cpp_native module" ON)
 
 # CMakeLists.txt lives in cpp/; repository root (proto/, qminiwasm/) is one level up.
@@ -124,6 +125,42 @@ if(QMINIWASM_WITH_NLOPT)
     target_compile_definitions(qminiwasm_core PUBLIC QMINIWASM_HAS_NLOPT=1)
 else()
     target_compile_definitions(qminiwasm_core PUBLIC QMINIWASM_HAS_NLOPT=0)
+endif()
+
+if(QMINIWASM_WITH_QUANTUM)
+    if(DEFINED ENV{LIBTORCH_ROOT} AND NOT "$ENV{LIBTORCH_ROOT}" STREQUAL "")
+        file(TO_CMAKE_PATH "$ENV{LIBTORCH_ROOT}" _qmw_libtorch_root_quantum)
+        list(PREPEND CMAKE_PREFIX_PATH "${_qmw_libtorch_root_quantum}")
+        message(STATUS "LIBTORCH_ROOT (quantum) -> CMAKE_PREFIX_PATH: ${_qmw_libtorch_root_quantum}")
+    endif()
+    find_package(Torch REQUIRED)
+    add_library(qminiwasm_quantum STATIC
+        quantum/openqasm3/lexer.cpp
+        quantum/openqasm3/parser.cpp
+        quantum/trinary/device.cpp
+        quantum/qml/circuit.cpp
+        quantum/quantum_bridge.cpp
+        quantum/quantum_bridge_c_api.cpp
+    )
+    target_include_directories(qminiwasm_quantum PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(qminiwasm_quantum PUBLIC ${TORCH_LIBRARIES})
+    target_compile_definitions(qminiwasm_quantum PUBLIC QMINIWASM_HAS_QUANTUM=1)
+    if(TORCH_CXX_FLAGS)
+        separate_arguments(_qmw_torch_cxx_quantum NATIVE_COMMAND "${TORCH_CXX_FLAGS}")
+        target_compile_options(qminiwasm_quantum PRIVATE ${_qmw_torch_cxx_quantum})
+    endif()
+    if(DEFINED TORCH_INCLUDE_DIRS)
+        target_include_directories(qminiwasm_quantum PRIVATE "${TORCH_INCLUDE_DIRS}")
+    endif()
+    if(MSVC)
+        target_compile_options(qminiwasm_quantum PRIVATE /W4 /permissive- /bigobj)
+    else()
+        target_compile_options(qminiwasm_quantum PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    target_link_libraries(qminiwasm_core PUBLIC qminiwasm_quantum)
+    target_compile_definitions(qminiwasm_core PUBLIC QMINIWASM_HAS_QUANTUM=1)
+else()
+    target_compile_definitions(qminiwasm_core PUBLIC QMINIWASM_HAS_QUANTUM=0)
 endif()
 
 # Optional SYCL (stub shared object; swap for DPC++ flags when using oneAPI)
@@ -259,6 +296,7 @@ if(QMINIWASM_WITH_TRAINING_ENGINE)
     if(QMINIWASM_TRAINING_WITH_LIBTORCH)
         list(APPEND _QMW_TRAINING_RUNTIME_SRCS
             training/src/safetensors_f32.cpp
+            training/src/bloch_attention.cpp
             training/src/libtorch_ternary_trainer.cpp
             training/src/hf_datasets_rows.cpp
         )
@@ -314,11 +352,25 @@ if(QMINIWASM_WITH_TRAINING_ENGINE)
     if(QMINIWASM_TRAINING_WITH_LIBTORCH)
         add_executable(qminiwasm_tpem_roundtrip training/src/tpem_roundtrip_cli.cpp)
         target_link_libraries(qminiwasm_tpem_roundtrip PRIVATE qminiwasm_training_runtime)
+        add_executable(bloch_golden_test training/test/bloch_golden_test.cpp)
+        target_link_libraries(bloch_golden_test PRIVATE qminiwasm_training_runtime nlohmann_json::nlohmann_json)
+        if(MSVC)
+            target_compile_options(bloch_golden_test PRIVATE /W4 /permissive-)
+        else()
+            target_compile_options(bloch_golden_test PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
+        add_executable(joint_cascade_trainer_test training/test/joint_cascade_trainer_test.cpp)
+        target_link_libraries(joint_cascade_trainer_test PRIVATE qminiwasm_training_runtime)
+        if(MSVC)
+            target_compile_options(joint_cascade_trainer_test PRIVATE /W4 /permissive-)
+        else()
+            target_compile_options(joint_cascade_trainer_test PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
     endif()
 endif()
 
 # Tests executable
-add_executable(qminiwasm_cpp_tests
+set(_QMW_CPP_TEST_SRCS
     tests/test_main.cpp
     tests/test_w158_pack.cpp
     tests/test_ternary_matvec.cpp
@@ -326,6 +378,10 @@ add_executable(qminiwasm_cpp_tests
     tests/test_wles_hooks.cpp
     tests/test_qaoa.cpp
 )
+if(QMINIWASM_WITH_QUANTUM)
+    list(APPEND _QMW_CPP_TEST_SRCS tests/test_openqasm_quantum.cpp)
+endif()
+add_executable(qminiwasm_cpp_tests ${_QMW_CPP_TEST_SRCS})
 target_link_libraries(qminiwasm_cpp_tests PRIVATE qminiwasm_core)
 if(MSVC)
     target_compile_options(qminiwasm_cpp_tests PRIVATE /W4 /permissive-)

@@ -6,7 +6,7 @@ Start here:
 
 - Main entrypoint: [../README.md](../README.md)
 - Project taxonomy glossary: [../docs/Q-Mini-WASM_ Edge AI Taxonomy.md](../docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md)
-- 0-to-1 happy path: [../docs/getting-started/QUICKSTART_0_TO_1.md](../docs/getting-started/QUICKSTART_0_TO_1.md)
+- Training WUI (native): [../training-wui/README.md](../training-wui/README.md)
 - Operator runbook: [../docs/operations/OPERATIONS_RUNBOOK.md](../docs/operations/OPERATIONS_RUNBOOK.md)
 - Vector dataflow walkthrough: [../docs/architecture/JOURNEY_OF_A_VECTOR.md](../docs/architecture/JOURNEY_OF_A_VECTOR.md)
 
@@ -51,7 +51,7 @@ Start here:
 ## Documentation Rules of Engagement
 
 - Use `README.md` for audience routing and top-level orientation.
-- Use `docs/getting-started` for the first successful run.
+- Use `training-wui/README.md` (Path A) for the first successful native training run.
 - Use `docs/operations/OPERATIONS_RUNBOOK.md` for deployment and infra commands.
 - Use wiki pages for deeper context, analysis, and research narratives.
 - Use `docs/IDENTITY_STACK_REFERENCE.md` as the source of truth for ZTEE-aligned identity protocol text; other pages should link rather than duplicate.

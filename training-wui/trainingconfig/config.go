@@ -93,10 +93,12 @@ type TrainingDoc struct {
 		UseTsignTernary *bool `toml:"use_tsign_ternary"`
 	} `toml:"adapter"`
 	Model struct {
-		DModel           *int64  `toml:"d_model"`
-		IoDModel         *int64  `toml:"io_d_model"`
-		NumTernaryBlocks *int64  `toml:"num_ternary_blocks"`
-		AttentionBackend *string `toml:"attention_backend"`
+		DModel              *int64  `toml:"d_model"`
+		IoDModel            *int64  `toml:"io_d_model"`
+		NumTernaryBlocks    *int64  `toml:"num_ternary_blocks"`
+		AttentionBackend    *string `toml:"attention_backend"`
+		NativeBlochSeqLen   *int64  `toml:"native_bloch_seq_len"`
+		NativeBlochNumHeads *int64  `toml:"native_bloch_num_heads"`
 	} `toml:"model"`
 	Cascade struct {
 		PolicyOptimizer   *string  `toml:"policy_optimizer"`
@@ -431,6 +433,12 @@ func TrainingTOMLToProto(absConfigPath, runID, repoRoot string) (*trainingrpc.Tr
 	}
 	if doc.Model.NumTernaryBlocks != nil && *doc.Model.NumTernaryBlocks > 0 {
 		cfg.NumTernaryBlocks = uint32(*doc.Model.NumTernaryBlocks)
+	}
+	if doc.Model.NativeBlochSeqLen != nil && *doc.Model.NativeBlochSeqLen > 0 {
+		cfg.NativeBlochSeqLen = uint32(*doc.Model.NativeBlochSeqLen)
+	}
+	if doc.Model.NativeBlochNumHeads != nil && *doc.Model.NativeBlochNumHeads > 0 {
+		cfg.NativeBlochNumHeads = uint32(*doc.Model.NativeBlochNumHeads)
 	}
 
 	src := strings.ToLower(strings.TrimSpace(doc.Data.Source))

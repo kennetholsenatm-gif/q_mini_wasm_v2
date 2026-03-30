@@ -15,7 +15,7 @@ Canonical technical write-up with equations, code map, env table excerpt, and te
 
 **[docs/CASCADE_AND_MOPD.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/CASCADE_AND_MOPD.md)**
 
-Related: **[AI Training Pipeline](AI-Training-Pipeline.md)** (epoch flow and data), **[Development](Development.md)** (running `python -m qminiwasm.engine`).
+Related: **[AI Training Pipeline](AI-Training-Pipeline.md)** (epoch flow and data), **[Development](Development.md)** (native WUI + gRPC).
 
 ---
 

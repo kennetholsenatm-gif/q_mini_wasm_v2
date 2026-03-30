@@ -18,10 +18,10 @@ Use **environment variables** for:
 
 Do **not** use environment variables as the primary way to set non-secret product configuration that should be shared with the team or reproduced in CI. Prefer TOML in `configs/` plus documented CLI overrides.
 
-## Legacy `QMINIWASM_*` training vars
+## `QMINIWASM_*` mirrors from the WUI
 
-The WUI still injects a small set of `QMINIWASM_*` variables into Python subprocesses so existing `qminiwasm.engine` code paths see the same values as `configs/wui.toml`. Prefer aligning Python with `configs/runtime.toml` over growing new env-based knobs.
+The WUI still injects a small set of `QMINIWASM_*` variables into Python subprocesses (preflight, probes) so tooling sees the same values as `configs/wui.toml`. Prefer aligning Python with `configs/runtime.toml` over growing new env-based knobs.
 
 ## Convenience scripts
 
-- **`scripts/start-training-stack.sh`** / **`scripts/start-training-stack.ps1`** — configure/build the C++ **`qminiwasm_training_engine_server`** via CMake when the binary is missing (needs **`cmake`** on `PATH` and gRPC/toolchain deps; see **`cpp/training/README.md`**), start it on **`127.0.0.1:50061`**, then run **`training-wui`** with `-root` set to the repository root. If the build fails, the WUI still starts; with default **`native`** training mode, use **`training_runtime_mode = "auto"`** or **`python`** in **`configs/wui.toml`** until the C++ server is available.
+- **`scripts/start-training-stack.sh`** / **`scripts/start-training-stack.ps1`** — configure/build the C++ **`qminiwasm_training_engine_server`** via CMake when the binary is missing (needs **`cmake`** on `PATH` and gRPC/toolchain deps; see **`cpp/training/README.md`**), start it on **`127.0.0.1:50061`**, then run **`training-wui`** with `-root` set to the repository root. If the build fails, fix the C++ build or install LibTorch—**`training_runtime_mode = "native"`** requires a reachable gRPC server.

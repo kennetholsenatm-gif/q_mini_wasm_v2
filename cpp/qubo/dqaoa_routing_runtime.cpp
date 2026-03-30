@@ -6,6 +6,10 @@
 #include <utility>
 #include <vector>
 
+#if QMINIWASM_HAS_QUANTUM
+#include "../quantum/quantum_bridge_c_api.h"
+#endif
+
 extern "C" std::size_t qmw_route_topk_l2_f64(const double* query, const double* candidates, std::size_t rows,
                                               std::size_t dim, std::size_t k, std::size_t* out_indices) {
   if (query == nullptr || candidates == nullptr || out_indices == nullptr || rows == 0 || dim == 0 || k == 0) {
@@ -44,3 +48,18 @@ extern "C" void qmw_route_assign_clusters(const double* adjacency, std::size_t n
     labels[degree[rank].second] = rank % k;
   }
 }
+
+#if QMINIWASM_HAS_QUANTUM
+extern "C" double qmw_routing_trinary_expval_pauli_z0(const char* openqasm, unsigned long long seed, int* err_out) {
+  return qmw_openqasm_expval_pauli_z0(openqasm, seed, err_out);
+}
+#else
+extern "C" double qmw_routing_trinary_expval_pauli_z0(const char* openqasm, unsigned long long seed, int* err_out) {
+  (void)openqasm;
+  (void)seed;
+  if (err_out != nullptr) {
+    *err_out = -1;
+  }
+  return 0.0;
+}
+#endif

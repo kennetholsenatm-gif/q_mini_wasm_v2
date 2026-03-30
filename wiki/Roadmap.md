@@ -6,7 +6,7 @@ This roadmap prioritizes **concrete implementation tooling** for the **Stateful 
 
 Normative identity/trust reference for ZTEE remains [`docs/IDENTITY_STACK_REFERENCE.md`](../docs/IDENTITY_STACK_REFERENCE.md); this page tracks *engineering milestones* only.
 
-**Layout pilots:** Trainable TPEM I/O — [`qminiwasm/tpem/`](../qminiwasm/tpem/); WASM host — [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/) (`qminiwasm.wasm` = package-level alias only); training / serve — [`qminiwasm/engine/`](../qminiwasm/engine/) (`python -m qminiwasm.engine`). Optional `python -m qminiwasm.cli train`. See [`docs/LAYOUT_REALIGNMENT_RFC.md`](../docs/LAYOUT_REALIGNMENT_RFC.md).
+**Layout pilots:** Trainable TPEM I/O — [`qminiwasm/tpem/`](../qminiwasm/tpem/); WASM host — [`qminiwasm/wasm_host/`](../qminiwasm/wasm_host/) (`qminiwasm.wasm` = package-level alias only); **training surface** — Go WUI + C++ gRPC ([`docs/TRAINING_NATIVE_PARITY.md`](../docs/TRAINING_NATIVE_PARITY.md)); **TOML / EngineConfig / tests** — [`qminiwasm/engine/`](../qminiwasm/engine/). See [`docs/LAYOUT_REALIGNMENT_RFC.md`](../docs/LAYOUT_REALIGNMENT_RFC.md).
 
 ```mermaid
 flowchart LR

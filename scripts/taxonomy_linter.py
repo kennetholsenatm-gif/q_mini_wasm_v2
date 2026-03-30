@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Edge AI taxonomy linter — fail CI when legacy ML vocabulary appears in gated paths.
+"""Edge AI taxonomy linter — fail CI when disallowed ML vocabulary appears in gated paths.
 
 Deprecated for CI: GitHub Actions use the Go implementation instead::
 

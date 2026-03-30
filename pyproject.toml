@@ -33,11 +33,6 @@ dev = [
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.0.0",
 ]
-serve = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "pydantic>=2.5.0",
-]
 wasm = [
     "wasmtime>=14.0.0",
     "pywasm>=2.0.0",
@@ -76,7 +71,7 @@ skips = [
   "B311",   # random: used for synthetic data/fault injection only, not crypto
   "B404",   # subprocess import: wasm engine uses it for compiler invocation
   "B603",   # subprocess without shell: engine runs fixed compiler with controlled args
-  "B614",   # torch.load: weights_only attempted first; full pickle only for trusted local legacy ckpt
+  "B614",   # torch.load: weights_only attempted first; full pickle only for trusted local checkpoints
 ]
 
 [tool.black]

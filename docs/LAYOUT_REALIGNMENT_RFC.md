@@ -10,9 +10,9 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 
 ## Pilot 1 (landed): `[tpem]` training table
 
-- **What:** Optional `[tpem]` table in training TOML, same keys as the legacy persistence table (`load_path`, `save_path`, `best_path`, `latest_path`).
-- **Merge rule:** For each key, if `[tpem]` sets a non-null value, it **overrides** the legacy table for that key when building `EngineConfig` (see `qminiwasm.engine.training_schema.TrainingConfig.to_engine_kwargs`).
-- **Serve:** `[serve]` accepts optional `tpem = "path.pt"`; it is preferred over the legacy weight path when both are present (`qminiwasm.engine.serve.get_model`).
+- **What:** Optional `[tpem]` table in training TOML, same keys as the `[checkpoint]` persistence table (`load_path`, `save_path`, `best_path`, `latest_path`).
+- **Merge rule:** For each key, if `[tpem]` sets a non-null value, it **overrides** `[checkpoint]` for that key when building `EngineConfig` (see `qminiwasm.engine.training_schema.TrainingConfig.to_engine_kwargs`).
+- **Serve:** `[serve]` accepts optional `tpem = "path.pt"`; it is preferred over **`checkpoint`** when both are set (Go **`qmw-serve`** / WUI consume **`serve.toml`**).
 
 ## Pilot 2 (landed): `qminiwasm.tpem` package
 
@@ -27,7 +27,7 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 
 ## Pilot 4 (landed): `qminiwasm.engine` only
 
-- **What:** Training TOML, `EngineConfig`, `train` / `serve`, and helpers live in [`qminiwasm/engine/`](../qminiwasm/engine/). Run **`python -m qminiwasm.engine`** or **`python -m qminiwasm.cli train`**; serve with **`uvicorn qminiwasm.engine.serve:app`**. The old top-level **`engine/`** package was **removed**.
+- **What:** Training TOML, `EngineConfig`, `train.main`, `training_schema`, and helpers live in [`qminiwasm/engine/`](../qminiwasm/engine/). The old top-level **`engine/`** package was **removed**. **Operator training** uses **Go + C++ gRPC** ([TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)); Python **`train.main`** remains for tests and internal tooling only.
 - **Boundary:** [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md): **`qminiwasm.engine` → library** only; library modules must not import `qminiwasm.engine`.
 
 ## Pilot 5 (landed): removed `qminiwasm.enclave`
@@ -35,9 +35,9 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 - **What:** The compatibility package **`qminiwasm.enclave`** was deleted from this repository. Downstream code must import **`qminiwasm.wasm_host`** (or submodules such as `qminiwasm.wasm_host.memory_encode`).
 - **Tests:** [`tests/test_wasm_host_layout.py`](../tests/test_wasm_host_layout.py) checks `wasm_host` + `tpem` layout only.
 
-## Pilot 6 (landed): `qminiwasm.cli` training alias
+## Pilot 6 (landed): `qminiwasm.cli` graph commands
 
-- **What:** [`qminiwasm/cli/__main__.py`](../qminiwasm/cli/__main__.py) — `python -m qminiwasm.cli train …` delegates to **`qminiwasm.engine.__main__`** (same flags after `train`).
+- **What:** [`qminiwasm/cli/__main__.py`](../qminiwasm/cli/__main__.py) — **`python -m qminiwasm.cli graph validate|apply`** for Enclave-as-Code manifests.
 
 ## Next pilots
 
@@ -49,5 +49,5 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 
 - Status: [MASTER_REALIGNMENT_STATUS.md](MASTER_REALIGNMENT_STATUS.md)
 - `qminiwasm.engine` / library boundary: [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md); implementation: [`qminiwasm/engine/`](../qminiwasm/engine/)
-- CLI alias: [`qminiwasm/cli/`](../qminiwasm/cli/) (`python -m qminiwasm.cli train …`)
+- CLI: [`qminiwasm/cli/`](../qminiwasm/cli/) (`python -m qminiwasm.cli graph …`)
 - Schema sample: [configs/training/schema.toml](../configs/training/schema.toml)

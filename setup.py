@@ -60,12 +60,6 @@ _setup_kw = dict(
             "mkdocs>=1.5.0",
             "mkdocs-material>=9.0.0",
         ],
-        "serve": [
-            "fastapi>=0.109.0",
-            "uvicorn[standard]>=0.27.0",
-            "pydantic>=2.5.0",
-            "python-dotenv>=1.0.0",
-        ],
         "wasm": [
             "wasmtime>=14.0.0",
             "pywasm>=2.0.0",

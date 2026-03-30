@@ -48,7 +48,7 @@ For graph-aware orchestration, qminiwasm-core now accepts a JSON sidecar graph m
 that references an `artifacts_dir` containing `artifact_manifest.json`.
 
 - Schema reference: `qminiwasm/engine/schemas/graph_manifest.schema.json`
-- Validator: `python -m qminiwasm.engine.graph_manifest validate <graph_manifest.json>`
+- Validator: `python -m qminiwasm.cli graph validate <graph_manifest.json>`
 - CLI integration:
   - `python -m qminiwasm.cli graph validate <graph_manifest.json>`
   - `python -m qminiwasm.cli graph apply <graph_manifest.json>`

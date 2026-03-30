@@ -21,6 +21,7 @@ The framework targets continuous trust through the **Cognitive Provenance Ledger
 ## Platform direction
 
 - **Training and WUI orchestration** target **Go plus C++ (LibTorch over gRPC)**; Python remains for tests, WASM artifact tooling, and workflows where no practical Go or C++ replacement exists yet.
+- **Trained artifacts** (TPEM and checkpoints from the C++ engine) are the basis for edge deployment and HTTP serve; use of inference-only flows without that training loop is **out of scope** for “full stack” product goals.
 
 ## Success criteria (definition of done)
 

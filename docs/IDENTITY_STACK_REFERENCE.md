@@ -13,16 +13,16 @@ This document describes a **reference** deployment pattern for **Zero-Trust Ephe
 ## PKI automation (this repository)
 
 - **Canonical script:** [`scripts/security/internal_ca_pki_provisioning.py`](../scripts/security/internal_ca_pki_provisioning.py)
-- **Legacy entrypoint:** [`scripts/security/freeipa_pki_provisioning.py`](../scripts/security/freeipa_pki_provisioning.py) (re-exports the same CLI)
+- **Alternate entrypoint:** [`scripts/security/freeipa_pki_provisioning.py`](../scripts/security/freeipa_pki_provisioning.py) (re-exports the same CLI)
 
 Environment variables:
 
-- **`INTERNAL_CA_SERVER`** — base URL of the CA control plane (legacy alias: `FREEIPA_SERVER`)
-- **`INTERNAL_CA_REALM`** — Kerberos realm for service principals (legacy: `FREEIPA_REALM`)
+- **`INTERNAL_CA_SERVER`** — base URL of the CA control plane (alias: `FREEIPA_SERVER`)
+- **`INTERNAL_CA_REALM`** — Kerberos realm for service principals (alias: `FREEIPA_REALM`)
 
 ## Example compose / OpenTofu layout (optional)
 
-If you maintain a security stack under `containers/security-stack/` or `infra/opentofu/modules/`, keep **vendor-specific image names and YAML** in those layers only; prose in this repo should refer to **internal CA** and **OIDC IdP** in docs and runbooks.
+If you maintain a security stack under `containers/security-stack/` or a separate OpenTofu/Kubernetes repo, keep **vendor-specific image names and YAML** in those layers only; prose in this repo should refer to **internal CA** and **OIDC IdP** in docs and runbooks. The default **qminiwasm-core** tree does not include `infra/opentofu/modules/`.
 
 ## Federation pattern
 

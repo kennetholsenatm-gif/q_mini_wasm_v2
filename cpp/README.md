@@ -10,6 +10,18 @@ cmake --build build
 ./build/qminiwasm_cpp_tests
 ```
 
+### Native quantum (optional)
+
+With LibTorch on `CMAKE_PREFIX_PATH` / `LIBTORCH_ROOT`:
+
+```bash
+cmake -S cpp -B build -DQMINIWASM_WITH_QUANTUM=ON
+cmake --build build
+./build/qminiwasm_cpp_tests
+```
+
+C API: `qmw_openqasm_expval_pauli_z0` and static capability string `qmw_native_quantum_stack_summary` ([`quantum/quantum_bridge_c_api.h`](quantum/quantum_bridge_c_api.h)) for operators and host runtimes. Routing integration stub: `qmw_routing_trinary_expval_pauli_z0` ([`qubo/dqaoa_routing_runtime_c_api.h`](qubo/dqaoa_routing_runtime_c_api.h)).
+
 ### Options
 
 | CMake option | Default | Meaning |
@@ -22,6 +34,7 @@ cmake --build build
 | `QMINIWASM_WITH_NATIVE_LOTA_QAF` | ON | Build LOTA forward/merge and t-sign update kernel helpers. |
 | `QMINIWASM_WITH_NATIVE_TPEM_BUILDER` | ON | Build native TPEM bundle byte-builder helper. |
 | `QMINIWASM_WITH_NATIVE_DQAOA_ROUTING` | ON | Build native routing top-k + cluster assignment helpers. |
+| `QMINIWASM_WITH_QUANTUM` | OFF | OpenQASM 3 **subset** lexer/parser + **qutrit** simulator (qubit gates on the \|0>,\|1> subspace) backed by **LibTorch CPU**. Requires `LIBTORCH_ROOT` (same as training). Enables `qmw_openqasm_expval_pauli_z0` / `qmw_routing_trinary_expval_pauli_z0`. |
 | `QMINIWASM_WITH_SYCL` | OFF | Builds shared `qminiwasm_sycl` stub; use Intel oneAPI / `-fsycl` for a real `joint_matrix` port. |
 | `QMINIWASM_WITH_WASMEDGE` | OFF | Set `WASMEDGE_ROOT` (or `WASMEDGE_INCLUDE_DIR` / `WASMEDGE_LIBRARY`) to the WasmEdge SDK. |
 | `QMINIWASM_BUILD_PYBIND` | ON | `qminiwasm_cpp_native` module: `pack_ternary_msb`, `unpack_ternary_msb`, `matvec_best`, CPUID queries. |

@@ -4,7 +4,7 @@ This repo supports two RunPod integration modes:
 
 | Mode | Use case | How the WUI uses it |
 |------|----------|---------------------|
-| **Pods** | Long-lived GPU VMs, full repo sync, multi-hour training | OpenTofu under `infra/runpod`, optional SSH + `python -m qminiwasm.engine` on the pod |
+| **Pods** | Long-lived GPU VMs, full repo sync, multi-hour training | OpenTofu under `infra/runpod`, SSH + native **`qmw-grpc-train`** on the pod |
 | **Serverless** | Queue-based GPU **jobs** (handler in your worker image) | HTTP API to `https://api.runpod.ai/v2/{ENDPOINT_ID}/…` — no OpenTofu |
 
 **Two HTTP bases:** [Management REST API](https://docs.runpod.io/api-reference/overview) at **`https://rest.runpod.io/v1`** (Bearer auth; account **`RUNPOD_API_KEY`** / **`RUNPOD_TOKEN`**) manages **templates** and **Serverless endpoints**. The WUI proxies **Infra → RunPod Serverless** for:
@@ -53,9 +53,9 @@ When you **Launch training** with execution target **RunPod Serverless**, the WU
 
 - **`config_rel`**: path relative to the **worker’s** checkout of the repo (your handler must know where the repo root is).
 - **`extra_env`**: quantum-related overrides from the WUI (`buildQuantumEnvOverrides`), same idea as local runs. Edge profiling may add `QMW_DISABLE_TROPICAL_ATTN=1` for Tier 1 runs.
-- **`toml_overlay`** (optional): TOML fragment (non-secret) **deep-merged** into the file at `config_rel` on the worker before `python -m qminiwasm.engine` runs. Omit the field when unused. The WUI caps size at **64 KiB**. The reference handler at `serverless/handler.py` implements merge using **`tomli-w`**; install **`llm-pract[training]`** (or `tomli-w`) in the worker image when using overlays.
+- **`toml_overlay`** (optional): TOML fragment (non-secret) **deep-merged** into the file at `config_rel` on the worker before **`qmw-grpc-train`** runs. Omit the field when unused. The WUI caps size at **64 KiB**. The reference handler at `serverless/handler.py` implements merge using **`tomli-w`**; install **`llm-pract[training]`** (or `tomli-w`) in the worker image when using overlays.
 
-Your worker must implement this input (or a superset). The repository does **not** ship a production Serverless worker image; you build a container with `qminiwasm-core`, dependencies, and a RunPod handler that runs `python -m qminiwasm.engine --config <path>` (after optional overlay merge).
+Your worker must implement this input (or a superset). The repository does **not** ship a production Serverless worker image; you build a container with `qminiwasm-core`, a built C++ **`qminiwasm_training_engine_server`**, Go **`qmw-grpc-train`** on `PATH` (or **`QMW_GRPC_TRAIN_BIN`**), and the RunPod handler in `serverless/handler.py` (after optional overlay merge).
 
 ## HTTP API (training-wui)
 
@@ -96,7 +96,7 @@ Optional: **`env`** (object of string → string, converted to GraphQL env pairs
 
 This repo now includes:
 
-- `serverless/handler.py` — RunPod handler that executes `python -m qminiwasm.engine --config <config_rel>`
+- `serverless/handler.py` — RunPod handler that runs **`qmw-grpc-train`** against **`config_rel`** (C++ gRPC server must be running in the container)
 - `serverless/Dockerfile` — AlmaLinux 10 base image + editable install + runpod worker runtime
 
 Example:

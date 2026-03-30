@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Inject env for the Cascade RL + MOPD continuation run, then start ``python -m qminiwasm.engine``.
+"""Inject env for the Cascade RL + MOPD continuation run, then start ``qmw-grpc-train``.
 
 Loads repo-root ``.env`` first (if present and python-dotenv is installed), then sets
 Cascade/MOPD and checkpoint variables so they override ``.env`` for this process.
+
+Requires ``qminiwasm_training_engine_server`` listening (see ``configs/wui.toml`` grpc_addr)
+and ``qmw-grpc-train`` on PATH or ``QMW_GRPC_TRAIN_BIN``.
 
 See docs/CASCADE_AND_MOPD.md (Recommended continuation run; § Long runs) and .env.example.
 
@@ -25,6 +28,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+from qminiwasm.engine.native_cli import qmw_grpc_train_argv
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_CKPT_DIR = REPO_ROOT / "artifacts" / "models" / "cascade_mopd"
@@ -198,7 +203,7 @@ def main() -> int:
         "--config",
         default=str(REPO_ROOT / "configs" / "training" / "cascade_mopd.toml"),
         metavar="PATH",
-        help="Training TOML passed to python -m qminiwasm.engine --config (default: configs/training/cascade_mopd.toml).",
+        help="Training TOML passed to qmw-grpc-train -config (default: configs/training/cascade_mopd.toml).",
     )
     args = parser.parse_args()
 
@@ -263,12 +268,8 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    return subprocess.run(
-        [sys.executable, "-m", "qminiwasm.engine", "--config", str(cfg_path)],
-        cwd=str(REPO_ROOT),
-        env=env,
-        check=False,
-    ).returncode
+    cmd = qmw_grpc_train_argv(repo_root=REPO_ROOT, config_path=cfg_path)
+    return subprocess.run(cmd, cwd=str(REPO_ROOT), env=env, check=False).returncode
 
 
 if __name__ == "__main__":

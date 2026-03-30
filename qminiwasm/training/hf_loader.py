@@ -27,7 +27,7 @@ Runbook (CodeSearchNet Python example, after ``pip install -e ".[training]"``):
   Optional: ``EARLY_STOP_PATIENCE=6``, ``LR_PLATEAU_FACTOR=0.5``, ``LR_PLATEAU_MIN_LR=1e-7``.
 - Auth (optional): set ``HUGGING_FACE_HUB_TOKEN`` or ``HF_TOKEN`` for higher Hub rate limits / gated datasets (never commit tokens; use ``.env`` — gitignored).
 - Reproducible Hub snapshots: set ``HF_DATASET_REVISION`` (git ref / commit); defaults to ``main``.
-- Run: ``python -m qminiwasm.engine`` from the repo root (editable install or PYTHONPATH).
+- Training: use the **Training WUI** or **`qmw-grpc-train`** with a TOML that sets ``[data]`` / Hugging Face fields; this loader is used from the Python training loop when invoked via library/tests.
 """
 
 from __future__ import annotations

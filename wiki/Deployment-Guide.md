@@ -73,98 +73,24 @@ vault --version
 your-oidc-idp --version
 ```
 
-## Quick Start Deployment
+## Quick start deployment (repository reality)
 
-### Option 1: Local Development (Kind + OpenTofu)
+**This checkout does not ship** `infra/opentofu/`, `charts/`, or a bundled Kind/Kubernetes module. The **supported** infrastructure-as-code path in-tree is **RunPod** under [`infra/runpod/`](../../infra/runpod/) (OpenTofu provider). Use **[docs/RUNPOD_QUICKSTART.md](../../docs/RUNPOD_QUICKSTART.md)** and **[docs/operations/OPERATIONS_RUNBOOK.md](../../docs/operations/OPERATIONS_RUNBOOK.md)**.
 
-#### Step 1: Environment Setup
-```bash
-# Clone the repository
-git clone https://github.com/kennetholsenatm-gif/qminiwasm-core.git
-cd qminiwasm-core
+**Application bring-up:**
 
-# Install Python dependencies
-pip install -r requirements.txt
+- **Training / Mission Control:** build the C++ gRPC training server and run the **Training WUI** from [`training-wui/README.md`](../../training-wui/README.md) (Go); see **[docs/TRAINING_NATIVE_PARITY.md](../../docs/TRAINING_NATIVE_PARITY.md)**.
+- **Python library / CI:** `pip install -r requirements.txt`, `pip install -e .` (see [Development](Development.md)).
 
-# Install pre-commit hooks
-pre-commit install
-```
+If you operate **your own** Kubernetes, Helm charts, or a separate `infra/opentofu` workspace, treat the **Edge Deployment** and **Security** sections below as **patterns** to map onto your cluster—not commands that succeed verbatim from this repo root.
 
-#### Step 2: Local Kubernetes Setup
-```bash
-# Create Kind cluster
-make -C infra/opentofu/modules/cluster/kind kind-create
+### Option 1 (removed): Kind + in-repo OpenTofu
 
-# Verify cluster
-kubectl cluster-info
-```
+Previously documented `infra/opentofu/modules/cluster/kind` and `infra/opentofu/environments/*` **are not present** here. Do not run those paths.
 
-#### Step 3: Deploy Infrastructure
-```bash
-# Navigate to local environment
-cd infra/opentofu/environments/local
+### Option 2 (external): Production-style Kubernetes / multi-cloud
 
-# Initialize OpenTofu
-tofu init
-
-# Apply infrastructure
-tofu apply
-
-# Verify deployment
-kubectl get pods -A
-```
-
-#### Step 4: Deploy Application
-```bash
-# Deploy WUI (optional)
-cd ../../../../charts/qminiwasm-wui
-helm install qminiwasm-wui .
-
-# Verify application
-kubectl get services
-```
-
-### Option 2: Production Deployment (Multi-Cloud)
-
-#### Step 1: Cloud Provider Setup
-```bash
-# AWS
-aws configure
-aws eks update-kubeconfig --region us-west-2 --name production-cluster
-
-# Azure
-az account set --subscription <subscription-id>
-az aks get-credentials --resource-group production-rg --name production-cluster
-
-# GCP
-gcloud container clusters get-credentials production-cluster --zone us-central1-a
-```
-
-#### Step 2: Infrastructure Deployment
-```bash
-# Navigate to production environment
-cd infra/opentofu/environments/prod
-
-# Configure variables
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your cloud-specific settings
-
-# Initialize and apply
-tofu init
-tofu apply
-```
-
-#### Step 3: Application Deployment
-```bash
-# Deploy core application
-helm install qminiwasm-core charts/qminiwasm-core/
-
-# Deploy monitoring stack
-helm install monitoring charts/monitoring/
-
-# Deploy security stack
-helm install security charts/security/
-```
+The following **illustrates** a typical cloud CLI flow only. **`infra/opentofu/environments/prod`** and **`charts/*`** are **not** in this repository; adapt names and paths to your organization’s IaC and Helm repos.
 
 ## Edge Deployment
 

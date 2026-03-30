@@ -10,9 +10,10 @@ import argparse
 import json
 import os
 import subprocess
-import sys
 import time
 from pathlib import Path
+
+from qminiwasm.engine.native_cli import qmw_grpc_train_argv
 
 
 def _soa_smoke_metrics() -> dict:
@@ -61,9 +62,12 @@ def _soa_smoke_metrics() -> dict:
 
 
 def run_one(cfg: Path) -> dict:
+    repo = Path(__file__).resolve().parents[1]
     t0 = time.perf_counter()
+    cmd = qmw_grpc_train_argv(repo_root=repo, config_path=cfg.resolve())
     p = subprocess.run(
-        [sys.executable, "-m", "qminiwasm.engine", "--config", str(cfg)],
+        cmd,
+        cwd=str(repo),
         capture_output=True,
         text=True,
         check=False,
