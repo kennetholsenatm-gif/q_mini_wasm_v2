@@ -70,6 +70,13 @@ class LibTorchTpemTrainer {
                                           const float* x_row_major, const float* target_row_major,
                                           double lambda_teacher, std::uint64_t step_mix);
 
+  /// Toy cascade MDP (8-D state, 4 actions, 16 steps) + ``CascadeToyPolicy`` (Python ``TinyCascadePolicy``).
+  /// Matches ``cascade_rl_train_step`` + ``CascadeGRPO``; use ``group_size >= 2`` for normalized advantages.
+  [[nodiscard]] double train_step_cascade_grpo(std::size_t group_size, std::uint64_t step_mix);
+
+  /// Same MDP; CISPO clipped ratio with detached clip coefficient (Python ``CascadeCISPO``).
+  [[nodiscard]] double train_step_cascade_cispo(std::size_t group_size, double epsilon, std::uint64_t step_mix);
+
   void set_learning_rate(double lr);
 
   ~LibTorchTpemTrainer();

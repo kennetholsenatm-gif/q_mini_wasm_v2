@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..rl.cascade_cispo import CascadeCISPO
 from ..rl.cascade_grpo import CascadeGRPO
 from ..native_bridge import load_native_lib
 from qminiwasm.runtime_modes import native_rl_runtime_enabled, resolve_impl_mode
@@ -104,8 +105,9 @@ def _policy_device(policy: Any) -> torch.device:
 def cascade_rl_train_step(
     policy_logits_fn: CascadePolicyFn,
     optimizer: torch.optim.Optimizer,
-    grpo: CascadeGRPO,
+    grpo: CascadeGRPO | None = None,
     *,
+    cispo: CascadeCISPO | None = None,
     group_size: int = 4,
     env_factory: Callable[[], ToyRoutingEnv] | None = None,
     mopd: MOPDLoss | None = None,
@@ -114,11 +116,21 @@ def cascade_rl_train_step(
     lambda_grpo: float = 1.0,
     lambda_mopd: float = 1.0,
 ) -> dict[str, float]:
-    """One optimization step: roll out ``group_size`` trajectories, GRPO + optional MOPD.
+    """One optimization step: roll out ``group_size`` trajectories, GRPO or CISPO + optional MOPD.
 
     When MOPD is enabled, aligns **final-state** hiddens per trajectory (batched mean for loss).
+
+    Pass exactly one of ``grpo`` or ``cispo``. CISPO requires Python rollouts (stores actions and
+    recomputes log-probs with grad); native rollout is disabled when ``cispo`` is set.
     """
-    if group_size < 2 and grpo.cfg.normalize_advantage:
+    if (grpo is None) == (cispo is None):
+        raise ValueError("cascade_rl_train_step: pass exactly one of grpo or cispo")
+    if grpo is not None:
+        norm_adv = grpo.cfg.normalize_advantage
+    else:
+        assert cispo is not None
+        norm_adv = cispo.cfg.normalize_advantage
+    if group_size < 2 and norm_adv:
         raise ValueError("group_size >= 2 required when normalize_advantage is True")
 
     dev = _policy_device(policy_logits_fn)
@@ -129,6 +141,8 @@ def cascade_rl_train_step(
         use_native_rollout = False
     if impl_mode == "native":
         use_native_rollout = True
+    if cispo is not None:
+        use_native_rollout = False
     if use_native_rollout and env_factory is None:
         lib = load_native_lib()
         if lib is not None and hasattr(lib, "qmw_rl_rollout_returns"):
@@ -174,6 +188,7 @@ def cascade_rl_train_step(
                     device=dev,
                     dtype=logprob_tensor.dtype,
                 )
+                assert grpo is not None
                 l_grpo, m_grpo = grpo(logprob_tensor, returns_tensor)
                 loss = lambda_grpo * l_grpo
                 metrics = {k: float(v.detach()) for k, v in m_grpo.items()}
@@ -191,6 +206,7 @@ def cascade_rl_train_step(
                 pass
 
     logprob_sums: list[torch.Tensor] = []
+    logprob_sums_old: list[torch.Tensor] = []
     returns: list[torch.Tensor] = []
     stud_rows: dict[str, list[torch.Tensor]] = {}
     teach_rows: dict[str, list[torch.Tensor]] = {}
@@ -207,18 +223,42 @@ def cascade_rl_train_step(
             s = s.to(dev)
         total_r = 0.0
         traj_log_probs: list[torch.Tensor] = []
+        traj_states: list[torch.Tensor] = []
+        traj_actions: list[torch.Tensor] = []
+        traj_dtype: torch.dtype | None = None
         done = False
         while not done:
             logits = policy_logits_fn(s)
             dist = torch.distributions.Categorical(logits=logits)
-            a = dist.sample()
-            traj_log_probs.append(dist.log_prob(a))
+            if cispo is not None:
+                with torch.no_grad():
+                    a = dist.sample()
+                    old_lp = dist.log_prob(a)
+                traj_dtype = old_lp.dtype
+                traj_states.append(s.detach().clone())
+                traj_actions.append(a.detach().clone())
+                traj_log_probs.append(old_lp)
+            else:
+                a = dist.sample()
+                lp = dist.log_prob(a)
+                traj_dtype = lp.dtype
+                traj_log_probs.append(lp)
             s_next, r, done, _ = env.step(int(a.item()))
             total_r += r
             s = s_next.to(dev) if s_next.device != dev else s_next
 
-        logprob_sums.append(torch.stack(traj_log_probs).sum())
-        returns.append(torch.tensor(total_r, device=dev, dtype=logprob_sums[-1].dtype))
+        if cispo is not None:
+            new_parts: list[torch.Tensor] = []
+            for st_t, ac_t in zip(traj_states, traj_actions):
+                logits_n = policy_logits_fn(st_t)
+                dist_n = torch.distributions.Categorical(logits=logits_n)
+                new_parts.append(dist_n.log_prob(ac_t))
+            logprob_sums.append(torch.stack(new_parts).sum())
+            logprob_sums_old.append(torch.stack(traj_log_probs).sum().detach())
+        else:
+            logprob_sums.append(torch.stack(traj_log_probs).sum())
+        rd = traj_dtype if traj_dtype is not None else torch.float32
+        returns.append(torch.tensor(total_r, device=dev, dtype=rd))
 
         if mopd is not None and student_hidden_fn is not None and teacher_hidden_fn is not None:
             with torch.no_grad():
@@ -231,10 +271,16 @@ def cascade_rl_train_step(
 
     logprob_tensor = torch.stack(logprob_sums)
     returns_tensor = torch.stack(returns)
-    l_grpo, m_grpo = grpo(logprob_tensor, returns_tensor)
-    loss = lambda_grpo * l_grpo
-
-    metrics = {k: float(v.detach()) for k, v in m_grpo.items()}
+    if cispo is not None:
+        old_tensor = torch.stack(logprob_sums_old)
+        l_pi, m_pi = cispo(logprob_tensor, old_tensor, returns_tensor)
+        loss = lambda_grpo * l_pi
+        metrics = {k: float(v.detach()) for k, v in m_pi.items()}
+    else:
+        assert grpo is not None
+        l_grpo, m_grpo = grpo(logprob_tensor, returns_tensor)
+        loss = lambda_grpo * l_grpo
+        metrics = {k: float(v.detach()) for k, v in m_grpo.items()}
 
     if mopd is not None and stud_rows and teach_rows:
         stud = {k: torch.cat(v, dim=0).mean(dim=0, keepdim=True) for k, v in stud_rows.items()}

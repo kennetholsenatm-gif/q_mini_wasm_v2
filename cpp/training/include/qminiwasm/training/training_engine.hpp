@@ -38,6 +38,27 @@ struct CascadeCurriculumLoopNative {
   /// Gate fail: reload teacher checkpoint and repeat PTQTP+heal (1 = single macro pass).
   std::uint32_t max_curriculum_cycles = 1;
 };
+struct TrainingPhaseNative {
+  std::string name;
+  std::size_t epochs = 1;
+  bool supervised = true;
+  bool cascade_rl = true;
+  bool freeze_model_backbone = false;
+  bool router_only = false;
+  std::string cascade_policy_optimizer;
+  std::optional<double> cispo_clip_epsilon;
+  std::optional<double> cascade_mopd_lambda;
+  std::optional<double> tequila_deadzone;
+  bool freeze_ternary_experts = false;
+  std::string mopd_teacher_checkpoint_path;
+};
+
+/// Active unified-matrix phase for global epoch ``g`` (0-based). Empty ``phases`` => nullptr.
+const TrainingPhaseNative* phase_at_global_epoch(std::size_t global_epoch,
+                                                 const std::vector<TrainingPhaseNative>& phases);
+
+/// Effective policy: ``grpo`` or ``cispo`` (lowercase).
+std::string effective_cascade_policy(const TrainingPhaseNative* phase, const std::string& root_policy);
 
 struct TrainingConfig {
   std::string run_id;
@@ -67,6 +88,12 @@ struct TrainingConfig {
   HfDatasetParamsNative hf;
   CascadeCurriculumLoopNative cascade_loop;
   bool use_native_engine_only = false;
+  std::vector<TrainingPhaseNative> training_phases;
+  std::string cascade_policy_optimizer = "grpo";
+  double cispo_clip_epsilon = 0.2;
+  std::string attention_backend;
+  /// Native toy cascade RL (GRPO/CISPO): number of trajectories per step; from TOML [cascade] group_size.
+  std::size_t cascade_rl_group_size = 4;
 };
 
 enum class EngineState {
@@ -109,6 +136,8 @@ struct TelemetryEvent {
   /// Enclave / footprint (e.g. ``enclave_summary``).
   double estimated_tpem_mib = 0.0;
   double tier_cap_mib = 0.0;
+  std::string training_phase;
+  std::string cascade_policy_optimizer;
 };
 
 struct EngineStatus {

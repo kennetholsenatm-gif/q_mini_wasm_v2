@@ -34,6 +34,7 @@ from .layers.lota import LoRALinearSide, merge_lora_into_linear_weight
 from .layers.ptqtp import PTQTPLinear
 from .training.cascade_rl import CascadeRouter
 from .layers.attention import TropicalAttention
+from .layers.bloch_attention import BlochSphereAttention
 from .wasm_host.engine import WasmEngine as WasmExecutor, WasmRuntimeConfig
 from .hardware import SYCLHardware
 from .hardware.device import get_device
@@ -102,6 +103,7 @@ class QMiniWASM:
         num_ternary_blocks: int = 1,
         io_d_model: int = 4096,
         tropical_attn_per_block: bool = False,
+        attention_backend: str = "tropical",
         use_gradient_checkpointing: bool = False,
     ):
         """Initialize the QMiniWASM model.
@@ -126,8 +128,10 @@ class QMiniWASM:
             num_ternary_blocks: Number of residual PreNorm + TernaryWASMExpert blocks.
             io_d_model: Mesh/HF encoder width (typically 4096). When different from ``d_model``,
                 trainable linear stem/head map between I/O and the core.
-            tropical_attn_per_block: If True, add a residual tropical attention step on the core
+            tropical_attn_per_block: If True, add a residual geometric attention step on the core
                 (single seq_len=1 attention inside ``hybrid_inference``).
+            attention_backend: ``tropical`` (max-plus hull) or ``bloch`` (fidelity on Bloch sphere);
+                only used when ``tropical_attn_per_block`` is True.
             use_gradient_checkpointing:
                 Recompute ternary stack activations during backward (training).
         """
@@ -139,6 +143,9 @@ class QMiniWASM:
         self.io_d_model = max(8, int(io_d_model))
         self.num_ternary_blocks = max(1, int(num_ternary_blocks))
         self._apply_tropical_in_hybrid = bool(tropical_attn_per_block)
+        self._attention_backend = str(attention_backend or "tropical").strip().lower()
+        if self._attention_backend not in ("tropical", "bloch"):
+            self._attention_backend = "tropical"
         self._use_gradient_checkpointing = bool(use_gradient_checkpointing)
         qaoa_cfg: Optional[QAOAConfig] = None
         mode = (qaoa_execution_mode or "pennylane").strip().lower()
@@ -220,10 +227,17 @@ class QMiniWASM:
         heads_s = (os.environ.get("QMW_TROPICAL_ATTN_HEADS") or "").strip()
         env_nh = int(heads_s) if heads_s.isdigit() else None
         nh = _pick_tropical_heads(self.d_model, env_nh)
-        if _qmw_env_on("QMW_DISABLE_TROPICAL_ATTN"):
-            self.tropical_attention = None
-        else:
-            self.tropical_attention = TropicalAttention(self.d_model, num_heads=nh).to(self.device)
+        self.tropical_attention = None
+        self.bloch_sphere_attention = None
+        if self._apply_tropical_in_hybrid and not _qmw_env_on("QMW_DISABLE_TROPICAL_ATTN"):
+            if self._attention_backend == "bloch":
+                self.bloch_sphere_attention = BlochSphereAttention(self.d_model, num_heads=nh).to(
+                    self.device
+                )
+            else:
+                self.tropical_attention = TropicalAttention(self.d_model, num_heads=nh).to(
+                    self.device
+                )
         self.cascade_router: Optional[CascadeRouter] = None
         if bool(use_cascade_router):
             self.cascade_router = CascadeRouter(
@@ -298,6 +312,10 @@ class QMiniWASM:
             params.extend(self.lota_branch.parameters())
         if self.hybrid_adapter is not None:
             params.extend(self.hybrid_adapter.parameters())
+        if self.tropical_attention is not None:
+            params.extend(self.tropical_attention.parameters())
+        if self.bloch_sphere_attention is not None:
+            params.extend(self.bloch_sphere_attention.parameters())
         return params
 
     def trainable_adam_parameters(
@@ -319,6 +337,10 @@ class QMiniWASM:
             out.extend(self.lota_branch.parameters())
         if self.hybrid_adapter is not None:
             out.extend(self.hybrid_adapter.parameters())
+        if self.tropical_attention is not None:
+            out.extend(self.tropical_attention.parameters())
+        if self.bloch_sphere_attention is not None:
+            out.extend(self.bloch_sphere_attention.parameters())
         return out
 
     def cascade_logits(self, hidden: torch.Tensor) -> Optional[torch.Tensor]:
@@ -564,13 +586,12 @@ class QMiniWASM:
             else:
                 ternary_output = self._forward_ternary_stack(routed_output)
 
-            if (
-                self._apply_tropical_in_hybrid
-                and self.tropical_attention is not None
-                and not self._use_ptqtp_inference
-            ):
+            if self._apply_tropical_in_hybrid and not self._use_ptqtp_inference:
                 t2 = ternary_output.unsqueeze(1)
-                ternary_output = ternary_output + self.tropical_attention(t2).squeeze(1)
+                if self.bloch_sphere_attention is not None:
+                    ternary_output = ternary_output + self.bloch_sphere_attention(t2).squeeze(1)
+                elif self.tropical_attention is not None:
+                    ternary_output = ternary_output + self.tropical_attention(t2).squeeze(1)
 
             if self.lota_branch is not None and not self._use_ptqtp_inference:
                 ternary_output = ternary_output + self.lota_branch(routed_output)

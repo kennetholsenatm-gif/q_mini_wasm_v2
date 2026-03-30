@@ -113,6 +113,24 @@ struct CoreModuleImpl : torch::nn::Module {
 
 TORCH_MODULE(CoreModule);
 
+struct CascadeToyPolicyImpl : torch::nn::Module {
+  CascadeToyPolicyImpl() {
+    l1_ = register_module("l1", torch::nn::Linear(8, 32));
+    l2_ = register_module("l2", torch::nn::Linear(32, 4));
+    torch::nn::init::kaiming_uniform_(l1_->weight, std::sqrt(5.0));
+    torch::nn::init::zeros_(l1_->bias);
+    torch::nn::init::kaiming_uniform_(l2_->weight, std::sqrt(5.0));
+    torch::nn::init::zeros_(l2_->bias);
+  }
+
+  torch::Tensor forward(torch::Tensor x) { return l2_->forward(torch::tanh(l1_->forward(x))); }
+
+  torch::nn::Linear l1_{nullptr};
+  torch::nn::Linear l2_{nullptr};
+};
+
+TORCH_MODULE(CascadeToyPolicy);
+
 torch::Tensor reconstruct_ptqtp_weight(const torch::Tensor& W, int num_planes) {
   torch::Tensor r = W.detach().clone();
   torch::Tensor acc = torch::zeros_like(r);
@@ -190,6 +208,8 @@ struct LibTorchTpemTrainer::Impl {
   CoreModule teacher_{nullptr};
   bool has_teacher_ = false;
   std::unique_ptr<torch::optim::Adam> optim_;
+  CascadeToyPolicy cascade_policy_{nullptr};
+  std::unique_ptr<torch::optim::Adam> cascade_optim_;
   std::map<std::string, torch::Tensor> frozen_router_;
   double last_lr_ = 1e-3;
   std::uint64_t seed_ = 42;
@@ -215,10 +235,31 @@ struct LibTorchTpemTrainer::Impl {
     frozen_router_.clear();
   }
 
+  void ensure_cascade_policy() {
+    if (!cascade_policy_) {
+      cascade_policy_ = CascadeToyPolicy();
+      rebuild_cascade_optim();
+    }
+  }
+
+  void rebuild_cascade_optim() {
+    if (!cascade_policy_) {
+      cascade_optim_.reset();
+      return;
+    }
+    cascade_optim_ = std::make_unique<torch::optim::Adam>(cascade_policy_->parameters(),
+                                                          torch::optim::AdamOptions(last_lr_));
+  }
+
   void set_learning_rate(double lr) {
     last_lr_ = lr;
     for (auto& group : optim_->param_groups()) {
       static_cast<torch::optim::AdamOptions&>(group.options()).lr(lr);
+    }
+    if (cascade_optim_) {
+      for (auto& group : cascade_optim_->param_groups()) {
+        static_cast<torch::optim::AdamOptions&>(group.options()).lr(lr);
+      }
     }
   }
 
@@ -434,6 +475,134 @@ struct LibTorchTpemTrainer::Impl {
     optim_->step();
     return loss.item<double>();
   }
+
+  static constexpr int kCascadeStateDim = 8;
+  static constexpr int kCascadeNumActions = 4;
+  static constexpr int kCascadeMaxSteps = 16;
+  static constexpr double kGrpoEps = 1e-8;
+
+  double train_step_cascade_grpo(std::size_t group_size, std::uint64_t step_mix) {
+    ensure_cascade_policy();
+    const auto gsz = static_cast<std::int64_t>(std::max<std::size_t>(1, group_size));
+    cascade_policy_->train();
+    std::vector<torch::Tensor> logprob_sums;
+    logprob_sums.reserve(static_cast<std::size_t>(gsz));
+    std::vector<torch::Tensor> returns_list;
+    returns_list.reserve(static_cast<std::size_t>(gsz));
+
+    for (std::int64_t g = 0; g < gsz; ++g) {
+      torch::manual_seed(static_cast<std::uint64_t>(step_mix ^ (static_cast<std::uint64_t>(g + 1) * 0x9E3779B9ULL)));
+      auto s = torch::randn({kCascadeStateDim}, torch::dtype(torch::kFloat32));
+      double total_r = 0.0;
+      std::vector<torch::Tensor> traj_lps;
+      traj_lps.reserve(static_cast<std::size_t>(kCascadeMaxSteps));
+      for (int t = 0; t < kCascadeMaxSteps; ++t) {
+        auto logits = cascade_policy_->forward(s);
+        auto log_p = torch::log_softmax(logits, /*dim=*/0);
+        auto probs = torch::softmax(logits, 0);
+        auto a = torch::multinomial(probs, /*num_samples=*/1, /*replacement=*/true).squeeze();
+        const int64_t ac = a.item<int64_t>();
+        traj_lps.push_back(log_p[ac]);
+        total_r += -0.01 * static_cast<double>(ac) +
+                   0.1 * s.sum().item<double>() / static_cast<double>(kCascadeStateDim);
+        s = (s + 0.05 * torch::randn_like(s)).detach();
+      }
+      logprob_sums.push_back(torch::stack(traj_lps).sum());
+      returns_list.push_back(torch::tensor(total_r, torch::dtype(torch::kFloat32)));
+    }
+
+    auto logprob_tensor = torch::stack(logprob_sums);
+    auto returns_tensor = torch::stack(returns_list).to(logprob_tensor.dtype()).detach();
+    torch::Tensor adv = returns_tensor;
+    if (gsz > 1) {
+      auto mean = returns_tensor.mean();
+      auto centered = returns_tensor - mean;
+      auto st = centered.pow(2).mean().sqrt();
+      adv = centered / (st + kGrpoEps);
+    }
+    auto loss = -(adv * logprob_tensor).mean();
+    cascade_optim_->zero_grad();
+    loss.backward();
+    cascade_optim_->step();
+    return loss.item<double>();
+  }
+
+  double train_step_cascade_cispo(std::size_t group_size, double epsilon, std::uint64_t step_mix) {
+    ensure_cascade_policy();
+    const auto gsz = static_cast<std::int64_t>(std::max<std::size_t>(1, group_size));
+    const double low = 1.0 - epsilon;
+    const double high = 1.0 + epsilon;
+    cascade_policy_->train();
+    std::vector<torch::Tensor> new_sums;
+    std::vector<torch::Tensor> old_sums;
+    std::vector<torch::Tensor> returns_list;
+    new_sums.reserve(static_cast<std::size_t>(gsz));
+    old_sums.reserve(static_cast<std::size_t>(gsz));
+    returns_list.reserve(static_cast<std::size_t>(gsz));
+
+    for (std::int64_t g = 0; g < gsz; ++g) {
+      torch::manual_seed(static_cast<std::uint64_t>(step_mix ^ (static_cast<std::uint64_t>(g + 101) * 0x85EBCA6BULL)));
+      auto s = torch::randn({kCascadeStateDim}, torch::dtype(torch::kFloat32));
+      double total_r = 0.0;
+      std::vector<torch::Tensor> old_lps;
+      std::vector<torch::Tensor> states;
+      std::vector<int64_t> actions;
+      old_lps.reserve(static_cast<std::size_t>(kCascadeMaxSteps));
+      states.reserve(static_cast<std::size_t>(kCascadeMaxSteps));
+      actions.reserve(static_cast<std::size_t>(kCascadeMaxSteps));
+
+      for (int t = 0; t < kCascadeMaxSteps; ++t) {
+        torch::Tensor logits;
+        torch::Tensor log_p;
+        int64_t ac = 0;
+        {
+          torch::NoGradGuard ng;
+          logits = cascade_policy_->forward(s);
+          log_p = torch::log_softmax(logits, 0);
+          auto probs = torch::softmax(logits, 0);
+          auto a = torch::multinomial(probs, 1, true).squeeze();
+          ac = a.item<int64_t>();
+          old_lps.push_back(log_p[ac].detach().clone());
+        }
+        states.push_back(s.clone());
+        actions.push_back(ac);
+        total_r += -0.01 * static_cast<double>(ac) +
+                   0.1 * s.sum().item<double>() / static_cast<double>(kCascadeStateDim);
+        s = (s + 0.05 * torch::randn_like(s)).detach();
+      }
+
+      std::vector<torch::Tensor> new_parts;
+      new_parts.reserve(static_cast<std::size_t>(kCascadeMaxSteps));
+      for (int t = 0; t < kCascadeMaxSteps; ++t) {
+        auto logits_n = cascade_policy_->forward(states[static_cast<std::size_t>(t)]);
+        auto log_pn = torch::log_softmax(logits_n, 0);
+        new_parts.push_back(log_pn[actions[static_cast<std::size_t>(t)]]);
+      }
+      new_sums.push_back(torch::stack(new_parts).sum());
+      old_sums.push_back(torch::stack(old_lps).sum());
+      returns_list.push_back(torch::tensor(total_r, torch::dtype(torch::kFloat32)));
+    }
+
+    auto logprob_tensor = torch::stack(new_sums);
+    auto old_tensor = torch::stack(old_sums).detach();
+    auto returns_tensor = torch::stack(returns_list).to(logprob_tensor.dtype()).detach();
+    auto diff = torch::clamp(logprob_tensor - old_tensor, -20.0, 20.0);
+    auto ratio = torch::exp(diff);
+    auto clipped = torch::clamp(ratio, low, high);
+    torch::Tensor adv = returns_tensor;
+    if (gsz > 1) {
+      auto mean = returns_tensor.mean();
+      auto centered = returns_tensor - mean;
+      auto st = centered.pow(2).mean().sqrt();
+      adv = centered / (st + kGrpoEps);
+    }
+    auto coeff = clipped.detach();
+    auto loss = -(coeff * adv * logprob_tensor).mean();
+    cascade_optim_->zero_grad();
+    loss.backward();
+    cascade_optim_->step();
+    return loss.item<double>();
+  }
 };
 
 std::unique_ptr<LibTorchTpemTrainer> LibTorchTpemTrainer::create(double learning_rate, std::uint64_t seed,
@@ -638,6 +807,15 @@ double LibTorchTpemTrainer::train_step_distill(std::size_t batch_size, std::int6
                                                const float* x_row_major, const float* target_row_major,
                                                double lambda_teacher, std::uint64_t step_mix) {
   return impl_->train_step_distill(batch_size, io_dim, x_row_major, target_row_major, lambda_teacher, step_mix);
+}
+
+double LibTorchTpemTrainer::train_step_cascade_grpo(std::size_t group_size, std::uint64_t step_mix) {
+  return impl_->train_step_cascade_grpo(group_size, step_mix);
+}
+
+double LibTorchTpemTrainer::train_step_cascade_cispo(std::size_t group_size, double epsilon,
+                                                     std::uint64_t step_mix) {
+  return impl_->train_step_cascade_cispo(group_size, epsilon, step_mix);
 }
 
 LibTorchTpemTrainer::~LibTorchTpemTrainer() = default;

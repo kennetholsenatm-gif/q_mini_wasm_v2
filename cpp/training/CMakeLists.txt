@@ -100,6 +100,7 @@ target_link_libraries(qminiwasm_training_proto PUBLIC protobuf::libprotobuf gRPC
 
 set(QMW_TRAINING_RUNTIME_SOURCES
   src/training_engine.cpp
+  src/training_phases.cpp
   src/native_checkpoint.cpp
   src/training_tracker.cpp
   src/balanced_sampler.cpp
@@ -178,3 +179,9 @@ if(QMINIWASM_TRAINING_WITH_LIBTORCH)
   target_link_libraries(qminiwasm_tpem_roundtrip PRIVATE qminiwasm_training_runtime)
   qmw_windows_copy_libtorch_dlls(qminiwasm_tpem_roundtrip)
 endif()
+
+add_executable(training_phases_test
+  test/training_phases_test.cpp
+)
+target_link_libraries(training_phases_test PRIVATE qminiwasm_training_runtime)
+

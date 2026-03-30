@@ -154,6 +154,9 @@ class ModelSection(BaseModel):
     io_d_model: Optional[int] = Field(None, ge=8, le=1_048_576)
     #: When True, apply one TropicalAttention after the ternary stack inside hybrid_inference.
     tropical_attn_per_block: Optional[bool] = None
+    #: When ``tropical_attn_per_block`` is True: ``tropical`` (max-plus hull) or
+    #: ``bloch`` (fidelity).
+    attention_backend: Optional[Literal["tropical", "bloch"]] = None
 
 
 class DistributedSection(BaseModel):
@@ -217,6 +220,29 @@ class CascadeSection(BaseModel):
     learned_projector: Optional[bool] = None
     router_hidden: Optional[int] = None
     couple_forward: Optional[bool] = None
+    #: Default cascade policy loss: ``grpo`` or ``cispo`` (per-phase override in
+    #: ``training_phases``).
+    policy_optimizer: Optional[Literal["grpo", "cispo"]] = None
+    #: CISPO trust-region half-width on the importance ratio (symmetric clip).
+    cispo_clip_epsilon: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+
+class TrainingPhaseSection(BaseModel):
+    """One row of ``[[training_phases]]`` (Unified Training Matrix)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1)
+    epochs: int = Field(..., ge=1)
+    supervised: bool = True
+    cascade_rl: bool = True
+    freeze_model_backbone: bool = False
+    router_only: bool = False
+    cascade_policy_optimizer: Literal["grpo", "cispo"] = "grpo"
+    cispo_clip_epsilon: Optional[float] = Field(None, ge=0.0, le=1.0)
+    cascade_mopd_lambda: Optional[float] = Field(None, ge=0.0)
+    tequila_deadzone: Optional[float] = Field(None, ge=0.0, le=1.0)
+    freeze_ternary_experts: bool = False
 
 
 class WasmSection(BaseModel):
@@ -339,6 +365,8 @@ class TrainingConfig(BaseModel):
     eval: EvalSection = Field(default_factory=EvalSection)
     adapter: AdapterSection = Field(default_factory=AdapterSection)
     cascade: CascadeSection = Field(default_factory=CascadeSection)
+    #: Ordered curriculum phases; when non-empty, epoch count is ``sum(epochs)`` unless overridden.
+    training_phases: Optional[List[TrainingPhaseSection]] = None
     cascade_curriculum_loop: CascadeCurriculumLoopSection = Field(
         default_factory=CascadeCurriculumLoopSection
     )
@@ -359,6 +387,8 @@ class TrainingConfig(BaseModel):
             out["io_d_model"] = m["io_d_model"]
         if "tropical_attn_per_block" in m:
             out["tropical_attn_per_block"] = m["tropical_attn_per_block"]
+        if "attention_backend" in m:
+            out["attention_backend"] = m["attention_backend"]
 
         dist = self.distributed.model_dump(exclude_none=True)
         if "gradient_checkpointing" in dist:
@@ -484,9 +514,14 @@ class TrainingConfig(BaseModel):
             "learned_projector": "cascade_learned_projector",
             "router_hidden": "cascade_router_hidden",
             "couple_forward": "cascade_couple_forward",
+            "policy_optimizer": "cascade_policy_optimizer",
+            "cispo_clip_epsilon": "cispo_clip_epsilon",
         }
         for k, v in c.items():
             out[c_map[k]] = v
+
+        if self.training_phases:
+            out["training_phases"] = [p.model_dump() for p in self.training_phases]
 
         w = self.wasm.model_dump(exclude_none=True)
         wmap = {
