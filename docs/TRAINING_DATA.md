@@ -1,6 +1,6 @@
 # Training data and ML engine results
 
-This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how **TOML and environment** line up with the stack. **Operator training** runs through the **Training WUI** and the C++ engine over **gRPC** using the same `configs/training/*.toml` files (see **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**). Many tables below still name **process-environment** variables used by the Python reference loop and CI; the native engine reads the **mapped proto fields** first—see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)** for overlap.
+This document describes how **training data** reaches the **C++ LibTorch** training core (fixed-width rows → forward → loss), what each source is good for, and how **TOML and environment** line up with the stack. **Operator training** runs through the **Training WUI** and the C++ engine over **gRPC** using `configs/training/*.toml` (see **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**). Tables that name **environment** variables reflect **proto-mapped** fields and deployment overrides—see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)**. **[DEPYTHONIZATION.md](DEPYTHONIZATION.md)** tracks removal of interpreter-era wording elsewhere.
 
 **Configuration policy:** Prefer **`configs/training/*.toml`** and the **[Training WUI](../training-wui/README.md)** for training knobs. Use **`.env`** only for **credentials** ([environment-variables.md](environment-variables.md)).
 
@@ -55,15 +55,13 @@ wasm_memory64_max_mb = 12288.0
 use_memory64 = true
 ```
 
-Cascade + MOPD helper: [`scripts/run_training_cascade_mopd.py`](../scripts/run_training_cascade_mopd.py) defaults to `--config configs/training/cascade_mopd.toml` and still injects `CASCADE_MOPD_*` / checkpoint paths via env for one-off overrides.
-
 ## Data sources (`TRAINING_DATA_SOURCE`)
 
 | Source | Description | Aligns with WASM memory semantics? |
 |--------|-------------|-------------------------------------|
 | `mesh` | Embedded C snippets compiled to bare wasm32 (`hash`, `encrypt`, `network`, `routing`, `consensus`). Uses `WasmEngine` + linear memory snapshots encoded to 4096-dim vectors. | Yes (synthetic but real wasmtime execution). |
-| `corpus` | JSON manifest listing paths to **bare wasm32** modules and export names. See [`corpus/manifest.json`](../corpus/manifest.json) and [`corpus/build_scratch_wasm.py`](../corpus/build_scratch_wasm.py). | Yes. |
-| `hf_tabular` | Hugging Face `datasets`: each row is turned into UTF-8 text, then [`encode_linear_memory`](../qminiwasm/wasm_host/memory_encode.py) produces **hidden**; **target = hidden** (identity MSE). | No — trains the hybrid stack on encoded text, not wasm linear memory. |
+| `corpus` | JSON manifest listing paths to **bare wasm32** modules and export names. See [`corpus/manifest.json`](../corpus/manifest.json) and corpus build tooling under [`corpus/`](../corpus/). | Yes. |
+| `hf_tabular` | Hugging Face rows: UTF-8 text blob → **4096-float** vector via the same layout as [`linear_memory_encode.hpp`](../cpp/wasm/linear_memory_encode.hpp); **target = hidden** (identity MSE). | No — scales text encodings, not wasm linear memory. |
 
 **Deployment-aligned data:** For behavior that should track **real WASM linear memory**, prefer **`mesh`** or **`corpus`**. Use **`hf_tabular`** for cheap scale and diversity (e.g. CodeSearchNet) as **pretraining** or auxiliary signal; it does not substitute for wasmtime-backed encodings at the edge.
 
@@ -73,14 +71,14 @@ The whitepaper-style catalog **[QMINIWASM Dataset and Expert Curation.md](QMINIW
 
 **Important limitations (read before scaling):**
 
-- **`hf_tabular` and native HF fetch** still implement **identity MSE** on **[`encode_linear_memory`](../qminiwasm/wasm_host/memory_encode.py)** vectors (`target == hidden`). They do **not** implement logits-level SFT, compiler rewards, or xCodeEval test execution from that document.
-- Use **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)** for what the LibTorch engine trains vs the Python graph; curated datasets here are **distribution shape** for the same encoder pipeline, not a guarantee of whitepaper-scale training.
+- **`hf_tabular` and native HF fetch** implement **identity MSE** on the **fixed-width encoder** vectors (`target == hidden`). They do **not** implement logits-level SFT, compiler rewards, or xCodeEval test execution from that document.
+- Use **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)** for the **LibTorch** capability surface; curated datasets here are **distribution shape**, not a guarantee of whitepaper-scale training.
 
 **Phase → Hub ids → wiring hints**
 
 | Phase / role | Hub dataset | `text_fields` / notes |
 |--------------|-------------|------------------------|
-| Phase 1 — STEM / logic | `nvidia/OpenMathInstruct-2` | Often message-style rows: set **`text_fields`** explicitly after inspecting the dataset card (e.g. fields such as `problem`, `generated_solution`, or nested `messages`—Python auto-heuristic concatenates common instruction/response keys when unset; see [`hf_loader`](../qminiwasm/training/hf_loader.py)). |
+| Phase 1 — STEM / logic | `nvidia/OpenMathInstruct-2` | Often message-style rows: set **`text_fields`** explicitly after inspecting the dataset card (e.g. `problem`, `generated_solution`, nested `messages`). When unset, the **C++** row fetch uses deterministic key-concatenation heuristics (`hf_datasets_rows.cpp`). |
 | Phase 1 — STEM / multi-trace | `open-r1/OpenR1-Math-220k` | Prefer explicit **`text_fields`** from the dataset schema (e.g. problem + solution columns). |
 | Phase 1 — code / execution | `NTU-NLP-sg/xCodeEval` | Multi-config dataset: set **`dataset_config`** per [Hyperparameters Hub README](https://huggingface.co/datasets/NTU-NLP-sg/xCodeEval); choose columns that flatten to text for the encoder. |
 | Phase 1 — edge-oriented code | `nex-agi/coding-eval` | Set **`text_fields`** from the dataset viewer; may require gated access + **`HF_TOKEN`**. |
@@ -88,17 +86,13 @@ The whitepaper-style catalog **[QMINIWASM Dataset and Expert Curation.md](QMINIW
 | Phase 3 — skeleton CoT | `melongena/SSR-CoT-16k` | Use **`text_fields`** matching SSR fields from the dataset card. |
 | Phase 3 — open reasoning anchor | `open-thoughts/OpenThoughts-114k` | Use **`text_fields`** per card; pair with low **`num_samples`** for smoke runs. |
 
-**Native gRPC parity:** When **`[huggingface].text_fields`** is set in TOML, the Training WUI / **`BuildHfProto`** maps it to **`HfDatasetParams.text_fields`** in [`proto/training_engine.proto`](../proto/training_engine.proto). The C++ engine passes the same ordered keys into [`hf_datasets_rows.cpp`](../cpp/training/src/hf_datasets_rows.cpp) so native row text matches the Python loader’s explicit column path. If **`text_fields`** is empty, native fetch keeps legacy behavior (concatenate top-level string JSON fields in key order).
+**TOML → proto → C++:** When **`[huggingface].text_fields`** is set, the Training WUI / **`BuildHfProto`** maps it to **`HfDatasetParams.text_fields`** in [`proto/training_engine.proto`](../proto/training_engine.proto). The engine passes those keys into [`hf_datasets_rows.cpp`](../cpp/training/src/hf_datasets_rows.cpp). If **`text_fields`** is empty, fetch concatenates top-level string fields in key order.
 
 **Theory pillars (experts):** The same doc’s “Task 2” experts (1.58-bit, CISPO, MOPD, tropical routing, stabilizer simulation) map to implementation status in **[ARCHITECTURE_WHITEPAPERS.md](ARCHITECTURE_WHITEPAPERS.md)** (traceability matrix) and **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**—link there instead of duplicating long citations in this file.
 
-Install Hugging Face support for library/tests (includes **`python-dotenv`**; load a repo-root **`.env`** in your tooling if needed; put `HUGGING_FACE_HUB_TOKEN` or `HF_TOKEN` there—do not commit `.env`):
+**Hub authentication:** put **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** in a local **`.env`** (see [environment-variables.md](environment-variables.md)); never commit secrets.
 
-```bash
-pip install -e ".[training]"
-```
-
-**Intel GPU training:** install PyTorch with **XPU** support first, then set `ACCELERATOR=xpu` — see **[INSTALL_TORCH_XPU.md](INSTALL_TORCH_XPU.md)**.
+**Intel GPU / LibTorch:** native engine device selection follows TOML and `ACCELERATOR` as mapped in **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)** and **[INSTALL_TORCH_XPU.md](INSTALL_TORCH_XPU.md)** (toolchain-focused; operator paths are Go + C++).
 
 ## Multiple Hugging Face datasets (WUI / TOML)
 
@@ -132,9 +126,9 @@ HF_TEXT_FIELDS=func_code_string,func_documentation_string
 
 ## WASM linear memory encoding
 
-[`qminiwasm/wasm_host/memory_encode.py`](../qminiwasm/wasm_host/memory_encode.py) maps bytes + scalars to a **4096-float** vector (stable layout: metadata slots + byte-derived floats). Training expects **hidden** and **target** each shaped `(4096,)`.
+[`cpp/wasm/linear_memory_encode.hpp`](../cpp/wasm/linear_memory_encode.hpp) defines **`encode_linear_memory_u8`**: bytes + scalars → **4096-float** vector (metadata slots + byte-derived floats). Training expects **hidden** and **target** each shaped `(4096,)`.
 
-**Model `io_d_model`:** the default encoder width is **4096**; `[model].io_d_model` in TOML (and the Training WUI) must match that vector size for `hybrid_inference`. If you change `io_d_model`, use a matching encoder or a custom encoding pipeline—otherwise shape errors occur at the stem. The native LibTorch trainer uses the same `io_d_model` for synthetic MSE batches so its checkpoint geometry stays aligned with Python exports.
+**Model `io_d_model`:** default width **4096**; `[model].io_d_model` in TOML must match. **`CoreModule`** checkpoints require consistent stem geometry—see **[cpp/training/README.md](../cpp/training/README.md)**.
 
 **Important:** only the first **~4088 UTF-8 bytes** of each row’s blob affect the embedding (the rest is unused). In **auto** HF mode (no `HF_TEXT_FIELDS`), the loader prepends a short labeled **`[context]`** block (`language`, `func_name`, `repo`, `path` when present) so that window mixes repository metadata with the **start** of the function body. Disable with `HF_CONTEXT_FIELDS=0`, or set `HF_CONTEXT_FIELDS=key1,key2` to override.
 
@@ -164,7 +158,7 @@ The variables below are **process-environment** hooks (shell, CI, containers). *
 | `HF_DETERMINISTIC_KEEP_EVERY_N` | Deterministic subsampling stride (`N`), keeps rows where `index % N == 0` |
 | `HF_TEXT_FIELDS` | Comma-separated row keys for text blob |
 | `HF_CONTEXT_FIELDS` | `0` / `off` / `false` disables `[context]` prefix; comma list selects metadata keys; unset uses defaults in auto mode only |
-| `SEED` | Reproducibility (Python / NumPy / torch) |
+| `SEED` | Reproducibility (engine / HF / LibTorch seed chain) |
 | `GRAD_CLIP_NORM` | Global grad clip (e.g. `1.0`) |
 | `LR_PLATEAU_PATIENCE` | `ReduceLROnPlateau` patience; `0` disables. For `hf_tabular`, defaults to `2` if unset |
 | `LR_PLATEAU_FACTOR`, `LR_PLATEAU_MIN_LR` | Scheduler tuning |
@@ -177,14 +171,14 @@ The variables below are **process-environment** hooks (shell, CI, containers). *
 | `CHECKPOINT_BEST_PATH` | Whenever epoch **train** mean MSE improves, overwrite this file with the best-so-far weights |
 | `EVAL_HOLDOUT_FRACTION` | Float in `(0,1)`: hold out that fraction for **eval** MSE (not used in optimizer). With `SEED` set, indices are shuffled deterministically; without `SEED`, the **last** fraction of rows is eval |
 | `EVAL_EVERY_EPOCH` | If `1` / `true` and holdout is enabled, log **eval** mean MSE after each epoch (`metrics.epoch_eval_mean_mse`) |
-| `TARGET_MEAN_MSE` | Optional threshold on **mean** `torch.nn.functional.mse_loss` over all elements (same scale as logged `mean_mse` / `eval_mean_mse`). Example: `1e-4` for **0.0001** |
+| `TARGET_MEAN_MSE` | Optional threshold on **mean MSE** over all elements (same scale as logged `mean_mse` / `eval_mean_mse`). Example: `1e-4` |
 | `STOP_ON_TARGET_MSE` | If `1` / `true`, stop early when the threshold is met (prefers **holdout eval** when `EVAL_EVERY_EPOCH=1`; otherwise train mean MSE — see training loop warning) |
 | `HYBRID_ADAPTER` | If `1` / `true`, enable residual MLP after ternary (see subsection above) |
 | `HYBRID_ADAPTER_HIDDEN` | Bottleneck width (integer ≥ 32; default **1024**) |
 | `CASCADE_RL`, `CASCADE_POLICY_LR`, `CASCADE_STEPS_PER_EPOCH`, `CASCADE_GROUP_SIZE`, `CASCADE_STATE_DIM`, `CASCADE_NUM_ACTIONS`, `CASCADE_MOPD_LAMBDA`, `CASCADE_MOPD_FEAT_LOSS`, `CASCADE_SEED_FROM_HIDDEN` | Cascade GRPO phase before each epoch’s MSE batches (prefer [`configs/training/cascade_mopd.toml`](../configs/training/cascade_mopd.toml); see **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**; CI env in [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)) |
-| `CASCADE_COUPLE_FORWARD` | If `0` / `false`, digest uses **input hidden mean only**; otherwise (default) blends **0.5 × input mean + 0.5 × `hybrid_inference` output mean** per batch |
-| `USE_CASCADE_ROUTER` | Attach `CascadeRouter` on the model (trained by cascade optimizer, not main AdamW) |
-| `CASCADE_LEARNED_PROJECTOR` | Loop-owned `CascadeRouter` when model has no router |
+| `CASCADE_COUPLE_FORWARD` | If `0` / `false`, digest uses **input hidden mean only**; otherwise (default) blends **0.5 × input mean + 0.5 × CoreModule forward output mean** per batch |
+| `USE_CASCADE_ROUTER` | Train checkpoint with attached cascade router head (native `CoreModule` surface) |
+| `CASCADE_LEARNED_PROJECTOR` | Train loop-owned cascade projector without attaching router to main export |
 | `CASCADE_ROUTER_HIDDEN` | Router MLP width |
 | `QAOA_SIMULATOR_BACKEND` | `auto`, `statevector`, or `mps` for `qiskit_statevector` execution mode |
 | `QAOA_MPS_MAX_BOND_DIM` | Optional MPS bond-dimension cap (when using MPS backend) |
@@ -203,7 +197,6 @@ Run (native CLI; requires C++ server as above):
 cd training-wui
 go run ./cmd/qmw-grpc-train -root .. -config configs/training/edge_fast_iter.toml
 go run ./cmd/qmw-grpc-train -root .. -config configs/training/edge_full_curriculum_streaming.toml
-cd .. && python scripts/benchmark_edge_curriculum.py
 ```
 
 **`hf_tabular` defaults (when env vars are unset):** `TARGET_MEAN_MSE=1e-4`, `GRAD_CLIP_NORM=1`, `CASCADE_POLICY_LR = 0.5 × learning_rate`, and `learning_rate=1.5e-4` when the engine constructor LR is the default **1e-4** and `LEARNING_RATE` is not set. Set env vars explicitly to override.
@@ -218,9 +211,9 @@ cd .. && python scripts/benchmark_edge_curriculum.py
 
 ### Cascade RL and MOPD
 
-The training loop runs a short **cascade GRPO** phase (toy routing MDP) before each epoch’s supervised MSE when `CASCADE_RL` is enabled. Optional **`CASCADE_MOPD_LAMBDA`** > 0 adds a **MOPD feature loss** during that phase: student features are the final MDP state `s`; the teacher is currently a **synthetic** stop-gradient target **`s + noise`** (regularization), not distillation from another model. **`CASCADE_MOPD_FEAT_LOSS`** selects `mse` vs `cosine` for that feature term.
+The **native engine** runs a **cascade GRPO/CISPO** phase (toy MDP) before supervised MSE when enabled. Optional **`CASCADE_MOPD_LAMBDA`** > 0 adds **MOPD-style** feature regularization during that phase. **`CASCADE_MOPD_FEAT_LOSS`** selects `mse` vs `cosine`.
 
-Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**.
+Full detail: **[CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md)**.
 
 **Continuation run (baseline → Cascade + MOPD):** see **§ Recommended continuation run** in [CASCADE_AND_MOPD.md](CASCADE_AND_MOPD.md) and [`configs/training/cascade_mopd.toml`](../configs/training/cascade_mopd.toml).
 
@@ -257,20 +250,18 @@ Runs depend on **hardware**, **seed**, **sample count**, and **epochs**. The fol
 
 ### Goal: mean MSE ≈ **1e-4** on real-world data
 
-- **What the number means:** training uses `F.mse_loss(output, target)` with default `reduction="mean"` over **all** elements in the batch (shape includes the full **4096**-dim vectors). Targets from **mesh/corpus** are bounded (roughly **[0, 1]** in most body slots); **HF tabular** uses the same encoder, so MSE is on a comparable scale.
-- **Extra capacity (scoped):** set **`HYBRID_ADAPTER=1`** to add a **residual MLP** after the ternary expert (`4096 → HYBRID_ADAPTER_HIDDEN → 4096`, default hidden **1024**). It is included in the AdamW step, saved in checkpoints as **`hybrid_adapter`**, and **auto-built on load** when serving from a checkpoint that contains those weights. This is the supported path toward harder **low-MSE** fits without changing the loss.
-- **Strict 1e-4 remains demanding** for very diverse rows: the quantum router stack is still mostly an **identity** forward; the adapter adds float MLP capacity while the ternary path stays STE-constrained. Combine with **holdout eval**, **LR schedule**, and **enough data/epochs** as needed.
+- **What the number means:** the **C++ engine** uses **mean MSE** over **all** elements in the micro-batch (including full **4096**-dim vectors). Targets from **mesh/corpus** are bounded (roughly **[0, 1]** in most body slots); **HF tabular** rows use the same width, so MSE is on a comparable scale.
+- **Extra capacity (scoped):** enable the **hybrid adapter** in TOML (`hybrid_adapter` / env mapped in proto) to add a **residual MLP** after the ternary expert (`4096 → hidden → 4096`). It is optimized with the main loop and saved in checkpoints when present.
+- **Strict 1e-4 remains demanding** for very diverse rows: combine **holdout eval**, **LR schedule**, and **enough data/epochs** as needed.
 - **Operational setup:** set `TARGET_MEAN_MSE=1e-4`, use a **holdout** (`EVAL_HOLDOUT_FRACTION`) and **`EVAL_EVERY_EPOCH=1`** so success is judged on **eval** mean MSE, and optionally `STOP_ON_TARGET_MSE=1`. After the run, check `metrics.target_mse_met`, `metrics.target_mse_reported_value`, and `metrics.target_mse_reported_name`.
 
 ### Returned metrics
 
-The **WUI** and **gRPC telemetry** expose epoch loss, eval MSE, LR, cascade fields, and sample counts (see **`training-wui/telemetry_grpc_payload.go`** and **`proto/training_engine.proto`**). For **library-level** runs, `qminiwasm.engine.train.main()` still returns a dict with fields such as `epochs_run`, `final_loss`, nested `metrics.*`, and checkpoint paths—useful for pytest parity—not as an operator CLI.
-
-Use telemetry series to compare runs with the same `SEED`, `HF_NUM_SAMPLES`, and `BATCH_SIZE`.
+The **WUI** and **gRPC telemetry** expose epoch loss, eval MSE, LR, cascade fields, and sample counts (see **`training-wui/telemetry_grpc_payload.go`** and **`proto/training_engine.proto`**). Use telemetry series to compare runs with the same `SEED`, `HF_NUM_SAMPLES`, and `BATCH_SIZE`.
 
 ## When you need “real” WASM traces
 
-For architecture-aligned supervision, prefer **`corpus`** or **`mesh`** (wasmtime + linear memory), not `hf_tabular`. **WASI-linked** modules (imports `wasi_snapshot_preview1`, etc.) are instantiated via wasmtime’s **`Linker` + `WasiConfig`** (`qminiwasm.wasm_host.wasi_link.instantiate_wasmtime_module`). To compile C as **wasm32-wasip1** with wasi-sdk, set **`WASI_SDK_PATH`** and **`QMINIWASM_WASM_C_LINK=wasip1`** (default remains bare `wasm32` for embedded mesh snippets).
+For architecture-aligned supervision, prefer **`corpus`** or **`mesh`** (WASM + linear memory), not `hf_tabular`. **WASI-linked** modules (`wasi_snapshot_preview1`, etc.) are loaded by your **host WASM runtime** with a WASI-capable linker. To compile C as **wasm32-wasip1** with wasi-sdk, set **`WASI_SDK_PATH`** and your toolchain’s **wasip1** link flags (bare `wasm32` remains typical for embedded mesh snippets).
 
 ## Remote GPU / OpenTofu
 

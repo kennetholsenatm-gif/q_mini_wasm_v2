@@ -165,7 +165,7 @@ Checkpoints are **trainable TPEM interchange v2**:
 - Python loads them with **`load_trainable_tpem_into_model`**. To **create** a v2 file from Python for C++ resume, use **`save_trainable_tpem_interchange_v2`** in `qminiwasm.tpem.trainable_tpem`.
 - **`model_uri`** in `proto/training_engine.proto` / gRPC: optional path to an existing interchange v2 before training starts. If **`model_uri`** is empty, optional **`d_model`**, **`io_d_model`**, **`num_ternary_blocks`** on the same message select **cold-start** geometry (random init); otherwise the native trainer defaults to `4096` / `4096` / `1`.
 
-**Scope vs full Python:** Native training matches the **ternary stack + I/O** path and **optional Bloch attention** (fidelity weights; no tropical/max-plus attention). There is no hybrid adapter, cascade router training, or QAOA execution in the forward pass. Use `qaoa_execution_mode="pennylane"` for a typical empty `quantum_router` snapshot. Qiskit-backed routers may still serialize tensors into the interchange; they are passed through on save.
+**Scope vs interpreter reference graphs:** Native training matches the **ternary stack + I/O** path and **optional Bloch attention** (fidelity weights; no tropical/max-plus attention). There is no hybrid adapter, cascade router training, or QAOA execution in the **CoreModule** forward. Use `qaoa_execution_mode="pennylane"` for a typical empty `quantum_router` snapshot. Qiskit-backed routers may still serialize tensors into the interchange; they are passed through on save.
 
 Golden-vector parity for the Bloch module is checked by **`bloch_golden_test`** (LibTorch) using `cpp/training/test/data/bloch_golden.json` from `scripts/gen_bloch_golden.py`.
 

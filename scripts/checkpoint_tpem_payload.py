@@ -18,7 +18,9 @@ if str(REPO_ROOT) not in sys.path:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Write packed ternary payload bytes from checkpoint")
-    ap.add_argument("checkpoint", type=Path, help="Trainable TPEM .pt (dict with ternary_expert.weight)")
+    ap.add_argument(
+        "checkpoint", type=Path, help="Trainable TPEM .pt (dict with ternary_expert.weight)"
+    )
     ap.add_argument(
         "--output",
         "-o",
@@ -37,7 +39,9 @@ def main() -> int:
 
     blob = torch.load(str(ck), map_location="cpu", weights_only=False)
     if not isinstance(blob, dict):
-        print(f"checkpoint must be a dict trainable TPEM, got {type(blob).__name__}", file=sys.stderr)
+        print(
+            f"checkpoint must be a dict trainable TPEM, got {type(blob).__name__}", file=sys.stderr
+        )
         return 1
     te = blob.get("ternary_expert")
     if not isinstance(te, dict):

@@ -47,7 +47,7 @@
   ],
   "scan_extensions": [".md", ".toml", ".py", ".rs", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".c", ".go"],
   "path_prefixes": ["docs/", "wiki/", "configs/", "qminiwasm/", "cpp/", "ternary_packed/", "scripts/", "tests/", "training-wui/"],
-  "ignore_path_substrings": ["/vendor/", "node_modules/", ".git/", "__pycache__/", ".cursor/", "mcps/"],
+  "ignore_path_substrings": ["/vendor/", "node_modules/", ".git/", "__pycache__/", ".cursor/", "mcps/", ".deps/", "/_deps/", "/build/", "build-training-engine"],
   "skip_all_patterns_for_paths": [
     "docs/Q-Mini-WASM_ Edge AI Taxonomy.md",
     "docs/UnifedMemory.md",
@@ -55,6 +55,7 @@
     "docs/QMINIWASM_ Advanced Architecture Synthesis.md",
     "docs/QMINIWASM_ Ternary Clifford Optimization.md",
     "docs/Ternary Quantum AI Edge Research.md",
-    "docs/QMINIWASM_ Synthetic Data for Edge AI.md"
+    "docs/QMINIWASM_ Synthetic Data for Edge AI.md",
+    "docs/QMINIWASM Dataset and Expert Curation.md"
   ]
 }

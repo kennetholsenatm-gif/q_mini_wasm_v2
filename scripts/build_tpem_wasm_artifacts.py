@@ -101,7 +101,11 @@ def _edge_schema(tier: int) -> dict:
     preset = ENCLAVE_TIER_PRESETS[name]
     tier_num = int(preset.tier_number)
     use_m64 = bool(preset.memory64_required) or tier >= 3
-    m64_mb = float(preset.default_memory64_max_mb) if preset.default_memory64_max_mb is not None else None
+    m64_mb = (
+        float(preset.default_memory64_max_mb)
+        if preset.default_memory64_max_mb is not None
+        else None
+    )
     if not use_m64:
         m64_mb = None
     return {
@@ -196,7 +200,9 @@ def main() -> int:
 
     schema_obj = _edge_schema(int(args.tier))
     schema_path = out / EDGE_SCHEMA_NAME
-    schema_path.write_text(json.dumps(schema_obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    schema_path.write_text(
+        json.dumps(schema_obj, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     schema_bytes = schema_path.read_bytes()
     schema_digest = hashlib.sha256(schema_bytes).hexdigest()
     schema_len = len(schema_bytes)
@@ -245,7 +251,9 @@ def main() -> int:
         }
     }
     manifest_path = out / "artifact_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     verify_artifact_contract(out)
 
     print(f"Wrote {wasm_path} ({len(wasm_bytes)} bytes, sha256={wasm_digest})")
