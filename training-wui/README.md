@@ -203,7 +203,7 @@ The dashboard can run **`apply`** before training and **`destroy`** when the job
 
 ### Train on pod vs train on WUI host
 
-- **Train on the pod (default for RunPod):** Set **Execution target** to RunPod and leave **Train on cloud GPU** checked. **Launch training** runs **`tofu apply`** (unless skipped or warm target), waits for **`public_ip`** (or uses the warm host), **tar-syncs** the repo over **SSH**, then runs **`python -u -m qminiwasm.engine`** on the pod (venv + `pip install -e ".[training]"` each run) with **`--wui-stop-file .wui/stop_<runId>`** for cooperative stop.
+- **Train on the pod (default for RunPod):** Set **Execution target** to RunPod and leave **Train on cloud GPU** checked. **Launch training** runs **`tofu apply`** (unless skipped or warm target), waits for **`public_ip`** (or uses the warm host), **tar-syncs** the repo over **SSH**, then runs the **native** remote script: start **`qminiwasm_training_engine_server`** on the pod and **`go run ./cmd/qmw-grpc-train`** under **`training-wui/`** (optional **`-stop-file`** for cooperative stop). Requires **Go**, a **built** C++ training server, and **LibTorch** on the pod—see [`runpod_remote.go`](runpod_remote.go) and [docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md).
 - **Train on the WUI host:** Uncheck **Train on cloud GPU**. The pod may still be provisioned, but training runs **locally** via **gRPC** to the C++ engine, same idea as a pure local run.
 
 **CUDA:** Pods default to **`ACCELERATOR=cuda`** in container env. See [`infra/runpod/CLOUD_ACCELERATOR.md`](../infra/runpod/CLOUD_ACCELERATOR.md).
@@ -239,9 +239,9 @@ Each run writes checkpoints under **`artifacts/models/<model-slug>/`** (repo roo
 | `best.pt` | Best training MSE so far (`CHECKPOINT_BEST_PATH`) — **default for serving** |
 | `latest.pt` | Last epoch (`CHECKPOINT_LATEST_PATH`) — used for **resume** |
 | `serve.toml` | Minimal `[serve]` table; load with **`QMINIWASM_SERVE_CONFIG=artifacts/models/<slug>/serve.toml`** |
-| `agent_bundle.json` | Machine-readable paths + **`uvicorn qminiwasm.engine.serve:app`** hint + HTTP API summary |
+| `agent_bundle.json` | Machine-readable paths + **legacy** **`uvicorn qminiwasm.engine.serve:app`** hint + HTTP API summary |
 
-After training, point tools at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn qminiwasm.engine.serve:app`** with **`pip install -e ".[serve]"`**. Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle for the exact contract.
+**Legacy HTTP inference (Python FastAPI):** point tools at **`agent_bundle.json`** or set **`QMINIWASM_CHECKPOINT=artifacts/models/<slug>/best.pt`** and run **`uvicorn qminiwasm.engine.serve:app`** with **`pip install -e ".[serve]"`**. Inference is **`POST /infer`** with **`hidden_states`** (batch of 4096-float vectors); see the bundle for the exact contract. For stack-level defaults vs Go **`qmw-serve`**, see **[docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md)**.
 
 **From the WUI:** After **`agent_bundle.json`** exists, **`POST /api/serve/start`** with body `{ "model_stem": "<slug>", "port": 8001 }` starts **`uvicorn`** on **`127.0.0.1`**, sets **`QMINIWASM_SERVE_CONFIG`**, and writes **`artifacts/models/<slug>/docker-compose.serve.yaml`**. **`POST /api/serve/stop`** stops it; **`GET /api/serve/status`** returns running flag, pid, and log tail. **Training and serve cannot run at the same time** in one WUI process.
 

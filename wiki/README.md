@@ -6,7 +6,7 @@ Start here:
 
 - Main entrypoint: [../README.md](../README.md)
 - Project taxonomy glossary: [../docs/Q-Mini-WASM_ Edge AI Taxonomy.md](../docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md)
-- 0-to-1 happy path: [../docs/getting-started/QUICKSTART_0_TO_1.md](../docs/getting-started/QUICKSTART_0_TO_1.md)
+- Training WUI (native): [../training-wui/README.md](../training-wui/README.md); legacy FastAPI inference quickstart: [../docs/getting-started/QUICKSTART_0_TO_1.md](../docs/getting-started/QUICKSTART_0_TO_1.md)
 - Operator runbook: [../docs/operations/OPERATIONS_RUNBOOK.md](../docs/operations/OPERATIONS_RUNBOOK.md)
 - Vector dataflow walkthrough: [../docs/architecture/JOURNEY_OF_A_VECTOR.md](../docs/architecture/JOURNEY_OF_A_VECTOR.md)
 

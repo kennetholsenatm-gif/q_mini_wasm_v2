@@ -1,6 +1,8 @@
 # AI training pipeline
 
-This page explains **how** the Q-Mini-WASM / **qminiwasm-core** training path works and **why** it is shaped this way. For every environment variable, metric name, and checkpoint field, use the canonical in-repo reference:
+This page explains **how** the Q-Mini-WASM / **qminiwasm-core** training path works and **why** it is shaped this way. **Mission Control / Training WUI** uses the **native** path (Go client → C++ **`TrainingEngineService`** over gRPC); the walkthrough below follows the **legacy Python** `run_training_loop` for clarity unless noted. Canonical split: **[docs/TRAINING_NATIVE_PARITY.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_NATIVE_PARITY.md)**.
+
+For every environment variable, metric name, and checkpoint field, use the canonical in-repo reference:
 
 **[docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md)**
 
@@ -8,7 +10,7 @@ This page explains **how** the Q-Mini-WASM / **qminiwasm-core** training path wo
 
 Train the hybrid stack around `QMiniWASM` so **`hybrid_inference`** improves under a **supervised signal**: mean **MSE** between model output and a **4096-dimensional target**, built from [`memory_encode`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/wasm_host/memory_encode.py) (metadata slots plus byte-derived floats).
 
-The entrypoint is **`python -m qminiwasm.engine --config configs/training/<profile>.toml`** (or **`python -m qminiwasm.cli train`**), which loads TOML + env-driven [`EngineConfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/config.py) and calls [`run_training_loop`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/training/loop.py) from [`qminiwasm/engine/train.py`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/train.py).
+The **legacy Python** entrypoint is **`python -m qminiwasm.engine --config configs/training/<profile>.toml`** (or **`python -m qminiwasm.cli train`**), which loads TOML + env-driven [`EngineConfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/config.py) and calls [`run_training_loop`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/training/loop.py) from [`qminiwasm/engine/train.py`](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/qminiwasm/engine/train.py). **Default WUI training** does not use this subprocess; it uses gRPC and the mapping in [`training-wui/trainingconfig`](https://github.com/kennetholsenatm-gif/qminiwasm-core/tree/main/training-wui/trainingconfig).
 
 **Why MSE on a fixed vector?** It keeps the objective simple and comparable across batches: same shape, same reduction (`mean` over all elements including the full 4096 dims). It is **not** full next-token language modeling; plateaus and residual error are expected on diverse encodings.
 
@@ -80,7 +82,7 @@ Canonical technical reference: **[docs/QUANTUM_QISKIT.md](https://github.com/ken
 ## Checkpoints and serving
 
 - **`CHECKPOINT_SAVE_PATH` / `CHECKPOINT_BEST_PATH` / `CHECKPOINT_LOAD_PATH`:** Single `.pt` with `quantum_router`, `ternary_expert`, optional **`hybrid_adapter`**, optional **`cascade_policy`** (maps to `model.cascade_router` when **`USE_CASCADE_ROUTER=1`**).
-- **Why strict naming matters:** Serving with `uvicorn qminiwasm.engine.serve:app` and **`QMINIWASM_CHECKPOINT`** must use the same **adapter** and **cascade** flags as training or weights will not load as expected (`strict=False` still logs missing keys).
+- **Why strict naming matters:** Serving with **legacy** `uvicorn qminiwasm.engine.serve:app` and **`QMINIWASM_CHECKPOINT`** must use the same **adapter** and **cascade** flags as training or weights will not load as expected (`strict=False` still logs missing keys). Align with **[TRAINING_NATIVE_PARITY.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_NATIVE_PARITY.md)** when using Go/`qmw-serve` instead.
 
 See the **Serving** and **Checkpoints** sections in [docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md).
 

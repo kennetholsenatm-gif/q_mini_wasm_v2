@@ -27,7 +27,7 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 
 ## Pilot 4 (landed): `qminiwasm.engine` only
 
-- **What:** Training TOML, `EngineConfig`, `train` / `serve`, and helpers live in [`qminiwasm/engine/`](../qminiwasm/engine/). Run **`python -m qminiwasm.engine`** or **`python -m qminiwasm.cli train`**; serve with **`uvicorn qminiwasm.engine.serve:app`**. The old top-level **`engine/`** package was **removed**.
+- **What:** Training TOML, `EngineConfig`, `train` / `serve`, and helpers live in [`qminiwasm/engine/`](../qminiwasm/engine/). Run **`python -m qminiwasm.engine`** or **`python -m qminiwasm.cli train`**; serve with **`uvicorn qminiwasm.engine.serve:app`**. The old top-level **`engine/`** package was **removed**. **Note:** the **Training WUI** default path now uses **Go + C++ gRPC** ([TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)); these Python entrypoints remain the **legacy** process shell.
 - **Boundary:** [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md): **`qminiwasm.engine` → library** only; library modules must not import `qminiwasm.engine`.
 
 ## Pilot 5 (landed): removed `qminiwasm.enclave`

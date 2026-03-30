@@ -22,7 +22,7 @@ Environment variables:
 
 ## Example compose / OpenTofu layout (optional)
 
-If you maintain a security stack under `containers/security-stack/` or `infra/opentofu/modules/`, keep **vendor-specific image names and YAML** in those layers only; prose in this repo should refer to **internal CA** and **OIDC IdP** in docs and runbooks.
+If you maintain a security stack under `containers/security-stack/` or a separate OpenTofu/Kubernetes repo, keep **vendor-specific image names and YAML** in those layers only; prose in this repo should refer to **internal CA** and **OIDC IdP** in docs and runbooks. The default **qminiwasm-core** tree does not include `infra/opentofu/modules/`.
 
 ## Federation pattern
 

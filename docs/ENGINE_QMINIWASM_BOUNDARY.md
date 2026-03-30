@@ -27,8 +27,8 @@ There is **no** top-level `engine/` Python package anymore; use **`python -m qmi
 
 ## Entrypoints
 
-- **Training:** `python -m qminiwasm.engine [--config PATH]` or `python -m qminiwasm.cli train …`
-- **Inference:** `uvicorn qminiwasm.engine.serve:app`
+- **Training:** `python -m qminiwasm.engine [--config PATH]` or `python -m qminiwasm.cli train …` (**legacy direct CLI**; the **Training WUI** default does not invoke these — it uses C++ gRPC per [TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md).)
+- **Inference:** `uvicorn qminiwasm.engine.serve:app` (**legacy FastAPI** HTTP server)
 
 ## WASM runtime
 

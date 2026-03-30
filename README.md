@@ -2,9 +2,25 @@
 
 **[Glossary](docs/GLOSSARY.md)** — terms and acronyms used below.
 
-## Run locally
+## Runtime stack (read first)
 
-Python 3.10+ and `pip`. From the repository root:
+This repository is an **edge-oriented ML runtime**: bounded **WebAssembly** execution, ternary/TPEM workflows, and optional quantum-assisted routing. Treat it as **infrastructure you provision deliberately**, not a single pip-install demo.
+
+| Surface | Role |
+|---------|------|
+| **Training WUI** ([`training-wui/README.md`](training-wui/README.md)) | Go web UI; **default training** talks to the C++ **`TrainingEngineService`** over **gRPC** (LibTorch). |
+| **C++ training engine** ([`cpp/training/README.md`](cpp/training/README.md)) | Native epoch loop, telemetry; must be built and reachable at `grpc_addr` in [`configs/wui.toml`](configs/wui.toml). |
+| **`qminiwasm` (Python)** | Library, **CI/tests**, optional **legacy** `python -m qminiwasm.engine` training loop, **FastAPI/uvicorn** inference, tooling, quantum sidecar paths ([`docs/TRAINING_NATIVE_PARITY.md`](docs/TRAINING_NATIVE_PARITY.md), [`sidecar/quantum/README.md`](sidecar/quantum/README.md)). |
+
+**Operator quickstart (native training):** follow **Path A** in [`training-wui/README.md`](training-wui/README.md) (Go 1.22+, `wat2wasm` if building edge artifacts, C++ server + `go run .` in `training-wui/`). Helper: [`scripts/start-training-stack.ps1`](scripts/start-training-stack.ps1) / `.sh` where present.
+
+**Remote GPU / RunPod:** **[docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)** and **[docs/RUNPOD_QUICKSTART.md](docs/RUNPOD_QUICKSTART.md)** — not part of a minimal local bring-up.
+
+---
+
+## Legacy: local FastAPI inference (Python)
+
+For **HTTP inference only** via the historical FastAPI app (not the default training stack): Python 3.10+ and `pip`. From the repository root:
 
 ```bash
 git clone <repository-url>
@@ -24,11 +40,9 @@ curl http://127.0.0.1:8080/health
 python -c "import json,urllib.request;data=json.dumps({'hidden_states': [[0.0]*4096]}).encode();req=urllib.request.Request('http://127.0.0.1:8080/infer', data=data, headers={'Content-Type':'application/json'});print(urllib.request.urlopen(req).read().decode())"
 ```
 
-Step-by-step narrative, prerequisites, and expected JSON: **[docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)**.
+Step-by-step narrative, prerequisites, and expected JSON: **[docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)** (scoped to this legacy inference path).
 
 For development tooling (lint, tests): `pip install -e ".[dev]"`. Optional extras: [pyproject.toml](pyproject.toml) — `wasm`, `training`, `security`.
-
-**Remote GPU / OpenTofu / RunPod:** use **[docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)** only; do not treat cloud provisioning as part of the local quickstart.
 
 ---
 
@@ -56,7 +70,8 @@ Execution stays in a **sandboxed WebAssembly module** with bounded linear memory
 ## Documentation map
 
 - Glossary (acronyms): [docs/GLOSSARY.md](docs/GLOSSARY.md)
-- Getting started: [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
+- Training WUI (native path): [training-wui/README.md](training-wui/README.md)
+- Legacy FastAPI inference quickstart: [docs/getting-started/QUICKSTART_0_TO_1.md](docs/getting-started/QUICKSTART_0_TO_1.md)
 - Operations: [docs/operations/OPERATIONS_RUNBOOK.md](docs/operations/OPERATIONS_RUNBOOK.md)
 - Identity and trust lifecycle: [docs/IDENTITY_STACK_REFERENCE.md](docs/IDENTITY_STACK_REFERENCE.md)
 - Training and data: [docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)
@@ -101,7 +116,7 @@ The path below follows the **physical lifecycle of one tensor**, from host input
 
 #### Step 1 — Python host receives and prepares the tensor
 
-The Python orchestrator (`qminiwasm.model.QMiniWASM`) receives hidden-state tensors and executes through `qminiwasm/wasm_host/engine.py` in a bounded Wasm store. The host captures pre/post linear-memory images as raw bytes so state can be encoded, paused, and resumed deterministically.
+This step is the **inference / library** path through the Python WASM host (not **Mission Control training**, which is Go → gRPC → C++; see [docs/TRAINING_NATIVE_PARITY.md](docs/TRAINING_NATIVE_PARITY.md)). The Python orchestrator (`qminiwasm.model.QMiniWASM`) receives hidden-state tensors and executes through `qminiwasm/wasm_host/engine.py` in a bounded Wasm store. The host captures pre/post linear-memory images as raw bytes so state can be encoded, paused, and resumed deterministically.
 
 #### Step 2 — Quantization to ternary logic
 

@@ -1,12 +1,12 @@
 # Training data and ML engine results
 
-This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics** from `python -m qminiwasm.engine`.
+This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics**. It is written primarily for the **legacy Python training loop** (`python -m qminiwasm.engine`), which shares TOML and data-source concepts with the stack but is **not** the default path from the **Training WUI** (Go → C++ gRPC — see **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**).
 
 **Configuration policy:** Prefer **`configs/training/*.toml`** and the **[Training WUI](../training-wui/README.md)** for training knobs. Use **`.env`** only for **credentials** ([environment-variables.md](environment-variables.md)). The engine may still honor **legacy process-environment** variables in CI, Docker, or one-off shells — see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)** for that inventory.
 
-## Local training (default)
+## Local training (legacy Python engine)
 
-The sections below describe training on your machine (or any environment where you run `python -m qminiwasm.engine` directly). They cover TOML config, data sources, checkpoints, and metrics—not cloud provisioning.
+The sections below describe training on your machine when you run **`python -m qminiwasm.engine` directly** (or equivalent). They cover TOML config, data sources, checkpoints, and metrics—not cloud provisioning. **Native training** consumes the same TOML files through the gRPC `TrainingConfig` mapping; parity notes live in **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**.
 
 ## Structured config (TOML)
 

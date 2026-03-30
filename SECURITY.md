@@ -26,8 +26,8 @@ Implementation artifacts in this repository:
 | **Local DevSecOps workflow** | [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) – full local workflow (tests, Bandit, Safety, Semgrep, STIG checks, reports). |
 | **Repository rulesets** | [.github/rulesets/](.github/rulesets/) – branch protection and security rules; import JSON via **Settings → Rules → Rulesets** so default branch requires PRs and CI. |
 | **Compliance evidence** | CI and script produce Bandit/pip-audit reports and compliance-report.md / stig-report.md; retain as artifacts for audits. |
-| **Admission control** | [infra/kyverno/](infra/kyverno/) – Kyverno policies (STIG baseline, Trivy scan gate); [infra/opentofu/kyverno/](infra/opentofu/kyverno/) for deploy. |
-| **Runtime security** | [infra/falco/](infra/falco/) – Falco + Falcosidekick (ELK/Splunk); custom rules for shell, filesystem, privilege escalation. |
+| **Admission control** | **Not in default tree:** `infra/kyverno/` and `infra/opentofu/` are absent from this repository. Use **[.github/workflows/ci.yml](.github/workflows/ci.yml)** **trivy-image** and your own cluster’s Kyverno/policy-as-code when operating Kubernetes. |
+| **Runtime security** | **Not in default tree:** `infra/falco/` is absent. Falco-style runtime monitoring remains a **recommended pattern** for production clusters you manage separately. |
 | **Trivy image scan** | [.github/workflows/ci.yml](.github/workflows/ci.yml) job `trivy-image`; [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) `Run-TrivyImageScan` before push. The scan uses `ignore-unfixed` (only fixable CRITICAL/HIGH fail the pipeline); accepted risks can be listed in [.trivyignore](.trivyignore). |
 
 Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability scanning); pip-audit → **RA-5** (dependency vulnerabilities); pre-commit and CI gates → **CM-3** (change control), **AC-3** (access enforcement); audit logs in GitHub Actions → **AU-2**, **AU-3**.
@@ -71,7 +71,7 @@ Control mapping (NIST / CMMC): Bandit and Semgrep → **RA-5** (vulnerability sc
 
 ### Zero Trust Access (Teleport)
 
-When Teleport is deployed (see [infra/teleport/](infra/teleport/) and [scripts/teleport-login.ps1](scripts/teleport-login.ps1)), access to development Kubernetes and Docker environments is gated by a Zero Trust boundary:
+When Teleport is deployed (see [scripts/teleport-login.ps1](scripts/teleport-login.ps1) / `scripts/teleport-login.sh`; optional `infra/teleport/` may exist only in extended layouts), access to development Kubernetes and Docker environments is gated by a Zero Trust boundary:
 
 - **Teleport Zero Trust boundary:** All access to development Kubernetes (and, if configured, Docker via Application Access) goes through Teleport. No long-lived SSH keys or static passwords are used; authentication is SSO (OIDC with GitHub, Okta, or Azure AD) plus WebAuthn only (hardware key or platform authenticator).
 - **IA-2 (Identification and Authentication):** Multi-factor authentication is enforced: first factor via the identity provider (SSO), second factor via WebAuthn (e.g., YubiKey, Touch ID, Windows Hello). Password-only and single-factor access are not permitted.
@@ -80,32 +80,27 @@ When Teleport is deployed (see [infra/teleport/](infra/teleport/) and [scripts/t
 
 IdP configuration (OIDC client secret) and audit sink configuration (ELK/Splunk endpoint and credentials) are not stored in the repository and are supplied via secrets or environment at deployment time.
 
-### Admission Control and Runtime Security (Kyverno and Falco)
+### Admission control and runtime security (reference pattern)
 
-We enforce **deploy gates** and **runtime security** so that only successfully scanned images can be deployed and containers are monitored in real time. This supports NIST RA-5, CM-3, AC-3, and STIG baselines.
+**In this repository:** shift-left scanning is implemented in **CI** (Trivy image job in [.github/workflows/ci.yml](.github/workflows/ci.yml); optional local [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1)). There is **no** checked-in `infra/kyverno/`, `infra/falco/`, or `infra/opentofu/` tree for cluster admission.
+
+**When you operate Kubernetes**, the following remains a **recommended** control model (implement in your own IaC repos):
 
 **Admission control (Kyverno)**  
-[Kyverno](https://kyverno.io/) runs as an admission controller in the cluster. It enforces:
+[Kyverno](https://kyverno.io/) can run as an admission controller. Typical policies:
 
-- **Trivy scan gate:** Workloads (Pods, Deployments, etc.) must have the annotation `trivy.scan/passed: "true"`. CI runs Trivy image scan and fails the pipeline on CRITICAL or HIGH vulnerabilities that have a fix available (`ignore-unfixed`); accepted risks may be listed in [.trivyignore](.trivyignore). Only images that pass are eligible for this annotation when deploying. Optionally, use Trivy SBOM attestation and Kyverno image verification (cosign attestors) so the cluster only accepts attested images.
-- **Kubernetes STIG baseline:** Pods must run as non-root (`runAsNonRoot: true`), set `allowPrivilegeEscalation: false`, and use a read-only root filesystem where applicable. This aligns with least privilege (AC-6) and configuration baselines (CM-2).
+- **Trivy scan gate:** Workloads (Pods, Deployments, etc.) carry annotations or attestations that prove an image passed policy. CI in this repo runs Trivy on `serverless/Dockerfile` builds; accepted risks may be listed in [.trivyignore](.trivyignore).
+- **Kubernetes STIG baseline:** Pods run as non-root (`runAsNonRoot: true`), `allowPrivilegeEscalation: false`, read-only root filesystem where applicable (AC-6, CM-2).
 
-Policies and Helm values are in [infra/kyverno/](infra/kyverno/). OpenTofu can deploy Kyverno and the policies when [infra/opentofu/desired/kyverno-*.tfvars.json](infra/opentofu/desired/kyverno-main.tfvars.json) is present. Blocked deployment attempts are logged by the API server and can be forwarded to ELK/Splunk for audit (AU-2, AU-3).
+Deploy Kyverno and policies from **your** platform repository; blocked attempts are logged by the API server and can be forwarded to ELK/Splunk (AU-2, AU-3).
 
 **Runtime security (Falco)**  
-[Falco](https://falco.org/) provides defense-in-depth by detecting at runtime:
-
-- Shell/terminal execution inside containers  
-- Writes to sensitive directories (e.g. `/etc`, `/bin`)  
-- Privilege escalation attempts (e.g. sudo, su)  
-- Unexpected network connections or sensitive port binding  
-
-Custom rules are in [infra/falco/](infra/falco/). Falco output is structured (JSON). [Falcosidekick](https://github.com/falcosecurity/falcosidekick) forwards events to ELK Stack or Splunk (configure endpoint and credentials via environment or secrets, not in the repository) for continuous monitoring and SIEM (AU/SI controls).
+[Falco](https://falco.org/) can detect shell use, sensitive writes, privilege escalation, and unexpected networking. [Falcosidekick](https://github.com/falcosecurity/falcosidekick) forwards events to ELK/Splunk (configure outside this repo).
 
 **Summary**  
-- **Shift-left:** Trivy scans images in CI and in the local [scripts/devsecops-workflow.ps1](scripts/devsecops-workflow.ps1) before push.  
-- **Cluster boundary:** Kyverno blocks workloads that have not passed the scan (annotation) or that violate the STIG baseline.  
-- **Runtime:** Falco detects malicious or risky behavior in running containers; events are sent to ELK/Splunk for analysis and alerting.
+- **Shift-left:** Trivy in CI (+ optional local workflow script).  
+- **Cluster boundary:** Add Kyverno (or equivalent) in **your** cluster.  
+- **Runtime:** Add Falco (or equivalent) in **your** cluster.
 
 ## Security Policies
 

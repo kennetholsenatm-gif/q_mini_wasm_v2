@@ -1,6 +1,6 @@
-# Quickstart 0 to 1
+# Quickstart 0 to 1 — legacy Python FastAPI inference
 
-This guide is the single happy path for getting `qminiwasm-core` running locally on `localhost:8080`.
+**Default training and Mission Control** use the **Training WUI** (Go) and the **C++ gRPC training engine** — see [`training-wui/README.md`](../../training-wui/README.md) and [`docs/TRAINING_NATIVE_PARITY.md`](../TRAINING_NATIVE_PARITY.md). This page is only the **legacy** path to run the FastAPI app on **`localhost:8080`** for local HTTP inference and smoke tests.
 
 ## Goal
 
@@ -69,6 +69,7 @@ Beyond this local quickstart, hardened deployments authenticate the **host** (X.
 
 ## What to do next
 
+- Native training / WUI: [`training-wui/README.md`](../../training-wui/README.md), [../TRAINING_NATIVE_PARITY.md](../TRAINING_NATIVE_PARITY.md)
 - Strategic architecture path: [../../README.md](../../README.md#how-we-stay-within-the-constraint)
 - Data and training references: [../TRAINING_DATA.md](../TRAINING_DATA.md)
 - Quantum mode details: [../QUANTUM_QISKIT.md](../QUANTUM_QISKIT.md)

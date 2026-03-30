@@ -13,21 +13,22 @@ The Q-Mini-WASM development workflow is designed to be comprehensive, secure, an
 - **IDE**: Visual Studio Code, PyCharm, or preferred IDE
 
 ### Initial Setup
+
+**Two tracks:** (1) **Python** — library, tests, and legacy `qminiwasm.engine` workflows. (2) **Native training** — Go **1.22+**, built C++ **`qminiwasm_training_engine_server`**, LibTorch; see [`training-wui/README.md`](../training-wui/README.md) Path A.
+
 ```bash
 # Clone the repository
 git clone https://github.com/kennetholsenatm-gif/qminiwasm-core.git
 cd qminiwasm-core
 
-# Install dependencies
+# Python track (CI, unit tests, optional legacy engine)
 pip install -r requirements.txt
-
-# Install pre-commit hooks
 pre-commit install
-
-# Set up development environment
 python -m pip install --upgrade pip
 pip install -e .
 ```
+
+For **Mission Control / default training**, also build the C++ training server ([`cpp/training/README.md`](../cpp/training/README.md)) and run the WUI from `training-wui/`.
 
 ## GitHub Actions and branch protection
 
@@ -56,9 +57,9 @@ All commits must pass the following pre-commit hooks:
 - **Bandit**: Python security linter
 - **Detect-secrets**: Secret detection with baseline comparison
 
-### Training web UI (optional)
+### Training web UI
 
-A small **Go** UI under [`training-wui/`](../training-wui) lists `configs/training/*.toml` and runs `python -m qminiwasm.engine --config …` from the repo root. To provision an Incus guest with deps + mount + built WUI, use the ops runbook in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus` (`setup-instance.sh`). See [`training-wui/README.md`](../training-wui/README.md).
+A **Go** UI under [`training-wui/`](../training-wui) lists `configs/training/*.toml` and drives **native** training via the C++ **`TrainingEngineService`** over **gRPC** (not `python -m qminiwasm.engine`). See [`training-wui/README.md`](../training-wui/README.md) and [`docs/TRAINING_NATIVE_PARITY.md`](../docs/TRAINING_NATIVE_PARITY.md). To provision an Incus guest with deps + mount + built WUI, use the ops runbook in `C:\GiTeaRepos\System_admin\runbooks\qminiwasm\incus` (`setup-instance.sh`) if that layout applies to your site.
 
 ### IBM Quantum (optional, training MoE)
 
@@ -150,14 +151,16 @@ For how this satisfies IA-2, AC-3, and AU-2/AU-3, see [SECURITY.md](../SECURITY.
 
 **Wiki overview (goals and design rationale):** [AI Training Pipeline](AI-Training-Pipeline.md).
 
-Training runs from the **qminiwasm-core** repository:
+**Default (native):** start **`qminiwasm_training_engine_server`**, then from **`training-wui/`** run **`go run .`** (or use **`scripts/start-training-stack.ps1` / `.sh`**). TOML under **`configs/training/`**; gRPC maps to `TrainingConfig`. See [`training-wui/README.md`](../training-wui/README.md) and [`docs/TRAINING_NATIVE_PARITY.md`](../docs/TRAINING_NATIVE_PARITY.md).
+
+**Legacy Python loop** (direct CLI, not the WUI default):
 
 ```bash
 pip install -e ".[training]"
 python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 ```
 
-**Canonical reference:** [docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md) (data sources, env table, checkpoints, metrics).
+**Canonical reference:** [docs/TRAINING_DATA.md](https://github.com/kennetholsenatm-gif/qminiwasm-core/blob/main/docs/TRAINING_DATA.md) (data sources, env table, checkpoints, metrics — scoped to the Python engine; native parity in link above).
 
 **Highlights (recent pipeline behavior):**
 
@@ -165,7 +168,7 @@ python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
 - **`HF_MESH_BLEND_FRACTION`** — Appends mesh-generated samples (fraction × HF row count) to Hugging Face tabular data, then shuffles when `SEED` is set, so training mixes WASM curriculum with Hub rows.
 - **Cascade RL** — GRPO toy routing runs before each epoch’s supervised MSE phase by default. **`CASCADE_COUPLE_FORWARD`** (default on) blends mean **input hidden** and mean **`hybrid_inference` output** for the cascade digest (tighter coupling to the live model). Disable with `CASCADE_COUPLE_FORWARD=0`.
 - **Checkpoints** — `cascade_policy` weights load into **`model.cascade_router`** when present and the model was constructed with **`USE_CASCADE_ROUTER=1`**.
-- **Serving** — `uvicorn qminiwasm.engine.serve:app` with **`QMINIWASM_CHECKPOINT`**, optional **`HYBRID_ADAPTER`**, **`USE_CASCADE_ROUTER`**, and matching **`CASCADE_*`** dims. **`POST /infer`** returns **`cascade_logits`** per row when the router is attached.
+- **Serving (legacy HTTP)** — `uvicorn qminiwasm.engine.serve:app` with **`QMINIWASM_CHECKPOINT`**, optional **`HYBRID_ADAPTER`**, **`USE_CASCADE_ROUTER`**, and matching **`CASCADE_*`** dims. **`POST /infer`** returns **`cascade_logits`** per row when the router is attached. Prefer documenting **Go `qmw-serve`** / WUI serve APIs when aligning with the default stack ([`docs/TRAINING_NATIVE_PARITY.md`](../docs/TRAINING_NATIVE_PARITY.md)).
 
 ## Pull Request Process
 

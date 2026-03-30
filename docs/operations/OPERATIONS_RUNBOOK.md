@@ -54,12 +54,16 @@ Operational concerns:
 
 When training from a remote pod/host, use repo sync plus explicit remote execution.
 
-Typical flow:
+**Default (Training WUI, RunPod + train on pod):** the WUI streams a bash script over SSH that starts **`qminiwasm_training_engine_server`** and **`go run ./cmd/qmw-grpc-train`** (see [`training-wui/runpod_remote.go`](../../training-wui/runpod_remote.go)). Prerequisites on the remote host match **native** local training: built C++ server, Go, LibTorch.
+
+Typical manual flow (aligned with that automation):
 
 1. sync repository contents to the remote workspace
 2. propagate `.env` and required secrets on the remote host
-3. run `python -m qminiwasm.engine --config configs/training/<profile>.toml` remotely
+3. on the remote host: start the gRPC training server, then run **`go run ./cmd/qmw-grpc-train`** from **`training-wui/`** with `-root` and `-config` pointing at the chosen TOML (see [docs/TRAINING_NATIVE_PARITY.md](../TRAINING_NATIVE_PARITY.md))
 4. pull artifacts/logs back to local if needed
+
+**Legacy:** direct **`python -m qminiwasm.engine --config configs/training/<profile>.toml`** on the remote host remains possible for ad hoc runs but is **not** the WUI default path.
 
 For WUI-assisted automation and helper scripts, see:
 
