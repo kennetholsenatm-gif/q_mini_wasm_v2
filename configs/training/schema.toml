@@ -66,6 +66,8 @@
 # mesh_blend_fraction = 0.0
 # extra_specs = [ { path = "openai/gsm8k" }, { path = "wikitext", dataset_config = "wikitext-2-raw-v1" } ]
 # (optional) Any number of extra Hub datasets (deduped by path+config); merged with [data].path when not qminiwasm/hf-multi.
+# Curated Cascade smoke presets: curriculum_phase1_stem_example.toml, curriculum_phase1_code_example.toml,
+# curriculum_phase3_cot_example.toml (docs/TRAINING_DATA.md § Curated Cascade curriculum).
 
 [checkpoint]
 # Convention: artifacts/models/<slug>/final.pt, best.pt, latest.pt (matches training WUI)

@@ -998,8 +998,10 @@ void TrainingEngine::Impl::run_cascade_curriculum(std::stop_token token) {
   std::string hf_err;
   const std::uint32_t cap = config_.hf.num_samples > 0 ? config_.hf.num_samples : 2048;
   if (!config_.hf.dataset_id.empty()) {
+    const std::vector<std::string>* hf_text =
+        config_.hf.text_fields.empty() ? nullptr : &config_.hf.text_fields;
     if (!hf_fetch_encoded_rows(config_.hf.dataset_id, config_.hf.config_name, config_.hf.split, config_.hf.revision,
-                               cap, io_dim, config_.seed, &rows, &hf_err)) {
+                               hf_text, cap, io_dim, config_.seed, &rows, &hf_err)) {
       emit(TelemetryEvent{
           .run_id = config_.run_id,
           .unix_ms = now_unix_ms(),

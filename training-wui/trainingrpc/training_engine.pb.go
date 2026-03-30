@@ -91,8 +91,10 @@ type HfDatasetParams struct {
 	Revision          string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
 	NumSamples        uint32                 `protobuf:"varint,5,opt,name=num_samples,json=numSamples,proto3" json:"num_samples,omitempty"`
 	MeshBlendFraction float64                `protobuf:"fixed64,6,opt,name=mesh_blend_fraction,json=meshBlendFraction,proto3" json:"mesh_blend_fraction,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Ordered row keys for native HF fetch + parity with Python hf_tabular text_fields (empty = legacy concat).
+	TextFields    []string `protobuf:"bytes,7,rep,name=text_fields,json=textFields,proto3" json:"text_fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HfDatasetParams) Reset() {
@@ -165,6 +167,13 @@ func (x *HfDatasetParams) GetMeshBlendFraction() float64 {
 		return x.MeshBlendFraction
 	}
 	return 0
+}
+
+func (x *HfDatasetParams) GetTextFields() []string {
+	if x != nil {
+		return x.TextFields
+	}
+	return nil
 }
 
 // Automated cascade curriculum: teacher fit to PTQTP on student to heal vs frozen teacher to optional gate.
@@ -294,18 +303,20 @@ func (x *CascadeCurriculumLoopParams) GetMaxCurriculumCycles() uint32 {
 
 // One row of [[training_phases]] (Unified Training Matrix). See docs/ARCHITECTURE_WHITEPAPERS.md.
 type TrainingPhaseParams struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Name                   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Epochs                 uint32                 `protobuf:"varint,2,opt,name=epochs,proto3" json:"epochs,omitempty"`
-	Supervised             bool                   `protobuf:"varint,3,opt,name=supervised,proto3" json:"supervised,omitempty"`
-	CascadeRl              bool                   `protobuf:"varint,4,opt,name=cascade_rl,json=cascadeRl,proto3" json:"cascade_rl,omitempty"`
-	FreezeModelBackbone    bool                   `protobuf:"varint,5,opt,name=freeze_model_backbone,json=freezeModelBackbone,proto3" json:"freeze_model_backbone,omitempty"`
-	RouterOnly             bool                   `protobuf:"varint,6,opt,name=router_only,json=routerOnly,proto3" json:"router_only,omitempty"`
-	CascadePolicyOptimizer string                 `protobuf:"bytes,7,opt,name=cascade_policy_optimizer,json=cascadePolicyOptimizer,proto3" json:"cascade_policy_optimizer,omitempty"`
-	CispoClipEpsilon       *float64               `protobuf:"fixed64,8,opt,name=cispo_clip_epsilon,json=cispoClipEpsilon,proto3,oneof" json:"cispo_clip_epsilon,omitempty"`
-	CascadeMopdLambda      *float64               `protobuf:"fixed64,9,opt,name=cascade_mopd_lambda,json=cascadeMopdLambda,proto3,oneof" json:"cascade_mopd_lambda,omitempty"`
-	TequilaDeadzone        *float64               `protobuf:"fixed64,10,opt,name=tequila_deadzone,json=tequilaDeadzone,proto3,oneof" json:"tequila_deadzone,omitempty"`
-	FreezeTernaryExperts   bool                   `protobuf:"varint,11,opt,name=freeze_ternary_experts,json=freezeTernaryExperts,proto3" json:"freeze_ternary_experts,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Name   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Epochs uint32                 `protobuf:"varint,2,opt,name=epochs,proto3" json:"epochs,omitempty"`
+	// When both supervised and cascade_rl are true, the native LibTorch engine runs one combined step per tick
+	// (MSE on CoreModule micro-batch + weighted toy GRPO/CISPO on CascadeToyPolicy); see libtorch_ternary_trainer.hpp.
+	Supervised             bool     `protobuf:"varint,3,opt,name=supervised,proto3" json:"supervised,omitempty"`
+	CascadeRl              bool     `protobuf:"varint,4,opt,name=cascade_rl,json=cascadeRl,proto3" json:"cascade_rl,omitempty"`
+	FreezeModelBackbone    bool     `protobuf:"varint,5,opt,name=freeze_model_backbone,json=freezeModelBackbone,proto3" json:"freeze_model_backbone,omitempty"`
+	RouterOnly             bool     `protobuf:"varint,6,opt,name=router_only,json=routerOnly,proto3" json:"router_only,omitempty"`
+	CascadePolicyOptimizer string   `protobuf:"bytes,7,opt,name=cascade_policy_optimizer,json=cascadePolicyOptimizer,proto3" json:"cascade_policy_optimizer,omitempty"`
+	CispoClipEpsilon       *float64 `protobuf:"fixed64,8,opt,name=cispo_clip_epsilon,json=cispoClipEpsilon,proto3,oneof" json:"cispo_clip_epsilon,omitempty"`
+	CascadeMopdLambda      *float64 `protobuf:"fixed64,9,opt,name=cascade_mopd_lambda,json=cascadeMopdLambda,proto3,oneof" json:"cascade_mopd_lambda,omitempty"`
+	TequilaDeadzone        *float64 `protobuf:"fixed64,10,opt,name=tequila_deadzone,json=tequilaDeadzone,proto3,oneof" json:"tequila_deadzone,omitempty"`
+	FreezeTernaryExperts   bool     `protobuf:"varint,11,opt,name=freeze_ternary_experts,json=freezeTernaryExperts,proto3" json:"freeze_ternary_experts,omitempty"`
 	// Absolute path: MOPD teacher interchange v2 for this phase (optional).
 	MopdTeacherCheckpointPath string `protobuf:"bytes,12,opt,name=mopd_teacher_checkpoint_path,json=mopdTeacherCheckpointPath,proto3" json:"mopd_teacher_checkpoint_path,omitempty"`
 	unknownFields             protoimpl.UnknownFields
@@ -1491,7 +1502,7 @@ var File_training_engine_proto protoreflect.FileDescriptor
 
 const file_training_engine_proto_rawDesc = "" +
 	"\n" +
-	"\x15training_engine.proto\x12\x15qminiwasm.trainingrpc\"\xd4\x01\n" +
+	"\x15training_engine.proto\x12\x15qminiwasm.trainingrpc\"\xf5\x01\n" +
 	"\x0fHfDatasetParams\x12\x1d\n" +
 	"\n" +
 	"dataset_id\x18\x01 \x01(\tR\tdatasetId\x12\x1f\n" +
@@ -1501,7 +1512,9 @@ const file_training_engine_proto_rawDesc = "" +
 	"\brevision\x18\x04 \x01(\tR\brevision\x12\x1f\n" +
 	"\vnum_samples\x18\x05 \x01(\rR\n" +
 	"numSamples\x12.\n" +
-	"\x13mesh_blend_fraction\x18\x06 \x01(\x01R\x11meshBlendFraction\"\xa1\x04\n" +
+	"\x13mesh_blend_fraction\x18\x06 \x01(\x01R\x11meshBlendFraction\x12\x1f\n" +
+	"\vtext_fields\x18\a \x03(\tR\n" +
+	"textFields\"\xa1\x04\n" +
 	"\x1bCascadeCurriculumLoopParams\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12&\n" +
 	"\x0fmax_heal_rounds\x18\x02 \x01(\rR\rmaxHealRounds\x126\n" +

@@ -68,6 +68,8 @@ When certainty is insufficient:
    - encrypt the payload (AES-256-GCM)
    - keep encryption keys out-of-band (supplied via the control plane / key broker semantics)
 
+**C++ tier chain (portable handoffs):** Native code can attach a versioned binary prefix [`QmwEscalationEnvelopeHeader`](../cpp/escalation/escalation_c_api.h) before the encrypted or plaintext payload body, and drive **multi-hop escalation** with `qmw_escalation_resolve_next`: Tier 1 (edge) → Tier 2 (state migration) → Tier 3 (QAHR-classical) → optional Tier 4 (native OpenQASM / trinary sim when `QMINIWASM_WITH_QUANTUM=ON`) → optional Tier 5 (external QPU placeholder). This does **not** replace Python [`prepare_escalation_payload`](../qminiwasm/cognitive/escalation.py) or [`StateMigrationInterconnect`](../qminiwasm/fabric/interconnect.py); it gives embedded hosts a **policy surface** for the same vocabulary. Optional: `qmw_escalation_run_native_openqasm_if_applicable` delegates to `qmw_openqasm_expval_pauli_z0` only when the last resolved tier is Tier 4.
+
 ### 5. Quantum-routed delivery (secure, short-lived data plane channel)
 
 1. The control plane selects the target enclave tier/path using **QAHR** cost shaping.
@@ -85,6 +87,23 @@ Once enrolled, trust is continuously evaluated:
    - publish the host certificate revocation to **CRL/OCSP**
    - revoke the IdP session / JWT family and drop the broker socket
 3. The enclave is removed from the active fabric mid-cycle.
+
+## Expert fleet (multi-WASM coordinator pattern)
+
+Some deployments place a **FleetCoordinator** role at **enterprise-scale** capacity (see EF `enterprise_core` in the taxonomy): a control-plane process that **routes** work to many **ExpertMember** enclaves—each typically a **macro** or **workgroup** WASM expert with its own linear-memory budget—without replacing those modules’ local execution.
+
+- **FleetCoordinator:** holds routing policy, optional telemetry aggregation, and **assignment** only (no substitute for per-expert WASM semantics). In-repo this lines up with [`qmw_expert_fleet_topk`](../cpp/router/expert_fleet_c_api.h) / [`qmw_expert_fleet_partition`](../cpp/router/expert_fleet_c_api.h) over [`qmw_route_*`](../cpp/qubo/dqaoa_routing_runtime_c_api.h), and with [`on_route_hint`](../cpp/wasm/wasm_host_hooks_c_api.h) on the WASM host path. **Multi-node scheduling, health checks, and RPC between enclaves are out of scope** here; use your broker/mTLS fabric (see above) and [`wiki/Deployment-Guide.md`](../wiki/Deployment-Guide.md).
+
+- **ExpertMember:** WASM instance with stable `instance_id`, optional `capability_mask`, and a fixed-length **route embedding** (`double` vector) supplied by the operator or derived from encoded hidden state. Descriptor POD: `QmwExpertMemberDescriptor` in [`expert_fleet_c_api.h`](../cpp/router/expert_fleet_c_api.h) (v1 metadata only; IPC is operator-defined).
+
+**Tier vocabulary (do not conflate):**
+
+| Concept | Where it lives | Meaning (short) |
+|--------|----------------|-----------------|
+| EF **enclave tier** (`micro` … `enterprise_core`) | Taxonomy / `enclave_tier` in TOML | Capacity / pages / Memory64 envelope |
+| **Training `TaxonomyTier`** (`kEdgeConstrained`, `kFogNode`, `kXpuCluster`) | [`taxonomy_tier.hpp`](../cpp/training/include/qminiwasm/training/taxonomy_tier.hpp) | Native training loop resource policy (throughput vs edge); **not** the same as inference fleet layout |
+| **`QmwEscalationTier`** | [`escalation_c_api.h`](../cpp/escalation/escalation_c_api.h) | Certainty-gated **handoff** chain (incl. external QPU placeholder at T5); **not** “cluster head for N WASM experts” |
+| **FleetCoordinator (this section)** | Docs + `expert_fleet_*` C API | Logical **router** over many ExpertMembers at deploy time |
 
 ## Operator references (what to read next)
 

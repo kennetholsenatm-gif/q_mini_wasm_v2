@@ -72,6 +72,7 @@ type TrainingDoc struct {
 		NumSamples        *int64        `toml:"num_samples"`
 		DatasetRevision   *string       `toml:"dataset_revision"`
 		MeshBlendFraction *float64      `toml:"mesh_blend_fraction"`
+		TextFields        []string      `toml:"text_fields"`
 		ExtraSpecs        []hfExtraToml `toml:"extra_specs"`
 	} `toml:"huggingface"`
 	Checkpoint struct {
@@ -282,6 +283,12 @@ func BuildHfProto(doc *TrainingDoc, repoRoot string) (*trainingrpc.HfDatasetPara
 	}
 	if doc.HuggingFace.MeshBlendFraction != nil {
 		hf.MeshBlendFraction = *doc.HuggingFace.MeshBlendFraction
+	}
+	for _, s := range doc.HuggingFace.TextFields {
+		t := strings.TrimSpace(s)
+		if t != "" {
+			hf.TextFields = append(hf.TextFields, t)
+		}
 	}
 	if strings.EqualFold(strings.TrimSpace(doc.Data.Path), "qminiwasm/hf-multi") ||
 		strings.EqualFold(strings.TrimSpace(doc.Data.Path), "qminiwasm/multi") {

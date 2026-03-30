@@ -148,11 +148,29 @@ void encode_text_to_row(const std::string& text, std::int64_t io_dim, std::uint6
   }
 }
 
-std::string row_to_text(const nlohmann::json& row_obj) {
-  std::string acc;
+std::string row_to_text(const nlohmann::json& row_obj, const std::vector<std::string>* field_order) {
   if (!row_obj.is_object()) {
-    return acc;
+    return {};
   }
+  if (field_order != nullptr && !field_order->empty()) {
+    std::string acc;
+    for (const auto& key : *field_order) {
+      auto it = row_obj.find(key);
+      if (it == row_obj.end() || it->is_null()) {
+        continue;
+      }
+      if (it->is_string()) {
+        acc += it->get<std::string>();
+      } else {
+        acc += it->dump();
+      }
+      acc.push_back('\n');
+    }
+    if (!acc.empty()) {
+      return acc;
+    }
+  }
+  std::string acc;
   for (auto it = row_obj.begin(); it != row_obj.end(); ++it) {
     if (it.value().is_string()) {
       acc += it.value().get<std::string>();
@@ -251,8 +269,9 @@ bool hf_resolve_config_from_info(const std::string& dataset_id, std::string* out
 
 bool hf_fetch_encoded_rows(const std::string& dataset_id, const std::string& config_name,
                            const std::string& split, const std::string& revision,
-                           std::uint32_t max_rows, std::int64_t io_dim, std::uint64_t seed,
-                           std::vector<float>* out_row_major, std::string* error_message) {
+                           const std::vector<std::string>* text_field_order, std::uint32_t max_rows,
+                           std::int64_t io_dim, std::uint64_t seed, std::vector<float>* out_row_major,
+                           std::string* error_message) {
   if (out_row_major == nullptr || io_dim < 8) {
     if (error_message != nullptr) {
       *error_message = "hf_fetch_encoded_rows: bad args";
@@ -342,7 +361,7 @@ bool hf_fetch_encoded_rows(const std::string& dataset_id, const std::string& con
       } else {
         row_obj = row_wrap;
       }
-      const std::string txt = row_to_text(row_obj);
+      const std::string txt = row_to_text(row_obj, text_field_order);
       const std::size_t base = out_row_major->size();
       out_row_major->resize(base + static_cast<std::size_t>(io_dim));
       encode_text_to_row(txt, io_dim, seed ^ static_cast<std::uint64_t>(offset), out_row_major->data() + base);

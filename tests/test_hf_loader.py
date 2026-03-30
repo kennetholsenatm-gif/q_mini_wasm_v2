@@ -103,6 +103,43 @@ def test_row_to_encoded_blob_legacy_fallback():
     assert b"a" in blob or b"z" in blob
 
 
+def test_auto_curriculum_messages_roles_and_content_order():
+    row = {
+        "messages": [
+            {"role": "user", "content": "Solve 2+2"},
+            {"role": "assistant", "content": "4"},
+        ]
+    }
+    blob = row_to_encoded_blob(row, text_fields=None)
+    assert blob.startswith(b"user\nSolve 2+2")
+    assert blob.find(b"Solve 2+2") < blob.find(b"assistant\n4")
+
+
+def test_auto_curriculum_problem_solution_reasoning_concat():
+    row = {
+        "problem": "Prove x",
+        "solution": "Therefore x",
+        "reasoning": "Step one",
+    }
+    blob = row_to_encoded_blob(row, text_fields=None)
+    assert blob == b"Prove x\n\nTherefore x\n\nStep one"
+
+    row_no_reason = {"instruction": "hi", "output": "bye"}
+    blob2 = row_to_encoded_blob(row_no_reason, text_fields=None)
+    assert blob2 == b"hi\n\nbye"
+
+
+def test_auto_curriculum_skipped_when_code_fields_present():
+    row = {
+        "whole_func_string": "def f(): return 1",
+        "problem": "ignored when code wins",
+        "solution": "also ignored",
+    }
+    blob = row_to_encoded_blob(row, text_fields=None)
+    assert b"def f()" in blob
+    assert b"ignored" not in blob
+
+
 def test_engine_config_hf_context_fields_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("HF_CONTEXT_FIELDS", raising=False)
     from qminiwasm.engine.config import EngineConfig
