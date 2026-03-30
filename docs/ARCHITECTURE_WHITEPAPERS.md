@@ -1,6 +1,6 @@
 # Whitepaper architecture index
 
-This index links the repository to the three architecture whitepapers and records implementation status. Canonical **Unified Training Matrix** phase names for TOML and logs: `sft`, `progressive_quant`, `mopd`, `router_cispo` (see `[[training_phases]]` in training TOML and [configs/training/schema.toml](training/schema.toml)).
+This index links the repository to the four architecture whitepapers and records implementation status. Canonical **Unified Training Matrix** phase names for TOML and logs: `sft`, `progressive_quant`, `mopd`, `router_cispo` (see `[[training_phases]]` in training TOML and [configs/training/schema.toml](training/schema.toml)).
 
 ## Documents
 
@@ -9,6 +9,7 @@ This index links the repository to the three architecture whitepapers and record
 | Ternary Quantum AI Edge Research | [Ternary Quantum AI Edge Research.md](Ternary%20Quantum%20AI%20Edge%20Research.md) |
 | Advanced Architecture Synthesis | [QMINIWASM_ Advanced Architecture Synthesis.md](QMINIWASM_%20Advanced%20Architecture%20Synthesis.md) |
 | Ternary Clifford Optimization | [QMINIWASM_ Ternary Clifford Optimization.md](QMINIWASM_%20Ternary%20Clifford%20Optimization.md) |
+| Synthetic Data for Edge AI | [QMINIWASM_ Synthetic Data for Edge AI.md](QMINIWASM_%20Synthetic%20Data%20for%20Edge%20AI.md) |
 
 ## Ternary Clifford Optimization (pillar traceability)
 
@@ -18,6 +19,13 @@ This index links the repository to the three architecture whitepapers and record
 | Clifford clustering / T-depth compiler | [qminiwasm/fabric/router.py](../qminiwasm/fabric/router.py) (routing / QAOA path only); no ZX / TODD DAG | Not started |
 | CISPO router for WASM vs QPU cost asymmetry | [qminiwasm/rl/cascade_cispo.py](../qminiwasm/rl/cascade_cispo.py), [qminiwasm/training/cascade_rl.py](../qminiwasm/training/cascade_rl.py), `[[training_phases]]` / MOPD; native `TelemetryEvent.cascade_policy_optimizer` (gRPC + WUI) for segment visibility | Implemented (toy MDP); production router graph TBD |
 | Magic state / stabilizer–QPU handoff | — | Not started |
+
+## Synthetic data / MOPD ([QMINIWASM_ Synthetic Data for Edge AI.md](QMINIWASM_%20Synthetic%20Data%20for%20Edge%20AI.md))
+
+| Paper theme | Repo mapping | Status |
+|-------------|--------------|--------|
+| Synthetic traces / MOPD / distillation | [qminiwasm/training/distillation.py](../qminiwasm/training/distillation.py), [qminiwasm/training/phases.py](../qminiwasm/training/phases.py), `[[training_phases]]` TOML | Partial (MOPD loss and phase hooks exist; large-scale synthetic trace generation is not wired as in the paper) |
+| Data pipeline / WASM instrumentation / state recovery | [qminiwasm/data/pipeline.py](../qminiwasm/data/pipeline.py) (`DataPipeline`, `ESIStateRecoveryHull`) | Partial (training-oriented scaffold; not full production attestation / streaming stack) |
 
 ## Traceability matrix
 
@@ -44,3 +52,4 @@ This index links the repository to the three architecture whitepapers and record
 - Training tables: [configs/training/schema.toml](training/schema.toml), validated by [qminiwasm/engine/training_schema.py](../qminiwasm/engine/training_schema.py).
 - Policy: prefer TOML over new `QMINIWASM_*` knobs; see [CONFIGURATION_POLICY.md](CONFIGURATION_POLICY.md).
 - [QMINIWASM_ Advanced Architecture Synthesis.md](QMINIWASM_%20Advanced%20Architecture%20Synthesis.md) curriculum and CISPO narrative (e.g. §2.3–2.4) maps to the same `[[training_phases]]` names and to native `training_phase` / `cascade_policy_optimizer` telemetry when using the gRPC LibTorch engine.
+- [QMINIWASM_ Synthetic Data for Edge AI.md](QMINIWASM_%20Synthetic%20Data%20for%20Edge%20AI.md) MOPD and synthetic-trace narrative aligns with `mopd` / distillation hooks above; end-to-end teacher checkpoint orchestration remains incremental.
