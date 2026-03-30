@@ -1,111 +1,127 @@
 # Journey of a Vector
 
-This document traces one vector through `qminiwasm-core` from edge-side Wasm execution to triggered IBM Quantum routing and back into a classical output tensor.
+This document traces **one fixed-width training row**—typically **4096 float32 dimensions** (`d_model` / `io_d_model` in config)—from its origin in data loaders or WASM execution through **quantum-assisted routing (QAHR)**, optional escalation, and the native orchestration hooks that sit beside the main PyTorch path.
 
 ## Why this matters
 
-The architecture can look like "magic" because WebAssembly, PyTorch, and Qiskit are all involved. This walkthrough makes each boundary explicit.
+The stack mixes **Wasmtime-backed mesh data**, **Hugging Face tabular encodings**, **optional native gRPC training**, **PyTorch**, and **Qiskit/PennyLane**. The walkthrough keeps each boundary explicit so operators know which code path owns the bytes versus the tensor math.
 
-## End-to-end flow
+## What “the vector” is
+
+- **Shape:** `[batch_size, io_d_model]` with `io_d_model` usually **4096** (must match `QMiniWASM` construction).
+- **Roles:** **`hidden`** is the model input; **`target`** is the supervision signal (often identical to `hidden` for HF identity-MSE—see [../TRAINING_DATA.md](../TRAINING_DATA.md)).
+- **Entry point:** [`QMiniWASM.hybrid_inference`](../../qminiwasm/model.py) validates `hidden_states` and runs the full hybrid forward (see [hybrid_inference implementation](../../qminiwasm/model.py) around the `input_stem` → `quantum_router` → ternary stack sequence).
+
+## Provenance: where the row comes from
+
+```mermaid
+flowchart TB
+  subgraph mesh_path [MeshOrCorpus]
+    DP[DataPipeline_generate_training_data]
+    EW[wasm_engine_execute_wasm]
+    DP --> EW
+    EW --> HS[hidden_and_target_dicts]
+  end
+  subgraph hf_path [HFTabular_Python]
+    LD[load_hf_tabular_samples]
+    LD --> HFB[HF_rows_io_d_model]
+  end
+  subgraph native_path [NativeTrainingEngine]
+    FE[hf_fetch_encoded_rows]
+    MB[hf_append_mesh_blend]
+    FE --> MB
+    MB --> ROWS[native_float_rows]
+  end
+  HS --> BATCH[PyTorch_batch_hidden_target]
+  HFB --> BATCH
+  ROWS --> NFW[C++_TrainingEngine_forward]
+  BATCH --> HI[hybrid_inference]
+```
+
+- **Mesh / corpus:** [`DataPipeline.generate_training_data`](../../qminiwasm/data/pipeline.py) calls **`wasm_engine.execute_wasm`** and builds samples with **`hidden`**, **`target`**, and optional **`wasm_memory`** / **`execution_state`** metadata.
+- **HF tabular:** [`load_hf_tabular_samples`](../../qminiwasm/training/hf_loader.py) and friends feed [`run_training_loop`](../../qminiwasm/training/loop.py), including optional **mesh blend** (`hf_mesh_blend_fraction`) and curriculum / **`text_fields`** behavior documented in [../TRAINING_DATA.md](../TRAINING_DATA.md).
+- **Native C++:** [`training_engine.cpp`](../../cpp/training/src/training_engine.cpp) uses **`hf_fetch_encoded_rows`** and **`hf_append_mesh_blend`** for the same conceptual row layout when HF is enabled; parity notes live in [../TRAINING_NATIVE_PARITY.md](../TRAINING_NATIVE_PARITY.md).
+
+## Encoding: linear memory to floats
+
+Edge snapshots are **bytes** in WASM linear memory; training consumes **4096 floats** per row.
+
+- **Python (canonical):** `qminiwasm.wasm_host.memory_encode` (see [../ENGINE_QMINIWASM_BOUNDARY.md](../ENGINE_QMINIWASM_BOUNDARY.md)).
+- **Native parity:** [`cpp/wasm/linear_memory_encode.hpp`](../../cpp/wasm/linear_memory_encode.hpp) / [`linear_memory_encode.cpp`](../../cpp/wasm/linear_memory_encode.cpp), exposed as **`encode_linear_memory_u8`** when the pybind target is built.
+
+## Forward pass: inside `hybrid_inference`
 
 ```mermaid
 flowchart LR
-    wasmInput[WasmEdgeInput] --> wasmRuntime[WasmRuntimeExecution]
-    wasmRuntime --> vectorTensor[HiddenStateVectorTensor]
-    vectorTensor --> pythonModel[QMiniWASM.hybrid_inference]
-    pythonModel --> quantumRouter[HybridQuantumMoE]
-    quantumRouter --> modeDecision{ExecutionMode}
-    modeDecision -->|pennylane| identityPath[IdentityRouting]
-    modeDecision -->|qiskit_statevector| localQiskit[LocalStatevectorEstimator]
-    modeDecision -->|qiskit_ibm| ibmRuntime[IBMEstimatorV2Runtime]
-    ibmRuntime --> fallbackCheck{QuotaOrCapacityError}
-    fallbackCheck -->|yes| localQiskit
-    fallbackCheck -->|no| zExpectations[ZiExpectations]
-    localQiskit --> zExpectations
-    identityPath --> mergedOutput[ClassicalResidualMerge]
-    zExpectations --> mergedOutput
-    mergedOutput --> outputTensor[FinalOutputTensor]
+  IN[hidden_states_BD] --> STEM[input_stem]
+  STEM --> QAHR[QAHRRouter_alias_HybridQuantumMoE]
+  QAHW[qaoa_execution_mode] -.->|configures| QAHR
+  QAHR --> TERN[ternary_stack_or_PTQTP]
+  TERN --> OPT[tropical_or_bloch_residuals]
+  OPT --> LOTA[lota_branch_optional]
+  LOTA --> ADP[hybrid_adapter_optional]
+  ADP --> HEAD[output_head_optional]
+  HEAD --> OUT[output_BD]
+  OUT --> LOSS[MSE_vs_target_in_training]
 ```
 
-## Operational states
+- **Router type:** [`QAHRRouter`](../../qminiwasm/fabric/router.py) is the implementation; **`HybridQuantumMoE`** is the legacy public alias (same class).
+- **Order of operations** in code: `input_stem` → `self.quantum_router(h)` → PTQTP or **`_forward_ternary_stack`** → optional **Bloch / tropical** add-on → optional **`lota_branch`**, **`hybrid_adapter`**, **`output_head`** ([`hybrid_inference`](../../qminiwasm/model.py)).
+- **Training loop:** Batches from the pipeline feed **`hybrid_inference`** for supervised MSE against `target`; optional **cascade RL / MOPD** can attach policy updates that still use the same hidden tensor as context (see [../CASCADE_AND_MOPD.md](../CASCADE_AND_MOPD.md)).
 
-| State | Name | Operational meaning |
-|------|------|---------------------|
-| **State 1 (Always-On)** | **Ternary WASM Inference** | Deterministic local execution in bounded WASM linear memory. |
-| **State 2 (Triggered)** | **QAOA Routing (Quantum Approximate Optimization Algorithm)** | Entered only when routing/search pressure exceeds configured local budget. |
+## Quantum routing backends (QAHR)
 
-**Beyond a single hop:** In C++, [`escalation_c_api.h`](../../cpp/escalation/escalation_c_api.h) models further escalation from migration / QAHR-classical tiers toward native simulator (`Tier 4`) or an external QPU target (`Tier 5`) using `QmwEscalationPolicy` and `qmw_escalation_resolve_next`. Python still owns full tensor / hull ingestion; the native API is for tiered **routing decisions** and optional OpenQASM execution on the trinary stack.
+Routing mode is driven by **`qaoa_execution_mode`** (and related training config), not by “every byte” of linear memory:
 
-### When to use Quantum Routing
+| Mode | Role |
+|------|------|
+| `pennylane` | Lightweight / identity-style path for QAHR wiring |
+| `qiskit_statevector` | Local exact expectation evaluation |
+| `qiskit_ibm` | IBM Quantum Runtime hardware path |
 
-State 2 is a hard-trigger path, not a default path. Example policy (control-plane configured): if classical assignment over 64 or more experts exceeds a 50ms latency budget, local execution pauses and routing search is delegated to the Qiskit backend, then the selected path is returned and State 1 resumes.
+Credentials, backends, transpilation, **`EstimatorV2`**, and fallback behavior are documented in [../QUANTUM_QISKIT.md](../QUANTUM_QISKIT.md). Expectations feed into the classical router residual; they do **not** provide gradients through real hardware.
 
-## Enclave tiers and enforced memory boundaries
+## Trainable vs detached
 
-| Tier | Class | Default pages (64KiB) | Approx linear memory | Memory64 |
-|------|-------|------------------------|----------------------|----------|
-| 1 | Micro | 4096 | ~256 MiB | Off |
-| 2 | Meso | 32768 | ~2 GiB | Off |
-| 3 | Macro | 131072 | ~8 GiB | On (`8192 MB` ceiling default) |
-| 4 | Workgroup | 262144 | ~16 GiB | On (`16384 MB` ceiling default) |
-| 5 | Enterprise Core | 4194304 | ~256 GiB | On (`262144 MB` ceiling default) |
+- **Trainable:** stems, router projections where implemented in PyTorch, ternary stack, adapters, and output heads.
+- **Detached:** hardware / estimator execution is a **signal source**; results are mixed in as scalars / tensors without backprop through the QPU device.
 
-Runtime resolution order is explicit: override knobs (`max_linear_memory_pages`, `wasm_memory64_max_mb`, `use_memory64`) win over tier presets, and tier presets win over generic runtime defaults.
+## Escalation and cloud resume (Python + native policy)
 
-## Step-by-step trace
+**Python (default narrative for Tier-2 payloads):**
 
-### Step 1: Vector originates in the Wasm edge environment
+1. Edge capture builds a payload with [`prepare_escalation_payload`](../../qminiwasm/cognitive/escalation.py) (`linear_memory`, `stack_snapshot`, certainty metadata, etc.).
+2. [`inference_from_escalation`](../../qminiwasm/model.py) runs **`qahr_route_after_escalation`**, applies **`StateMigrationInterconnect`** deltas (e.g. tropical attention), then calls **`hybrid_inference`** on the continuation hidden state.
+3. For WLES-style resume, Python can write bytes back into linear memory via **`write_linear_memory`** in [`wles_wasmtime_harness.py`](../../qminiwasm/wasm_host/wles_wasmtime_harness.py).
 
-- The Wasm execution layer runs deterministic module logic and exposes execution state.
-- In practical pipelines, edge-side state and features are transformed into fixed-width hidden vectors used by the model path.
-- The `QMiniWASM` object owns the Wasm executor and data pipeline orchestration.
+**Native complement (embedded hosts):** [`qmw_escalation_resolve_next`](../../cpp/escalation/escalation_c_api.h), the **`QmwEscalationEnvelopeHeader`** prefix, and optional **`qmw_escalation_run_native_openqasm_if_applicable`** provide a **policy / framing surface** aligned with Certainty-Gated Escalation—they **do not replace** Python payload preparation in the default training stack (see [../ENGINE_QMINIWASM_BOUNDARY.md](../ENGINE_QMINIWASM_BOUNDARY.md) and [../ENCLAVE_LIFECYCLE.md](../ENCLAVE_LIFECYCLE.md)).
 
-## Step 2: Handoff into Python orchestration
+## WASM runtimes, host hooks, and expert fleet
 
-- `QMiniWASM` is initialized in `qminiwasm/model.py` and wires together:
-  - `WasmExecutor`
-  - `TernaryWASMExpert`
-  - `HybridQuantumMoE`
-- During inference, `QMiniWASM.hybrid_inference(...)` receives `hidden_states` as a tensor and calls the quantum router block.
-- Escalation payload construction is handled by `prepare_escalation_payload(...)` in `qminiwasm/cognitive/escalation.py`.
+- **Python mesh execution** uses **Wasmtime** under [`qminiwasm.wasm_host`](../../qminiwasm/wasm_host/)—not the C++ WasmEdge bridge—which produces realistic **`hidden`** / **`target`** from compiled modules.
+- **`cpp/wasmedge/engine_bridge.cpp`** is a **correctness-first stub**: it invokes **`qmw_wasm_hooks_notify_before_execute` / `..._after_execute`** and returns an explicit “not implemented” style status while tests validate hook ordering ([`test_wasm_hooks.cpp`](../../cpp/tests/test_wasm_hooks.cpp)).
+- **Experimental coordinator path:** [`QmwWASMHostCallbacks`](../../cpp/wasm/wasm_host_hooks_c_api.h) adds **`on_linear_memory_snapshot`** (e.g. around WLES save) and **`on_route_hint`**, intended to supply a **query vector** for native expert selection: **`qmw_expert_fleet_topk`** / **`qmw_expert_fleet_partition`** in [`expert_fleet_c_api.h`](../../cpp/router/expert_fleet_c_api.h) delegate to **`qmw_route_*`** when **`QMINIWASM_WITH_NATIVE_DQAOA_ROUTING`** is on, otherwise return safe stubs. **Fleet vocabulary and tier semantics** are in [../ENCLAVE_LIFECYCLE.md](../ENCLAVE_LIFECYCLE.md). This is **orchestration beside** the single-model `hybrid_inference` path, not a duplicate forward pass.
 
-## Step 3: Router mode decision
+## Operational states (summary)
 
-The quantum router mode is determined by `qaoa_execution_mode`:
+| State | Name | Meaning |
+|------|------|--------|
+| **State 1 (always-on)** | **Ternary WASM / tensor path** | Deterministic local execution and bounded linear memory in edge configs; vectors materialize in Python or native loaders. |
+| **State 2 (triggered)** | **QAHR / QAOA routing** | Entered by policy when quantum routing is enabled—see mode table above—not on every batch by default. |
 
-- `pennylane`: identity/no-op routing path
-- `qiskit_statevector`: local exact expectation evaluation
-- `qiskit_ibm`: IBM Quantum Runtime hardware path
+Detailed **enclave tiers**, **EF capacity**, and **FleetCoordinator** vs **ExpertMember** roles are centralized in [../ENCLAVE_LIFECYCLE.md](../ENCLAVE_LIFECYCLE.md) to avoid duplicating tier-page tables here.
 
-This selection is configured from training/serve config and environment surfaces documented in [../QUANTUM_QISKIT.md](../QUANTUM_QISKIT.md).
+## Serving note (HTTP inference)
 
-## Step 4: Qiskit execution contract
+Embedded **`qmw-serve`** and Training WUI **`POST /infer`** currently return **501 Not Implemented** for LibTorch-over-HTTP until a tensor bridge exists ([`training-wui/cmd/qmw-serve/main.go`](../../training-wui/cmd/qmw-serve/main.go), [`training-wui/infer_serve.go`](../../training-wui/infer_serve.go)). **Training** and **library inference in-process** are the accurate paths for `hybrid_inference` today.
 
-When `qiskit_ibm` is selected:
+## Related documents
 
-1. Build the QAOA circuit.
-2. Resolve credentials (`IBM_QUANTUM_API_TOKEN` or `QISKIT_IBM_TOKEN`).
-3. Resolve backend device name (`IBM_BACKEND_NAME` or equivalent config fallback).
-4. Transpile to ISA-compliant circuit for the selected backend.
-5. Execute with `EstimatorV2` and collect per-qubit `Z` expectations.
-
-If IBM runtime fails due to quota or capacity conditions, the path can fall back to local `qiskit_statevector` when fallback is enabled.
-
-## Step 5: Return to classical pipeline
-
-- Quantum expectations are converted to a tensor and detached from hardware execution.
-- The router projects quantum outputs back into the model dimension and mixes them as a scaled residual.
-- The final routed tensor is returned as the model output for downstream serving or training logic.
-- For pause/resume flows, Python writes the resumed bytes back into WASM linear memory (`write_linear_memory(...)` in `qminiwasm/wasm_host/wles_wasmtime_harness.py`) before continuing execution.
-
-## Step 6: What is trainable vs detached
-
-- Classical projection and merge layers remain trainable in PyTorch.
-- IBM hardware execution itself is a detached signal source (no gradient through the quantum device).
-- This creates a hybrid path where quantum results influence routing while preserving stable classical optimization.
-
-## Practical checkpoints
-
-- For conceptual architecture, return to [../../README.md](../../README.md#why-this-stack).
-- For operator setup, use [../operations/OPERATIONS_RUNBOOK.md](../operations/OPERATIONS_RUNBOOK.md).
-- For exact quantum configuration and constraints, use [../QUANTUM_QISKIT.md](../QUANTUM_QISKIT.md).
+| Topic | Document |
+|-------|----------|
+| Stack framing | [../../README.md](../../README.md) |
+| Training data sources | [../TRAINING_DATA.md](../TRAINING_DATA.md) |
+| Native vs Python training | [../TRAINING_NATIVE_PARITY.md](../TRAINING_NATIVE_PARITY.md), [../ENGINE_QMINIWASM_BOUNDARY.md](../ENGINE_QMINIWASM_BOUNDARY.md) |
+| Quantum setup | [../QUANTUM_QISKIT.md](../QUANTUM_QISKIT.md) |
+| Enclave / fleet / CGE | [../ENCLAVE_LIFECYCLE.md](../ENCLAVE_LIFECYCLE.md) |
+| Operations | [../operations/OPERATIONS_RUNBOOK.md](../operations/OPERATIONS_RUNBOOK.md) |
