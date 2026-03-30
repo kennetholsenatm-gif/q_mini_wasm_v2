@@ -199,9 +199,7 @@ def _is_skipped_authority_doc(rel_path: str, cfg: Dict[str, Any]) -> bool:
 
 def scan_entries(
     entries: List[Tuple[str, int, str]],
-    rules: List[
-        Tuple[re.Pattern[str], str, tuple[str, ...] | None, tuple[str, ...] | None]
-    ],
+    rules: List[Tuple[re.Pattern[str], str, tuple[str, ...] | None, tuple[str, ...] | None]],
     cfg: Dict[str, Any],
 ) -> List[str]:
     violations: List[str] = []

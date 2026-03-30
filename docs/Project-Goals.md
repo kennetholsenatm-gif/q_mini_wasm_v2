@@ -20,12 +20,15 @@ The framework targets continuous trust through the **Cognitive Provenance Ledger
 
 ## Platform direction
 
-- **Training and WUI orchestration** target **Go plus C++ (LibTorch over gRPC)**; Python remains for tests, WASM artifact tooling, and workflows where no practical Go or C++ replacement exists yet.
-- **Trained artifacts** (TPEM and checkpoints from the C++ engine) are the basis for edge deployment and HTTP serve; use of inference-only flows without that training loop is **out of scope** for “full stack” product goals.
+- **Orchestration:** **Go** — Training WUI, `qmw-grpc-train`, edge artifact build, serve entrypoints.
+- **Compute:** **C++** — LibTorch training engine (`TrainingEngineService`), linear-memory encode, WASM host hooks, escalation tiers, expert-fleet routing primitives, native tests.
+- **Edge:** **WebAssembly** modules with bounded linear memory and TPEM interchange.
+- **Depythonization:** any remaining non–Go/C++ code and docs references are **being removed**; see [DEPYTHONIZATION.md](DEPYTHONIZATION.md).
+
+**Trained artifacts** (checkpoints and interchange from the C++ engine) are the basis for edge deployment and future native inference RPC.
 
 ## Success criteria (definition of done)
 
 - Documentation and artifacts consistently use the unified vocabulary (TPEM/EF/ECL/ESI/WLES/ZTEE/CPL).
 - CI includes a taxonomy gate so forbidden legacy terms do not enter the docs/code paths.
-- Test coverage validates the stateful flows (ECL outcomes, CGE payload packaging, WLES/ESI envelope invariants).
-
+- Test coverage validates the stateful flows (ECL outcomes, CGE / WLES envelope invariants) via **Go** and **C++** test targets.

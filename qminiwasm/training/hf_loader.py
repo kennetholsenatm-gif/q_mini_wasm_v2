@@ -97,8 +97,24 @@ def _context_prefix_bytes(row: Dict[str, Any], keys: tuple[str, ...]) -> bytes:
 
 # Common Hub columns for instruction-tuning / math / CoT rows (auto mode when text_fields unset).
 _Q_INSTRUCTION_KEYS = ("instruction", "input", "question", "problem", "prompt")
-_Q_RESPONSE_KEYS = ("output", "response", "answer", "solution", "completion", "generated_solution", "generated_text")
-_Q_EXTRA_REASON_KEYS = ("reasoning", "cot", "chain_of_thought", "rationale", "thought", "thinking", "explanation")
+_Q_RESPONSE_KEYS = (
+    "output",
+    "response",
+    "answer",
+    "solution",
+    "completion",
+    "generated_solution",
+    "generated_text",
+)
+_Q_EXTRA_REASON_KEYS = (
+    "reasoning",
+    "cot",
+    "chain_of_thought",
+    "rationale",
+    "thought",
+    "thinking",
+    "explanation",
+)
 
 
 def _strify_cell(val: Any) -> Optional[str]:

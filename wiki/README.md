@@ -9,6 +9,7 @@ Start here:
 - Training WUI (native): [../training-wui/README.md](../training-wui/README.md)
 - Operator runbook: [../docs/operations/OPERATIONS_RUNBOOK.md](../docs/operations/OPERATIONS_RUNBOOK.md)
 - Vector dataflow walkthrough: [../docs/architecture/JOURNEY_OF_A_VECTOR.md](../docs/architecture/JOURNEY_OF_A_VECTOR.md)
+- Depythonization status: [../docs/DEPYTHONIZATION.md](../docs/DEPYTHONIZATION.md)
 
 ## Strategic and Product Context
 

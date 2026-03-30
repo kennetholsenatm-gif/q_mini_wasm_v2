@@ -1,6 +1,8 @@
 # Layout realignment RFC (Phase 1 pilot)
 
-The master realignment prompt calls for **flattening** deep trees (`engine/`, `qminiwasm/`, etc.) into top-level **domains** (memory packing, WASM runtime, quantum routing). Full moves are high-churn: every import, packaging entry point, and CI path must move together.
+**Current direction (2026):** operator and documentation work is **Go + C++ + WASM** only; interpreter-era layout notes below are **historical**. See **[DEPYTHONIZATION.md](DEPYTHONIZATION.md)** and **[ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md)**.
+
+The master realignment prompt called for **flattening** deep trees into top-level **domains** (memory packing, WASM runtime, quantum routing). Full moves are high-churn: imports, packaging, and CI must move together.
 
 ## Principles
 
@@ -25,10 +27,10 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 - **`qminiwasm.wasm`:** Package-level alias only (re-exports `wasm_host`); submodule shims were removed — import **`qminiwasm.wasm_host.<submodule>`** when you need a submodule path.
 - **CI:** `python -m qminiwasm.wasm_host.tpem_bundle verify …`
 
-## Pilot 4 (landed): `qminiwasm.engine` only
+## Pilot 4 (historical): `qminiwasm.engine`
 
-- **What:** Training TOML, `EngineConfig`, `train.main`, `training_schema`, and helpers live in [`qminiwasm/engine/`](../qminiwasm/engine/). The old top-level **`engine/`** package was **removed**. **Operator training** uses **Go + C++ gRPC** ([TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)); Python **`train.main`** remains for tests and internal tooling only.
-- **Boundary:** [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md): **`qminiwasm.engine` → library** only; library modules must not import `qminiwasm.engine`.
+- **Was:** Training TOML helpers lived under [`qminiwasm/engine/`](../qminiwasm/engine/). **Now:** **Mission Control** + **[`training-wui/trainingconfig`](../training-wui/trainingconfig)** + C++ engine own the operator contract ([TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)).
+- **Boundary today:** [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md) (native-only); [DEPYTHONIZATION.md](DEPYTHONIZATION.md) for removing remaining interpreter surfaces.
 
 ## Pilot 5 (landed): removed `qminiwasm.enclave`
 
@@ -48,6 +50,5 @@ The master realignment prompt calls for **flattening** deep trees (`engine/`, `q
 ## References
 
 - Status: [MASTER_REALIGNMENT_STATUS.md](MASTER_REALIGNMENT_STATUS.md)
-- `qminiwasm.engine` / library boundary: [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md); implementation: [`qminiwasm/engine/`](../qminiwasm/engine/)
-- CLI: [`qminiwasm/cli/`](../qminiwasm/cli/) (`python -m qminiwasm.cli graph …`)
+- Native boundary: [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md); depythonization: [DEPYTHONIZATION.md](DEPYTHONIZATION.md)
 - Schema sample: [configs/training/schema.toml](../configs/training/schema.toml)
