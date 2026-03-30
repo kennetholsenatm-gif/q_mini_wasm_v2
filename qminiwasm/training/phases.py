@@ -24,7 +24,9 @@ def flatten_training_phases(phases: List[dict[str, Any]]) -> List[PhaseEpochPlan
         name = str(row.get("name") or f"phase_{i}")
         n_ep = max(1, int(row.get("epochs", 1)))
         for _ in range(n_ep):
-            out.append(PhaseEpochPlan(global_epoch=g, phase_index=i, phase_name=name, spec=dict(row)))
+            out.append(
+                PhaseEpochPlan(global_epoch=g, phase_index=i, phase_name=name, spec=dict(row))
+            )
             g += 1
     return out
 

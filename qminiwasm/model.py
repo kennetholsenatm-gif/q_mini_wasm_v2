@@ -231,9 +231,9 @@ class QMiniWASM:
         self.bloch_sphere_attention = None
         if self._apply_tropical_in_hybrid and not _qmw_env_on("QMW_DISABLE_TROPICAL_ATTN"):
             if self._attention_backend == "bloch":
-                self.bloch_sphere_attention = BlochSphereAttention(
-                    self.d_model, num_heads=nh
-                ).to(self.device)
+                self.bloch_sphere_attention = BlochSphereAttention(self.d_model, num_heads=nh).to(
+                    self.device
+                )
             else:
                 self.tropical_attention = TropicalAttention(self.d_model, num_heads=nh).to(
                     self.device

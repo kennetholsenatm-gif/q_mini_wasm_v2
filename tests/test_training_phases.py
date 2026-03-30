@@ -15,7 +15,10 @@ def test_total_epochs_from_phases() -> None:
 
 
 def test_resolve_phase_at_epoch() -> None:
-    p = [{"name": "a", "epochs": 2, "supervised": True}, {"name": "b", "epochs": 1, "supervised": False}]
+    p = [
+        {"name": "a", "epochs": 2, "supervised": True},
+        {"name": "b", "epochs": 1, "supervised": False},
+    ]
     i0, s0 = resolve_phase_at_epoch(0, p)
     assert i0 == 0 and s0["name"] == "a"
     i1, s1 = resolve_phase_at_epoch(2, p)
