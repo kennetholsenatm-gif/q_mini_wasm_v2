@@ -53,6 +53,8 @@ from .cascade_rl import (
     cascade_rl_train_step,
     hidden_digest_for_cascade,
 )
+from .phase_control import apply_phase_to_model
+from .phases import merge_phase_cascade_overrides, resolve_phase_at_epoch, total_epochs_from_phases
 from qminiwasm.tpem.trainable_tpem import (
     load_cascade_policy_from_trainable_tpem,
     load_trainable_tpem_into_model,
@@ -62,6 +64,7 @@ from .distillation import MOPDLoss, MOPDLossConfig
 from .lota_qaf import TSignSGD
 from .repro import set_training_seed
 
+from ..rl.cascade_cispo import CascadeCISPO, CascadeCISPOConfig
 from ..rl.cascade_grpo import CascadeGRPO, CascadeGRPOConfig
 
 logger = logging.getLogger(__name__)
@@ -560,6 +563,10 @@ def run_training_loop(
     log_xpu_memory_reset_peak: bool = False,
     log_train_throughput: bool = False,
     wui_stop_file: str | None = None,
+    training_phases: Optional[List[Dict[str, Any]]] = None,
+    cascade_policy_optimizer: str = "grpo",
+    cispo_clip_epsilon: float = 0.2,
+    attention_backend: str = "tropical",
 ) -> dict[str, Any]:
     """Run the training curriculum for QMiniWASM.
 
@@ -664,6 +671,12 @@ def run_training_loop(
         wui_stop_file: Optional absolute path; when the file exists, training requests the same
             graceful stop as SIGINT (batch boundary). The Training WUI creates this file when
             OS signals cannot reach the child (typical on Windows GUI launches).
+        training_phases: Optional ``[[training_phases]]`` rows; when set, ``epochs`` is overridden
+            by ``sum(phase.epochs)`` and per-epoch behavior follows each phase (see
+            ``docs/ARCHITECTURE_WHITEPAPERS.md``).
+        cascade_policy_optimizer: Default ``grpo`` or ``cispo`` when not using ``training_phases``.
+        cispo_clip_epsilon: CISPO symmetric clip half-width on the importance ratio.
+        attention_backend: ``tropical`` or ``bloch`` (with ``tropical_attn_per_block``).
 
     Returns:
         Dict with ``epochs_run``, ``final_loss``, ``metrics``, and TPEM artifact path fields
@@ -675,6 +688,16 @@ def run_training_loop(
     d_m = max(32, int(d_model))
     n_blk = max(1, int(num_ternary_blocks))
     g_accum = max(1, int(gradient_accumulation_steps))
+    phases_list: List[Dict[str, Any]] = list(training_phases) if training_phases else []
+    if phases_list:
+        ne = total_epochs_from_phases(phases_list)
+        if int(epochs) != ne:
+            logger.info(
+                "training_phases: overriding training.epochs %s -> sum(phase.epochs)=%s",
+                epochs,
+                ne,
+            )
+        epochs = ne
     if fsdp_enabled or ddp_enabled:
         logger.info(
             "fsdp/ddp requested but QMiniWASM is not an nn.Module; ignoring distributed wrap. "
@@ -796,6 +819,7 @@ def run_training_loop(
         num_ternary_blocks=n_blk,
         io_d_model=io_dm,
         tropical_attn_per_block=bool(tropical_attn_per_block),
+        attention_backend=str(attention_backend or "tropical"),
         use_gradient_checkpointing=bool(gradient_checkpointing),
     )
     model.quantum_router.train()
@@ -1195,8 +1219,53 @@ def run_training_loop(
             log_xpu_memory=log_xpu_memory,
             reset_peak=log_xpu_memory_reset_peak,
         )
+        if phases_list:
+            _, phase_spec = resolve_phase_at_epoch(epoch, phases_list)
+            apply_phase_to_model(model, phase_spec, base_tequila_deadzone=float(tequila_deadzone))
+            supervised_on = bool(phase_spec.get("supervised", True))
+            cascade_phase_on = bool(phase_spec.get("cascade_rl", True))
+            opt_kind, mopd_l_phase, c_eps_phase = merge_phase_cascade_overrides(
+                phase_spec,
+                default_mopd_lambda=float(cascade_mopd_lambda),
+                default_cispo_epsilon=float(cispo_clip_epsilon),
+            )
+            phase_name = str(phase_spec.get("name", ""))
+        else:
+            apply_phase_to_model(
+                model,
+                {"freeze_model_backbone": False, "router_only": False, "tequila_deadzone": None},
+                base_tequila_deadzone=float(tequila_deadzone),
+            )
+            supervised_on = True
+            cascade_phase_on = True
+            opt_kind = str(cascade_policy_optimizer or "grpo").strip().lower()
+            if opt_kind not in ("grpo", "cispo"):
+                opt_kind = "grpo"
+            mopd_l_phase = float(cascade_mopd_lambda)
+            c_eps_phase = float(cispo_clip_epsilon)
+            phase_name = "default"
+        logger.info(
+            "epoch=%s/%s training_phase=%s supervised=%s cascade=%s policy_opt=%s",
+            epoch + 1,
+            epochs,
+            phase_name,
+            int(supervised_on),
+            int(cascade_phase_on),
+            opt_kind,
+        )
+        cascade_active = bool(use_cascade_rl) and cascade_phase_on
+        cispo_trainer = (
+            CascadeCISPO(
+                CascadeCISPOConfig(
+                    normalize_advantage=bool(int(cascade_group_size) >= 2),
+                    epsilon=float(c_eps_phase),
+                )
+            )
+            if opt_kind == "cispo"
+            else None
+        )
         cascade_s = 0.0
-        if use_cascade_rl and int(cascade_steps_per_epoch) > 0:
+        if cascade_active and int(cascade_steps_per_epoch) > 0:
             t_cascade0 = time.perf_counter()
             assert cascade_policy is not None and cascade_optimizer is not None
             if cascade_seed_from_hidden and train_samples:
@@ -1221,7 +1290,7 @@ def run_training_loop(
             c_ret_acc = 0.0
             mopd_mod: MOPDLoss | None = None
             _mopd_feat = _normalize_cascade_mopd_feat_loss(str(cascade_mopd_feat_loss))
-            if float(cascade_mopd_lambda) > 0.0:
+            if float(mopd_l_phase) > 0.0:
                 mopd_mod = MOPDLoss(
                     MOPDLossConfig(
                         lambda_kl=0.0,
@@ -1244,31 +1313,57 @@ def run_training_loop(
             use_native_rollout = os.getenv(
                 "QMINIWASM_NATIVE_RL_RUNTIME", "0"
             ).strip().lower() not in {"", "0", "false", "off", "no"}
+            if cispo_trainer is not None:
+                use_native_rollout = False
             cascade_steps_done = 0
             for _ in range(int(cascade_steps_per_epoch)):
                 _poll_wui_stop_file()
                 if stop_requested.is_set():
                     break
                 if mopd_mod is not None:
-                    cm = cascade_rl_train_step(
-                        cascade_policy,
-                        cascade_optimizer,
-                        grpo_trainer,
-                        group_size=int(cascade_group_size),
-                        env_factory=None if use_native_rollout else _env_factory,
-                        mopd=mopd_mod,
-                        student_hidden_fn=_student_h,
-                        teacher_hidden_fn=_teacher_h,
-                        lambda_mopd=float(cascade_mopd_lambda),
-                    )
+                    if cispo_trainer is not None:
+                        cm = cascade_rl_train_step(
+                            cascade_policy,
+                            cascade_optimizer,
+                            grpo=None,
+                            cispo=cispo_trainer,
+                            group_size=int(cascade_group_size),
+                            env_factory=None if use_native_rollout else _env_factory,
+                            mopd=mopd_mod,
+                            student_hidden_fn=_student_h,
+                            teacher_hidden_fn=_teacher_h,
+                            lambda_mopd=float(mopd_l_phase),
+                        )
+                    else:
+                        cm = cascade_rl_train_step(
+                            cascade_policy,
+                            cascade_optimizer,
+                            grpo_trainer,
+                            group_size=int(cascade_group_size),
+                            env_factory=None if use_native_rollout else _env_factory,
+                            mopd=mopd_mod,
+                            student_hidden_fn=_student_h,
+                            teacher_hidden_fn=_teacher_h,
+                            lambda_mopd=float(mopd_l_phase),
+                        )
                 else:
-                    cm = cascade_rl_train_step(
-                        cascade_policy,
-                        cascade_optimizer,
-                        grpo_trainer,
-                        group_size=int(cascade_group_size),
-                        env_factory=None if use_native_rollout else _env_factory,
-                    )
+                    if cispo_trainer is not None:
+                        cm = cascade_rl_train_step(
+                            cascade_policy,
+                            cascade_optimizer,
+                            grpo=None,
+                            cispo=cispo_trainer,
+                            group_size=int(cascade_group_size),
+                            env_factory=None if use_native_rollout else _env_factory,
+                        )
+                    else:
+                        cm = cascade_rl_train_step(
+                            cascade_policy,
+                            cascade_optimizer,
+                            grpo_trainer,
+                            group_size=int(cascade_group_size),
+                            env_factory=None if use_native_rollout else _env_factory,
+                        )
                 c_loss_acc += float(cm.get("loss", 0.0))
                 c_ret_acc += float(cm.get("return_mean", 0.0))
                 cascade_steps_done += 1
@@ -1278,13 +1373,14 @@ def run_training_loop(
             epoch_cascade_loss.append(c_loss_acc)
             epoch_cascade_return.append(c_ret_acc)
             logger.info(
-                "epoch=%s/%s cascade_rl mean_loss=%.6f mean_return=%.6f (steps=%s group=%s)",
+                "epoch=%s/%s cascade_rl mean_loss=%.6f mean_return=%.6f (steps=%s group=%s opt=%s)",
                 epoch + 1,
                 epochs,
                 c_loss_acc,
                 c_ret_acc,
                 int(cascade_steps_per_epoch),
                 int(cascade_group_size),
+                opt_kind,
             )
             cascade_s = time.perf_counter() - t_cascade0
 
@@ -1302,129 +1398,138 @@ def run_training_loop(
         n_batches = 0
         supervised_sample_count = 0
         user_stop_mid_epoch = False
-        t_supervised0 = time.perf_counter()
-        micro_step = [0]
+        supervised_wall_s = 0.0
+        if supervised_on:
+            t_supervised0 = time.perf_counter()
+            micro_step = [0]
 
-        def _autocast_cm():
-            if not amp_enabled:
-                return nullcontext()
-            dt = device.type
-            if dt not in ("cuda", "xpu", "cpu"):
-                return nullcontext()
-            try:
-                return torch.autocast(device_type=dt, enabled=True)
-            except Exception:
-                return nullcontext()
+            def _autocast_cm():
+                if not amp_enabled:
+                    return nullcontext()
+                dt = device.type
+                if dt not in ("cuda", "xpu", "cpu"):
+                    return nullcontext()
+                try:
+                    return torch.autocast(device_type=dt, enabled=True)
+                except Exception:
+                    return nullcontext()
 
-        def _supervised_one_batch(
-            hidden_states: torch.Tensor,
-            targets: torch.Tensor,
-            batch_start_index: int,
-        ) -> None:
-            nonlocal epoch_loss, n_batches, skipped_nonfinite_batches, supervised_sample_count
-            idx = micro_step[0]
-            micro_step[0] = idx + 1
-            if idx % g_accum == 0:
-                optimizer.zero_grad()
-                if tsign_opt is not None:
-                    tsign_opt.zero_grad()
-            with _autocast_cm():
-                out = model.hybrid_inference(hidden_states)
-                if use_cascade_rl and cascade_seed_from_hidden:
-                    hm = hidden_states.mean(0).detach()
-                    blend = 0.5 * (hm + out.detach().mean(0)) if cascade_couple_forward else hm
-                    digest_holder[0] = _cascade_digest_from_blend(
-                        blend,
-                        cascade_policy=cascade_policy,
-                        state_dim=int(cascade_state_dim),
-                        device=device,
-                        io_dim=io_dm,
+            def _supervised_one_batch(
+                hidden_states: torch.Tensor,
+                targets: torch.Tensor,
+                batch_start_index: int,
+            ) -> None:
+                nonlocal epoch_loss, n_batches, skipped_nonfinite_batches, supervised_sample_count
+                idx = micro_step[0]
+                micro_step[0] = idx + 1
+                if idx % g_accum == 0:
+                    optimizer.zero_grad()
+                    if tsign_opt is not None:
+                        tsign_opt.zero_grad()
+                with _autocast_cm():
+                    out = model.hybrid_inference(hidden_states)
+                    if use_cascade_rl and cascade_seed_from_hidden:
+                        hm = hidden_states.mean(0).detach()
+                        blend = 0.5 * (hm + out.detach().mean(0)) if cascade_couple_forward else hm
+                        digest_holder[0] = _cascade_digest_from_blend(
+                            blend,
+                            cascade_policy=cascade_policy,
+                            state_dim=int(cascade_state_dim),
+                            device=device,
+                            io_dim=io_dm,
+                        )
+                    loss_full = torch.nn.functional.mse_loss(out, targets)
+                    loss = loss_full / float(g_accum)
+                if not torch.isfinite(loss):
+                    skipped_nonfinite_batches += 1
+                    logger.error(
+                        "Non-finite loss at epoch %s batch starting index %s; skipping step.",
+                        epoch,
+                        batch_start_index,
                     )
-                loss_full = torch.nn.functional.mse_loss(out, targets)
-                loss = loss_full / float(g_accum)
-            if not torch.isfinite(loss):
-                skipped_nonfinite_batches += 1
-                logger.error(
-                    "Non-finite loss at epoch %s batch starting index %s; skipping step.",
-                    epoch,
-                    batch_start_index,
-                )
-                return
-            loss.backward()
-            at_boundary = (idx + 1) % g_accum == 0
-            if at_boundary:
+                    return
+                loss.backward()
+                at_boundary = (idx + 1) % g_accum == 0
+                if at_boundary:
+                    if grad_clip_norm is not None and grad_clip_norm > 0:
+                        _clip_grad_norm_xpu_safe(adam_params, grad_clip_norm, device)
+                    optimizer.step()
+                    if tsign_opt is not None:
+                        tsign_opt.step()
+                epoch_loss += float(loss_full.detach().item())
+                n_batches += 1
+                supervised_sample_count += int(hidden_states.shape[0])
+
+            if train_loader is not None:
+                batch_start_idx = 0
+                for hidden_states_cpu, targets_cpu in train_loader:
+                    _poll_wui_stop_file()
+                    if stop_requested.is_set():
+                        user_stop_mid_epoch = True
+                        logger.info(
+                            "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
+                            epoch + 1,
+                            epochs,
+                            n_batches,
+                        )
+                        break
+                    i = batch_start_idx
+                    batch_start_idx += int(hidden_states_cpu.shape[0])
+                    hidden_states = hidden_states_cpu.to(device)
+                    targets = targets_cpu.to(device)
+                    _supervised_one_batch(hidden_states, targets, i)
+            else:
+                for i in range(0, len(train_samples), batch_size):
+                    _poll_wui_stop_file()
+                    if stop_requested.is_set():
+                        user_stop_mid_epoch = True
+                        logger.info(
+                            "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
+                            epoch + 1,
+                            epochs,
+                            n_batches,
+                        )
+                        break
+                    batch = train_samples[i : i + batch_size]
+                    if not batch:
+                        continue
+                    try:
+                        validated_batch = [_validate_training_sample(b) for b in batch]
+                        hidden_list = [_as_d_model("hidden", b["hidden"]) for b in validated_batch]
+                        target_list = [_as_d_model("target", b["target"]) for b in validated_batch]
+                    except (KeyError, TypeError) as e:
+                        raise type(e)(f"Invalid training batch sample: {e}") from e
+                    hidden_states = torch.stack(hidden_list).to(device)
+                    targets = torch.stack(target_list).to(device)
+                    _supervised_one_batch(hidden_states, targets, i)
+
+            rem = micro_step[0] % g_accum
+            if rem != 0:
                 if grad_clip_norm is not None and grad_clip_norm > 0:
                     _clip_grad_norm_xpu_safe(adam_params, grad_clip_norm, device)
                 optimizer.step()
                 if tsign_opt is not None:
                     tsign_opt.step()
-            epoch_loss += float(loss_full.detach().item())
-            n_batches += 1
-            supervised_sample_count += int(hidden_states.shape[0])
 
-        if train_loader is not None:
-            batch_start_idx = 0
-            for hidden_states_cpu, targets_cpu in train_loader:
-                _poll_wui_stop_file()
-                if stop_requested.is_set():
-                    user_stop_mid_epoch = True
-                    logger.info(
-                        "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
-                        epoch + 1,
-                        epochs,
-                        n_batches,
-                    )
-                    break
-                i = batch_start_idx
-                batch_start_idx += int(hidden_states_cpu.shape[0])
-                hidden_states = hidden_states_cpu.to(device)
-                targets = targets_cpu.to(device)
-                _supervised_one_batch(hidden_states, targets, i)
+            supervised_wall_s = time.perf_counter() - t_supervised0
+            if n_batches > 0:
+                _log_train_throughput_if_enabled(
+                    log_train_throughput=log_train_throughput,
+                    epoch=epoch + 1,
+                    epochs_total=epochs,
+                    wall_s=supervised_wall_s,
+                    n_batches=n_batches,
+                    n_samples=supervised_sample_count,
+                    batch_size=batch_size,
+                    dl_workers=dl_workers,
+                    cascade_s=cascade_s,
+                )
         else:
-            for i in range(0, len(train_samples), batch_size):
-                _poll_wui_stop_file()
-                if stop_requested.is_set():
-                    user_stop_mid_epoch = True
-                    logger.info(
-                        "Graceful stop at epoch %s/%s batch boundary (completed batches=%s).",
-                        epoch + 1,
-                        epochs,
-                        n_batches,
-                    )
-                    break
-                batch = train_samples[i : i + batch_size]
-                if not batch:
-                    continue
-                try:
-                    validated_batch = [_validate_training_sample(b) for b in batch]
-                    hidden_list = [_as_d_model("hidden", b["hidden"]) for b in validated_batch]
-                    target_list = [_as_d_model("target", b["target"]) for b in validated_batch]
-                except (KeyError, TypeError) as e:
-                    raise type(e)(f"Invalid training batch sample: {e}") from e
-                hidden_states = torch.stack(hidden_list).to(device)
-                targets = torch.stack(target_list).to(device)
-                _supervised_one_batch(hidden_states, targets, i)
-
-        rem = micro_step[0] % g_accum
-        if rem != 0:
-            if grad_clip_norm is not None and grad_clip_norm > 0:
-                _clip_grad_norm_xpu_safe(adam_params, grad_clip_norm, device)
-            optimizer.step()
-            if tsign_opt is not None:
-                tsign_opt.step()
-
-        supervised_wall_s = time.perf_counter() - t_supervised0
-        if n_batches > 0:
-            _log_train_throughput_if_enabled(
-                log_train_throughput=log_train_throughput,
-                epoch=epoch + 1,
-                epochs_total=epochs,
-                wall_s=supervised_wall_s,
-                n_batches=n_batches,
-                n_samples=supervised_sample_count,
-                batch_size=batch_size,
-                dl_workers=dl_workers,
-                cascade_s=cascade_s,
+            logger.info(
+                "epoch=%s/%s phase=%s: supervised disabled (Unified Training Matrix)",
+                epoch + 1,
+                epochs,
+                phase_name,
             )
 
         if user_stop_mid_epoch:
@@ -1657,10 +1762,65 @@ def run_training_loop(
                     best_mse,
                 )
                 break
-        else:
+        elif supervised_on:
             logger.warning(
                 "epoch=%s produced zero batches; check batch_size and data length", epoch + 1
             )
+
+        if not supervised_on:
+            epochs_completed = epoch + 1
+            current_lr = float(optimizer.param_groups[0]["lr"])
+            epoch_lrs.append(current_lr)
+            proxy = float(epoch_cascade_loss[-1]) if epoch_cascade_loss else float("nan")
+            epoch_losses.append(proxy)
+            logger.info(
+                "epoch=%s/%s phase=%s supervised=off proxy=%.6f lr=%.2e",
+                epoch + 1,
+                epochs,
+                phase_name,
+                proxy,
+                current_lr,
+            )
+            logger.info(
+                "qmw_metric epoch=%s mean_loss=%.6f mean_return=%.6f mean_mse=%.6f",
+                epoch + 1,
+                proxy,
+                0.0,
+                proxy,
+            )
+            _emit_enclave_telemetry()
+            _log_xpu_memory_if_enabled(
+                device,
+                log_xpu_memory=log_xpu_memory,
+                phase="epoch_end_cascade_only",
+                epoch=epoch + 1,
+                epochs_total=epochs,
+                batches=0,
+            )
+            if checkpoint_latest_path and ((epoch + 1) % latest_every_n_epochs == 0):
+                try:
+                    save_trainable_tpem_artifact(
+                        checkpoint_latest_path,
+                        model,
+                        meta=_merge_export_meta(
+                            {
+                                "training_data_source": source,
+                                "seed": seed,
+                                "epoch": epoch + 1,
+                                "epochs_requested": epochs,
+                                "epoch_mean_mse": proxy,
+                                "training_phase": phase_name,
+                                "cascade_only_epoch": True,
+                            }
+                        ),
+                        cascade_policy=_cascade_ckpt_module(),
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to write latest TPEM %s: %s",
+                        checkpoint_latest_path,
+                        e,
+                    )
 
     eval_mean_mse: Optional[float] = None
     if eval_samples and not eval_every_epoch:

@@ -93,10 +93,17 @@ type TrainingDoc struct {
 		UseTsignTernary *bool `toml:"use_tsign_ternary"`
 	} `toml:"adapter"`
 	Model struct {
-		DModel           *int64 `toml:"d_model"`
-		IoDModel         *int64 `toml:"io_d_model"`
-		NumTernaryBlocks *int64 `toml:"num_ternary_blocks"`
+		DModel           *int64  `toml:"d_model"`
+		IoDModel         *int64  `toml:"io_d_model"`
+		NumTernaryBlocks *int64  `toml:"num_ternary_blocks"`
+		AttentionBackend *string `toml:"attention_backend"`
 	} `toml:"model"`
+	Cascade struct {
+		PolicyOptimizer   *string  `toml:"policy_optimizer"`
+		CispoClipEpsilon  *float64 `toml:"cispo_clip_epsilon"`
+		GroupSize         *int64   `toml:"group_size"`
+	} `toml:"cascade"`
+	TrainingPhases        []trainingPhaseToml `toml:"training_phases"`
 	CascadeCurriculumLoop struct {
 		Enabled               *bool    `toml:"enabled"`
 		MaxHealRounds         *int64   `toml:"max_heal_rounds"`
@@ -449,5 +456,8 @@ func TrainingTOMLToProto(absConfigPath, runID, repoRoot string) (*trainingrpc.Tr
 		cfg.MicroBatchSize = autoB
 	}
 
+	if err := applyUnifiedTrainingMatrixTOML(&doc, cfg); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }

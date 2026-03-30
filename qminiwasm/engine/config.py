@@ -149,6 +149,10 @@ class EngineConfig:
         amp_enabled: Optional[bool] = None,
         fsdp_enabled: Optional[bool] = None,
         ddp_enabled: Optional[bool] = None,
+        training_phases: Optional[List[Dict[str, Any]]] = None,
+        cascade_policy_optimizer: Optional[str] = None,
+        cispo_clip_epsilon: Optional[float] = None,
+        attention_backend: Optional[str] = None,
     ):
         apply_optimized_auto_defaults()
         self.accelerator = accelerator
@@ -518,6 +522,15 @@ class EngineConfig:
         self.amp_enabled = bool(amp_enabled) if amp_enabled is not None else False
         self.fsdp_enabled = bool(fsdp_enabled) if fsdp_enabled is not None else False
         self.ddp_enabled = bool(ddp_enabled) if ddp_enabled is not None else False
+
+        self.training_phases = training_phases if training_phases else None
+        _cpo = (cascade_policy_optimizer or "grpo").strip().lower()
+        self.cascade_policy_optimizer = _cpo if _cpo in ("grpo", "cispo") else "grpo"
+        self.cispo_clip_epsilon = (
+            float(cispo_clip_epsilon) if cispo_clip_epsilon is not None else 0.2
+        )
+        _ab = (attention_backend or "tropical").strip().lower()
+        self.attention_backend = _ab if _ab in ("tropical", "bloch") else "tropical"
 
     def wasm_runtime_kwargs(self) -> Dict[str, Any]:
         """Build kwargs for :class:`qminiwasm.wasm_host.engine.WasmRuntimeConfig`."""

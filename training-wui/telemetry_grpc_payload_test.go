@@ -8,26 +8,28 @@ import (
 
 func TestBuildGRPCMetricWebSocketPayload_fullEvent(t *testing.T) {
 	ev := &trainingrpc.TelemetryEvent{
-		UnixMs:             1_700_000_000_000,
-		Epoch:              3,
-		Step:               42,
-		TrainLoss:          0.5,
-		ValLoss:            0.6,
-		LearningRate:       1e-4,
-		SamplesPerSecond:   123.4,
-		SamplerQueueDepth:  1,
-		PrefetchQueueDepth: 2,
-		ComputeQueueDepth:  3,
-		TaxonomyTier:       "L2",
-		PrecisionMode:      "bf16",
-		Stage:              "forward",
-		EventType:          "step",
-		Message:            "ok",
-		GraphId:            "g1",
-		NodeId:             "n1",
-		EnclaveState:       "ready",
-		AttestationState:   "verified",
-		DecoherenceScore:   0.001,
+		UnixMs:                 1_700_000_000_000,
+		Epoch:                  3,
+		Step:                   42,
+		TrainLoss:              0.5,
+		ValLoss:                0.6,
+		LearningRate:           1e-4,
+		SamplesPerSecond:       123.4,
+		SamplerQueueDepth:      1,
+		PrefetchQueueDepth:     2,
+		ComputeQueueDepth:      3,
+		TaxonomyTier:           "L2",
+		PrecisionMode:          "bf16",
+		Stage:                  "forward",
+		EventType:              "step",
+		Message:                "ok",
+		GraphId:                "g1",
+		NodeId:                 "n1",
+		EnclaveState:           "ready",
+		AttestationState:       "verified",
+		DecoherenceScore:       0.001,
+		TrainingPhase:          "mopd",
+		CascadePolicyOptimizer: "grpo",
 	}
 	m := buildGRPCMetricWebSocketPayload("run-xyz", ev, "2026-03-27T12:00:00Z")
 
@@ -67,6 +69,8 @@ func TestBuildGRPCMetricWebSocketPayload_fullEvent(t *testing.T) {
 	expectFloat(t, m, "host_rss_mib", 0)
 	expectFloat(t, m, "estimated_tpem_mib", 0)
 	expectFloat(t, m, "tier_cap_mib", 0)
+	expectStr(t, m, "training_phase", "mopd")
+	expectStr(t, m, "cascade_policy_optimizer", "grpo")
 }
 
 func TestBuildGRPCMetricWebSocketPayload_nilEvent(t *testing.T) {

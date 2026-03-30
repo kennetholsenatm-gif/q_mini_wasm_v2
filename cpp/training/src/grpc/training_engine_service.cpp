@@ -63,6 +63,38 @@ qminiwasm::training::TrainingConfig map_config(const qminiwasm::trainingrpc::Sta
     out.cascade_loop.heal_epochs_per_round = c.heal_epochs_per_round() > 0 ? c.heal_epochs_per_round() : 2;
     out.cascade_loop.max_curriculum_cycles = c.max_curriculum_cycles() > 0 ? c.max_curriculum_cycles() : 1;
   }
+  out.cascade_policy_optimizer = cfg.cascade_policy_optimizer();
+  out.cispo_clip_epsilon = cfg.cispo_clip_epsilon();
+  out.attention_backend = cfg.attention_backend();
+  if (cfg.cascade_rl_group_size() > 0) {
+    out.cascade_rl_group_size = static_cast<std::size_t>(cfg.cascade_rl_group_size());
+  } else {
+    out.cascade_rl_group_size = 4;
+  }
+  out.training_phases.clear();
+  for (int i = 0; i < cfg.training_phases_size(); ++i) {
+    const auto& p = cfg.training_phases(i);
+    qminiwasm::training::TrainingPhaseNative ph;
+    ph.name = p.name();
+    ph.epochs = p.epochs() > 0 ? static_cast<std::size_t>(p.epochs()) : 1;
+    ph.supervised = p.supervised();
+    ph.cascade_rl = p.cascade_rl();
+    ph.freeze_model_backbone = p.freeze_model_backbone();
+    ph.router_only = p.router_only();
+    ph.cascade_policy_optimizer = p.cascade_policy_optimizer();
+    if (p.has_cispo_clip_epsilon()) {
+      ph.cispo_clip_epsilon = p.cispo_clip_epsilon();
+    }
+    if (p.has_cascade_mopd_lambda()) {
+      ph.cascade_mopd_lambda = p.cascade_mopd_lambda();
+    }
+    if (p.has_tequila_deadzone()) {
+      ph.tequila_deadzone = p.tequila_deadzone();
+    }
+    ph.freeze_ternary_experts = p.freeze_ternary_experts();
+    ph.mopd_teacher_checkpoint_path = p.mopd_teacher_checkpoint_path();
+    out.training_phases.push_back(std::move(ph));
+  }
   return out;
 }
 
@@ -234,6 +266,8 @@ class TrainingEngineService final : public qminiwasm::trainingrpc::TrainingEngin
       msg.set_host_rss_mib(event.host_rss_mib);
       msg.set_estimated_tpem_mib(event.estimated_tpem_mib);
       msg.set_tier_cap_mib(event.tier_cap_mib);
+      msg.set_training_phase(event.training_phase);
+      msg.set_cascade_policy_optimizer(event.cascade_policy_optimizer);
       if (!writer->Write(msg)) {
         break;
       }

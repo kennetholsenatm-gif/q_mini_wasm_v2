@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cctype>
 #include <cmath>
+#include <optional>
 #include <condition_variable>
 #include <cstdlib>
 #include <exception>
@@ -52,8 +54,70 @@ struct ComputePacket {
   double train_loss = 0.0;
   double val_loss = 0.0;
   double samples_per_second = 0.0;
+  /// True when active ``training_phases`` row has ``supervised=false`` (eval-only, no optimizer step).
+  bool eval_only_supervised_skipped = false;
+  /// True when active phase is RL-only (``!supervised && cascade_rl``); LibTorch toy GRPO/CISPO step.
+  bool cascade_rl_native = false;
+  bool cascade_rl_is_cispo = false;
 };
+
+std::string trim_ascii_copy(std::string s) {
+  const auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
+  s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
+  s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
+  return s;
+}
+
+void ascii_tolower_inplace(std::string* s) {
+  for (auto& c : *s) {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+}
+
+std::string resolve_cascade_policy(const std::string& phase_field, const std::string& root_field) {
+  std::string p = trim_ascii_copy(phase_field);
+  ascii_tolower_inplace(&p);
+  if (!p.empty()) {
+    return p;
+  }
+  std::string r = trim_ascii_copy(root_field);
+  ascii_tolower_inplace(&r);
+  return r.empty() ? "grpo" : r;
+}
+
+std::optional<std::string> reject_unimplemented_unified_matrix(const TrainingConfig& cfg) {
+  std::string ab = trim_ascii_copy(cfg.attention_backend);
+  ascii_tolower_inplace(&ab);
+  if (ab == "bloch") {
+    return std::string(
+        "native training engine: attention_backend=bloch is not implemented (use Python / "
+        "BlochSphereAttention or attention_backend=tropical)");
+  }
+  return std::nullopt;
+}
+
+void attach_training_phase_telemetry(TelemetryEvent* ev, const TrainingConfig& cfg) {
+  if (ev == nullptr) {
+    return;
+  }
+  if (cfg.cascade_loop.enabled) {
+    ev->training_phase.clear();
+    ev->cascade_policy_optimizer = resolve_cascade_policy("", cfg.cascade_policy_optimizer);
+    return;
+  }
+  if (cfg.training_phases.empty()) {
+    ev->training_phase.clear();
+    ev->cascade_policy_optimizer = resolve_cascade_policy("", cfg.cascade_policy_optimizer);
+    return;
+  }
+  const TrainingPhaseNative* ph = phase_at_global_epoch(ev->epoch, cfg.training_phases);
+  if (ph != nullptr) {
+    ev->training_phase = ph->name;
+    ev->cascade_policy_optimizer = effective_cascade_policy(ph, cfg.cascade_policy_optimizer);
+  }
+}
 }  // namespace
+
 
 class TrainingEngine::Impl {
  public:
@@ -73,6 +137,12 @@ class TrainingEngine::Impl {
     telemetry_bus_.reopen();
 
     config_ = config;
+    if (const auto rej = reject_unimplemented_unified_matrix(config_); rej.has_value()) {
+      if (error_message != nullptr) {
+        *error_message = *rej;
+      }
+      return false;
+    }
     if (config_.run_id.empty()) {
       config_.run_id = "run-cpp-foundation";
     }
@@ -270,6 +340,7 @@ class TrainingEngine::Impl {
  private:
   void run_cascade_curriculum(std::stop_token token);
   void emit(TelemetryEvent event) {
+    attach_training_phase_telemetry(&event, config_);
     telemetry_bus_.push(event);
     std::lock_guard<std::recursive_mutex> lock(mu_);
     if (callback_) {
@@ -429,8 +500,37 @@ class TrainingEngine::Impl {
         std::lock_guard<std::mutex> lk(libtorch_mu_);
         const std::uint64_t mix =
             (static_cast<std::uint64_t>(batch.epoch) << 32) ^ static_cast<std::uint64_t>(batch.step);
-        train_loss = libtorch_trainer_->train_step(config_.micro_batch_size, mix);
-        val_loss = libtorch_trainer_->eval_step(config_.micro_batch_size, mix);
+        const TrainingPhaseNative* active_ph = nullptr;
+        if (!config_.training_phases.empty() && !config_.cascade_loop.enabled) {
+          active_ph = phase_at_global_epoch(batch.epoch, config_.training_phases);
+        }
+        const bool rl_only =
+            active_ph != nullptr && !active_ph->supervised && active_ph->cascade_rl;
+        const bool eval_only =
+            active_ph != nullptr && !active_ph->supervised && !active_ph->cascade_rl;
+        bool cascade_rl_is_cispo = false;
+        if (rl_only) {
+          const std::string pol = effective_cascade_policy(active_ph, config_.cascade_policy_optimizer);
+          cascade_rl_is_cispo = (pol == "cispo");
+          double cispo_eps = config_.cispo_clip_epsilon;
+          if (active_ph->cispo_clip_epsilon.has_value()) {
+            cispo_eps = *active_ph->cispo_clip_epsilon;
+          }
+          const std::size_t rl_group =
+              std::max<std::size_t>(1, config_.cascade_rl_group_size);
+          if (cascade_rl_is_cispo) {
+            train_loss = libtorch_trainer_->train_step_cascade_cispo(rl_group, cispo_eps, mix);
+          } else {
+            train_loss = libtorch_trainer_->train_step_cascade_grpo(rl_group, mix);
+          }
+          val_loss = libtorch_trainer_->eval_step(config_.micro_batch_size, mix ^ 0xCAFEBABECAFECAFEULL);
+        } else if (eval_only) {
+          val_loss = libtorch_trainer_->eval_step(config_.micro_batch_size, mix);
+          train_loss = val_loss;
+        } else {
+          train_loss = libtorch_trainer_->train_step(config_.micro_batch_size, mix);
+          val_loss = libtorch_trainer_->eval_step(config_.micro_batch_size, mix);
+        }
         const auto dt_inner = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t_inner).count();
         const double sps =
             static_cast<double>(batch.samples.size()) / std::max(1.0, static_cast<double>(dt_inner) / 1e6);
@@ -440,6 +540,9 @@ class TrainingEngine::Impl {
             .train_loss = train_loss,
             .val_loss = val_loss,
             .samples_per_second = sps,
+            .eval_only_supervised_skipped = eval_only,
+            .cascade_rl_native = rl_only,
+            .cascade_rl_is_cispo = cascade_rl_is_cispo,
         };
         if (!compute_to_update_->push(std::move(packet), token)) {
           break;
@@ -521,9 +624,20 @@ class TrainingEngine::Impl {
           .compute_queue_depth = compute_to_update_->size(),
           .taxonomy_tier = policy_.tier,
           .precision_mode = policy_.precision,
-          .stage = "update",
-          .event_type = "step",
-          .message = "step_completed",
+          .stage = packet.cascade_rl_native
+                       ? (packet.cascade_rl_is_cispo ? "cascade_cispo" : "cascade_grpo")
+                   : packet.eval_only_supervised_skipped
+                       ? "eval_only"
+                       : "update",
+          .event_type =
+              packet.cascade_rl_native
+                  ? (packet.cascade_rl_is_cispo ? "cascade_cispo_native" : "cascade_grpo_native")
+                  : packet.eval_only_supervised_skipped ? "phase_supervised_skipped_native" : "step",
+          .message = packet.cascade_rl_native
+                         ? (packet.cascade_rl_is_cispo ? "native_cascade_cispo_toy_mdp" : "native_cascade_grpo_toy_mdp")
+                     : packet.eval_only_supervised_skipped
+                         ? "native_eval_only_supervised_false"
+                         : "step_completed",
       };
       emit(std::move(event));
       set_status(EngineStatus{

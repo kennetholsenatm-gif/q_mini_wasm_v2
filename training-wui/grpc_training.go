@@ -69,6 +69,7 @@ func trainingGRPCReachable(timeout time.Duration) bool {
 
 // grpcEstimatedTotalEpochs sets a WUI progress denominator for gRPC runs. Matches native cascade
 // budgeting when cascade_loop.enabled (teacher + heal, scaled by max_curriculum_cycles); else cfg.epochs.
+// When training_phases is set, cfg.epochs is already sum(phase.epochs) (Unified Training Matrix); do not apply cascade_loop expansion.
 func grpcEstimatedTotalEpochs(cfg *trainingrpc.TrainingConfig) int {
 	if cfg == nil {
 		return 1
@@ -76,6 +77,9 @@ func grpcEstimatedTotalEpochs(cfg *trainingrpc.TrainingConfig) int {
 	e := int(cfg.GetEpochs())
 	if e < 1 {
 		e = 1
+	}
+	if len(cfg.GetTrainingPhases()) > 0 {
+		return e
 	}
 	cl := cfg.GetCascadeLoop()
 	if cl == nil || !cl.GetEnabled() {

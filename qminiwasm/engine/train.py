@@ -128,4 +128,8 @@ def main(config: EngineConfig | None = None, *, wui_stop_file: str | None = None
         amp_enabled=bool(getattr(config, "amp_enabled", False)),
         fsdp_enabled=bool(getattr(config, "fsdp_enabled", False)),
         ddp_enabled=bool(getattr(config, "ddp_enabled", False)),
+        training_phases=getattr(config, "training_phases", None),
+        cascade_policy_optimizer=str(getattr(config, "cascade_policy_optimizer", "grpo") or "grpo"),
+        cispo_clip_epsilon=float(getattr(config, "cispo_clip_epsilon", 0.2) or 0.2),
+        attention_backend=str(getattr(config, "attention_backend", "tropical") or "tropical"),
     )

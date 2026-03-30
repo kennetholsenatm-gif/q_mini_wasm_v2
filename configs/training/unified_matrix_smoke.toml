@@ -1,0 +1,47 @@
+# Minimal smoke config for Unified Training Matrix (short run, CPU mesh).
+# See docs/ARCHITECTURE_WHITEPAPERS.md and configs/training/schema.toml.
+
+[hardware]
+accelerator = "cpu"
+
+[training]
+epochs = 99
+batch_size = 4
+learning_rate = 1.0e-4
+seed = 42
+
+[data]
+source = "mesh"
+
+[model]
+d_model = 64
+num_ternary_blocks = 1
+io_d_model = 64
+tropical_attn_per_block = true
+attention_backend = "bloch"
+
+[cascade]
+enabled = true
+steps_per_epoch = 1
+group_size = 4
+state_dim = 8
+num_actions = 4
+mopd_lambda = 0.0
+policy_optimizer = "grpo"
+cispo_clip_epsilon = 0.2
+
+[[training_phases]]
+name = "sft"
+epochs = 1
+supervised = true
+cascade_rl = true
+cascade_policy_optimizer = "grpo"
+
+[[training_phases]]
+name = "router_cispo_probe"
+epochs = 1
+supervised = false
+cascade_rl = true
+router_only = false
+freeze_model_backbone = true
+cascade_policy_optimizer = "cispo"

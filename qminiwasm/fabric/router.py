@@ -10,6 +10,10 @@ It handles:
 
 In environments without Qiskit, it falls back to classical/mock behavior so tests and
 hierarchical inference can run without quantum dependencies.
+
+Local Clifford subgraph simulation (stabilizer tableau stub) lives in
+:mod:`qminiwasm.quantum.clifford` for future WASM/QPU routing cost models; this
+module does not invoke it yet.
 """
 
 import logging

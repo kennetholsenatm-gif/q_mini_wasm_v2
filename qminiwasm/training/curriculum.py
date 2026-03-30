@@ -6,7 +6,7 @@ from typing import Any, List
 
 
 def get_curriculum_phases() -> List[dict[str, Any]]:
-    """Return curriculum phase definitions (e.g. latent ISA mapping, trace unrolling, CISPO)."""
+    """Return high-level curriculum labels; see ``docs/ARCHITECTURE_WHITEPAPERS.md`` for TOML phases."""
     return [
         {
             "name": "latent_isa",

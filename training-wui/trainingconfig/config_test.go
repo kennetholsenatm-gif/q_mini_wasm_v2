@@ -318,3 +318,74 @@ func TestCascadeNativeStepsPerEpochCeil(t *testing.T) {
 		}
 	}
 }
+
+func TestTrainingTOMLToProto_unifiedTrainingMatrixPhases(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfg.toml")
+	content := `
+[training]
+epochs = 99
+batch_size = 4
+learning_rate = 1.0e-4
+seed = 42
+
+[data]
+source = "mesh"
+
+[model]
+d_model = 64
+num_ternary_blocks = 1
+io_d_model = 64
+attention_backend = "bloch"
+
+[cascade]
+policy_optimizer = "grpo"
+cispo_clip_epsilon = 0.2
+group_size = 8
+
+[[training_phases]]
+name = "sft"
+epochs = 1
+supervised = true
+cascade_rl = true
+cascade_policy_optimizer = "grpo"
+
+[[training_phases]]
+name = "router_cispo_probe"
+epochs = 1
+supervised = false
+cascade_rl = true
+freeze_model_backbone = true
+cascade_policy_optimizer = "cispo"
+`
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := TrainingTOMLToProto(p, "um1", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GetEpochs() != 2 {
+		t.Fatalf("epochs: sum(phases)=2 expected, got %d", cfg.GetEpochs())
+	}
+	if cfg.GetAttentionBackend() != "bloch" {
+		t.Fatalf("attention_backend: %q", cfg.GetAttentionBackend())
+	}
+	if cfg.GetCascadePolicyOptimizer() != "grpo" {
+		t.Fatalf("root cascade_policy_optimizer: %q", cfg.GetCascadePolicyOptimizer())
+	}
+	if cfg.GetCascadeRlGroupSize() != 8 {
+		t.Fatalf("cascade_rl_group_size: %d", cfg.GetCascadeRlGroupSize())
+	}
+	ph := cfg.GetTrainingPhases()
+	if len(ph) != 2 {
+		t.Fatalf("training_phases len: %d", len(ph))
+	}
+	if ph[0].GetName() != "sft" || ph[0].GetEpochs() != 1 || !ph[0].GetSupervised() {
+		t.Fatalf("phase0: %+v", ph[0])
+	}
+	if ph[1].GetCascadePolicyOptimizer() != "cispo" {
+		t.Fatalf("phase1 optimizer: %q", ph[1].GetCascadePolicyOptimizer())
+	}
+}
