@@ -112,7 +112,7 @@ jobs:
       - name: CI version (confirm this is v4, host Python 3.11)
         run: echo "CI workflow v4 | host Python 3.11 | sha=${{ github.sha }} | ref=${{ github.ref }}"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -169,7 +169,7 @@ jobs:
       - name: CI version (confirm this is v4, host Python 3.11)
         run: echo "CI workflow v4 | host Python 3.11 | sha=${{ github.sha }} | ref=${{ github.ref }}"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
