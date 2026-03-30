@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import torch.nn as nn
+
+from qminiwasm.layers.ternary import TernaryWASMExpert
 
 if TYPE_CHECKING:
     from qminiwasm.model import QMiniWASM
@@ -63,12 +65,12 @@ def apply_phase_to_model(
     td = phase.get("tequila_deadzone")
     if td is not None:
         v = float(td)
-        for blk in model.ternary_blocks:
-            blk.tequila_deadzone = v
+        for mod in model.ternary_blocks:
+            cast(TernaryWASMExpert, mod).tequila_deadzone = v
     else:
         v0 = float(base_tequila_deadzone)
-        for blk in model.ternary_blocks:
-            blk.tequila_deadzone = v0
+        for mod in model.ternary_blocks:
+            cast(TernaryWASMExpert, mod).tequila_deadzone = v0
 
 
 def freeze_ternary_weights_only(model: QMiniWASM, freeze: bool) -> None:

@@ -9,7 +9,8 @@ The implementation follows the white paper's specifications for:
 - Wasmtime instrumentation and stack/memory delta capture
 - Intentional fault injection for robustness training
 - State recovery using ESIStateRecoveryHull (legacy name: HullKVCache)
-- Continuous pre-training; CISPO routing loss lives in ``qminiwasm.rl.cascade_cispo`` / training loop
+- Continuous pre-training; CISPO routing loss lives in ``qminiwasm.rl.cascade_cispo``
+  and the training loop
 """
 
 import hashlib
@@ -108,7 +109,8 @@ class DataPipeline:
     - Wasmtime instrumentation and stack/memory delta capture
     - Intentional fault injection for robustness training
     - State recovery using ESIStateRecoveryHull (legacy name: HullKVCache)
-    - Continuous pre-training; CISPO routing loss lives in ``qminiwasm.rl.cascade_cispo`` / training loop
+    - Continuous pre-training; CISPO routing loss lives in ``qminiwasm.rl.cascade_cispo``
+      and the training loop
     """
 
     def __init__(self, wasm_runtime: Optional[WasmRuntimeConfig] = None):

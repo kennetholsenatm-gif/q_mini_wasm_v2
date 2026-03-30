@@ -125,7 +125,11 @@ def cascade_rl_train_step(
     """
     if (grpo is None) == (cispo is None):
         raise ValueError("cascade_rl_train_step: pass exactly one of grpo or cispo")
-    norm_adv = grpo.cfg.normalize_advantage if grpo is not None else cispo.cfg.normalize_advantage
+    if grpo is not None:
+        norm_adv = grpo.cfg.normalize_advantage
+    else:
+        assert cispo is not None
+        norm_adv = cispo.cfg.normalize_advantage
     if group_size < 2 and norm_adv:
         raise ValueError("group_size >= 2 required when normalize_advantage is True")
 

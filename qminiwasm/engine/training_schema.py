@@ -154,7 +154,8 @@ class ModelSection(BaseModel):
     io_d_model: Optional[int] = Field(None, ge=8, le=1_048_576)
     #: When True, apply one TropicalAttention after the ternary stack inside hybrid_inference.
     tropical_attn_per_block: Optional[bool] = None
-    #: When ``tropical_attn_per_block`` is True: ``tropical`` (max-plus hull) or ``bloch`` (fidelity).
+    #: When ``tropical_attn_per_block`` is True: ``tropical`` (max-plus hull) or
+    #: ``bloch`` (fidelity).
     attention_backend: Optional[Literal["tropical", "bloch"]] = None
 
 
@@ -219,7 +220,8 @@ class CascadeSection(BaseModel):
     learned_projector: Optional[bool] = None
     router_hidden: Optional[int] = None
     couple_forward: Optional[bool] = None
-    #: Default cascade policy loss: ``grpo`` or ``cispo`` (per-phase override in ``training_phases``).
+    #: Default cascade policy loss: ``grpo`` or ``cispo`` (per-phase override in
+    #: ``training_phases``).
     policy_optimizer: Optional[Literal["grpo", "cispo"]] = None
     #: CISPO trust-region half-width on the importance ratio (symmetric clip).
     cispo_clip_epsilon: Optional[float] = Field(None, ge=0.0, le=1.0)
