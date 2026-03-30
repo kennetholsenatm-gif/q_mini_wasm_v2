@@ -1,0 +1,35 @@
+# Smoke-scale Phase 3 CoT / MOPD-oriented Hub ids (dense reasoning traces). Identity-MSE on encoder only.
+# Large gated sets need HF_TOKEN. Trim num_samples for local smoke; expand for real runs.
+
+[hardware]
+accelerator = "cpu"
+
+[training]
+epochs = 2
+batch_size = 4
+learning_rate = 0.0001
+seed = 42
+
+[data]
+source = "hf_tabular"
+path = "open-thoughts/OpenThoughts-114k"
+
+[huggingface]
+dataset_config = "default"
+split = "train"
+num_samples = 96
+# Inspect dataset viewer — use ordered string columns (reasoning + answer).
+text_fields = ["prompt", "response"]
+
+[[huggingface.extra_specs]]
+path = "melongena/SSR-CoT-16k"
+dataset_config = "default"
+
+[[huggingface.extra_specs]]
+path = "a-m-team/AM-DeepSeek-R1-Distilled-1.4M"
+dataset_config = "default"
+
+[model]
+d_model = 4096
+io_d_model = 4096
+num_ternary_blocks = 1

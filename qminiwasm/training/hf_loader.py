@@ -95,6 +95,96 @@ def _context_prefix_bytes(row: Dict[str, Any], keys: tuple[str, ...]) -> bytes:
     return out
 
 
+# Common Hub columns for instruction-tuning / math / CoT rows (auto mode when text_fields unset).
+_Q_INSTRUCTION_KEYS = ("instruction", "input", "question", "problem", "prompt")
+_Q_RESPONSE_KEYS = ("output", "response", "answer", "solution", "completion", "generated_solution", "generated_text")
+_Q_EXTRA_REASON_KEYS = ("reasoning", "cot", "chain_of_thought", "rationale", "thought", "thinking", "explanation")
+
+
+def _strify_cell(val: Any) -> Optional[str]:
+    if val is None:
+        return None
+    if isinstance(val, str):
+        s = val.strip()
+        return s if s else None
+    if isinstance(val, (int, float, bool)):
+        return str(val)
+    return None
+
+
+def _row_messages_blob(row: Dict[str, Any]) -> Optional[bytes]:
+    """Flatten chat-style ``messages`` list[dict] into text when entries have string content."""
+    raw = row.get("messages")
+    if not isinstance(raw, list) or not raw:
+        return None
+    lines: List[str] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        role = _strify_cell(item.get("role")) or ""
+        content = item.get("content")
+        if content is None:
+            continue
+        if isinstance(content, str):
+            body = content.strip()
+        elif isinstance(content, list):
+            # Some datasets store multi-part content
+            parts: List[str] = []
+            for chunk in content:
+                if isinstance(chunk, dict):
+                    t = _strify_cell(chunk.get("text") or chunk.get("content"))
+                    if t:
+                        parts.append(t)
+                elif isinstance(chunk, str) and chunk.strip():
+                    parts.append(chunk.strip())
+            body = "\n".join(parts)
+        else:
+            body = str(content).strip()
+        if not body:
+            continue
+        if role:
+            lines.append(f"{role}\n{body}")
+        else:
+            lines.append(body)
+    if not lines:
+        return None
+    return "\n\n".join(lines).encode("utf-8", errors="replace")
+
+
+def _row_auto_curriculum_blob(row: Dict[str, Any]) -> Optional[bytes]:
+    """Best-effort concatenation for STEM / CoT Hub rows before falling back to sorted-items dump."""
+    parts: List[str] = []
+
+    mb = _row_messages_blob(row)
+    if mb:
+        return mb
+
+    picked_i: Optional[str] = None
+    picked_r: Optional[str] = None
+    for ik in _Q_INSTRUCTION_KEYS:
+        s = _strify_cell(row.get(ik))
+        if s:
+            picked_i = s
+            break
+    for rk in _Q_RESPONSE_KEYS:
+        s = _strify_cell(row.get(rk))
+        if s:
+            picked_r = s
+            break
+    if picked_i or picked_r:
+        if picked_i:
+            parts.append(picked_i)
+        if picked_r:
+            parts.append(picked_r)
+        for ek in _Q_EXTRA_REASON_KEYS:
+            s = _strify_cell(row.get(ek))
+            if s:
+                parts.append(s)
+        return "\n\n".join(parts).encode("utf-8", errors="replace")
+
+    return None
+
+
 def _row_blob_from_code_fields(row: Dict[str, Any]) -> Optional[bytes]:
     """Prefer a single rich field so the encoder prefix is not duplicated body+whole."""
     whole = row.get("whole_func_string")
@@ -146,7 +236,11 @@ def row_to_encoded_blob(
         if blob_code is not None:
             body = blob_code
         else:
-            body = str(sorted(row_dict.items())).encode("utf-8", errors="replace")
+            blob_auto = _row_auto_curriculum_blob(row_dict)
+            if blob_auto is not None:
+                body = blob_auto
+            else:
+                body = str(sorted(row_dict.items())).encode("utf-8", errors="replace")
 
     if ctx_keys:
         prefix = _context_prefix_bytes(row_dict, ctx_keys)

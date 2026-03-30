@@ -34,6 +34,8 @@ flowchart LR
 | **State 1 (Always-On)** | **Ternary WASM Inference** | Deterministic local execution in bounded WASM linear memory. |
 | **State 2 (Triggered)** | **QAOA Routing (Quantum Approximate Optimization Algorithm)** | Entered only when routing/search pressure exceeds configured local budget. |
 
+**Beyond a single hop:** In C++, [`escalation_c_api.h`](../../cpp/escalation/escalation_c_api.h) models further escalation from migration / QAHR-classical tiers toward native simulator (`Tier 4`) or an external QPU target (`Tier 5`) using `QmwEscalationPolicy` and `qmw_escalation_resolve_next`. Python still owns full tensor / hull ingestion; the native API is for tiered **routing decisions** and optional OpenQASM execution on the trinary stack.
+
 ### When to use Quantum Routing
 
 State 2 is a hard-trigger path, not a default path. Example policy (control-plane configured): if classical assignment over 64 or more experts exceeds a 50ms latency budget, local execution pauses and routing search is delegated to the Qiskit backend, then the selected path is returned and State 1 resumes.

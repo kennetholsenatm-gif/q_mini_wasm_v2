@@ -14,6 +14,9 @@ Hyperparameters and non-secret options should live in **TOML** under [`configs/t
 
 - [`configs/training/mesh_cpu.toml`](../configs/training/mesh_cpu.toml) — synthetic mesh on CPU
 - [`configs/training/hf_tabular_example.toml`](../configs/training/hf_tabular_example.toml) — Hugging Face tabular (dataset fields in TOML; Hub tokens in `.env` per [environment-variables.md](environment-variables.md))
+- [`configs/training/curriculum_phase1_stem_example.toml`](../configs/training/curriculum_phase1_stem_example.toml) — smoke-scale **Phase 1 STEM / math** Hub mix (see curated curriculum below)
+- [`configs/training/curriculum_phase1_code_example.toml`](../configs/training/curriculum_phase1_code_example.toml) — smoke-scale **Phase 1 code** Hub ids
+- [`configs/training/curriculum_phase3_cot_example.toml`](../configs/training/curriculum_phase3_cot_example.toml) — smoke-scale **Phase 3 CoT / MOPD-oriented** Hub ids
 - [`configs/training/schema.toml`](../configs/training/schema.toml) — commented reference for all sections
 
 Example (from **`training-wui/`** after the C++ server is up):
@@ -63,6 +66,31 @@ Cascade + MOPD helper: [`scripts/run_training_cascade_mopd.py`](../scripts/run_t
 | `hf_tabular` | Hugging Face `datasets`: each row is turned into UTF-8 text, then [`encode_linear_memory`](../qminiwasm/wasm_host/memory_encode.py) produces **hidden**; **target = hidden** (identity MSE). | No — trains the hybrid stack on encoded text, not wasm linear memory. |
 
 **Deployment-aligned data:** For behavior that should track **real WASM linear memory**, prefer **`mesh`** or **`corpus`**. Use **`hf_tabular`** for cheap scale and diversity (e.g. CodeSearchNet) as **pretraining** or auxiliary signal; it does not substitute for wasmtime-backed encodings at the edge.
+
+## Curated Cascade curriculum (Hub)
+
+The whitepaper-style catalog **[QMINIWASM Dataset and Expert Curation.md](QMINIWASM%20Dataset%20and%20Expert%20Curation.md)** recommends specific Hugging Face datasets for each Cascade RL phase (STEM/math, execution-aware code, CoT-heavy distillation). This repo wires them in as **TOML examples** and **`hf_tabular`** / native-gRPC row fetch—not as full next-token SFT or execution-based RL.
+
+**Important limitations (read before scaling):**
+
+- **`hf_tabular` and native HF fetch** still implement **identity MSE** on **[`encode_linear_memory`](../qminiwasm/wasm_host/memory_encode.py)** vectors (`target == hidden`). They do **not** implement logits-level SFT, compiler rewards, or xCodeEval test execution from that document.
+- Use **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)** for what the LibTorch engine trains vs the Python graph; curated datasets here are **distribution shape** for the same encoder pipeline, not a guarantee of whitepaper-scale training.
+
+**Phase → Hub ids → wiring hints**
+
+| Phase / role | Hub dataset | `text_fields` / notes |
+|--------------|-------------|------------------------|
+| Phase 1 — STEM / logic | `nvidia/OpenMathInstruct-2` | Often message-style rows: set **`text_fields`** explicitly after inspecting the dataset card (e.g. fields such as `problem`, `generated_solution`, or nested `messages`—Python auto-heuristic concatenates common instruction/response keys when unset; see [`hf_loader`](../qminiwasm/training/hf_loader.py)). |
+| Phase 1 — STEM / multi-trace | `open-r1/OpenR1-Math-220k` | Prefer explicit **`text_fields`** from the dataset schema (e.g. problem + solution columns). |
+| Phase 1 — code / execution | `NTU-NLP-sg/xCodeEval` | Multi-config dataset: set **`dataset_config`** per [Hyperparameters Hub README](https://huggingface.co/datasets/NTU-NLP-sg/xCodeEval); choose columns that flatten to text for the encoder. |
+| Phase 1 — edge-oriented code | `nex-agi/coding-eval` | Set **`text_fields`** from the dataset viewer; may require gated access + **`HF_TOKEN`**. |
+| Phase 3 — CoT / distillation | `a-m-team/AM-DeepSeek-R1-Distilled-1.4M` | Long reasoning traces: list all string columns you need in order (e.g. prompt + full response / chain-of-thought sections) via **`[huggingface].text_fields`**. |
+| Phase 3 — skeleton CoT | `melongena/SSR-CoT-16k` | Use **`text_fields`** matching SSR fields from the dataset card. |
+| Phase 3 — open reasoning anchor | `open-thoughts/OpenThoughts-114k` | Use **`text_fields`** per card; pair with low **`num_samples`** for smoke runs. |
+
+**Native gRPC parity:** When **`[huggingface].text_fields`** is set in TOML, the Training WUI / **`BuildHfProto`** maps it to **`HfDatasetParams.text_fields`** in [`proto/training_engine.proto`](../proto/training_engine.proto). The C++ engine passes the same ordered keys into [`hf_datasets_rows.cpp`](../cpp/training/src/hf_datasets_rows.cpp) so native row text matches the Python loader’s explicit column path. If **`text_fields`** is empty, native fetch keeps legacy behavior (concatenate top-level string JSON fields in key order).
+
+**Theory pillars (experts):** The same doc’s “Task 2” experts (1.58-bit, CISPO, MOPD, tropical routing, stabilizer simulation) map to implementation status in **[ARCHITECTURE_WHITEPAPERS.md](ARCHITECTURE_WHITEPAPERS.md)** (traceability matrix) and **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**—link there instead of duplicating long citations in this file.
 
 Install Hugging Face support for library/tests (includes **`python-dotenv`**; load a repo-root **`.env`** in your tooling if needed; put `HUGGING_FACE_HUB_TOKEN` or `HF_TOKEN` there—do not commit `.env`):
 

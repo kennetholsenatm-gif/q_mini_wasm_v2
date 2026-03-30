@@ -22,6 +22,8 @@ struct HfDatasetParamsNative {
   std::string revision;
   std::uint32_t num_samples = 0;
   double mesh_blend_fraction = 0.0;
+  /// Ordered JSON row keys for ``row_to_text`` (matches TOML ``text_fields`` / proto). Empty: legacy concat.
+  std::vector<std::string> text_fields;
 };
 
 struct CascadeCurriculumLoopNative {

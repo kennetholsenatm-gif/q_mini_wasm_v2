@@ -12,6 +12,8 @@ message HfDatasetParams {
   string revision = 4;
   uint32 num_samples = 5;
   double mesh_blend_fraction = 6;
+  // Ordered row keys for native HF fetch + parity with Python hf_tabular text_fields (empty = legacy concat).
+  repeated string text_fields = 7;
 }
 
 // Automated cascade curriculum: teacher fit to PTQTP on student to heal vs frozen teacher to optional gate.

@@ -5,6 +5,7 @@
 
 namespace qminiwasm::training {
 
+/** Training runtime taxonomy (batch slots, prefetch), not EF pages and not inference expert-fleet layout. */
 enum class TaxonomyTier {
   kEdgeConstrained = 0,
   kFogNode = 1,

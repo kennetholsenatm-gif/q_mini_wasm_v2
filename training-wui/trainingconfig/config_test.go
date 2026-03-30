@@ -246,6 +246,42 @@ num_ternary_blocks = 1
 	}
 }
 
+func TestTrainingTOMLToProto_hfTextFields(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfg.toml")
+	content := `
+[training]
+epochs = 1
+batch_size = 4
+
+[data]
+source = "hf_tabular"
+path = "openai/gsm8k"
+
+[huggingface]
+dataset_config = "main"
+split = "train"
+num_samples = 10
+text_fields = ["question", "answer"]
+`
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := TrainingTOMLToProto(p, "tf1", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hf := cfg.GetHf()
+	if hf == nil {
+		t.Fatal("nil hf")
+	}
+	tf := hf.GetTextFields()
+	if len(tf) != 2 || tf[0] != "question" || tf[1] != "answer" {
+		t.Fatalf("text_fields: %v", tf)
+	}
+}
+
 func TestTrainingTOMLToProto_cascadeOmittedGateTargetDisablesMseGate(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

@@ -1,5 +1,7 @@
 #include "wles_hooks.hpp"
 
+#include "wasm_host_hooks_c_api.h"
+
 #include <fstream>
 
 namespace qminiwasm::wles {
@@ -8,6 +10,7 @@ bool save_linear_memory(const char* path, const std::uint8_t* data, std::size_t 
   if (path == nullptr || data == nullptr) {
     return false;
   }
+  qmw_wasm_hooks_notify_linear_memory_snapshot(0, data, len, path);
   std::ofstream f(path, std::ios::binary | std::ios::trunc);
   if (!f) {
     return false;

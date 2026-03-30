@@ -48,6 +48,10 @@ qminiwasm::training::TrainingConfig map_config(const qminiwasm::trainingrpc::Sta
     out.hf.revision = h.revision();
     out.hf.num_samples = h.num_samples();
     out.hf.mesh_blend_fraction = h.mesh_blend_fraction();
+    out.hf.text_fields.clear();
+    for (int i = 0; i < h.text_fields_size(); ++i) {
+      out.hf.text_fields.push_back(h.text_fields(i));
+    }
   }
   if (cfg.cascade_loop().enabled()) {
     const auto& c = cfg.cascade_loop();

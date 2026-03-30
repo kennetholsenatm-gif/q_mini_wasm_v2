@@ -37,6 +37,11 @@ add_library(qminiwasm_core STATIC
     grammar/grammar_mask_scalar.cpp
     grammar/grammar_dispatch.cpp
     wasm/wles_hooks.cpp
+    wasm/linear_memory_encode.cpp
+    wasm/wasm_host_hooks.cpp
+    escalation/escalation_policy.cpp
+    escalation/escalation_quantum_hook.cpp
+    router/expert_fleet.cpp
     qubo/qaoa_small_n.cpp
 )
 if(QMINIWASM_WITH_NATIVE_RL_RUNTIME)
@@ -372,10 +377,14 @@ endif()
 # Tests executable
 set(_QMW_CPP_TEST_SRCS
     tests/test_main.cpp
+    tests/test_escalation_policy.cpp
+    tests/test_expert_fleet.cpp
     tests/test_w158_pack.cpp
     tests/test_ternary_matvec.cpp
     tests/test_grammar_mask.cpp
+    tests/test_linear_memory_encode.cpp
     tests/test_wles_hooks.cpp
+    tests/test_wasm_hooks.cpp
     tests/test_qaoa.cpp
 )
 if(QMINIWASM_WITH_QUANTUM)

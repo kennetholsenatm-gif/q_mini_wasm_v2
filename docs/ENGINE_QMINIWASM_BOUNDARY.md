@@ -35,6 +35,12 @@ There is **no** top-level `engine/` Python package anymore. **Operator training*
 
 Use **`qminiwasm.wasm_host`** for Wasmtime, memory encoding, trit packing, WASI, TPEM bundle helpers. **`qminiwasm.wasm`** remains a **package-level** alias of `wasm_host` only (no per-submodule shims — import `qminiwasm.wasm_host.*` for submodules). **`qminiwasm.state`** re-exports delta compression from `wasm_host` for older doc references.
 
+The canonical **4096-d linear-memory float encoding** for training is implemented in Python in `wasm_host.memory_encode` and duplicated for speed in native code under [`cpp/wasm/linear_memory_encode.hpp`](../cpp/wasm/linear_memory_encode.hpp) (also exposed as `qminiwasm_cpp_native.encode_linear_memory_u8` when the CMake pybind target is built). For **multi-instance routing and future WASM clustering**, the repo defines an experimental C hook ABI in [`cpp/wasm/wasm_host_hooks_c_api.h`](../cpp/wasm/wasm_host_hooks_c_api.h) (snapshots on WLES save, execute pre/post around the WasmEdge bridge stub, and an optional route-hint channel); pairing those hooks with native `qmw_route_*` helpers remains operator-specific.
+
+**Certainty-gated escalation tiers** in native code: [`cpp/escalation/escalation_c_api.h`](../cpp/escalation/escalation_c_api.h) (`qmw_escalation_resolve_next`, envelope header, optional `qmw_escalation_run_native_openqasm_if_applicable`) complements Python CGE payloads in `qminiwasm.cognitive.escalation` and does not replace them in the default training stack.
+
+**Expert fleet (multi-WASM router):** [`cpp/router/expert_fleet_c_api.h`](../cpp/router/expert_fleet_c_api.h) wraps routing top-k / partition primitives for coordinator-style deployments; vocabulary is spelled out in [`docs/ENCLAVE_LIFECYCLE.md`](ENCLAVE_LIFECYCLE.md) and ties to [`cpp/wasm/wasm_host_hooks_c_api.h`](../cpp/wasm/wasm_host_hooks_c_api.h) `on_route_hint`.
+
 ## Related docs
 
 - [LAYOUT_REALIGNMENT_RFC.md](LAYOUT_REALIGNMENT_RFC.md)
