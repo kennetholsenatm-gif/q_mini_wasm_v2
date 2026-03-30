@@ -91,7 +91,7 @@ Uncheck **Train on RunPod GPU** only if you want training to run **on the WUI ho
 
 ## 6. Secrets on the pod
 
-Copy or recreate **`.env`** on the pod (or export vars) for `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`, IBM Quantum tokens, etc., so the synced tree matches what the native engine and data loaders expect. Optional **legacy** direct-Python training (`python -m qminiwasm.engine`) is documented in [docs/TRAINING_DATA.md](TRAINING_DATA.md) and is **not** what the WUI launches on the pod by default.
+Copy or recreate **`.env`** on the pod (or export vars) for `HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`, IBM Quantum tokens, etc., so the synced tree matches what the native engine and data loaders expect. Training on the pod uses **native gRPC** (`qminiwasm_training_engine_server` + `qmw-grpc-train`); see [docs/TRAINING_DATA.md](TRAINING_DATA.md) for TOML and data-source reference.
 
 ## 7. Destroy when done
 

@@ -34,7 +34,15 @@ PowerShell: use forward slashes in `CMAKE_TOOLCHAIN_FILE` or an absolute path, e
 
 ### LibTorch (real TPEM weights; default **ON**)
 
-The training library links **LibTorch** for Phase-1 native training: a residual PreNorm stack of ternary STE experts (`d_model`→`d_model`, matching Python `TernaryWASMExpert` blocks), optional linear **stem/head** when `io_d_model ≠ d_model`, Adam steps, and **interchange v2** checkpoints (not Python `torch.save` pickles).
+The training library links **LibTorch** for native TPEM training: a residual PreNorm stack of ternary STE experts (`d_model`→`d_model`, matching Python `TernaryWASMExpert` blocks), optional linear **stem/head** when `io_d_model ≠ d_model`, an **optional** native **Bloch-sphere fidelity attention** block when `attention_backend=bloch` (broadcast pooled `d_model` vector over a configurable virtual sequence with learnable `pos_embed`, then Bloch attention and mean-pool before experts), Adam steps, and **interchange v2** checkpoints (not Python `torch.save` pickles).
+
+**Phase-1 baseline (no Bloch):** With `attention_backend` unset or not `bloch`, the core is strictly **2D** `[batch, io_dim]` (or `[batch, d_model]` after stem): **no** sequence attention—the stack is stem/head plus PreNorm experts only.
+
+**Bloch path:** Set `attention_backend=bloch` in training TOML / gRPC `TrainingConfig`, and optionally `[model] native_bloch_seq_len`, `native_bloch_num_heads` (defaults 8 and 4, with head count reduced so `d_model` is divisible). Interchange v2 stores Bloch weights under `bloch.*` and envelope keys `native_bloch_seq_len` / `native_bloch_num_heads` when present.
+
+#### OpenQASM / trinary simulator (optional)
+
+The parent [`cpp/CMakeLists.txt`](../CMakeLists.txt) optionally builds **`QMINIWASM_WITH_QUANTUM`**: an OpenQASM 3 **subset** front-end and a **qutrit** statevector simulator (LibTorch CPU) for routing experiments (`qmw_routing_trinary_expval_pauli_z0`). Use the same LibTorch install as training; enable with `-DQMINIWASM_WITH_QUANTUM=ON`. See [`cpp/README.md`](../README.md#native-quantum-optional).
 
 #### Quick install (CPU)
 
@@ -152,16 +160,18 @@ When **`TrainingConfig`** carries absolute paths in **`checkpoint_save_path`**, 
 Checkpoints are **trainable TPEM interchange v2**:
 
 - Binary layout: **`QMWTPEM2`** (8 bytes) + `uint64` JSON envelope length + UTF-8 JSON + raw **safetensors** blob (F32 tensors only).
-- JSON envelope includes **`d_model`**, **`io_d_model`**, **`num_ternary_blocks`** (defaults align with Python `QMiniWASM`).
-- Tensor keys: **`quantum_router.*`** (frozen snapshot in Phase 1), **`input_stem.*` / `output_head.*`** when stem/head exist, **`ternary_expert.weight`** for a single block, or **`ternary_blocks.{i}.weight`** for depth `N>1` (bias keys from Python are ignored if the native expert has no bias parameter).
+- JSON envelope includes **`d_model`**, **`io_d_model`**, **`num_ternary_blocks`** (defaults align with Python `QMiniWASM`), and when native Bloch is saved, **`native_bloch_seq_len`**, **`native_bloch_num_heads`**.
+- Tensor keys: **`quantum_router.*`** (frozen snapshot in Phase 1), **`input_stem.*` / `output_head.*`** when stem/head exist, **`bloch.pos_embed`** and **`bloch.q_proj` / `k_proj` / `v_proj` / `out_proj`** (`*.weight`, `*.bias`) when Bloch is enabled, **`ternary_expert.weight`** for a single block, or **`ternary_blocks.{i}.weight`** for depth `N>1` (bias keys from Python are ignored if the native expert has no bias parameter).
 - Python loads them with **`load_trainable_tpem_into_model`**. To **create** a v2 file from Python for C++ resume, use **`save_trainable_tpem_interchange_v2`** in `qminiwasm.tpem.trainable_tpem`.
 - **`model_uri`** in `proto/training_engine.proto` / gRPC: optional path to an existing interchange v2 before training starts. If **`model_uri`** is empty, optional **`d_model`**, **`io_d_model`**, **`num_ternary_blocks`** on the same message select **cold-start** geometry (random init); otherwise the native trainer defaults to `4096` / `4096` / `1`.
 
-**Scope vs full Python:** Native training approximates the **ternary stack + I/O** path only (no tropical attention, hybrid adapter, cascade router training, or QAOA execution in forward). Use `qaoa_execution_mode="pennylane"` for a typical empty `quantum_router` snapshot. Qiskit-backed routers may still serialize tensors into the interchange; they are passed through on save.
+**Scope vs full Python:** Native training matches the **ternary stack + I/O** path and **optional Bloch attention** (fidelity weights; no tropical/max-plus attention). There is no hybrid adapter, cascade router training, or QAOA execution in the forward pass. Use `qaoa_execution_mode="pennylane"` for a typical empty `quantum_router` snapshot. Qiskit-backed routers may still serialize tensors into the interchange; they are passed through on save.
+
+Golden-vector parity for the Bloch module is checked by **`bloch_golden_test`** (LibTorch) using `cpp/training/test/data/bloch_golden.json` from `scripts/gen_bloch_golden.py`.
 
 ### Without LibTorch (`-DQMINIWASM_TRAINING_WITH_LIBTORCH=OFF`)
 
-The engine writes the legacy JSON manifest `{"format":"qminiwasm_native_training_engine","version":1,...}` (not loadable as weights).
+The engine writes a **versioned** JSON manifest `{"format":"qminiwasm_native_training_engine","version":1,...}` (not loadable as weights).
 
 Successful or failed writes appear as telemetry with `stage=checkpoint` and `event_type=native_saved` / `native_save_failed`.
 
@@ -177,6 +187,6 @@ Successful or failed writes appear as telemetry with `stage=checkpoint` and `eve
 
 1. **Done:** Native `StartTraining` / `StreamTelemetry` / `StopTraining` from the WUI for local and RunPod “train on host” runs.
 2. **Done:** WebSocket payloads use the `metric` / `alert` contract with `telemetry_source` distinguishing sources; **`TelemetryEvent`** fields from `proto/training_engine.proto` are forwarded on **`metric`** (details and diagrams: [`training-wui/README.md`](../../training-wui/README.md)).
-3. **Partial:** Log-line regex telemetry still applies to **subprocess (Python)** runs only; full parity for quantum/prune/QAOA metrics on the C++ path depends on richer `TelemetryEvent` or synthetic lines.
+3. **Partial:** Richer quantum/prune/QAOA metrics on the C++ path depend on `TelemetryEvent` fields or synthetic log lines (Mission Control is gRPC-first).
 
 WUI: set **`configs/wui.toml`** `[wui] training_runtime_mode = "native"` (default) and **`grpc_addr`** (default `127.0.0.1:50061`), or **`training-wui -grpc-addr` / `-training-runtime`**. See [`training-wui/README.md`](../../training-wui/README.md).

@@ -7,8 +7,6 @@
 - **Train on pod (default):** after sync, the WUI runs a remote bash script that starts **`qminiwasm_training_engine_server`** and **`go run ./cmd/qmw-grpc-train`** (`training-wui/runpod_remote.go`). **Train on WUI host:** local gRPC to a C++ engine on the laptop; pod may still be provisioned.
 - **Cloud accelerator defaults:** `infra/runpod/variables.tf` sets container **`ACCELERATOR=cuda`** and **`NVIDIA_VISIBLE_DEVICES=all`**. See **`infra/runpod/CLOUD_ACCELERATOR.md`**, **`scripts/runpod_sync_and_train.example.sh`**, and the WUI RunPod panel.
 
-**Historical note:** earlier revisions assumed `python -m qminiwasm.engine` as the WUI subprocess; that is **legacy** and not the default training path ([docs/TRAINING_NATIVE_PARITY.md](../TRAINING_NATIVE_PARITY.md)).
-
 ## Gaps (what “full” RunPod integration could mean)
 
 1. **Remote training** – Further automation for artifacts, health checks, and optional RunPod API exec/logs (native stack is already SSH-driven on the pod).
@@ -22,7 +20,7 @@
 | Phase | Scope |
 |-------|--------|
 | **P0** | ~~Document current flow; optional “copy SSH command” from `tofu output` in the UI.~~ **Done:** `CLOUD_ACCELERATOR.md`, example script, WUI hints when `public_ip` is present; pod env defaults for CUDA. |
-| **P1** | Optional **remote command** field: run custom `ssh user@ip '…'` (e.g. native `qmw-grpc-train` or legacy `python -m qminiwasm.engine`) after apply, with SSH key from env. |
+| **P1** | Optional **remote command** field: run custom `ssh user@ip '…'` (e.g. native `qmw-grpc-train`) after apply, with SSH key from env. |
 | **P2** | **rsync** or small agent to sync repo + `configs/` + `artifacts/` bidirectionally. |
 | **P3** | RunPod **HTTP API** (if available) for pod exec/logs instead of raw SSH. |
 

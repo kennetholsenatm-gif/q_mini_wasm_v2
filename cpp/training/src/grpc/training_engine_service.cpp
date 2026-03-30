@@ -1,5 +1,7 @@
 #include <grpcpp/grpcpp.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -66,6 +68,8 @@ qminiwasm::training::TrainingConfig map_config(const qminiwasm::trainingrpc::Sta
   out.cascade_policy_optimizer = cfg.cascade_policy_optimizer();
   out.cispo_clip_epsilon = cfg.cispo_clip_epsilon();
   out.attention_backend = cfg.attention_backend();
+  out.native_bloch_seq_len = cfg.native_bloch_seq_len();
+  out.native_bloch_num_heads = cfg.native_bloch_num_heads();
   if (cfg.cascade_rl_group_size() > 0) {
     out.cascade_rl_group_size = static_cast<std::size_t>(cfg.cascade_rl_group_size());
   } else {
@@ -115,6 +119,25 @@ void FillNativeColdStartMemoryEstimate(const qminiwasm::trainingrpc::TrainingCon
     param_floats += 2ULL * io * d + d + io;
   }
   param_floats += nb * (d * d + 2ULL * d);
+
+  std::string ab = cfg.attention_backend();
+  std::transform(ab.begin(), ab.end(), ab.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (ab == "bloch") {
+    std::uint32_t t_len = cfg.native_bloch_seq_len() > 0 ? cfg.native_bloch_seq_len() : 8;
+    std::uint32_t H = cfg.native_bloch_num_heads() > 0 ? cfg.native_bloch_num_heads() : 4;
+    while (H > 1U && (d % static_cast<std::uint64_t>(H)) != 0ULL) {
+      --H;
+    }
+    if (H < 1U) {
+      H = 1U;
+    }
+    const std::uint64_t dv = d / static_cast<std::uint64_t>(H);
+    param_floats += static_cast<std::uint64_t>(t_len) * d;
+    param_floats += 2ULL * (3ULL * static_cast<std::uint64_t>(H) * d + 3ULL * static_cast<std::uint64_t>(H));
+    param_floats += static_cast<std::uint64_t>(H) * dv * d + static_cast<std::uint64_t>(H) * dv;
+    param_floats += d * (static_cast<std::uint64_t>(H) * dv) + d;
+  }
 
   const std::uint64_t param_bytes = param_floats * 4ULL;
   const std::uint64_t adam_bytes = param_bytes * 2ULL;

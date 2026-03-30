@@ -1,4 +1,4 @@
-# Development: lint, test, docs, optional API server
+# Development: lint, test, docs
 black>=23.7.0
 flake8>=6.0.0
 mypy>=1.4.0
@@ -9,9 +9,6 @@ pytest-cov>=4.1
 mkdocs>=1.5.0
 mkdocs-material>=9.0.0
 
-# engine/serve.py (optional local inference API)
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
 pydantic>=2.5.0
 
 # scripts/security/* (optional)

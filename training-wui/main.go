@@ -312,7 +312,7 @@ func main() {
 	repoRoot = filepath.Clean(abs)
 
 	// Load repo .env (e.g. /opt/qmw/.env from bind mount) so IBM/HF tokens are visible
-	// to this process and subprocesses (python -m qminiwasm.engine).
+	// to this process and subprocesses (Python preflight / tooling).
 	loadDotenvFromRepo(repoRoot)
 
 	pythonExe = resolvePythonExecutable(*py)

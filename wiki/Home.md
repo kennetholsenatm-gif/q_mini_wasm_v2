@@ -4,7 +4,7 @@
 
 Welcome. This track summarizes what the **qminiwasm-core** / Q-Mini-WASM effort is aiming for and why it matters, without assuming a technical background.
 
-**Repository onboarding** (runtime stack, legacy inference path, repo layout, and “journey of a vector” map): [README](../README.md#runtime-stack-read-first) in the repo root.
+**Repository onboarding** (runtime stack, repo layout, and “journey of a vector” map): [README](../README.md#runtime-stack-read-first) in the repo root.
 
 ### What problem does this address?
 
@@ -14,9 +14,9 @@ Welcome. This track summarizes what the **qminiwasm-core** / Q-Mini-WASM effort 
 
 ### What we combine
 
-1. **Edge-oriented execution** — WASM-backed runtimes and encodings so ML pipelines can align with **linear memory** and deployment shapes you actually ship.
-2. **Hybrid classical–quantum-style routing** — Quantum-inspired or backend-driven routing (for example **QAOA**-style layers in the stack) to explore structured search over internal state. With **`qiskit_ibm`** and IBM credentials, training may use real IBM Quantum hardware for the QAOA path when configured; otherwise behavior may use simulators or a no-op `pennylane` mode depending on configuration.
-3. **Trainable TPEM lifecycle + HTTP inference** — **Default training** runs through the **Training WUI** (Go) and the **C++ LibTorch engine over gRPC**; optional **legacy** supervised training via `python -m qminiwasm.engine --config configs/training/<profile>.toml` for direct Python loops; cascade RL warm-up where enabled; persisted **trainable TPEM** artifacts; HTTP inference via **legacy** FastAPI/uvicorn or WUI serve helpers. See **[docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md)** and **[AI Training Pipeline](AI-Training-Pipeline.md)**.
+1. **Native training + trainable TPEM lifecycle** — **Training** runs through the **Training WUI** (Go) and the **C++ LibTorch engine over gRPC**; cascade RL warm-up where enabled; persisted **trainable TPEM** checkpoints are the basis for edge and serve workflows; **HTTP inference** via **Go `qmw-serve`** and WUI **`/api/serve/*`** consumes those artifacts. See **[docs/TRAINING_NATIVE_PARITY.md](../docs/TRAINING_NATIVE_PARITY.md)** and **[AI Training Pipeline](AI-Training-Pipeline.md)**.
+2. **Edge-oriented execution** — WASM-backed runtimes and encodings so ML pipelines can align with **linear memory** and deployment shapes you actually ship.
+3. **Hybrid classical–quantum-style routing** — Quantum-inspired or backend-driven routing (for example **QAOA**-style layers in the stack) to explore structured search over internal state. With **`qiskit_ibm`** and IBM credentials, training may use real IBM Quantum hardware for the QAOA path when configured; otherwise behavior may use simulators or a no-op `pennylane` mode depending on configuration.
 
 ### Read first: Stateful WASM Agents + ZTEE
 

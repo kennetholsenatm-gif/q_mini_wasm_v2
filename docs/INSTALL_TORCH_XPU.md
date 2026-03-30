@@ -62,10 +62,10 @@ Optional (SYCL / Level Zero, for `SYCLHardware` — not required for `torch.xpu`
 ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 ```
 
-Run training:
+After starting the C++ training server, run (from **`training-wui/`**):
 
 ```bash
-python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
+go run ./cmd/qmw-grpc-train -root .. -config configs/training/mesh_cpu.toml -grpc 127.0.0.1:50061
 ```
 
 Logs should show **Intel XPU** (not “XPU requested but … using CPU”).

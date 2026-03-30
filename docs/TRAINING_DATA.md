@@ -1,12 +1,12 @@
 # Training data and ML engine results
 
-This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how to read **run metrics**. It is written primarily for the **legacy Python training loop** (`python -m qminiwasm.engine`), which shares TOML and data-source concepts with the stack but is **not** the default path from the **Training WUI** (Go → C++ gRPC — see **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**).
+This document describes how **training data** reaches `QMiniWASM.hybrid_inference`, what each source is good for, and how **TOML and environment** line up with the stack. **Operator training** runs through the **Training WUI** and the C++ engine over **gRPC** using the same `configs/training/*.toml` files (see **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**). Many tables below still name **process-environment** variables used by the Python reference loop and CI; the native engine reads the **mapped proto fields** first—see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)** for overlap.
 
-**Configuration policy:** Prefer **`configs/training/*.toml`** and the **[Training WUI](../training-wui/README.md)** for training knobs. Use **`.env`** only for **credentials** ([environment-variables.md](environment-variables.md)). The engine may still honor **legacy process-environment** variables in CI, Docker, or one-off shells — see **[ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)** for that inventory.
+**Configuration policy:** Prefer **`configs/training/*.toml`** and the **[Training WUI](../training-wui/README.md)** for training knobs. Use **`.env`** only for **credentials** ([environment-variables.md](environment-variables.md)).
 
-## Local training (legacy Python engine)
+## Local training (native path)
 
-The sections below describe training on your machine when you run **`python -m qminiwasm.engine` directly** (or equivalent). They cover TOML config, data sources, checkpoints, and metrics—not cloud provisioning. **Native training** consumes the same TOML files through the gRPC `TrainingConfig` mapping; parity notes live in **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**.
+Start **`qminiwasm_training_engine_server`** on **`grpc_addr`** from **`configs/wui.toml`**, then run the **Training WUI** from **`training-wui/`** (see **[training-wui/README.md](../training-wui/README.md)**). For a headless one-shot with the same TOML, use **`go run ./cmd/qmw-grpc-train`** from **`training-wui/`** with **`-root`**, **`-config`**, and **`-grpc`**. The sections below cover TOML, data sources, checkpoints, and metrics—not cloud provisioning.
 
 ## Structured config (TOML)
 
@@ -16,15 +16,13 @@ Hyperparameters and non-secret options should live in **TOML** under [`configs/t
 - [`configs/training/hf_tabular_example.toml`](../configs/training/hf_tabular_example.toml) — Hugging Face tabular (dataset fields in TOML; Hub tokens in `.env` per [environment-variables.md](environment-variables.md))
 - [`configs/training/schema.toml`](../configs/training/schema.toml) — commented reference for all sections
 
-Run training:
+Example (from **`training-wui/`** after the C++ server is up):
 
 ```bash
-python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
+go run ./cmd/qmw-grpc-train -root .. -config configs/training/mesh_cpu.toml -grpc 127.0.0.1:50061
 ```
 
-**Precedence:** values set in the TOML file override environment variables for those keys. **`ACCELERATOR`** is still applied from the environment when set (after loading the file), so containers can pin the device without editing the file — listed under [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md). **`HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`** are always read from the environment when not passed explicitly — **never commit tokens in TOML**.
-
-If you omit `--config`, the engine falls back to environment variables only and logs a **deprecation warning**.
+**Precedence:** values set in the TOML file override environment variables for those keys where both apply. **`ACCELERATOR`** is still applied from the environment when set (after loading the file), so containers can pin the device without editing the file — listed under [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md). **`HUGGING_FACE_HUB_TOKEN` / `HF_TOKEN`** are always read from the environment when not passed explicitly — **never commit tokens in TOML**.
 
 ## Enclave tiers and memory boundaries (preset + override)
 
@@ -66,7 +64,7 @@ Cascade + MOPD helper: [`scripts/run_training_cascade_mopd.py`](../scripts/run_t
 
 **Deployment-aligned data:** For behavior that should track **real WASM linear memory**, prefer **`mesh`** or **`corpus`**. Use **`hf_tabular`** for cheap scale and diversity (e.g. CodeSearchNet) as **pretraining** or auxiliary signal; it does not substitute for wasmtime-backed encodings at the edge.
 
-Install Hugging Face support (includes **`python-dotenv`** so a repo-root **`.env`** is loaded automatically by `python -m qminiwasm.engine` and `qminiwasm.engine.train.main`; put `HUGGING_FACE_HUB_TOKEN` or `HF_TOKEN` there—do not commit `.env`):
+Install Hugging Face support for library/tests (includes **`python-dotenv`**; load a repo-root **`.env`** in your tooling if needed; put `HUGGING_FACE_HUB_TOKEN` or `HF_TOKEN` there—do not commit `.env`):
 
 ```bash
 pip install -e ".[training]"
@@ -98,7 +96,7 @@ Override explicitly, for example:
 HF_TEXT_FIELDS=whole_func_string
 ```
 
-Or legacy-style concatenation:
+Alternative comma-separated concatenation:
 
 ```text
 HF_TEXT_FIELDS=func_code_string,func_documentation_string
@@ -171,12 +169,13 @@ The variables below are **process-environment** hooks (shell, CI, containers). *
 - `configs/training/edge_full_curriculum_streaming.toml`: broader curated curriculum with bounded streaming.
 - `configs/training/edge_curriculum_mix.toml`: reference dataset mix groups (reasoning/tool-use/alignment).
 
-Run:
+Run (native CLI; requires C++ server as above):
 
 ```bash
-python -m qminiwasm.engine --config configs/training/edge_fast_iter.toml
-python -m qminiwasm.engine --config configs/training/edge_full_curriculum_streaming.toml
-python scripts/benchmark_edge_curriculum.py
+cd training-wui
+go run ./cmd/qmw-grpc-train -root .. -config configs/training/edge_fast_iter.toml
+go run ./cmd/qmw-grpc-train -root .. -config configs/training/edge_full_curriculum_streaming.toml
+cd .. && python scripts/benchmark_edge_curriculum.py
 ```
 
 **`hf_tabular` defaults (when env vars are unset):** `TARGET_MEAN_MSE=1e-4`, `GRAD_CLIP_NORM=1`, `CASCADE_POLICY_LR = 0.5 × learning_rate`, and `learning_rate=1.5e-4` when the engine constructor LR is the default **1e-4** and `LEARNING_RATE` is not set. Set env vars explicitly to override.
@@ -185,7 +184,7 @@ python scripts/benchmark_edge_curriculum.py
 
 **Gated datasets:** Some Hub datasets require accepting terms on the dataset page and setting **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** before `load_dataset` can load them. Presets and sample configs in this repo use **public** datasets (e.g. CodeSearchNet) so default runs work without a token; if you add a gated id to `extra_specs`, expect to authenticate first.
 
-**`datasets` 3.x+ / script-less Hub:** Datasets that only ship as legacy Python scripts may raise *Dataset scripts are no longer supported*. Prefer Parquet-backed repos (e.g. **`google-research-datasets/mbpp`** with **`dataset_config = "full"`** or **`"sanitized"`** instead of **`Muennighoff/mbpp`**).
+**`datasets` 3.x+ / script-less Hub:** Datasets that only ship as Hub Python scripts may raise *Dataset scripts are no longer supported*. Prefer Parquet-backed repos (e.g. **`google-research-datasets/mbpp`** with **`dataset_config = "full"`** or **`"sanitized"`** instead of **`Muennighoff/mbpp`**).
 
 **Multi-dataset without a primary Hub id:** Set **`[data].path`** to the reserved placeholder **`qminiwasm/hf-multi`** (alias: **`qminiwasm/multi`**) and list every real dataset under **`[huggingface].extra_specs`**. The engine does not call `load_dataset` on the placeholder; sample budget is split across extras only (up to **nine** Hub datasets in this mode). Use your **model name / WUI “Build + Run” name** to pick a new **`artifacts/models/<slug>/`** output directory; the placeholder only affects how Hub rows are merged, not where checkpoints are written.
 
@@ -201,31 +200,25 @@ Full detail, equations, and code pointers: **[CASCADE_AND_MOPD.md](CASCADE_AND_M
 
 **Layout:** Prefer one directory per run or model under **`artifacts/models/<slug>/`** with stable names: **`final.pt`** (end-of-run / `save_path`), **`best.pt`**, **`latest.pt`**. This matches the **training WUI** (“Build + Run”) and the **`agent_bundle.json`** / **`serve.toml`** sidecars written next to those files.
 
-1. Train and save a final checkpoint (prefer TOML `[checkpoint]`; env below is for shell/CI — see [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)):
+1. Train and save checkpoints via the **WUI** or **`qmw-grpc-train`** (prefer TOML `[checkpoint]`; env below is for shell/CI — see [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md)):
 
 ```bash
 export SEED=42   # optional; or set [training].seed in TOML
-python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
+cd training-wui && go run ./cmd/qmw-grpc-train -root .. -config configs/training/mesh_cpu.toml
 # with checkpoints only in env:
 export CHECKPOINT_SAVE_PATH=./artifacts/models/qminiwasm/final.pt
 export CHECKPOINT_BEST_PATH=./artifacts/models/qminiwasm/best.pt
 export CHECKPOINT_LATEST_PATH=./artifacts/models/qminiwasm/latest.pt
-python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
+go run ./cmd/qmw-grpc-train -root .. -config configs/training/mesh_cpu.toml
 ```
 
 2. Optional holdout metric (same forward as training, data not seen in the train split): set `[eval]` in your TOML (`holdout_fraction`, `every_epoch`) or use `EVAL_HOLDOUT_FRACTION` / `EVAL_EVERY_EPOCH` when those keys are omitted from the file.
 
-3. **Serving:** run the API with the same weights file. Prefer **`configs/serve/*.toml`** (e.g. [`configs/serve/default.toml`](../configs/serve/default.toml) with a `[serve]` table: `checkpoint`, `hybrid_adapter`, cascade dims). Legacy env such as `QMINIWASM_CHECKPOINT` / `QMINIWASM_SERVE_CONFIG` may still apply when documented in [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md). Optional **`USE_CASCADE_ROUTER=1`** and matching cascade dims align with training; responses may include **`cascade_logits`** per row. Set **`HYBRID_ADAPTER=1`** if the checkpoint contains `hybrid_adapter` weights (or rely on auto-attach on load).
+3. **Serving:** use **Go `qmw-serve`** or the WUI **`POST /api/serve/start`** with **`serve.toml`** / **`agent_bundle.json`** next to the model (see [training-wui/README.md](../training-wui/README.md)). Prefer **`configs/serve/*.toml`** (e.g. [`configs/serve/default.toml`](../configs/serve/default.toml) with a `[serve]` table: `checkpoint`, `hybrid_adapter`, cascade dims). Env such as `QMINIWASM_CHECKPOINT` / `QMINIWASM_SERVE_CONFIG` is documented in [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md). Optional **`USE_CASCADE_ROUTER=1`** and matching cascade dims align with training; HTTP **`POST /infer`** may include **`cascade_logits`** per row when the stack supports it. Set **`HYBRID_ADAPTER=1`** if the checkpoint contains `hybrid_adapter` weights (or rely on auto-attach on load).
 
 Checkpoint files include `format_version`, `d_model`, `quantum_router`, `ternary_expert`, optional **`hybrid_adapter`**, optional **`cascade_policy`** (same tensors as `model.cascade_router` when used), and optional `meta` (training tags). Loading uses `strict=False` and logs missing/unexpected keys.
 
-Run from repo root:
-
-```bash
-python -m qminiwasm.engine --config configs/training/mesh_cpu.toml
-```
-
-Logs go to **stdout** (friendlier for PowerShell). Third-party HTTP loggers are quieted to WARNING.
+Training logs stream on **stderr/stdout** from **`qmw-grpc-train`** and in the **WUI** Mission Control panel.
 
 ## Example results (illustrative)
 
@@ -243,22 +236,9 @@ Runs depend on **hardware**, **seed**, **sample count**, and **epochs**. The fol
 
 ### Returned metrics
 
-`python -m qminiwasm.engine` prints a dict including:
+The **WUI** and **gRPC telemetry** expose epoch loss, eval MSE, LR, cascade fields, and sample counts (see **`training-wui/telemetry_grpc_payload.go`** and **`proto/training_engine.proto`**). For **library-level** runs, `qminiwasm.engine.train.main()` still returns a dict with fields such as `epochs_run`, `final_loss`, nested `metrics.*`, and checkpoint paths—useful for pytest parity—not as an operator CLI.
 
-- `epochs_run`: epochs **actually completed** (early stop may stop sooner than `EPOCHS`)
-- `final_loss`: last epoch’s mean MSE (on the **train** split when holdout is used)
-- `metrics.epoch_mean_mse`: per-epoch train means
-- `metrics.epoch_learning_rates`: LR after each epoch
-- `metrics.best_epoch_mean_mse`, `metrics.stopped_early`, `metrics.num_samples`, `metrics.num_samples_train`, `metrics.num_samples_eval`
-- `metrics.eval_mean_mse` when holdout is enabled (and finite)
-- `metrics.epoch_eval_mean_mse` when `EVAL_EVERY_EPOCH=1`
-- `metrics.target_mean_mse_goal`, `metrics.target_mse_met`, `metrics.target_mse_reported_value`, `metrics.target_mse_reported_name` when `TARGET_MEAN_MSE` is set
-- `metrics.stopped_on_target_mse` when early exit on target is used
-- `metrics.cascade_couple_forward`, `metrics.cascade_policy_mode` when cascade RL is enabled
-- `metrics.hf_mesh_blend_fraction` when `hf_tabular` and blend > 0
-- `checkpoint_saved`, `checkpoint_best_saved`, `checkpoint_load_path`, `checkpoint_save_path`, `checkpoint_best_path`
-
-Use these series to compare runs with the same `SEED`, `HF_NUM_SAMPLES`, and `BATCH_SIZE`.
+Use telemetry series to compare runs with the same `SEED`, `HF_NUM_SAMPLES`, and `BATCH_SIZE`.
 
 ## When you need “real” WASM traces
 
@@ -266,7 +246,7 @@ For architecture-aligned supervision, prefer **`corpus`** or **`mesh`** (wasmtim
 
 ## Remote GPU / OpenTofu
 
-For RunPod pods, OpenTofu lifecycle under `infra/runpod/`, serverless workers, SSH sync, and remote execution of `python -m qminiwasm.engine`, use the operator runbook only—do not duplicate provisioning commands here. See **[OPERATIONS_RUNBOOK.md](operations/OPERATIONS_RUNBOOK.md)** and the **[`infra/runpod/`](../../infra/runpod/)** tree.
+For RunPod pods, OpenTofu lifecycle under `infra/runpod/`, serverless workers, SSH sync, and remote **native** training (`qmw-grpc-train` on the pod), use the operator runbook only—do not duplicate provisioning commands here. See **[OPERATIONS_RUNBOOK.md](operations/OPERATIONS_RUNBOOK.md)** and the **[`infra/runpod/`](../../infra/runpod/)** tree.
 
 ## License notes
 

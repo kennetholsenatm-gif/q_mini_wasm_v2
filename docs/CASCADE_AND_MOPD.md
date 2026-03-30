@@ -109,7 +109,7 @@ Also: [.env.example](../.env.example), [TRAINING_DATA.md](TRAINING_DATA.md) § C
 
 ### Metrics to compare after each run
 
-From the dict returned by **`python -m qminiwasm.engine`** (and logs):
+From **WUI / gRPC telemetry** and, for library tests, the dict returned by **`qminiwasm.engine.train.main()`** (and logs):
 
 | Metric | Use |
 |--------|-----|

@@ -16,6 +16,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from qminiwasm.engine.native_cli import qmw_grpc_train_argv, qmw_grpc_train_executable
 from qminiwasm.runtime_modes import apply_optimized_auto_defaults
 
 _MAX_OVERLAY_BYTES = 64 * 1024
@@ -104,11 +105,20 @@ def _merge_training_config_to_temp(
 
 
 def _run_train(config_abs: Path) -> tuple[int, str, str]:
-    py = _as_str(os.getenv("PYTHON_BIN")) or sys.executable
-    cmd = [py, "-m", "qminiwasm.engine", "--config", str(config_abs)]
+    repo = _repo_root()
+    if qmw_grpc_train_executable() is None:
+        return (
+            127,
+            "",
+            "qmw-grpc-train not found on PATH. Install the Go binary (training-wui/cmd/qmw-grpc-train), "
+            "set QMW_GRPC_TRAIN_BIN if it is not on PATH, start qminiwasm_training_engine_server, "
+            "and set QMINIWASM_TRAINING_GRPC_ADDR if not using 127.0.0.1:50061. "
+            "See docs/RUNPOD_SERVERLESS.md.",
+        )
+    cmd = qmw_grpc_train_argv(repo_root=repo, config_path=config_abs)
     proc = subprocess.run(
         cmd,
-        cwd=str(_repo_root()),
+        cwd=str(repo),
         text=True,
         capture_output=True,
         env=os.environ.copy(),

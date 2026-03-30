@@ -114,6 +114,7 @@ set(QMW_TRAINING_RUNTIME_SOURCES
 if(QMINIWASM_TRAINING_WITH_LIBTORCH)
   list(APPEND QMW_TRAINING_RUNTIME_SOURCES
     src/safetensors_f32.cpp
+    src/bloch_attention.cpp
     src/libtorch_ternary_trainer.cpp
     src/hf_datasets_rows.cpp
   )
@@ -178,6 +179,24 @@ if(QMINIWASM_TRAINING_WITH_LIBTORCH)
   )
   target_link_libraries(qminiwasm_tpem_roundtrip PRIVATE qminiwasm_training_runtime)
   qmw_windows_copy_libtorch_dlls(qminiwasm_tpem_roundtrip)
+
+  add_executable(bloch_golden_test test/bloch_golden_test.cpp)
+  target_link_libraries(bloch_golden_test PRIVATE qminiwasm_training_runtime nlohmann_json::nlohmann_json)
+  if(MSVC)
+    target_compile_options(bloch_golden_test PRIVATE /W4 /permissive-)
+  else()
+    target_compile_options(bloch_golden_test PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  qmw_windows_copy_libtorch_dlls(bloch_golden_test)
+
+  add_executable(joint_cascade_trainer_test test/joint_cascade_trainer_test.cpp)
+  target_link_libraries(joint_cascade_trainer_test PRIVATE qminiwasm_training_runtime)
+  if(MSVC)
+    target_compile_options(joint_cascade_trainer_test PRIVATE /W4 /permissive-)
+  else()
+    target_compile_options(joint_cascade_trainer_test PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  qmw_windows_copy_libtorch_dlls(joint_cascade_trainer_test)
 endif()
 
 add_executable(training_phases_test

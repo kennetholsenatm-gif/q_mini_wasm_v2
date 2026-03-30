@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Environment Variables Documentation Generator (legacy).
+Environment Variables Documentation Generator (superseded by Go; kept for local use).
 
 Prefer the Go tool (same output shape):
 
@@ -207,7 +207,7 @@ For **CI, Docker, serverless, and toolchain** variables that may still be read b
 
 - [README](../README.md) — project overview
 - [Training data](TRAINING_DATA.md)
-- [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md) — CI / container / legacy process env (not WUI user config)
+- [ENV_CI_OVERRIDES.md](ENV_CI_OVERRIDES.md) — CI / container / automation env (not WUI user config)
 """
 
     return markdown

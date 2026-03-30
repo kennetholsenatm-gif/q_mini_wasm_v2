@@ -1756,7 +1756,7 @@
           <strong>Native LibTorch TPEM (default):</strong> <code>d_model</code> and <code>num_ternary_blocks</code> size the <strong>ternary STE stack</strong>; <code>io_d_model</code> is encoder / mesh–HF row width. Saved under <code>[model]</code> — gRPC <code>StartTraining</code> uses these for <strong>cold start</strong> when no checkpoint/tpem load path is set (stem/head when <code>io_d_model ≠ d_model</code>).
         </p>
         <p class="hint hint-block" style="margin-top:0">
-          <strong>Native only from the WUI:</strong> the same TOML maps to <code>TrainingConfig</code> for the C++ engine; run <code>python -m qminiwasm.engine</code> only manually outside the WUI if you need the legacy loop.
+          <strong>Native only from the WUI:</strong> the same TOML maps to <code>TrainingConfig</code> for the C++ engine. For a headless run, use <code>go run ./cmd/qmw-grpc-train</code> from <code>training-wui/</code> with <code>-root</code>, <code>-config</code>, and <code>-grpc</code>.
         </p>
         <p class="hint hint-block" style="margin-top:0">
           <strong>Epochs / batch / LR</strong> and <strong>data paths</strong> are set in steps 1–3 and the quick grid above — the schema list below skips those keys so you do not edit them twice.
@@ -1935,8 +1935,8 @@
         <div class="model-card stack-md" id="deployServeCard" style="margin-top:var(--space-md)">
           <h3 style="margin-top:0">Deploy to serve</h3>
           <p class="hint" style="margin:0">
-            After <code>agent_bundle.json</code> and <code>serve.toml</code> exist for this model, start a local HTTP API (uvicorn on
-            <code>127.0.0.1</code>) and generate <code>docker-compose.serve.yaml</code> in the model folder.
+            After <code>agent_bundle.json</code> and <code>serve.toml</code> exist for this model, start the embedded Go HTTP server on
+            <code>127.0.0.1</code> via <strong>Deploy to serve</strong> and generate <code>docker-compose.serve.yaml</code> in the model folder (or use <code>qmw-serve</code> from the bundle).
           </p>
           <div class="row stack-sm align-center flex-wrap">
             <button type="button" class="primary" id="btnDeployServe">Deploy to serve</button>

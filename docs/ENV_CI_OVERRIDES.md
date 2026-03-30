@@ -6,7 +6,7 @@
 
 When a knob has a TOML equivalent, **prefer TOML** (e.g. `[wasm]` in training config). This document is the inventory of what the codebase may still **read** from `os.environ`.
 
-## Training engine (`qminiwasm.engine` / `run_training_loop`)
+## Training loop env (`run_training_loop` / tests)
 
 | Variable | Role |
 |----------|------|
@@ -17,7 +17,7 @@ When a knob has a TOML equivalent, **prefer TOML** (e.g. `[wasm]` in training co
 | `QMINIWASM_TPEM_LATEST_EVERY_N_EPOCHS` | Checkpoint cadence override. |
 | `QMINIWASM_ENCLAVE_ADAPTER` | Enable experimental enclave adapter backend. |
 | `QMINIWASM_NATIVE_RL_RUNTIME` | Native cascade rollout path. |
-| `ACCELERATOR` | Legacy global accelerator hint (prefer `[hardware].accelerator` in TOML). |
+| `ACCELERATOR` | Global accelerator hint when TOML does not pin device (prefer `[hardware].accelerator` in TOML). |
 
 **Removed from env (use TOML only):** `QMINIWASM_DATALOADER_NUM_WORKERS` — use `[training].dataloader_num_workers`. WASM store limits / backend / Memory64 — use `[wasm]` and `[enclave]` in TOML (`EngineConfig` no longer applies `QMW_WASM_*` / `QMINIWASM_WASM_BACKEND` / `QMINIWASM_USE_MEMORY64` / `QMINIWASM_WASM_MEMORY64_MAX_MB` overrides).
 
@@ -45,7 +45,7 @@ Various toggles (`QMW_DISABLE_TROPICAL_ATTN`, `QMW_ROUTING_LATENCY_BUDGET_MS`, `
 
 ## Training WUI (`training-wui`)
 
-**Operator config** for engine mode, gRPC address, RunPod SSH defaults, and runtime-profile mirrors lives in **`configs/wui.toml`** (and optional **`-wui-config` / `-training-runtime` / `-grpc-addr`** flags). The repo default is **`training_runtime_mode = "native"`** (C++ gRPC). The WUI injects matching **`QMINIWASM_*`** vars into Python children so `qminiwasm.engine` stays aligned without relying on the shell environment.
+**Operator config** for engine mode, gRPC address, RunPod SSH defaults, and runtime-profile mirrors lives in **`configs/wui.toml`** (and optional **`-wui-config` / `-training-runtime` / `-grpc-addr`** flags). The repo default is **`training_runtime_mode = "native"`** (C++ gRPC). The WUI injects matching **`QMINIWASM_*`** vars into Python children (preflight and tooling) so schema and probes stay aligned with **`configs/wui.toml`** without relying on the shell environment.
 
 Preflight runs a **Python torch/SYCL/IBM probe** when available; if it fails or returns invalid JSON, the WUI falls back to a **Go-only** preflight (TOML + gRPC reachability, no live IBM or torch device). Set **`QMW_WUI_PREFLIGHT_GO_ONLY=1`** on the WUI process to skip the Python probe entirely (hosts without the Python training stack). Subprocess code may pass **secrets** into the Python probe; **training** still comes from the selected TOML file. Internal keys like `QMW_HF_*` / `QMW_FACTS_*` are script helpers, not user configuration.
 
@@ -54,7 +54,8 @@ Preflight runs a **Python torch/SYCL/IBM probe** when available; if it fails or 
 | Variable | Role |
 |----------|------|
 | `QMW_REPO_ROOT` | Repo root inside container. |
-| `PYTHON_BIN` | Python executable for child processes. |
+| `PYTHON_BIN` | Python executable for optional child processes. |
+| `QMW_GRPC_TRAIN_BIN` | Path to **`qmw-grpc-train`** when not on `PATH` (serverless / containers). |
 
 ## Native build / setup
 
@@ -62,7 +63,7 @@ Preflight runs a **Python torch/SYCL/IBM probe** when available; if it fails or 
 |----------|------|
 | `QMINIWASM_BUILD_NATIVE` | Build native extensions. |
 | `VCPKG_ROOT`, `CMAKE_TOOLCHAIN_FILE` | C++ gRPC training engine build. |
-| `QMINIWASM_TRAINING_GRPC_ADDR` | Injected by WUI from **`configs/wui.toml`**; CI may still set it when driving **`qminiwasm.engine`** without the WUI. |
+| `QMINIWASM_TRAINING_GRPC_ADDR` | Injected by WUI from **`configs/wui.toml`**; CI, **`qmw-grpc-train`**, and serverless use the same address for the C++ **`TrainingEngineService`**. |
 
 ## CI workflows
 

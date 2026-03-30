@@ -92,6 +92,10 @@ struct TrainingConfig {
   std::string cascade_policy_optimizer = "grpo";
   double cispo_clip_epsilon = 0.2;
   std::string attention_backend;
+  /// When ``attention_backend=bloch``: virtual sequence length after stem (broadcast token + pos embed). Zero → 8.
+  std::uint32_t native_bloch_seq_len = 0;
+  /// When ``attention_backend=bloch``: head count. Zero → 4 (may be reduced so ``d_model`` is divisible).
+  std::uint32_t native_bloch_num_heads = 0;
   /// Native toy cascade RL (GRPO/CISPO): number of trajectories per step; from TOML [cascade] group_size.
   std::size_t cascade_rl_group_size = 4;
 };

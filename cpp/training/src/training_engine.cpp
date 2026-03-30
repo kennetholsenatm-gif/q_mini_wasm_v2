@@ -59,6 +59,8 @@ struct ComputePacket {
   /// True when active phase is RL-only (``!supervised && cascade_rl``); LibTorch toy GRPO/CISPO step.
   bool cascade_rl_native = false;
   bool cascade_rl_is_cispo = false;
+  /// ``supervised && cascade_rl``: one combined backward (MSE on TPEM + weighted toy policy loss).
+  bool joint_sft_cascade_native = false;
 };
 
 std::string trim_ascii_copy(std::string s) {
@@ -85,15 +87,29 @@ std::string resolve_cascade_policy(const std::string& phase_field, const std::st
   return r.empty() ? "grpo" : r;
 }
 
-std::optional<std::string> reject_unimplemented_unified_matrix(const TrainingConfig& cfg) {
+bool attention_backend_is_bloch(const TrainingConfig& cfg) {
   std::string ab = trim_ascii_copy(cfg.attention_backend);
   ascii_tolower_inplace(&ab);
-  if (ab == "bloch") {
-    return std::string(
-        "native training engine: attention_backend=bloch is not implemented (use Python / "
-        "BlochSphereAttention or attention_backend=tropical)");
+  return ab == "bloch";
+}
+
+/// Resolved Bloch broadcast sequence length and head count for a given ``d_model`` (zeros when not Bloch).
+void native_bloch_dims_for_model(const TrainingConfig& cfg, std::int64_t d_model, int* out_seq, int* out_heads) {
+  *out_seq = 0;
+  *out_heads = 0;
+  if (!attention_backend_is_bloch(cfg)) {
+    return;
   }
-  return std::nullopt;
+  int seq = cfg.native_bloch_seq_len > 0 ? static_cast<int>(cfg.native_bloch_seq_len) : 8;
+  int heads = cfg.native_bloch_num_heads > 0 ? static_cast<int>(cfg.native_bloch_num_heads) : 4;
+  while (heads > 1 && d_model > 0 && (d_model % heads) != 0) {
+    --heads;
+  }
+  if (heads < 1) {
+    heads = 1;
+  }
+  *out_seq = seq;
+  *out_heads = heads;
 }
 
 void attach_training_phase_telemetry(TelemetryEvent* ev, const TrainingConfig& cfg) {
@@ -137,12 +153,6 @@ class TrainingEngine::Impl {
     telemetry_bus_.reopen();
 
     config_ = config;
-    if (const auto rej = reject_unimplemented_unified_matrix(config_); rej.has_value()) {
-      if (error_message != nullptr) {
-        *error_message = *rej;
-      }
-      return false;
-    }
     if (config_.run_id.empty()) {
       config_.run_id = "run-cpp-foundation";
     }
@@ -175,7 +185,9 @@ class TrainingEngine::Impl {
       libtorch_trainer_ = LibTorchTpemTrainer::create(config_.learning_rate, config_.seed, &lib_err);
       std::lock_guard<std::mutex> tlock(libtorch_mu_);
       if (!config_.model_uri.empty()) {
-        if (!libtorch_trainer_->load_interchange(config_.model_uri, &lib_err)) {
+        const bool bloch = attention_backend_is_bloch(config_);
+        if (!libtorch_trainer_->load_interchange(config_.model_uri, bloch, config_.native_bloch_seq_len,
+                                                  config_.native_bloch_num_heads, &lib_err)) {
           if (error_message != nullptr) {
             *error_message = lib_err;
           }
@@ -193,7 +205,10 @@ class TrainingEngine::Impl {
         const auto d = static_cast<std::int64_t>(d0);
         const auto io = io0 > 0 ? static_cast<std::int64_t>(io0) : d;
         const int nb = nb0 > 0 ? static_cast<int>(nb0) : 1;
-        if (!libtorch_trainer_->init_geometry(d, io, nb, &lib_err)) {
+        int bseq = 0;
+        int bhead = 0;
+        native_bloch_dims_for_model(config_, d, &bseq, &bhead);
+        if (!libtorch_trainer_->init_geometry(d, io, nb, bseq, bhead, &lib_err)) {
           if (error_message != nullptr) {
             *error_message = lib_err;
           }
@@ -508,7 +523,10 @@ class TrainingEngine::Impl {
             active_ph != nullptr && !active_ph->supervised && active_ph->cascade_rl;
         const bool eval_only =
             active_ph != nullptr && !active_ph->supervised && !active_ph->cascade_rl;
+        const bool joint_sft_rl =
+            active_ph != nullptr && active_ph->supervised && active_ph->cascade_rl;
         bool cascade_rl_is_cispo = false;
+        bool joint_sft_cascade = false;
         if (rl_only) {
           const std::string pol = effective_cascade_policy(active_ph, config_.cascade_policy_optimizer);
           cascade_rl_is_cispo = (pol == "cispo");
@@ -523,6 +541,20 @@ class TrainingEngine::Impl {
           } else {
             train_loss = libtorch_trainer_->train_step_cascade_grpo(rl_group, mix);
           }
+          val_loss = libtorch_trainer_->eval_step(config_.micro_batch_size, mix ^ 0xCAFEBABECAFECAFEULL);
+        } else if (joint_sft_rl) {
+          joint_sft_cascade = true;
+          const std::string pol = effective_cascade_policy(active_ph, config_.cascade_policy_optimizer);
+          cascade_rl_is_cispo = (pol == "cispo");
+          double cispo_eps = config_.cispo_clip_epsilon;
+          if (active_ph->cispo_clip_epsilon.has_value()) {
+            cispo_eps = *active_ph->cispo_clip_epsilon;
+          }
+          const std::size_t rl_group =
+              std::max<std::size_t>(1, config_.cascade_rl_group_size);
+          constexpr double kJointCascadeLambda = 0.1;
+          train_loss = libtorch_trainer_->train_step_joint_supervised_cascade(
+              config_.micro_batch_size, rl_group, kJointCascadeLambda, cascade_rl_is_cispo, cispo_eps, mix);
           val_loss = libtorch_trainer_->eval_step(config_.micro_batch_size, mix ^ 0xCAFEBABECAFECAFEULL);
         } else if (eval_only) {
           val_loss = libtorch_trainer_->eval_step(config_.micro_batch_size, mix);
@@ -543,6 +575,7 @@ class TrainingEngine::Impl {
             .eval_only_supervised_skipped = eval_only,
             .cascade_rl_native = rl_only,
             .cascade_rl_is_cispo = cascade_rl_is_cispo,
+            .joint_sft_cascade_native = joint_sft_cascade,
         };
         if (!compute_to_update_->push(std::move(packet), token)) {
           break;
@@ -624,20 +657,27 @@ class TrainingEngine::Impl {
           .compute_queue_depth = compute_to_update_->size(),
           .taxonomy_tier = policy_.tier,
           .precision_mode = policy_.precision,
-          .stage = packet.cascade_rl_native
+          .stage = packet.joint_sft_cascade_native
+                       ? (packet.cascade_rl_is_cispo ? "joint_sft_cascade_cispo" : "joint_sft_cascade_grpo")
+                   : packet.cascade_rl_native
                        ? (packet.cascade_rl_is_cispo ? "cascade_cispo" : "cascade_grpo")
                    : packet.eval_only_supervised_skipped
                        ? "eval_only"
                        : "update",
           .event_type =
-              packet.cascade_rl_native
-                  ? (packet.cascade_rl_is_cispo ? "cascade_cispo_native" : "cascade_grpo_native")
+              packet.joint_sft_cascade_native
+                  ? (packet.cascade_rl_is_cispo ? "joint_sft_cascade_cispo_native" : "joint_sft_cascade_grpo_native")
+                  : packet.cascade_rl_native
+                      ? (packet.cascade_rl_is_cispo ? "cascade_cispo_native" : "cascade_grpo_native")
                   : packet.eval_only_supervised_skipped ? "phase_supervised_skipped_native" : "step",
-          .message = packet.cascade_rl_native
-                         ? (packet.cascade_rl_is_cispo ? "native_cascade_cispo_toy_mdp" : "native_cascade_grpo_toy_mdp")
-                     : packet.eval_only_supervised_skipped
-                         ? "native_eval_only_supervised_false"
-                         : "step_completed",
+          .message =
+              packet.joint_sft_cascade_native
+                  ? (packet.cascade_rl_is_cispo ? "native_joint_sft_cascade_cispo" : "native_joint_sft_cascade_grpo")
+                  : packet.cascade_rl_native
+                      ? (packet.cascade_rl_is_cispo ? "native_cascade_cispo_toy_mdp" : "native_cascade_grpo_toy_mdp")
+                  : packet.eval_only_supervised_skipped
+                      ? "native_eval_only_supervised_false"
+                      : "step_completed",
       };
       emit(std::move(event));
       set_status(EngineStatus{
@@ -1179,7 +1219,9 @@ void TrainingEngine::Impl::run_cascade_curriculum(std::stop_token token) {
         std::string err;
         const bool loaded = [&]() {
           std::lock_guard<std::mutex> lk(libtorch_mu_);
-          return libtorch_trainer_->load_interchange(c.teacher_checkpoint_path, &err);
+          return libtorch_trainer_->load_interchange(c.teacher_checkpoint_path, attention_backend_is_bloch(config_),
+                                                     config_.native_bloch_seq_len, config_.native_bloch_num_heads,
+                                                     &err);
         }();
         if (!loaded) {
           emit(TelemetryEvent{

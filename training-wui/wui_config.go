@@ -162,8 +162,8 @@ func trainingRuntimeModeRaw() string {
 	return wuiResolved.TrainingRuntimeMode
 }
 
-// wuiRuntimeEnvForPython sets subprocess-visible vars so `python -m qminiwasm.engine` matches WUI TOML
-// (legacy env keys; prefer configs/runtime.toml on the Python side long-term).
+// wuiRuntimeEnvForPython sets subprocess-visible vars for Python preflight/tooling to mirror WUI TOML
+// (older env keys; prefer configs/runtime.toml on the Python side long-term).
 func wuiRuntimeEnvForPython() []string {
 	rp := wuiResolved.RuntimeProfile
 	ns := "0"

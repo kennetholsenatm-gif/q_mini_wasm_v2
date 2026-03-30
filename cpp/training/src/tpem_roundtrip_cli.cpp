@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
 
   std::string err;
   auto trainer = qminiwasm::training::LibTorchTpemTrainer::create(lr, seed, &err);
-  if (!trainer->load_interchange(in_path, &err)) {
+  if (!trainer->load_interchange(in_path, false, 0, 0, &err)) {
     std::cerr << "load_interchange: " << err << '\n';
     return 1;
   }

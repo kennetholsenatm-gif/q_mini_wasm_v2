@@ -67,8 +67,8 @@ variable "ports" {
 variable "env" {
   type        = map(string)
   description = <<-EOT
-    Container environment variables. Defaults set ACCELERATOR=cuda so `python -m qminiwasm.engine`
-    uses the Runpod GPU once PyTorch sees CUDA inside the container. Override in terraform.tfvars if needed.
+    Container environment variables. Defaults set ACCELERATOR=cuda so native training / PyTorch
+    can use the Runpod GPU inside the container. Override in terraform.tfvars if needed.
   EOT
   default = {
     ACCELERATOR            = "cuda"

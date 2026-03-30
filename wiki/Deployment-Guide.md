@@ -80,7 +80,7 @@ your-oidc-idp --version
 **Application bring-up:**
 
 - **Training / Mission Control:** build the C++ gRPC training server and run the **Training WUI** from [`training-wui/README.md`](../../training-wui/README.md) (Go); see **[docs/TRAINING_NATIVE_PARITY.md](../../docs/TRAINING_NATIVE_PARITY.md)**.
-- **Python library / CI / legacy engine:** `pip install -r requirements.txt`, `pip install -e .` (see [Development](Development.md)).
+- **Python library / CI:** `pip install -r requirements.txt`, `pip install -e .` (see [Development](Development.md)).
 
 If you operate **your own** Kubernetes, Helm charts, or a separate `infra/opentofu` workspace, treat the **Edge Deployment** and **Security** sections below as **patterns** to map onto your cluster—not commands that succeed verbatim from this repo root.
 

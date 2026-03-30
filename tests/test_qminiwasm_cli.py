@@ -1,4 +1,4 @@
-"""Smoke tests for ``python -m qminiwasm.cli`` (delegates training to ``qminiwasm.engine``)."""
+"""Smoke tests for ``python -m qminiwasm.cli`` (graph manifest commands)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def test_cli_help_exits_zero():
         check=False,
     )
     assert r.returncode == 0
-    assert "train" in r.stdout
+    assert "graph" in r.stdout
 
 
 def test_cli_no_subcommand_exits_nonzero():
@@ -29,7 +29,7 @@ def test_cli_no_subcommand_exits_nonzero():
         check=False,
     )
     assert r.returncode != 0
-    assert "train" in r.stdout or "train" in r.stderr
+    assert "graph" in r.stdout or "graph" in r.stderr
 
 
 def _write_artifacts_and_graph_manifest(tmp_path: Path) -> Path:

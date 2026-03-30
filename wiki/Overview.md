@@ -21,7 +21,7 @@ Start with the conceptual “why” and then follow the operator “how”:
 
 ## Next steps
 
-- If you’re trying to run **native training / WUI**: [`training-wui/README.md`](../training-wui/README.md); **legacy FastAPI inference** on localhost: [`docs/getting-started/QUICKSTART_0_TO_1.md`](../docs/getting-started/QUICKSTART_0_TO_1.md)
+- If you’re trying to run **native training / WUI**: [`training-wui/README.md`](../training-wui/README.md)
 - If you’re deploying: [`wiki/Deployment-Guide.md`](Deployment-Guide.md)
 - If you’re integrating quantum-assisted routing: [`wiki/Mathematical-Formulation.md`](Mathematical-Formulation.md)
 

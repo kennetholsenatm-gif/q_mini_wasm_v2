@@ -1,5 +1,9 @@
 # AWS Public ECR mirrors docker.io/library/* and avoids Docker Hub rate limits.
 # Debian Bookworm + Python 3.12 (same major as prior AlmaLinux-based image).
+#
+# Training jobs call qmw-grpc-train (see serverless/handler.py). Production images must install
+# the Go binary on PATH (or set QMW_GRPC_TRAIN_BIN), build qminiwasm_training_engine_server, and
+# start it before the handler runs — this slim file only installs Python deps for merge/validation.
 FROM public.ecr.aws/docker/library/python:3.12-slim-bookworm
 
 ENV LANG=C.UTF-8 \

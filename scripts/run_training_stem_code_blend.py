@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from qminiwasm.engine.native_cli import qmw_grpc_train_argv
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PHASE1_CONFIG = REPO_ROOT / "configs" / "training" / "stem_code_blend_phase1_cpu.toml"
 DEFAULT_PHASE2_CONFIG = (
@@ -23,7 +25,7 @@ DEFAULT_PHASE1_LATEST = (
 
 
 def _run_engine(config_path: Path, *, dry_run: bool) -> int:
-    cmd = [sys.executable, "-m", "qminiwasm.engine", "--config", str(config_path)]
+    cmd = qmw_grpc_train_argv(repo_root=REPO_ROOT, config_path=config_path.resolve())
     print(" ".join(cmd))
     if dry_run:
         return 0

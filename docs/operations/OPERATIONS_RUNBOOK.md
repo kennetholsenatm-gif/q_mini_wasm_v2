@@ -63,8 +63,6 @@ Typical manual flow (aligned with that automation):
 3. on the remote host: start the gRPC training server, then run **`go run ./cmd/qmw-grpc-train`** from **`training-wui/`** with `-root` and `-config` pointing at the chosen TOML (see [docs/TRAINING_NATIVE_PARITY.md](../TRAINING_NATIVE_PARITY.md))
 4. pull artifacts/logs back to local if needed
 
-**Legacy:** direct **`python -m qminiwasm.engine --config configs/training/<profile>.toml`** on the remote host remains possible for ad hoc runs but is **not** the WUI default path.
-
 For WUI-assisted automation and helper scripts, see:
 
 - [../../training-wui/README.md](../../training-wui/README.md)

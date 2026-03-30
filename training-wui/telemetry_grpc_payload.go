@@ -5,7 +5,7 @@ import (
 )
 
 // buildGRPCMetricWebSocketPayload maps a C++ TelemetryEvent to the JSON object sent on the
-// run WebSocket as type "metric". Preserves legacy keys (epoch, mean_loss, mean_mse, line) for charts.
+// run WebSocket as type "metric". Preserves chart-stable keys (epoch, mean_loss, mean_mse, line).
 func buildGRPCMetricWebSocketPayload(runID string, ev *trainingrpc.TelemetryEvent, tsRFC3339 string) map[string]any {
 	if ev == nil {
 		return map[string]any{
