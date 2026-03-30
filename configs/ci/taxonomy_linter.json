@@ -1,5 +1,5 @@
 {
-  "$schema_comment": "Edge AI taxonomy gate: regexes matched against added/changed lines (CI) or file prose (full scan). FP dtype patterns use apply_extensions so Python/Go numeric code is not falsely flagged; prose in .md/.toml/.yaml is still enforced on --full. skip_all_patterns_for_paths includes long-form whitepapers that retain IEEE/FP and standard ML citations by design.",
+  "$schema_comment": "Edge AI taxonomy gate: regexes matched against added/changed lines (CI) or file prose (full scan). FP dtype patterns use apply_extensions so Python/Go numeric code is not falsely flagged; prose in .md/.toml/.yaml is still enforced on --full. skip_all_patterns_for_paths includes long-form whitepapers (architecture synthesis, Clifford, quantum edge research, synthetic data / MOPD) that retain IEEE/FP and standard ML citations by design.",
   "patterns": [
     {"regex": "(?i)\\bVRAM\\b", "hint": "Prefer Linear Memory Saturation (LMS) or Enclave Footprint (EF)."},
     {"regex": "(?i)\\bkv\\s*[- ]?cache\\b", "hint": "Prefer ESI / WLES vocabulary; geometric hull types use ESI* names."},
@@ -54,6 +54,7 @@
     "docs/MASTER_REALIGNMENT_STATUS.md",
     "docs/QMINIWASM_ Advanced Architecture Synthesis.md",
     "docs/QMINIWASM_ Ternary Clifford Optimization.md",
-    "docs/Ternary Quantum AI Edge Research.md"
+    "docs/Ternary Quantum AI Edge Research.md",
+    "docs/QMINIWASM_ Synthetic Data for Edge AI.md"
   ]
 }
