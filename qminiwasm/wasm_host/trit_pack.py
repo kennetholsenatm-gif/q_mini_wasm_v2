@@ -16,13 +16,19 @@ import torch
 from qminiwasm.runtime_modes import resolve_impl_mode
 
 try:
-    from qminiwasm._native_ternary import (
-        pack_ternary_list as _native_pack_ternary_list,
-        unpack_ternary_list as _native_unpack_ternary_list,
+    from qminiwasm_cpp_native import (
+        pack_ternary_msb as _native_pack_ternary_list,
+        unpack_ternary_msb as _native_unpack_ternary_list,
     )
 except ImportError:
-    _native_pack_ternary_list = None
-    _native_unpack_ternary_list = None
+    try:
+        from qminiwasm._native_ternary import (
+            pack_ternary_list as _native_pack_ternary_list,
+            unpack_ternary_list as _native_unpack_ternary_list,
+        )
+    except ImportError:
+        _native_pack_ternary_list = None
+        _native_unpack_ternary_list = None
 
 TRITS_PER_BYTE = 5
 PACK_ENCODING_VERSION = 2

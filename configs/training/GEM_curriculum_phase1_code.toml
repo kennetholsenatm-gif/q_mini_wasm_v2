@@ -1,0 +1,46 @@
+# Phase 1: Real WASM Traces using Corpus Data
+# Aligned for authentic architecture supervision rather than synthetic text-to-vector mappings.
+
+[hardware]
+accelerator = "cpu"
+
+[training]
+epochs = 12
+batch_size = 16
+learning_rate = 0.00012
+grad_clip_norm = 1.0
+lr_plateau_patience = 2
+lr_plateau_factor = 0.5
+lr_plateau_min_lr = 1.0e-7
+seed = 42
+
+[data]
+# Switch from hf_tabular to corpus to track real WASM linear memory
+source = "corpus"
+path = "corpus/manifest.json" 
+
+[checkpoint]
+save_path = "artifacts/models/real_wasm_phase1/final.pt"
+best_path = "artifacts/models/real_wasm_phase1/best.pt"
+latest_path = "artifacts/models/real_wasm_phase1/latest.pt"
+
+[eval]
+holdout_fraction = 0.03
+every_epoch = true
+target_mean_mse = 0.0001
+stop_on_target_mse = false
+
+[cascade]
+enabled = true
+policy_lr = 0.000075
+steps_per_epoch = 2
+group_size = 4
+state_dim = 8
+num_actions = 4
+mopd_lambda = 0.08
+mopd_feat_loss = "mse"
+seed_from_hidden = true
+use_router = true
+learned_projector = true
+router_hidden = 32
+couple_forward = true

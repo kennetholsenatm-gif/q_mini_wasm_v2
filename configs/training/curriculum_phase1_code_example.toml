@@ -1,4 +1,4 @@
-# Smoke-scale Phase 1 code / execution mix (xCodeEval + coding-eval narrative) per QMINIWASM Dataset and Expert Curation.
+# Smoke-scale Phase 1 code / execution mix (xCodeEval + coding-eval narrative) per docs/research/QMINIWASM Dataset and Expert Curation.md.
 # xCodeEval is multi-config: pick a config name from https://huggingface.co/datasets/NTU-NLP-sg/xCodeEval
 # coding-eval may require HF_TOKEN / license acceptance.
 # Native + Python: set text_fields so row text matches your chosen config's string columns.

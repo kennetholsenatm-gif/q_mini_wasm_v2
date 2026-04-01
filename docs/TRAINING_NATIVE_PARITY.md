@@ -23,17 +23,17 @@ flowchart LR
   IC --> Inf
 ```
 
-Interchange layout and Bloch keys: [`cpp/training/README.md`](../cpp/training/README.md). Paper ↔ binary traceability: [ARCHITECTURE_WHITEPAPERS.md](ARCHITECTURE_WHITEPAPERS.md#traceability-matrix).
+Interchange layout and Bloch keys: [`cpp/training/README.md`](../cpp/training/README.md). Paper ↔ binary traceability: [research/ARCHITECTURE_WHITEPAPERS.md](research/ARCHITECTURE_WHITEPAPERS.md#traceability-matrix).
 
 ## Native capability bounds
 
 | Capability | Native LibTorch `CoreModule` | Matrix / detail |
 |------------|------------------------------|-----------------|
-| Ternary STE experts, stem/head | Yes | [1.58-bit ternary experts](ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
-| Bloch fidelity attention | Yes (broadcast token + `pos_embed`; see engine README for sequence limits) | [BlochSphere](ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
-| Joint SFT + cascade RL | When flags set: `train_step_joint_supervised_cascade` | [Native gRPC row](ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
-| Tropical / max-plus attention | Roadmap / partial — align with whitepaper | [Tropical geometry](ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
-| Trainable quantum router in core forward | Not in `CoreModule` forward | [MoE / QAOA routing](ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
+| Ternary STE experts, stem/head | Yes | [1.58-bit ternary experts](research/ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
+| Bloch fidelity attention | Yes (broadcast token + `pos_embed`; see engine README for sequence limits) | [BlochSphere](research/ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
+| Joint SFT + cascade RL | When flags set: `train_step_joint_supervised_cascade` | [Native gRPC row](research/ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
+| Tropical / max-plus attention | Roadmap / partial — align with whitepaper | [Tropical geometry](research/ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
+| Trainable quantum router in core forward | Not in `CoreModule` forward | [MoE / QAOA routing](research/ARCHITECTURE_WHITEPAPERS.md#traceability-matrix) |
 | Native OpenQASM + trinary sim | Optional build `QMINIWASM_WITH_QUANTUM` | [`cpp/README.md`](../cpp/README.md#native-quantum-optional) |
 
 When a run fails with interchange or geometry errors, align `[model] attention_backend`, `native_bloch_*`, and checkpoint envelope tensors with [`cpp/training/README.md`](../cpp/training/README.md#checkpoints-native-engine).
@@ -57,4 +57,4 @@ When a run fails with interchange or geometry errors, align `[model] attention_b
 
 - Native boundary: [ENGINE_QMINIWASM_BOUNDARY.md](ENGINE_QMINIWASM_BOUNDARY.md)
 - Depythonization: [DEPYTHONIZATION.md](DEPYTHONIZATION.md)
-- Whitepaper traceability: [ARCHITECTURE_WHITEPAPERS.md](ARCHITECTURE_WHITEPAPERS.md)
+- Whitepaper traceability: [research/ARCHITECTURE_WHITEPAPERS.md](research/ARCHITECTURE_WHITEPAPERS.md)

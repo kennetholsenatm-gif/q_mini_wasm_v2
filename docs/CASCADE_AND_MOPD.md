@@ -121,6 +121,60 @@ Expect a **fresh** epoch counter (epoch 1 of the new run), **new** AdamW state, 
 - **Real teacher:** Second network, EMA weights, or main-model hidden projectors as `teacher_hidden_fn`.
 - **KL branch in cascade:** Wire auxiliary logits into `MOPDLoss` with `lambda_kl` > 0 when a teacher provides matching logits.
 
+## CISPO Mathematics (Clipped Importance Sampling Policy Optimization)
+
+**Purpose:** CISPO replaces standard PPO/GRPO clipping to prevent gradient suppression of critical tokens (token dropout) during cascade RL policy optimization. This is particularly important for reasoning tasks where low-probability tokens trigger inflection points.
+
+### PPO Failure: Token Dropout
+
+Standard PPO uses a surrogate objective with combined clipping:
+
+```
+L^PPO(θ) = -E_t [ min(r_t(θ) · A_t, clip(r_t(θ), 1-ε, 1+ε) · A_t) ]
+```
+
+where `r_t(θ) = π_θ(a_t|s_t) / π_θ_old(a_t|s_t)`. When reasoning tasks produce inflection-point tokens (e.g., "Wait," "However"), these tokens initially have low probability under the old policy. Increasing their probability creates a large ratio → the clip activates → gradients are suppressed to zero → the token never gets learned (**gradient death**).
+
+### CISPO Objective Function
+
+CISPO decouples the clipping from the gradient computation:
+
+```
+L^CISPO(θ) = -E_t [ E_{a~π_θ} [ w_t^detach · A_t · log π_θ(a_t|s_t) ] ]
+```
+
+where:
+- `w_t^detach = clamp(r_t(a), 1-ε, 1+ε).detach()` — **detached** clipped importance weight
+- `A_t` — advantage (standardized returns)
+- `log π_θ(a_t|s_t)` — log-probability under **current** policy
+
+**Key insight:** The clipped ratio `w_t^detach` acts as a **constant scalar coefficient** during backpropagation. Gradients flow exclusively through `log π_θ(a_t|s_t)`, ensuring every token contributes an unbiased gradient regardless of its initial probability or importance ratio magnitude.
+
+### Native Implementation (C++)
+
+The native `LibTorchTpemTrainer::cascade_cispo_loss_tensor()` implements:
+
+1. **Trajectory collection** (with NoGradGuard): Roll toy MDP, collect old log-probs, states, actions
+2. **New log-prob computation**: Re-compute `log π_θ(a|s)` with current policy (gradient-tracked)
+3. **Importance ratio**: `ratio = exp(log_p_new - log_p_old)`, clipped to `[1-ε, 1+ε]`
+4. **Detach operator**: `coeff = clipped.detach()` — ratio detached from autograd
+5. **Loss**: `-(coeff * adv * logprob_tensor).mean()` — gradients through log-probs only
+
+### Recommended Parameters
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `cispo_clip_epsilon` | 0.2 | Symmetric clip range `[0.8, 1.2]` |
+| `group_size` | 4 | Trajectories per step (≥ 2 for advantage normalization) |
+| `cascade_policy_lr` | 1e-4 | Same as main LR for balanced updates |
+
+### Telemetry
+
+- `train_step_cascade_cispo` → stage: `cascade_cispo`, event: `cascade_cispo_native`
+- Ratio magnitude tracking: watch `epoch_cascade_loss` for healthy values (not NaN/Inf)
+- If cascade loss spikes but MSE stays stable, policy may be exploring correctly
+- If both spike and MSE degrades, reduce `cispo_clip_epsilon` or `cascade_policy_lr`
+
 ## Tests
 
 - [`tests/test_cascade_rl_mopd.py`](../tests/test_cascade_rl_mopd.py) — GRPO, MOPD loss, `cascade_rl_train_step` with MOPD.

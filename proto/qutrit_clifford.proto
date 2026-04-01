@@ -1,0 +1,437 @@
+syntax = "proto3";
+
+package qminiwasm.quantum;
+
+option go_package = "github.com/kennetholsenatm-gif/qminiwasm-core/training-wui/qutritrpc";
+
+// ============================================================================
+// Qutrit Clifford Operations Service
+// ============================================================================
+// Provides gRPC interface for qutrit stabilizer tableau operations,
+// error correction, graph states, scrambling, and attention mechanisms.
+// All operations stay within Gottesman-Knill simulability bounds.
+// ============================================================================
+
+service QutritCliffordService {
+  // Qutrit Tableau Operations
+  rpc CreateTableau(CreateTableauRequest) returns (CreateTableauResponse);
+  rpc DestroyTableau(DestroyTableauRequest) returns (DestroyTableauResponse);
+  rpc CopyTableau(CopyTableauRequest) returns (CopyTableauResponse);
+  rpc ApplyH3(ApplyGateRequest) returns (ApplyGateResponse);
+  rpc ApplyS3(ApplyGateRequest) returns (ApplyGateResponse);
+  rpc ApplyCZ3(ApplyCZ3Request) returns (ApplyGateResponse);
+  rpc ApplyX3(ApplyPowerGateRequest) returns (ApplyGateResponse);
+  rpc ApplyZ3(ApplyPowerGateRequest) returns (ApplyGateResponse);
+  rpc MeasureTableau(MeasureRequest) returns (MeasureResponse);
+  rpc GetStabilizerString(GetStabilizerStringRequest) returns (GetStabilizerStringResponse);
+
+  // Error Correction Operations
+  rpc Encode513(EncodeRequest) returns (EncodeResponse);
+  rpc Encode312(EncodeRequest) returns (EncodeResponse);
+  rpc ExtractSyndrome513(ExtractSyndromeRequest) returns (ExtractSyndrome513Response);
+  rpc ExtractSyndrome312(ExtractSyndromeRequest) returns (ExtractSyndrome312Response);
+  rpc IdentifyError513(IdentifyErrorRequest) returns (IdentifyErrorResponse);
+  rpc CorrectError513(CorrectErrorRequest) returns (CorrectErrorResponse);
+  rpc DetectError312(DetectErrorRequest) returns (DetectErrorResponse);
+
+  // Graph State Operations
+  rpc CreateGraphState(CreateGraphStateRequest) returns (CreateGraphStateResponse);
+  rpc InitializeGraphState(GraphStateRequest) returns (GraphStateResponse);
+  rpc EncodeFeatures(EncodeFeaturesRequest) returns (EncodeFeaturesResponse);
+  rpc ExtractFeatures(GraphStateRequest) returns (ExtractFeaturesResponse);
+  rpc GetStabilizerGenerators(GraphStateRequest) returns (GetStabilizerGeneratorsResponse);
+  rpc GenerateGraph(GenerateGraphRequest) returns (GenerateGraphResponse);
+  rpc GraphStateProjection(GraphStateProjectionRequest) returns (GraphStateProjectionResponse);
+
+  // Scrambling Operations
+  rpc CreateScrambling(CreateScramblingRequest) returns (CreateScramblingResponse);
+  rpc EncryptWeights(EncryptWeightsRequest) returns (EncryptWeightsResponse);
+  rpc EncryptData(EncryptDataRequest) returns (EncryptDataResponse);
+  rpc DecryptOutput(DecryptOutputRequest) returns (DecryptOutputResponse);
+  rpc ScrambleWeights(ScrambleWeightsRequest) returns (ScrambleWeightsResponse);
+  rpc ScrambleAndDecrypt(ScrambleAndDecryptRequest) returns (ScrambleAndDecryptResponse);
+
+  // Attention Operations
+  rpc CreateBellAttention(CreateBellAttentionRequest) returns (CreateBellAttentionResponse);
+  rpc EncodeKeyQuery(EncodeKeyQueryRequest) returns (EncodeKeyQueryResponse);
+  rpc BellMeasurement(BellMeasurementRequest) returns (BellMeasurementResponse);
+  rpc ComputeAttention(ComputeAttentionRequest) returns (ComputeAttentionResponse);
+  rpc QutritAttention(QutritAttentionRequest) returns (QutritAttentionResponse);
+  rpc SoftmaxApproximation(SoftmaxApproximationRequest) returns (SoftmaxApproximationResponse);
+  rpc TopKAttention(TopKAttentionRequest) returns (TopKAttentionResponse);
+}
+
+// ============================================================================
+// Qutrit Tableau Messages
+// ============================================================================
+
+message CreateTableauRequest {
+  int32 n_qutrits = 1;
+}
+
+message CreateTableauResponse {
+  int64 tableau_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message DestroyTableauRequest {
+  int64 tableau_id = 1;
+}
+
+message DestroyTableauResponse {
+  bool success = 1;
+}
+
+message CopyTableauRequest {
+  int64 source_id = 1;
+}
+
+message CopyTableauResponse {
+  int64 new_tableau_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message ApplyGateRequest {
+  int64 tableau_id = 1;
+  int32 qubit = 2;
+}
+
+message ApplyCZ3Request {
+  int64 tableau_id = 1;
+  int32 control = 2;
+  int32 target = 3;
+}
+
+message ApplyPowerGateRequest {
+  int64 tableau_id = 1;
+  int32 qubit = 2;
+  int32 power = 3;
+}
+
+message ApplyGateResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message MeasureRequest {
+  int64 tableau_id = 1;
+  int32 qubit = 2;
+}
+
+message MeasureResponse {
+  int32 result = 1;  // 0, 1, 2 or -1 for random
+  bool success = 2;
+  string error = 3;
+}
+
+message GetStabilizerStringRequest {
+  int64 tableau_id = 1;
+  int32 row = 2;
+}
+
+message GetStabilizerStringResponse {
+  string stabilizer = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+// ============================================================================
+// Error Correction Messages
+// ============================================================================
+
+message EncodeRequest {
+  int32 state = 1;  // 0, 1, or 2
+}
+
+message EncodeResponse {
+  int64 tableau_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message ExtractSyndromeRequest {
+  int64 tableau_id = 1;
+}
+
+message ExtractSyndrome513Response {
+  repeated int32 syndrome = 1;  // 4 values
+  bool success = 2;
+  string error = 3;
+}
+
+message ExtractSyndrome312Response {
+  int32 x_syndrome = 1;
+  int32 z_syndrome = 2;
+  bool success = 3;
+  string error = 4;
+}
+
+message IdentifyErrorRequest {
+  repeated int32 syndrome = 1;
+}
+
+message IdentifyErrorResponse {
+  int32 qutrit = 1;
+  int32 error_type = 2;  // 0=X, 1=Z, 2=Y
+  bool found = 3;
+  bool success = 4;
+  string error = 5;
+}
+
+message CorrectErrorRequest {
+  int64 tableau_id = 1;
+  int32 qutrit = 2;
+  int32 error_type = 3;
+}
+
+message CorrectErrorResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message DetectErrorRequest {
+  int64 tableau_id = 1;
+}
+
+message DetectErrorResponse {
+  bool detected = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+// ============================================================================
+// Graph State Messages
+// ============================================================================
+
+message CreateGraphStateRequest {
+  int32 n_qutrits = 1;
+  repeated repeated_int32 adjacency = 2;  // 2D adjacency matrix
+}
+
+message repeated_int32 {
+  repeated int32 values = 1;
+}
+
+message CreateGraphStateResponse {
+  int64 graph_state_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message GraphStateRequest {
+  int64 graph_state_id = 1;
+}
+
+message GraphStateResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message EncodeFeaturesRequest {
+  int64 graph_state_id = 1;
+  repeated int32 features = 2;
+}
+
+message EncodeFeaturesResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message ExtractFeaturesResponse {
+  int64 graph_state_id = 1;
+  repeated int32 features = 2;
+  bool success = 3;
+  string error = 4;
+}
+
+message GetStabilizerGeneratorsResponse {
+  int64 graph_state_id = 1;
+  repeated string generators = 2;
+  bool success = 3;
+  string error = 4;
+}
+
+message GenerateGraphRequest {
+  int32 n = 1;
+  string graph_type = 2;  // "cyclic", "complete", "star", "random"
+  double edge_prob = 3;
+  uint32 seed = 4;
+}
+
+message GenerateGraphResponse {
+  repeated repeated_int32 adjacency = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message GraphStateProjectionRequest {
+  repeated int32 input_features = 1;
+  string graph_type = 2;
+  int32 n_output = 3;  // -1 for same as input
+}
+
+message GraphStateProjectionResponse {
+  repeated int32 output_features = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+// ============================================================================
+// Scrambling Messages
+// ============================================================================
+
+message CreateScramblingRequest {
+  int32 n_qutrits = 1;
+  uint64 seed = 2;
+  int32 depth = 3;
+}
+
+message CreateScramblingResponse {
+  int64 scrambling_id = 1;
+  int32 gate_count = 2;
+  bool success = 3;
+  string error = 4;
+}
+
+message EncryptWeightsRequest {
+  int64 scrambling_id = 1;
+  repeated int32 weights = 2;
+}
+
+message EncryptWeightsResponse {
+  int64 tableau_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message EncryptDataRequest {
+  int64 scrambling_id = 1;
+  repeated int32 data = 2;
+}
+
+message EncryptDataResponse {
+  int64 tableau_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message DecryptOutputRequest {
+  int64 scrambling_id = 1;
+  int64 tableau_id = 2;
+}
+
+message DecryptOutputResponse {
+  repeated int32 decrypted = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message ScrambleWeightsRequest {
+  repeated int32 weights = 1;
+  uint64 seed = 2;
+  int32 depth = 3;
+}
+
+message ScrambleWeightsResponse {
+  int64 tableau_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message ScrambleAndDecryptRequest {
+  repeated int32 data = 1;
+  uint64 seed = 2;
+  int32 depth = 3;
+}
+
+message ScrambleAndDecryptResponse {
+  repeated int32 decrypted = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+// ============================================================================
+// Attention Messages
+// ============================================================================
+
+message CreateBellAttentionRequest {
+  int32 n_heads = 1;
+  int32 n_features = 2;
+}
+
+message CreateBellAttentionResponse {
+  int64 attention_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message EncodeKeyQueryRequest {
+  int64 attention_id = 1;
+  repeated int32 keys = 2;
+  repeated int32 queries = 3;
+}
+
+message EncodeKeyQueryResponse {
+  int64 tableau_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message BellMeasurementRequest {
+  int64 attention_id = 1;
+  int64 tableau_id = 2;
+}
+
+message BellMeasurementResponse {
+  repeated float scores = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message ComputeAttentionRequest {
+  int64 attention_id = 1;
+  repeated int32 keys = 2;
+  repeated int32 queries = 3;
+}
+
+message ComputeAttentionResponse {
+  repeated float scores = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message QutritAttentionRequest {
+  repeated int32 keys = 1;
+  repeated int32 queries = 2;
+  int32 n_heads = 3;  // -1 for len(keys)
+}
+
+message QutritAttentionResponse {
+  repeated float scores = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message SoftmaxApproximationRequest {
+  repeated float scores = 1;
+  float temperature = 2;
+}
+
+message SoftmaxApproximationResponse {
+  repeated float discrete_scores = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message TopKAttentionRequest {
+  repeated float scores = 1;
+  int32 k = 2;
+}
+
+message TopKAttentionResponse {
+  repeated int32 indices = 1;
+  bool success = 2;
+  string error = 3;
+}

@@ -39,6 +39,15 @@ struct CascadeCurriculumLoopNative {
   std::uint32_t heal_epochs_per_round = 2;
   /// Gate fail: reload teacher checkpoint and repeat PTQTP+heal (1 = single macro pass).
   std::uint32_t max_curriculum_cycles = 1;
+  /// Simulated Annealing for progressive quantization (Phase 2).
+  /// T_0: initial computational temperature (high = broad exploration of ternary lattice).
+  double sa_initial_temperature = 1.0;
+  /// γ: per-epoch cooling multiplier (T_{t+1} = T_t * γ; values < 1 cause exponential decay).
+  double sa_cooling_rate = 0.95;
+  /// T_min: floor temperature (below T_min, weights are considered frozen to ternary vertices).
+  double sa_min_temperature = 0.01;
+  /// Target Metropolis-Hastings acceptance rate for adaptive T scheduling (0 = disable adaptive).
+  double sa_acceptance_window = 0.0;
 };
 struct TrainingPhaseNative {
   std::string name;

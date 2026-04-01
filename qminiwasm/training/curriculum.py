@@ -8,7 +8,7 @@ from typing import Any, List
 def get_curriculum_phases() -> List[dict[str, Any]]:
     """Return high-level curriculum labels.
 
-    See ``docs/ARCHITECTURE_WHITEPAPERS.md`` for TOML phases.
+    See ``docs/research/ARCHITECTURE_WHITEPAPERS.md`` for TOML phases.
     """
     return [
         {

@@ -673,7 +673,7 @@ def run_training_loop(
             OS signals cannot reach the child (typical on Windows GUI launches).
         training_phases: Optional ``[[training_phases]]`` rows; when set, ``epochs`` is overridden
             by ``sum(phase.epochs)`` and per-epoch behavior follows each phase (see
-            ``docs/ARCHITECTURE_WHITEPAPERS.md``).
+            ``docs/research/ARCHITECTURE_WHITEPAPERS.md``).
         cascade_policy_optimizer: Default ``grpo`` or ``cispo`` when not using ``training_phases``.
         cispo_clip_epsilon: CISPO symmetric clip half-width on the importance ratio.
         attention_backend: ``tropical`` or ``bloch`` (with ``tropical_attn_per_block``).

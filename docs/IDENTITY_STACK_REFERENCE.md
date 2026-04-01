@@ -36,4 +36,4 @@ Health and federation checks depend on your CA and IdP products; use their CLIs 
 
 ---
 
-**Note:** The former root-level summary file `FREEIPA_INTEGRATION_SUMMARY.md` redirects here to avoid vendor-specific naming in the primary narrative.
+**Note:** Vendor-specific deployment playbooks are out of scope here; use this document plus your identity provider and CA vendor documentation.

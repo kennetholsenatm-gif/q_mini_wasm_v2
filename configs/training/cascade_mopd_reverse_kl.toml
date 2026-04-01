@@ -1,0 +1,44 @@
+# Example: Cascade training with Reverse-KL MOPD (real FP32 teacher distillation)
+# Uses reverse-KL divergence (mode-seeking) instead of MSE (mean-seeking).
+# Best when student is discrete (ternary) and teacher is continuous (FP32).
+
+# Requires:
+#   - A trained FP32 checkpoint (Phase 1 SFT) as teacher
+#   - Set teacher_checkpoint_path to the SFT checkpoint in [cascade_curriculum_loop]
+#   - Use train_step_distill_reverse_kl in cascade curriculum loop
+
+[training]
+epochs = 30
+batch_size = 32
+learning_rate = 1.0e-4
+seed = 42
+
+[cascade_curriculum_loop]
+enabled = true
+max_heal_rounds = 3
+ptqtp_num_planes = 2
+gate_target_val_mse = 0
+heal_learning_rate_scale = 0.5
+teacher_epoch_fraction = 0.5
+heal_epochs_per_round = 2
+
+# Simulated annealing for progressive quantization
+sa_initial_temperature = 1.0
+sa_cooling_rate = 0.95
+sa_min_temperature = 0.01
+sa_acceptance_window = 0.5
+
+[cascade]
+enabled = true
+policy_lr = 1.0e-4
+steps_per_epoch = 2
+group_size = 4
+mopd_lambda = 0.0
+mopd_feat_loss = "mse"
+policy_optimizer = "cispo"
+cispo_clip_epsilon = 0.2
+
+[model]
+d_model = 256
+num_ternary_blocks = 1
+io_d_model = 256

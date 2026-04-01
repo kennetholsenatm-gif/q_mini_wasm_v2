@@ -50,12 +50,13 @@
   "ignore_path_substrings": ["/vendor/", "node_modules/", ".git/", "__pycache__/", ".cursor/", "mcps/", ".deps/", "/_deps/", "/build/", "build-training-engine"],
   "skip_all_patterns_for_paths": [
     "docs/Q-Mini-WASM_ Edge AI Taxonomy.md",
-    "docs/UnifedMemory.md",
     "docs/MASTER_REALIGNMENT_STATUS.md",
-    "docs/QMINIWASM_ Advanced Architecture Synthesis.md",
-    "docs/QMINIWASM_ Ternary Clifford Optimization.md",
-    "docs/Ternary Quantum AI Edge Research.md",
-    "docs/QMINIWASM_ Synthetic Data for Edge AI.md",
-    "docs/QMINIWASM Dataset and Expert Curation.md"
+    "docs/research/UnifedMemory.md",
+    "docs/research/QMINIWASM_ Advanced Architecture Synthesis.md",
+    "docs/research/QMINIWASM_ Ternary Clifford Optimization.md",
+    "docs/research/Ternary Quantum AI Edge Research.md",
+    "docs/research/QMINIWASM_ Synthetic Data for Edge AI.md",
+    "docs/research/QMINIWASM Dataset and Expert Curation.md",
+    "docs/research/PYTHON_CPP_AB_CONTRACT.md"
   ]
 }

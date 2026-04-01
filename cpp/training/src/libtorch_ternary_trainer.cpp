@@ -249,14 +249,17 @@ bool copy_linear_weight_bias(torch::nn::Linear& lin, const torch::Tensor& w,
 
 struct LibTorchTpemTrainer::Impl {
   CoreModule core_{nullptr};
-  CoreModule teacher_{nullptr};
+  CoreModule teacher_{nullptr};  // Cloned teacher from core (synthetic)
+  CoreModule external_teacher_{nullptr};  // External FP32 teacher from checkpoint (real)
   bool has_teacher_ = false;
+  bool has_external_teacher_ = false;
   std::unique_ptr<torch::optim::Adam> optim_;
   CascadeToyPolicy cascade_policy_{nullptr};
   std::unique_ptr<torch::optim::Adam> cascade_optim_;
   std::map<std::string, torch::Tensor> frozen_router_;
   double last_lr_ = 1e-3;
   std::uint64_t seed_ = 42;
+  double sa_current_temperature_ = 0.0;  /* 0 = not in SA phase */
 
   Impl(double learning_rate, std::uint64_t seed)
       : last_lr_(learning_rate), seed_(seed) {
@@ -547,10 +550,119 @@ struct LibTorchTpemTrainer::Impl {
     return true;
   }
 
+  double ternary_quantize_element(double w_val) {
+    // Greedy ternary projection: sign(w) * clamp(round(|w|/α), 0, 1)
+    // where α = mean(|w|) for the weight tensor
+    return w_val >= 0.0 ? 1.0 : (w_val <= 0.0 ? -1.0 : 0.0);
+  }
+
+  bool apply_simulated_annealing(double temperature, double cool_rate, double min_temperature,
+                                  double target_acceptance, std::uint64_t step_mix,
+                                  double* out_acceptance_rate, std::string* error_message) {
+    if (temperature < min_temperature) {
+      set_err(error_message, "sa: temperature below min_temperature");
+      return false;
+    }
+    torch::NoGradGuard g;
+    std::mt19937_64 rng(step_mix);
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+    std::normal_distribution<double> noise_dist(0.0, 1.0);
+
+    const int nb = core_->num_blocks();
+    double total_attempts = 0.0;
+    double total_accepted = 0.0;
+
+    for (int i = 0; i < nb; ++i) {
+      auto& w = core_->experts_[static_cast<std::size_t>(i)]->weight_;
+      const auto shape = w.sizes();
+      const auto numel = w.numel();
+
+      // Compute α for ternary quantization (mean absolute value)
+      auto abs_val = w.abs();
+      double alpha = abs_val.mean().item<double>() + 1e-8;
+
+      // Current quantization error energy: E = Σ |ternary(w) * α - w|²
+      auto ternary_target = torch::round(w / alpha).clamp(-1.0, 1.0);
+      double energy_current = (ternary_target * alpha - w).pow(2).sum().item<double>();
+
+      // Create candidate: add noise to weights
+      auto w_flat = w.view({numel}).clone();
+      std::vector<double> best_vals;
+      best_vals.reserve(static_cast<size_t>(numel));
+
+      // Metropolis-Hastings per weight element
+      std::int64_t n_accepted = 0;
+      std::int64_t n_trials = 0;
+
+      // Iterate in chunks for memory efficiency
+      for (std::int64_t idx = 0; idx < numel; ++idx) {
+        double current_val = w_flat[idx].item<double>();
+        double ternary_val = ternary_target.view({numel})[idx].item<double>();
+
+        // Propose a perturbed value (exploration within continuous space)
+        double perturbation = noise_dist(rng) * temperature * alpha;
+        double candidate_val = current_val + perturbation;
+
+        // Quantize candidate to ternary
+        double candidate_ternary = candidate_val > 0.0 ? 1.0 : (candidate_val < 0.0 ? -1.0 : 0.0);
+        double current_ternary = current_val > 0.0 ? 1.0 : (current_val < 0.0 ? -1.0 : 0.0);
+
+        // Energy: distance between candidate weight and its quantized version
+        double energy_candidate = std::pow(candidate_val - candidate_ternary * alpha, 2);
+        double energy_current_elem = std::pow(current_val - current_ternary * alpha, 2);
+
+        // Also consider the direct distance to target ternary
+        double delta_energy = energy_candidate - energy_current_elem;
+
+        // Metropolis-Hastings acceptance criterion
+        bool accept = false;
+        if (delta_energy <= 0) {
+          accept = true;  // Lower energy always accepted
+        } else {
+          double acceptance_prob = std::exp(-delta_energy / std::max(temperature, 1e-10));
+          if (uniform_dist(rng) < acceptance_prob) {
+            accept = true;
+          }
+        }
+
+        if (accept) {
+          w_flat[idx] = candidate_val;
+          ++n_accepted;
+        }
+        ++n_trials;
+      }
+
+      // After exploring, finalize by quantizing to ternary lattice
+      if (temperature <= min_temperature) {
+        // Fully quantize when frozen
+        for (std::int64_t idx = 0; idx < numel; ++idx) {
+          double val = w_flat[idx].item<double>();
+          double quantized = val > 0.0 ? 1.0 : (val < 0.0 ? -1.0 : 0.0);
+          w_flat[idx] = quantized * alpha;
+        }
+      }
+
+      w.copy_(w_flat.view(shape));
+      total_accepted += static_cast<double>(n_accepted);
+      total_attempts += static_cast<double>(n_trials);
+    }
+
+    double acc_rate = total_attempts > 0.0 ? total_accepted / total_attempts : 0.0;
+    if (out_acceptance_rate != nullptr) {
+      *out_acceptance_rate = acc_rate;
+    }
+    sa_current_temperature_ = temperature * cool_rate;  // Update for next call
+
+    rebuild_optim();
+    return true;
+  }
+
   double train_step_distill(std::size_t batch_size, std::int64_t io_dim, const float* x_rm, const float* t_rm,
                             double lambda_teacher, std::uint64_t step_mix) {
     (void)step_mix;
-    if (!has_teacher_ || !teacher_) {
+    const bool use_cloned = has_teacher_ && teacher_;
+    const bool use_external = has_external_teacher_ && external_teacher_;
+    if (!use_cloned && !use_external) {
       return train_step_supervised(batch_size, io_dim, x_rm, t_rm, step_mix);
     }
     const auto b = static_cast<std::int64_t>(std::max<std::size_t>(1, batch_size));
@@ -563,13 +675,223 @@ struct LibTorchTpemTrainer::Impl {
     torch::Tensor teach_out;
     {
       torch::NoGradGuard ng;
-      teach_out = teacher_->forward(x);
+      // Prefer external teacher if loaded, otherwise use cloned teacher
+      if (use_external) {
+        teach_out = external_teacher_->forward(x);
+      } else {
+        teach_out = teacher_->forward(x);
+      }
     }
     auto stu_out = core_->forward(x);
+    // MSE distillation loss (forward-KL style)
     auto loss = torch::mse_loss(stu_out, teach_out) + static_cast<float>(lambda_teacher) * torch::mse_loss(stu_out, tgt);
     loss.backward();
     optim_->step();
     return loss.item<double>();
+  }
+
+  double train_step_distill_reverse_kl(std::size_t batch_size, std::int64_t io_dim, const float* x_rm,
+                                         const float* t_rm, double lambda_kl, double lambda_target,
+                                         std::uint64_t step_mix) {
+    (void)step_mix;
+    const bool use_cloned = has_teacher_ && teacher_;
+    const bool use_external = has_external_teacher_ && external_teacher_;
+    if (!use_cloned && !use_external) {
+      return train_step_supervised(batch_size, io_dim, x_rm, t_rm, step_mix);
+    }
+    const auto b = static_cast<std::int64_t>(std::max<std::size_t>(1, batch_size));
+    auto x = torch::from_blob(const_cast<float*>(x_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                 .clone();
+    auto tgt = torch::from_blob(const_cast<float*>(t_rm), {b, io_dim}, torch::TensorOptions().dtype(torch::kFloat32))
+                   .clone();
+    core_->train();
+    optim_->zero_grad();
+    torch::Tensor teach_out;
+    torch::Tensor teach_logits;
+    {
+      torch::NoGradGuard ng;
+      if (use_external) {
+        teach_out = external_teacher_->forward(x);
+      } else {
+        teach_out = teacher_->forward(x);
+      }
+      // Convert teacher output to distribution via soft normalization
+      teach_logits = teach_out / teach_out.abs().mean().clamp_min(1e-8);
+    }
+    auto stu_out = core_->forward(x);
+    // Student logits distribution
+    auto stu_logits = stu_out / stu_out.abs().mean().clamp_min(1e-8);
+    // Reverse-KL: D_KL(q_student || p_teacher)
+    // = E_{x ~ q} [log q(x) - log p(x)]
+    // Using Monte Carlo estimation with student's distribution
+    auto log_q = torch::log_softmax(stu_logits, /*dim=*/-1);
+    auto log_p = torch::log_softmax(teach_logits, /*dim=*/-1);
+    // Reverse KL on softmax-normalized distributions (per-element for regression-like outputs)
+    auto kl_reverse = (torch::exp(log_q) * (log_q - log_p)).sum(-1).mean();
+    // Target loss (MSE on task targets)
+    auto target_loss = torch::mse_loss(stu_out, tgt);
+    auto loss = kl_reverse + static_cast<float>(lambda_kl) * kl_reverse + static_cast<float>(lambda_target) * target_loss;
+    loss.backward();
+    optim_->step();
+    return loss.item<double>();
+  }
+
+  bool load_teacher_from_interchange(const std::string& path, std::uint32_t native_bloch_seq_len,
+                                      std::uint32_t native_bloch_num_heads, std::string* error_message) {
+    // Create external teacher with same geometry as core
+    const std::int64_t d = core_->d_model();
+    const std::int64_t io = core_->io_d_model();
+    const int nb = core_->num_blocks();
+    const int bseq = core_->native_bloch_seq_len();
+    const int bheads = core_->native_bloch_num_heads();
+
+    external_teacher_ = CoreModule(d, io, nb, bseq, bheads);
+    torch::NoGradGuard g;
+
+    // Load checkpoint into external teacher
+    std::string raw;
+    if (!read_file_all(path, &raw, error_message)) {
+      external_teacher_ = nullptr;
+      has_external_teacher_ = false;
+      return false;
+    }
+    if (raw.size() < 8 + 8) {
+      set_err_interchange(error_message, "teacher interchange file too small");
+      external_teacher_ = nullptr;
+      has_external_teacher_ = false;
+      return false;
+    }
+    if (std::memcmp(raw.data(), kTpemInterchangeMagic, 8) != 0) {
+      set_err_interchange(error_message, "not a valid interchange file for teacher");
+      external_teacher_ = nullptr;
+      has_external_teacher_ = false;
+      return false;
+    }
+    const auto* u = reinterpret_cast<const unsigned char*>(raw.data() + 8);
+    const std::uint64_t json_len = read_u64_le(u);
+    if (json_len > raw.size() - 16) {
+      set_err_interchange(error_message, "teacher interchange: invalid json length");
+      external_teacher_ = nullptr;
+      has_external_teacher_ = false;
+      return false;
+    }
+    std::string env_json(raw.substr(16, static_cast<std::size_t>(json_len)));
+    nlohmann::json env;
+    try {
+      env = nlohmann::json::parse(env_json);
+    } catch (const std::exception& e) {
+      set_err_interchange(error_message, std::string("teacher interchange: JSON error: ") + e.what());
+      external_teacher_ = nullptr;
+      has_external_teacher_ = false;
+      return false;
+    }
+
+    std::vector<torch::nn::Parameter> teacher_params = external_teacher_->parameters();
+    const std::size_t st_begin = 16 + static_cast<std::size_t>(json_len);
+    const std::string_view st_blob(raw.data() + st_begin, raw.size() - st_begin);
+    std::unordered_map<std::string, torch::Tensor> tensors;
+    if (!decode_safetensors_f32(st_blob, &tensors, error_message)) {
+      external_teacher_ = nullptr;
+      has_external_teacher_ = false;
+      return false;
+    }
+
+    // Load weights into external teacher (reuse existing loading logic)
+    // We need to adapt the flat tensor loading for the external teacher
+    constexpr const char* qr_prefix = "quantum_router.";
+    std::unordered_map<std::string, torch::Tensor> filtered;
+    for (const auto& [key, val] : tensors) {
+      if (key.rfind(qr_prefix, 0) != 0) {  // Skip router tensors
+        filtered[key] = val;
+      }
+    }
+
+    // Copy stem/head if present
+    if (external_teacher_->stem_head()) {
+      auto it_w = filtered.find("input_stem.weight");
+      if (it_w == filtered.end()) {
+        set_err_interchange(error_message, "teacher: missing input_stem.weight");
+        external_teacher_ = nullptr;
+        has_external_teacher_ = false;
+        return false;
+      }
+      auto it_b = filtered.find("input_stem.bias");
+      const torch::Tensor* pb = (it_b != filtered.end()) ? &it_b->second : nullptr;
+      if (!copy_linear_weight_bias(external_teacher_->stem_, it_w->second, pb, error_message)) {
+        external_teacher_ = nullptr;
+        has_external_teacher_ = false;
+        return false;
+      }
+      auto ow = filtered.find("output_head.weight");
+      if (ow == filtered.end()) {
+        set_err_interchange(error_message, "teacher: missing output_head.weight");
+        external_teacher_ = nullptr;
+        has_external_teacher_ = false;
+        return false;
+      }
+      auto ob = filtered.find("output_head.bias");
+      const torch::Tensor* pob = (ob != filtered.end()) ? &ob->second : nullptr;
+      if (!copy_linear_weight_bias(external_teacher_->head_, ow->second, pob, error_message)) {
+        external_teacher_ = nullptr;
+        has_external_teacher_ = false;
+        return false;
+      }
+    }
+
+    // Copy ternary expert weights
+    const int nb_local = external_teacher_->num_blocks();
+    for (int i = 0; i < nb_local; ++i) {
+      std::string wkey = (nb_local == 1) ? std::string("ternary_expert.weight")
+                                          : ("ternary_blocks." + std::to_string(i) + ".weight");
+      auto it = filtered.find(wkey);
+      if (it == filtered.end() && nb_local == 1) {
+        it = filtered.find("ternary_blocks.0.weight");
+      }
+      if (it == filtered.end()) {
+        set_err_interchange(error_message, "teacher: missing " + wkey);
+        external_teacher_ = nullptr;
+        has_external_teacher_ = false;
+        return false;
+      }
+      auto t = it->second.detach().cpu().to(torch::kFloat32).contiguous();
+      auto& ex = external_teacher_->experts_[static_cast<std::size_t>(i)];
+      if (t.dim() != 2 || t.size(0) != external_teacher_->d_model() || t.size(1) != external_teacher_->d_model()) {
+        set_err_interchange(error_message, "teacher: bad expert weight shape");
+        external_teacher_ = nullptr;
+        has_external_teacher_ = false;
+        return false;
+      }
+      ex->weight_.copy_(t);
+    }
+
+    // Copy Bloch attention params if present
+    if (external_teacher_->native_bloch_seq_len() > 0 && external_teacher_->bloch_) {
+      auto itp = filtered.find("bloch.pos_embed");
+      if (itp != filtered.end()) {
+        auto te = itp->second.detach().cpu().to(torch::kFloat32).contiguous();
+        if (te.sizes().equals(external_teacher_->pos_embed_.sizes())) {
+          external_teacher_->pos_embed_.copy_(te);
+        }
+      }
+      auto load_lin = [&](std::string_view base, torch::nn::Linear& lin) {
+        const std::string wkey = std::string(base) + ".weight";
+        auto iw = filtered.find(wkey);
+        if (iw == filtered.end()) return;
+        const torch::Tensor* loc_pb = nullptr;
+        const std::string bkey = std::string(base) + ".bias";
+        auto ib = filtered.find(bkey);
+        if (ib != filtered.end()) loc_pb = &ib->second;
+        copy_linear_weight_bias(lin, iw->second, loc_pb, nullptr);
+      };
+      load_lin("bloch.q_proj", external_teacher_->bloch_->q_proj_);
+      load_lin("bloch.k_proj", external_teacher_->bloch_->k_proj_);
+      load_lin("bloch.v_proj", external_teacher_->bloch_->v_proj_);
+      load_lin("bloch.out_proj", external_teacher_->bloch_->out_proj_);
+    }
+
+    external_teacher_->eval();
+    has_external_teacher_ = true;
+    return true;
   }
 
   static constexpr int kCascadeStateDim = 8;
@@ -997,7 +1319,18 @@ bool LibTorchTpemTrainer::clone_teacher_from_core(std::string* error_message) {
   return impl_->clone_teacher_from_core(error_message);
 }
 
-void LibTorchTpemTrainer::reset_teacher() { impl_->reset_teacher(); }
+bool LibTorchTpemTrainer::load_teacher_from_interchange(const std::string& path,
+                                                         std::uint32_t native_bloch_seq_len,
+                                                         std::uint32_t native_bloch_num_heads,
+                                                         std::string* error_message) {
+  return impl_->load_teacher_from_interchange(path, native_bloch_seq_len, native_bloch_num_heads, error_message);
+}
+
+void LibTorchTpemTrainer::reset_teacher() {
+  impl_->reset_teacher();
+  impl_->external_teacher_ = nullptr;
+  impl_->has_external_teacher_ = false;
+}
 
 bool LibTorchTpemTrainer::apply_ptqtp_reconstruct_experts(int num_planes, std::string* error_message) {
   return impl_->apply_ptqtp_reconstruct_experts(num_planes, error_message);
@@ -1007,6 +1340,14 @@ double LibTorchTpemTrainer::train_step_distill(std::size_t batch_size, std::int6
                                                const float* x_row_major, const float* target_row_major,
                                                double lambda_teacher, std::uint64_t step_mix) {
   return impl_->train_step_distill(batch_size, io_dim, x_row_major, target_row_major, lambda_teacher, step_mix);
+}
+
+double LibTorchTpemTrainer::train_step_distill_reverse_kl(std::size_t batch_size, std::int64_t io_dim,
+                                                            const float* x_row_major, const float* target_row_major,
+                                                            double lambda_kl, double lambda_target,
+                                                            std::uint64_t step_mix) {
+  return impl_->train_step_distill_reverse_kl(batch_size, io_dim, x_row_major, target_row_major, lambda_kl,
+                                                lambda_target, step_mix);
 }
 
 double LibTorchTpemTrainer::train_step_cascade_grpo(std::size_t group_size, std::uint64_t step_mix) {
@@ -1023,6 +1364,13 @@ double LibTorchTpemTrainer::train_step_joint_supervised_cascade(std::size_t batc
                                                                 double cispo_epsilon, std::uint64_t step_mix) {
   return impl_->train_step_joint_supervised_cascade(batch_size, group_size, cascade_lambda, use_cispo, cispo_epsilon,
                                                       step_mix);
+}
+
+bool LibTorchTpemTrainer::apply_simulated_annealing(double temperature, double cool_rate, double min_temperature,
+                                                     double target_acceptance, std::uint64_t step_mix,
+                                                     double* out_acceptance_rate, std::string* error_message) {
+  return impl_->apply_simulated_annealing(temperature, cool_rate, min_temperature, target_acceptance, step_mix,
+                                            out_acceptance_rate, error_message);
 }
 
 LibTorchTpemTrainer::~LibTorchTpemTrainer() = default;

@@ -27,6 +27,7 @@ Start here:
 
 ## Research and Theory
 
+- In-repo whitepaper index and traceability: [../docs/research/README.md](../docs/research/README.md)
 - [Mathematical-Formulation](Mathematical-Formulation.md)
 - [Quantum-Optimization](Quantum-Optimization.md)
 - [Vec2Text-Inversion](Vec2Text-Inversion.md)

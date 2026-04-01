@@ -1,4 +1,4 @@
-# Smoke-scale Phase 1 (STEM / logic) mix aligned with docs/QMINIWASM Dataset and Expert Curation.md.
+# Smoke-scale Phase 1 (STEM / logic) mix aligned with docs/research/QMINIWASM Dataset and Expert Curation.md.
 # OpenMathInstruct-2 + OpenR1-Math-220k: wide basins before quantization. Uses hf_tabular identity-MSE
 # on encode_linear_memory — not full logits SFT. Verify row keys on the Hub; set text_fields if auto/heuristic fails.
 

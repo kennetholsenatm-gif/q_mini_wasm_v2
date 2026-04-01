@@ -54,17 +54,31 @@ def native_capabilities() -> dict[str, Any]:
                 caps["abi_version"] = int(fn())
             except Exception:
                 caps["abi_version"] = None
+    # Try new qminiwasm_cpp_native module first (preferred)
     try:
-        mod = importlib.import_module("qminiwasm._native_ternary")
+        mod = importlib.import_module("qminiwasm_cpp_native")
         caps["pybind_loaded"] = True
         caps["pybind_symbols"] = {
-            "dot_u8_i8": hasattr(mod, "dot_u8_i8"),
-            "pack_ternary_list": hasattr(mod, "pack_ternary_list"),
-            "unpack_ternary_list": hasattr(mod, "unpack_ternary_list"),
+            "pack_ternary_msb": hasattr(mod, "pack_ternary_msb"),
+            "unpack_ternary_msb": hasattr(mod, "unpack_ternary_msb"),
+            "matvec_best": hasattr(mod, "matvec_best"),
             "encode_linear_memory_u8": hasattr(mod, "encode_linear_memory_u8"),
+            "cpu_has_avx512f": hasattr(mod, "cpu_has_avx512f"),
+            "cpu_has_avx512vnni": hasattr(mod, "cpu_has_avx512vnni"),
         }
     except Exception:
-        caps["pybind_loaded"] = False
-        caps["pybind_symbols"] = {}
+        # Fallback to legacy _native_ternary module
+        try:
+            mod = importlib.import_module("qminiwasm._native_ternary")
+            caps["pybind_loaded"] = True
+            caps["pybind_symbols"] = {
+                "dot_u8_i8": hasattr(mod, "dot_u8_i8"),
+                "pack_ternary_list": hasattr(mod, "pack_ternary_list"),
+                "unpack_ternary_list": hasattr(mod, "unpack_ternary_list"),
+                "encode_linear_memory_u8": hasattr(mod, "encode_linear_memory_u8"),
+            }
+        except Exception:
+            caps["pybind_loaded"] = False
+            caps["pybind_symbols"] = {}
     caps["strict_native"] = strict_native_enabled()
     return caps

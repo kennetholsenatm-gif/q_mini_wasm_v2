@@ -111,6 +111,14 @@
 # heal_epochs_per_round = 2         # fallback when training.epochs <= teacher epochs (see below)
 # max_curriculum_cycles = 1         # on gate fail: reload teacher ckpt and repeat PTQTP+heal
 #
+# Simulated Annealing (Metropolis-Hastings) for progressive quantization (Phase 2).
+# Replaces greedy PTQTP with thermodynamic cooling: weights explore the ternary lattice
+# via controlled noise injection before freezing to {-1, 0, +1} vertices.
+# sa_initial_temperature = 1.0     # T_0: initial computational temperature (high = broad exploration)
+# sa_cooling_rate = 0.95           # γ: per-epoch multiplier (T_{t+1} = T_t * γ)
+# sa_min_temperature = 0.01        # T_min: floor temperature (below which weights are frozen)
+# sa_acceptance_window = 0.5       # target acceptance rate for adaptive T adjustment (0-1, 0=disable)
+#
 # Tier-matched native cascade (training WUI): POST /api/training/native_cascade_apply merges
 # configs/training/cascade_curriculum_native.toml with configs/training/native_cascade/tier_*.toml
 # (edge_constrained, fog_node, xpu_cluster) using Enclave tier 1–5. Dataset id in [data] / [huggingface]
@@ -179,7 +187,7 @@
 # wasm_memory64_max_mb = 8192.0     # explicit override
 # use_memory64 = true               # explicit override
 
-# Reserved / future: stabilizer path & router cost hooks (see docs/ARCHITECTURE_WHITEPAPERS.md,
+# Reserved / future: stabilizer path & router cost hooks (see docs/research/ARCHITECTURE_WHITEPAPERS.md,
 # Ternary Clifford Optimization pillar traceability). Not read by TrainingConfig yet.
 # [quantum_clifford]
 # max_local_qubits = 8

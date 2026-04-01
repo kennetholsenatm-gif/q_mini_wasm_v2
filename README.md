@@ -55,6 +55,7 @@ Execution stays in **sandboxed WASM** with bounded linear memory. **Training orc
 - Wiki index: [wiki/README.md](wiki/README.md)
 - Hardware: [docs/INSTALL_TORCH_XPU.md](docs/INSTALL_TORCH_XPU.md), [docs/SYCL-Integration.md](docs/SYCL-Integration.md)
 - Taxonomy (research): [docs/Q-Mini-WASM_ Edge AI Taxonomy.md](docs/Q-Mini-WASM_%20Edge%20AI%20Taxonomy.md)
+- Architecture whitepapers (index): [docs/research/README.md](docs/research/README.md)
 - Goals: [docs/Project-Goals.md](docs/Project-Goals.md)
 - Journey of a vector: [docs/architecture/JOURNEY_OF_A_VECTOR.md](docs/architecture/JOURNEY_OF_A_VECTOR.md)
 - **Removing interpreter paths:** [docs/DEPYTHONIZATION.md](docs/DEPYTHONIZATION.md)

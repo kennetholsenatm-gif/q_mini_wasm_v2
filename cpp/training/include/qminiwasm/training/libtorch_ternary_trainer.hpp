@@ -69,13 +69,35 @@ class LibTorchTpemTrainer {
 
   /// Frozen teacher copy of ``core_`` for distillation (same device: CPU).
   [[nodiscard]] bool clone_teacher_from_core(std::string* error_message);
+
+  /// Load external FP32 teacher from interchange checkpoint (real distillation target, not a clone).
+  /// The teacher must have matching geometry (d_model, io_d_model, num_blocks) to the student core.
+  [[nodiscard]] bool load_teacher_from_interchange(const std::string& path,
+                                                    std::uint32_t native_bloch_seq_len,
+                                                    std::uint32_t native_bloch_num_heads,
+                                                    std::string* error_message);
   void reset_teacher();
   /// Replace expert latent weights with greedy PTQTP reconstruction (post-training shrink).
   [[nodiscard]] bool apply_ptqtp_reconstruct_experts(int num_planes, std::string* error_message);
+
+  /// Simulated Annealing quantization: Metropolis-Hastings cooling to freeze weights to ternary lattice.
+  /// Acceptance: min(1, exp(-ΔE/T)) where ΔE = |ternary(w') - w'|² - |ternary(w) - w|².
+  /// Returns acceptance rate for telemetry monitoring.
+  [[nodiscard]] bool apply_simulated_annealing(double temperature, double cool_rate, double min_temperature,
+                                               double target_acceptance, std::uint64_t step_mix,
+                                               double* out_acceptance_rate, std::string* error_message);
   /// Distillation: MSE(student, teacher) + lambda_teacher * MSE(student, target).
   [[nodiscard]] double train_step_distill(std::size_t batch_size, std::int64_t io_dim,
                                           const float* x_row_major, const float* target_row_major,
                                           double lambda_teacher, std::uint64_t step_mix);
+
+  /// Reverse-KL distillation: D_KL(q_student || p_teacher) + lambda_target * MSE(student, target).
+  /// Mode-seeking distillation that focuses on teacher's high-density modes.
+  /// Prefer when student is discrete (e.g., ternary) and teacher is continuous (FP32).
+  [[nodiscard]] double train_step_distill_reverse_kl(std::size_t batch_size, std::int64_t io_dim,
+                                                      const float* x_row_major, const float* target_row_major,
+                                                      double lambda_kl, double lambda_target,
+                                                      std::uint64_t step_mix);
 
   /// Toy cascade MDP (8-D state, 4 actions, 16 steps) + ``CascadeToyPolicy`` (Python ``TinyCascadePolicy``).
   /// Matches ``cascade_rl_train_step`` + ``CascadeGRPO``; use ``group_size >= 2`` for normalized advantages.

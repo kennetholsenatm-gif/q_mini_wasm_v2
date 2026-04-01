@@ -1,5 +1,5 @@
 # Minimal smoke config for Unified Training Matrix (short run, CPU mesh).
-# See docs/ARCHITECTURE_WHITEPAPERS.md and configs/training/schema.toml.
+# See docs/research/ARCHITECTURE_WHITEPAPERS.md and configs/training/schema.toml.
 
 [hardware]
 accelerator = "cpu"

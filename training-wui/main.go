@@ -78,13 +78,15 @@ func agentDebugLog9c4017(hypothesisID, location, message string, data map[string
 // #endregion agent log
 
 var (
-	repoRoot          string
-	pythonExe         string
-	serverAddr        string
-	serverAuthToken   string
-	agentDebugLogPath string
-	runManager        = newManager()
-	wsHub             = newRunWSHub()
+	repoRoot              string
+	pythonExe             string
+	serverAddr            string
+	serverAuthToken       string
+	agentDebugLogPath     string
+	qutritTrainingAddr    string
+	qutritTrainingEnabled bool
+	runManager            = newManager()
+	wsHub                 = newRunWSHub()
 )
 
 var (
@@ -299,11 +301,15 @@ func main() {
 	wuiConfigPath := flag.String("wui-config", "", "Path to WUI settings TOML (default: configs/wui.toml under -root)")
 	trainingRuntimeFlag := flag.String("training-runtime", "", "Override [wui] training_runtime_mode from TOML (native|grpc|cpp|auto|python|optimized)")
 	grpcAddrFlag := flag.String("grpc-addr", "", "Override [wui] grpc_addr (host:port for C++ TrainingEngineService)")
+	qutritTrainingAddrFlag := flag.String("qutrit-training-addr", "localhost:50053", "Qutrit training gRPC service address (host:port)")
+	qutritTrainingEnabledFlag := flag.Bool("qutrit-training-enabled", false, "Enable qutrit training service discovery and health checks")
 	flag.Parse()
 	// Go's log defaults to stderr; Windows PowerShell treats native stderr as ErrorRecord
 	// (NativeCommandError) even for informational lines—use stdout for operator messages.
 	log.SetOutput(os.Stdout)
 	serverAuthToken = strings.TrimSpace(*token)
+	qutritTrainingAddr = strings.TrimSpace(*qutritTrainingAddrFlag)
+	qutritTrainingEnabled = *qutritTrainingEnabledFlag
 
 	abs, err := filepath.Abs(*root)
 	if err != nil {
@@ -380,6 +386,7 @@ func main() {
 	mux.HandleFunc("/api/runpod/serverless/run", handleRunpodServerlessRun)
 	mux.HandleFunc("/api/runpod/serverless/job", handleRunpodServerlessJob)
 	mux.HandleFunc("/api/runs/", handleRunsItem)
+	mux.HandleFunc("/api/quantum/training/status", handleQutritTrainingStatus)
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -1514,6 +1521,42 @@ func handleQuantumTopology(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"quantum_topology": qt})
+}
+
+func handleQutritTrainingStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	addr := qutritTrainingAddr
+	if a := strings.TrimSpace(r.URL.Query().Get("addr")); a != "" {
+		addr = a
+	}
+	reachable := qutritTrainingReachable(600 * time.Millisecond, addr)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"qutrit_training_enabled": qutritTrainingEnabled,
+		"qutrit_training_addr":    addr,
+		"qutrit_training_reachable": reachable,
+		"service":                 "QutritTrainingService",
+		"proto":                   "proto/qutrit_training.proto",
+	})
+}
+
+func qutritTrainingReachable(timeout time.Duration, addr string) bool {
+	if !qutritTrainingEnabled {
+		return false
+	}
+	if strings.TrimSpace(addr) == "" {
+		addr = qutritTrainingAddr
+	}
+	d := net.Dialer{Timeout: timeout}
+	c, err := d.Dial("tcp", addr)
+	if err != nil {
+		return false
+	}
+	_ = c.Close()
+	return true
 }
 
 func missingLoadCheckpointFromConfig(configAbs string) (string, error) {
