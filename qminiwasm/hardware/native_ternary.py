@@ -18,6 +18,16 @@ def dot_u8_i8(weights_u8: bytes, activations_i8: bytes, offset_per_lane: int = 1
     mode = _native_mode()
     if mode == "python":
         return _dot_u8_i8_python(weights_u8, activations_i8, offset_per_lane)
+    # Try new qminiwasm_cpp_native module first (preferred)
+    try:
+        from qminiwasm_cpp_native import matvec_best as _native_matvec
+
+        # matvec_best expects packed weights and activations
+        # For now, fall back to Python implementation as the API is different
+        pass
+    except ImportError:
+        pass
+    # Fallback to legacy _native_ternary module
     try:
         from qminiwasm._native_ternary import dot_u8_i8 as _ext
 

@@ -301,7 +301,7 @@ func (x *CascadeCurriculumLoopParams) GetMaxCurriculumCycles() uint32 {
 	return 0
 }
 
-// One row of [[training_phases]] (Unified Training Matrix). See docs/ARCHITECTURE_WHITEPAPERS.md.
+// One row of [[training_phases]] (Unified Training Matrix). See docs/research/ARCHITECTURE_WHITEPAPERS.md.
 type TrainingPhaseParams struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Name   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`

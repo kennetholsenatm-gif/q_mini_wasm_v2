@@ -67,7 +67,7 @@ use_memory64 = true
 
 ## Curated Cascade curriculum (Hub)
 
-The whitepaper-style catalog **[QMINIWASM Dataset and Expert Curation.md](QMINIWASM%20Dataset%20and%20Expert%20Curation.md)** recommends specific Hugging Face datasets for each Cascade RL phase (STEM/math, execution-aware code, CoT-heavy distillation). This repo wires them in as **TOML examples** and **`hf_tabular`** / native-gRPC row fetch—not as full next-token SFT or execution-based RL.
+The whitepaper-style catalog **[QMINIWASM Dataset and Expert Curation.md](research/QMINIWASM%20Dataset%20and%20Expert%20Curation.md)** recommends specific Hugging Face datasets for each Cascade RL phase (STEM/math, execution-aware code, CoT-heavy distillation). This repo wires them in as **TOML examples** and **`hf_tabular`** / native-gRPC row fetch—not as full next-token SFT or execution-based RL.
 
 **Important limitations (read before scaling):**
 
@@ -88,7 +88,7 @@ The whitepaper-style catalog **[QMINIWASM Dataset and Expert Curation.md](QMINIW
 
 **TOML → proto → C++:** When **`[huggingface].text_fields`** is set, the Training WUI / **`BuildHfProto`** maps it to **`HfDatasetParams.text_fields`** in [`proto/training_engine.proto`](../proto/training_engine.proto). The engine passes those keys into [`hf_datasets_rows.cpp`](../cpp/training/src/hf_datasets_rows.cpp). If **`text_fields`** is empty, fetch concatenates top-level string fields in key order.
 
-**Theory pillars (experts):** The same doc’s “Task 2” experts (1.58-bit, CISPO, MOPD, tropical routing, stabilizer simulation) map to implementation status in **[ARCHITECTURE_WHITEPAPERS.md](ARCHITECTURE_WHITEPAPERS.md)** (traceability matrix) and **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**—link there instead of duplicating long citations in this file.
+**Theory pillars (experts):** The same doc’s “Task 2” experts (1.58-bit, CISPO, MOPD, tropical routing, stabilizer simulation) map to implementation status in **[research/ARCHITECTURE_WHITEPAPERS.md](research/ARCHITECTURE_WHITEPAPERS.md)** (traceability matrix) and **[TRAINING_NATIVE_PARITY.md](TRAINING_NATIVE_PARITY.md)**—link there instead of duplicating long citations in this file.
 
 **Hub authentication:** put **`HUGGING_FACE_HUB_TOKEN`** or **`HF_TOKEN`** in a local **`.env`** (see [environment-variables.md](environment-variables.md)); never commit secrets.
 

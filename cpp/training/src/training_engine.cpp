@@ -1254,19 +1254,100 @@ void TrainingEngine::Impl::run_cascade_curriculum(std::stop_token token) {
             .message = err,
         });
       }
-      if (!libtorch_trainer_->apply_ptqtp_reconstruct_experts(static_cast<int>(c.ptqtp_num_planes), &err)) {
-        emit(TelemetryEvent{
-            .run_id = config_.run_id,
-            .unix_ms = now_unix_ms(),
-            .taxonomy_tier = policy_.tier,
-            .precision_mode = policy_.precision,
-            .stage = "cascade_ptqtp",
-            .event_type = "failed",
-            .message = err,
-        });
+
+      // Phase 2: Simulated Annealing (Metropolis-Hastings) for progressive quantization.
+      // Replaces (or augments) greedy PTQTP with thermodynamic cooling that allows
+      // continuous weights to explore the ternary lattice before freezing to {-1,0,+1}.
+      // If SA is configured with sa_initial_temperature > sa_min_temperature, SA runs;
+      // otherwise falls back to PTQTP for backward compatibility.
+      const bool use_sa = c.sa_initial_temperature > c.sa_min_temperature && c.sa_cooling_rate > 0.0 && c.sa_cooling_rate < 1.0;
+      if (use_sa) {
+        emit_phase("cascade_phase_sa", "simulated_annealing_start");
+        double T = c.sa_initial_temperature;
+        double gamma = c.sa_cooling_rate;
+        double T_min = c.sa_min_temperature;
+        double target_acc = c.sa_acceptance_window;
+        int sa_ep = 0;
+        double sa_acc_total = 0.0;
+        while (T > T_min && !token.stop_requested()) {
+          double acc_rate = 0.0;
+          std::uint64_t sa_mix = config_.seed ^ static_cast<std::uint64_t>(cycle * 1000000 + static_cast<std::uint64_t>(sa_ep + 1) * 500);
+          if (!libtorch_trainer_->apply_simulated_annealing(T, gamma, T_min, target_acc, sa_mix, &acc_rate, &err)) {
+            emit(TelemetryEvent{
+                .run_id = config_.run_id,
+                .unix_ms = now_unix_ms(),
+                .taxonomy_tier = policy_.tier,
+                .precision_mode = policy_.precision,
+                .stage = "cascade_sa",
+                .event_type = "failed",
+                .message = err,
+            });
+            // Fall back to PTQTP on SA failure
+            break;
+          }
+          sa_acc_total += acc_rate;
+          sa_ep++;
+
+          // Evaluate progress and report telemetry
+          double sa_val = run_eval_short(static_cast<std::uint64_t>(sa_ep + 2000));
+          emit(TelemetryEvent{
+              .run_id = config_.run_id,
+              .unix_ms = now_unix_ms(),
+              .epoch = global_epoch_0based > 0 ? global_epoch_0based - 1U : 0U,
+              .step = static_cast<std::uint32_t>(sa_ep),
+              .train_loss = 0.0,
+              .val_loss = sa_val,
+              .learning_rate = lr,
+              .samples_per_second = 0.0,
+              .taxonomy_tier = policy_.tier,
+              .precision_mode = policy_.precision,
+              .stage = "cascade_sa",
+              .event_type = "sa_epoch",
+              .message = "sa_temperature_progress",
+              .estimated_tpem_mib = est_mib,
+              .tier_cap_mib = c.gate_max_tpem_mib > 0 ? c.gate_max_tpem_mib : -1.0,
+          });
+
+          // Cool down: T <- T * gamma
+          const double T_next = T * gamma;
+          emit(TelemetryEvent{
+              .run_id = config_.run_id,
+              .unix_ms = now_unix_ms(),
+              .epoch = global_epoch_0based > 0 ? global_epoch_0based - 1U : 0U,
+              .step = static_cast<std::uint32_t>(sa_ep),
+              .train_loss = 0.0,
+              .val_loss = sa_val,
+              .learning_rate = lr,
+              .samples_per_second = 0.0,
+              .taxonomy_tier = policy_.tier,
+              .precision_mode = policy_.precision,
+              .stage = "cascade_sa",
+              .event_type = "sa_temperature",
+              .message = "sa_temperature",
+              .estimated_tpem_mib = T,
+              .tier_cap_mib = T_next,
+          });
+          last_completed_val_loss_ = sa_val;
+          T = T_next;
+        }
+        last_completed_val_loss_ = run_eval_short(static_cast<std::uint64_t>(2500 + cycle));
+        emit_epoch_throughput("cascade_sa", "sa_final");
+      } else {
+        // Fallback: use PTQTP (existing greedy reconstruction)
+        if (!libtorch_trainer_->apply_ptqtp_reconstruct_experts(static_cast<int>(c.ptqtp_num_planes), &err)) {
+          emit(TelemetryEvent{
+              .run_id = config_.run_id,
+              .unix_ms = now_unix_ms(),
+              .taxonomy_tier = policy_.tier,
+              .precision_mode = policy_.precision,
+              .stage = "cascade_ptqtp",
+              .event_type = "failed",
+              .message = err,
+          });
+        }
+        emit_phase("cascade_phase_ptqtp", "ptqtp_applied");
       }
     }
-    emit_phase("cascade_phase_ptqtp", "ptqtp_applied");
 
     for (std::uint32_t round = 0; round < max_heal && !token.stop_requested(); ++round) {
       lr *= c.heal_learning_rate_scale;

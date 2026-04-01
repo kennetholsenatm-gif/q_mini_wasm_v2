@@ -30,7 +30,7 @@ The framework uses a single production lexicon aligned with [../docs/Q-Mini-WASM
 - **Tier 3 — Macro-Enclaves:** ~8 GB EF (Memory64-bound; ~40B effective).  
 - **Tiers 4–5 — Workgroup / Enterprise Core:** ~16 GB through 256 GB+ EF for datacenter-class unified memory; optional presets in `configs/serve/default.toml` (runtime support may trail Tier 1–3).
 
-For extended **enterprise-scale** enclave classes (workgroup to multi-100GB EF), see [../docs/UnifedMemory.md](../docs/UnifedMemory.md)—that taxonomy complements, and does not rename, the three tiers above.
+For extended **enterprise-scale** enclave classes (workgroup to multi-100GB EF), see [../docs/research/UnifedMemory.md](../docs/research/UnifedMemory.md)—that taxonomy complements, and does not rename, the three tiers above.
 
 **Stateful Operational Autonomy (SOA) metrics** (evaluation, not day-to-day ML ops jargon): Local Containment Index (LCI), Linear Memory Efficiency (LME), snapshot restoration velocity, and Vec2Text/ESI fidelity (e.g. Exact Match recovery, contextual BERTScore).
 

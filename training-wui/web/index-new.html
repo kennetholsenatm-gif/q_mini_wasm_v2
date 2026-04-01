@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QMiniWASM — Training Dashboard</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <!-- CSS (cognitive-ergonomic layers) -->
+  <link rel="stylesheet" href="css/theme.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/telemetry.css" />
+  
+  <!-- Mermaid.JS (pipeline visualizer) -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: false, theme: "dark" });</script>
+  
+  <!-- Chart.js (telemetry charts) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  
+  <!-- Toast host -->
+  <div id="toastHost" class="toast-host"></div>
+  
+  <!-- App shell -->
+  <div class="app">
+    
+    <!-- Header (sticky, pre-attentive status) -->
+    <header class="app-header">
+      <div class="app-header-row">
+        <div>
+          <h1 class="app-title">QMiniWASM Training Dashboard</h1>
+          <p class="app-subtitle">Native C++ LibTorch TPEM over gRPC · Cognitive-first interface</p>
+          <p class="app-subtitle" id="serverBindBanner" style="cursor:pointer;text-decoration:underline dotted;" title="Click to copy bind address">
+            Server bind: detecting...
+          </p>
+        </div>
+        <div class="app-header-actions">
+          <!-- Mode toggle (Expert / Novice) -->
+          <div id="modeToggleHost"></div>
+          
+          <!-- Quick actions -->
+          <button type="button" class="btn btn-ghost" id="btnRefreshConfigs">Refresh configs</button>
+          <button type="button" class="btn btn-ghost" id="btnRefreshPreflight">Refresh preflight</button>
+        </div>
+      </div>
+    </header>
+    
+    <!-- Sticky bar (always-visible status) -->
+    <div class="sticky-bar" id="stickyBar">
+      <button type="button" class="btn btn-danger" id="btnStopSticky" disabled>Stop (graceful)</button>
+      <button type="button" class="btn btn-danger-ghost" id="btnForceKillSticky" disabled>Force kill</button>
+      <div class="hint" id="stickyEpochLabel" style="margin:0">Epoch: -- / --</div>
+      <div class="progress-bar" style="width:200px"><div class="progress-bar-fill" id="stickyEpochProgress" style="width:0%"></div></div>
+      <span class="hint" id="stickyPhaseLabel" style="margin:0;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    </div>
+    
+    <!-- Tab bar (Gestalt: similarity for related content) -->
+    <nav class="tab-bar" role="tablist" aria-label="Main views">
+      <button type="button" class="tab-button active" id="tabBtnTraining" role="tab" aria-selected="true">Training</button>
+      <button type="button" class="tab-button" id="tabBtnMission" role="tab" aria-selected="false">Mission Control</button>
+      <button type="button" class="tab-button" id="tabBtnInfra" role="tab" aria-selected="false">Infra & RunPod</button>
+      <button type="button" class="tab-button" id="tabBtnQuantum" role="tab" aria-selected="false">Quantum Topology</button>
+      <button type="button" class="tab-button" id="tabBtnRegistry" role="tab" aria-selected="false">Artifact Registry</button>
+    </nav>
+    
+    <!-- Main content -->
+    <main id="main-content" class="app-main">
+      
+      <!-- Training panel -->
+      <div id="panelTraining" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnTraining">
+        <div class="content">
+          
+          <!-- Pipeline visualizer (Mermaid) -->
+          <div class="section-boundary">
+            <h2 class="section-title">Training Pipeline</h2>
+            <div class="card">
+              <div id="pipelineVisualizer" style="min-height:200px"></div>
+            </div>
+          </div>
+          
+          <!-- Novice mode: 5-step wizard -->
+          <div id="wizardSection" class="section-boundary">
+            <h2 class="section-title">Training Setup (Wizard)</h2>
+            <div class="wizard-rail">
+              <p class="hint" style="margin:0 0 var(--space-2)">
+                Stack five blocks into one file — <code>configs/training/wui_working.toml</code> — then launch.
+              </p>
+              <div class="wizard-steps" role="tablist" aria-label="Training setup steps">
+                <button type="button" class="wizard-pip wizard-pip--active" data-lego="1" role="tab">1 · Dataset mix</button>
+                <button type="button" class="wizard-pip" data-lego="2" role="tab">2 · Model & device</button>
+                <button type="button" class="wizard-pip" data-lego="3" role="tab">3 · Data source</button>
+                <button type="button" class="wizard-pip" data-lego="4" role="tab">4 · Training params</button>
+                <button type="button" class="wizard-pip" data-lego="5" role="tab">5 · Save & launch</button>
+              </div>
+              <div class="wizard-nav">
+                <button type="button" class="btn btn-ghost" id="btnWizardPrev" disabled>Back</button>
+                <button type="button" class="btn btn-primary" id="btnWizardNext">Next step</button>
+              </div>
+            </div>
+            <div id="wizardContent">
+              <!-- Wizard step content rendered by wizard.js -->
+              <div class="hint">Wizard steps will be populated by the existing training logic.</div>
+            </div>
+          </div>
+          
+          <!-- Expert mode: TOML editor with schema introspection -->
+          <div id="expertEditorSection" class="section-boundary" style="display:none">
+            <h2 class="section-title">TOML Configuration Editor</h2>
+            <div class="card">
+              <div id="expertEditorContainer"></div>
+            </div>
+          </div>
+          
+          <!-- Quick metrics (3-column chunk) -->
+          <div class="section-boundary">
+            <h2 class="section-title">Quick Metrics</h2>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <div class="metric-label">Train MSE</div>
+                <div class="metric-value" id="metricMSE">—</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Return</div>
+                <div class="metric-value" id="metricReturn">—</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Learning Rate</div>
+                <div class="metric-value" id="metricLR">—</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Telemetry charts -->
+          <div class="section-boundary">
+            <h2 class="section-title">Live Telemetry</h2>
+            <div class="card">
+              <div class="telemetry-filter">
+                <span class="telemetry-filter-label">Show:</span>
+                <label class="label-inline"><input type="radio" name="telemetryFilter" value="all" checked /> All</label>
+                <label class="label-inline"><input type="radio" name="telemetryFilter" value="grpc" /> C++ gRPC</label>
+                <label class="label-inline"><input type="radio" name="telemetryFilter" value="python" /> Python</label>
+              </div>
+              <div id="telemetryStatus" class="hint">No run selected.</div>
+              <div class="chart-container"><canvas id="chartMSE"></canvas></div>
+              <div class="chart-container"><canvas id="chartReturn"></canvas></div>
+              
+              <!-- Expandable advanced metrics -->
+              <details>
+                <summary>Advanced metrics</summary>
+                <div class="telemetry-scroll" style="margin-top:var(--space-3)">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Epoch</th>
+                        <th>MSE</th>
+                        <th>Return</th>
+                        <th>LR</th>
+                        <th>σ/s</th>
+                        <th>Stage</th>
+                        <th>Source</th>
+                      </tr>
+                    </thead>
+                    <tbody id="telemetryMetricBody"></tbody>
+                  </table>
+                </div>
+              </details>
+            </div>
+          </div>
+          
+          <!-- Training log (inline with controls) -->
+          <div class="section-boundary">
+            <h2 class="section-title">Training Log</h2>
+            <div class="log-section">
+              <div class="log-toolbar">
+                <button type="button" class="btn btn-danger" id="btnStop" disabled>Stop (graceful)</button>
+                <button type="button" class="btn btn-danger-ghost" id="btnForceKill" disabled>Force kill</button>
+                <button type="button" class="btn btn-ghost" id="btnCoopStop" disabled>Cooperative stop</button>
+                <button type="button" class="btn btn-ghost" id="btnClearLog">Clear view</button>
+              </div>
+              <div class="log-legend">
+                <div class="log-legend-item">
+                  <span class="log-legend-swatch log-legend-swatch--better"></span>
+                  <span>improved</span>
+                </div>
+                <div class="log-legend-item">
+                  <span class="log-legend-swatch log-legend-swatch--same"></span>
+                  <span>flat</span>
+                </div>
+                <div class="log-legend-item">
+                  <span class="log-legend-swatch log-legend-swatch--worse"></span>
+                  <span>worse</span>
+                </div>
+                <div class="log-legend-item">
+                  <span class="log-legend-swatch log-legend-swatch--info"></span>
+                  <span>reference</span>
+                </div>
+              </div>
+              <div id="log" class="log-terminal" role="log" aria-live="off"></div>
+            </div>
+          </div>
+          
+          <!-- Launch controls -->
+          <div class="section-boundary">
+            <h2 class="section-title">Launch Training</h2>
+            <div class="card">
+              <label class="label" for="cfgSelect">Config file</label>
+              <select id="cfgSelect" class="select"></select>
+              <div class="hint" style="margin-top:var(--space-2)">
+                Select a config and click Launch. Use Expert mode (TOML editor) to create custom configs.
+              </div>
+              <div style="margin-top:var(--space-4)">
+                <button type="button" class="btn btn-primary btn-full" id="btnLaunch">Launch Training</button>
+              </div>
+              <p id="launchMsg" class="hint" style="margin-top:var(--space-2)" aria-live="polite"></p>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+      
+      <!-- Mission Control panel -->
+      <div id="panelMission" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnMission" hidden>
+        <div class="content">
+          <h2 class="section-title">Mission Control</h2>
+          <div class="card">
+            <div class="hint">Mission Control telemetry and log panels — uses existing WebSocket integration.</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Infra & RunPod panel -->
+      <div id="panelInfra" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnInfra" hidden>
+        <div class="content">
+          <h2 class="section-title">Infra & RunPod</h2>
+          <div class="card">
+            <div class="hint">Infrastructure management — uses existing RunPod and OpenTofu integration.</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Quantum Topology panel -->
+      <div id="panelQuantum" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnQuantum" hidden>
+        <div class="content">
+          <h2 class="section-title">Quantum Topology</h2>
+          <div class="card">
+            <div class="hint">Quantum circuit visualization — uses existing PennyLane integration.</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Artifact Registry panel -->
+      <div id="panelRegistry" class="tab-panel" role="tabpanel" aria-labelledby="tabBtnRegistry" hidden>
+        <div class="content">
+          <h2 class="section-title">Artifact Registry</h2>
+          <div class="card">
+            <div class="hint">Model artifacts and HF push — uses existing artifact management.</div>
+          </div>
+        </div>
+      </div>
+      
+    </main>
+  </div>
+  
+  <!-- Billing confirmation modal -->
+  <div id="modalBillingBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-panel" role="dialog" aria-labelledby="modalBillingTitle">
+      <h3 id="modalBillingTitle">Confirm billable action</h3>
+      <p class="hint" id="modalBillingMessage" style="margin:0 0 var(--space-3)"></p>
+      <label for="modalBillingInput">Type <strong>confirm</strong> to proceed</label>
+      <input id="modalBillingInput" type="text" autocomplete="off" class="input" style="margin-top:var(--space-2)" />
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="modalBillingCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="modalBillingOk" disabled>Proceed</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- JavaScript modules (cognitive-ergonomic architecture) -->
+  <script type="module">
+    import QMW from "./modules/utils.js";
+    import SchemaIntrospection from "./modules/schema-introspection.js";
+    import ExpertEditor from "./modules/expert-editor.js";
+    import ModeToggle from "./modules/mode-toggle.js";
+    import MermaidPipeline from "./modules/mermaid-pipeline.js";
+    import TelemetryClient from "./modules/telemetry-client.js";
+    import Wizard from "./modules/wizard.js";
+    import "./modules/infra-panels.js";
+    
+    // Bootstrap
+    QMW.bootstrap_token_from_url();
+    
+    // Initialize panels
+    QMW.init_panels();
+    
+    // Mode toggle
+    const modeToggle = new ModeToggle();
+    document.getElementById("modeToggleHost").appendChild(modeToggle.render());
+    
+    // Pipeline visualizer
+    const pipeline = new MermaidPipeline("pipelineVisualizer");
+    
+    // Wizard integration
+    const wizard = new Wizard();
+    wizard.init();
+    pipeline.render({
+      d_model: 4096,
+      io_d_model: 4096,
+      num_ternary_blocks: 1,
+      data_source: "mesh",
+      has_teacher: true,
+      sa_enabled: true,
+      mopd_enabled: false,
+      cispo_enabled: false
+    });
+    
+    // Telemetry client (WebSocket integration with Go backend)
+    const telemetry = new TelemetryClient();
+    telemetry.init_charts();
+    
+    // Schema introspection + Expert editor
+    let introspection = null;
+    let expertEditor = null;
+    
+    async function loadSchema() {
+      try {
+        const r = await QMW.api_fetch("/api/schema");
+        const data = await r.json();
+        introspection = new SchemaIntrospection(data);
+        expertEditor = new ExpertEditor("expertEditorContainer", introspection);
+      } catch (e) {
+        console.error("Failed to load schema:", e);
+      }
+    }
+    
+    loadSchema();
+    
+    // Mode change handler
+    QMW.bus.on("mode-changed", function(e) {
+      const isExpert = e.mode === "expert";
+      const wizard = document.getElementById("wizardSection");
+      const expert = document.getElementById("expertEditorSection");
+      if (wizard) wizard.style.display = isExpert ? "none" : "block";
+      if (expert) expert.style.display = isExpert ? "block" : "none";
+      if (isExpert && expertEditor) expertEditor.focus();
+    });
+    
+    // Tab switching
+    function showTab(which) {
+      const panels = ["panelTraining", "panelMission", "panelInfra", "panelQuantum", "panelRegistry"];
+      const tabs = ["tabBtnTraining", "tabBtnMission", "tabBtnInfra", "tabBtnQuantum", "tabBtnRegistry"];
+      const whichCap = which.charAt(0).toUpperCase() + which.slice(1);
+      panels.forEach(function(id, i) {
+        const panel = document.getElementById(id);
+        const tab = document.getElementById(tabs[i]);
+        if (panel) panel.hidden = (id !== "panel" + whichCap);
+        if (tab) {
+          const isActive = tabs[i] === "tabBtn" + whichCap;
+          tab.classList.toggle("active", isActive);
+          tab.setAttribute("aria-selected", isActive ? "true" : "false");
+        }
+      });
+    }
+    
+    document.getElementById("tabBtnTraining").onclick = function() { showTab("training"); };
+    document.getElementById("tabBtnMission").onclick = function() { showTab("mission"); };
+    document.getElementById("tabBtnInfra").onclick = function() { showTab("infra"); };
+    document.getElementById("tabBtnQuantum").onclick = function() { showTab("quantum"); };
+    document.getElementById("tabBtnRegistry").onclick = function() { showTab("registry"); };
+    
+    // Stop controls
+    document.getElementById("btnStop").onclick = async function() {
+      if (!telemetry.run_id) return;
+      try {
+        await QMW.api_fetch("/api/runs/" + encodeURIComponent(telemetry.run_id) + "/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        QMW.add_toast("Stop requested", "ok");
+      } catch (e) {
+        QMW.add_toast(String(e.message || e), "error");
+      }
+    };
+    
+    document.getElementById("btnStopSticky").onclick = document.getElementById("btnStop").onclick;
+    
+    // Load configs
+    async function loadConfigs() {
+      try {
+        const r = await QMW.api_fetch("/api/configs");
+        const data = await r.json();
+        const sel = document.getElementById("cfgSelect");
+        if (!sel) return;
+        sel.innerHTML = "";
+        for (const c of (data.configs || [])) {
+          const opt = document.createElement("option");
+          opt.value = c.path;
+          opt.textContent = c.name;
+          sel.appendChild(opt);
+        }
+      } catch (e) {
+        console.error("Failed to load configs:", e);
+      }
+    }
+    
+    loadConfigs();
+    
+    // Launch training
+    document.getElementById("btnLaunch").onclick = async function() {
+      const cfg = document.getElementById("cfgSelect");
+      const path = cfg ? cfg.value : "";
+      const msg = document.getElementById("launchMsg");
+      if (!path) {
+        if (msg) { msg.textContent = "Select a config file first."; }
+        return;
+      }
+      if (msg) { msg.textContent = "Starting..."; }
+      try {
+        const r = await QMW.api_fetch("/api/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ config: path })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        if (msg) { msg.textContent = "Started " + data.id; }
+        telemetry.connect(data.id);
+        document.getElementById("btnStop").disabled = false;
+        document.getElementById("btnStopSticky").disabled = false;
+        QMW.add_toast("Training started: " + data.id.slice(0, 8), "ok");
+      } catch (e) {
+        if (msg) { msg.textContent = String(e.message || e); }
+        QMW.add_toast(String(e.message || e), "error");
+      }
+    };
+    
+    // Server bind
+    async function loadServerMeta() {
+      try {
+        const r = await QMW.api_fetch("/api/meta");
+        const data = await r.json();
+        const banner = document.getElementById("serverBindBanner");
+        if (banner) {
+          banner.textContent = "Server bind: " + (data.server_addr || "(unknown)");
+          banner.dataset.addr = data.server_addr || "";
+        }
+      } catch (_) {}
+    }
+    
+    loadServerMeta();
+    
+    console.log("[QMW] Cognitive-first Training WUI initialized");
+  </script>
+</body>
+</html>

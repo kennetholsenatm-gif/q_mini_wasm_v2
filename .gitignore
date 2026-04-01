@@ -69,6 +69,9 @@ htmlcov/
 .tox/
 .nox/
 
+# DevSecOps: generated scan summary written by scripts/devsecops-workflow.ps1 (not source-controlled)
+security-report.md
+
 # Docker (allow multi-container Dockerfiles and root compose)
 .dockerignore
 !.dockerignore

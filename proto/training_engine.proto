@@ -31,7 +31,7 @@ message CascadeCurriculumLoopParams {
   uint32 max_curriculum_cycles = 11;
 }
 
-// One row of [[training_phases]] (Unified Training Matrix). See docs/ARCHITECTURE_WHITEPAPERS.md.
+// One row of [[training_phases]] (Unified Training Matrix). See docs/research/ARCHITECTURE_WHITEPAPERS.md.
 message TrainingPhaseParams {
   string name = 1;
   uint32 epochs = 2;

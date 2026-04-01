@@ -19,6 +19,9 @@ option(QMINIWASM_WITH_WASMEDGE "Build WasmEdge C++ host helpers (needs WasmEdge 
 option(QMINIWASM_WITH_NLOPT "Link NLopt for COBYLA QUBO solver" ON)
 option(QMINIWASM_WITH_QUANTUM "OpenQASM 3 subset + trinary LibTorch simulator (CPU; needs LibTorch)" OFF)
 option(QMINIWASM_BUILD_PYBIND "Build pybind11 qminiwasm_cpp_native module" ON)
+option(QMINIWASM_BUILD_SHARED_QUTRIT "Build qutrit Clifford library as shared (DLL)" OFF)
+option(QMINIWASM_WITH_QUTRIT_GRPC "Build qutrit Clifford gRPC service (needs Protobuf + gRPC)" OFF)
+option(QMINIWASM_WITH_QUTRIT_TRAINING_GRPC "Build qutrit training gRPC service (needs Protobuf + gRPC)" OFF)
 
 # CMakeLists.txt lives in cpp/; repository root (proto/, qminiwasm/) is one level up.
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -146,6 +149,11 @@ if(QMINIWASM_WITH_QUANTUM)
         quantum/qml/circuit.cpp
         quantum/quantum_bridge.cpp
         quantum/quantum_bridge_c_api.cpp
+        quantum/qutrit_tableau.cpp
+        quantum/error_correction.cpp
+        quantum/graph_states.cpp
+        quantum/scrambling.cpp
+        quantum/attention.cpp
     )
     target_include_directories(qminiwasm_quantum PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(qminiwasm_quantum PUBLIC ${TORCH_LIBRARIES})
@@ -164,6 +172,43 @@ if(QMINIWASM_WITH_QUANTUM)
     endif()
     target_link_libraries(qminiwasm_core PUBLIC qminiwasm_quantum)
     target_compile_definitions(qminiwasm_core PUBLIC QMINIWASM_HAS_QUANTUM=1)
+
+    # Optional shared qutrit Clifford library (DLL)
+    if(QMINIWASM_BUILD_SHARED_QUTRIT)
+        add_library(qminiwasm_qutrit_clifford SHARED
+            quantum/qutrit_tableau.cpp
+            quantum/error_correction.cpp
+            quantum/graph_states.cpp
+            quantum/scrambling.cpp
+            quantum/attention.cpp
+        )
+        target_include_directories(qminiwasm_qutrit_clifford PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+        target_compile_definitions(qminiwasm_qutrit_clifford PRIVATE QMINIWASM_DLL_EXPORTS)
+        set_target_properties(qminiwasm_qutrit_clifford PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            VERSION ${PROJECT_VERSION}
+            SOVERSION ${QUTRIT_ABI_VERSION}
+        )
+        if(MSVC)
+            target_compile_options(qminiwasm_qutrit_clifford PRIVATE /W4 /permissive- /bigobj)
+        else()
+            target_compile_options(qminiwasm_qutrit_clifford PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
+        install(TARGETS qminiwasm_qutrit_clifford
+            ARCHIVE DESTINATION lib
+            LIBRARY DESTINATION lib
+            RUNTIME DESTINATION bin
+        )
+        install(FILES
+            quantum/qutrit_export.hpp
+            quantum/qutrit_tableau.hpp
+            quantum/error_correction.hpp
+            quantum/graph_states.hpp
+            quantum/scrambling.hpp
+            quantum/attention.hpp
+            DESTINATION include/qminiwasm/quantum
+        )
+    endif()
 else()
     target_compile_definitions(qminiwasm_core PUBLIC QMINIWASM_HAS_QUANTUM=0)
 endif()
@@ -198,7 +243,7 @@ if(QMINIWASM_WITH_WASMEDGE)
 endif()
 
 # Optional gRPC / proto code generation
-if(QMINIWASM_WITH_GRPC)
+if(QMINIWASM_WITH_GRPC OR QMINIWASM_WITH_QUTRIT_GRPC)
     find_package(Protobuf CONFIG REQUIRED)
     find_package(gRPC CONFIG REQUIRED)
     if(NOT TARGET protobuf::protoc OR NOT TARGET gRPC::grpc_cpp_plugin)
@@ -230,6 +275,122 @@ if(QMINIWASM_WITH_GRPC)
     )
     target_include_directories(qminiwasm_grpc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${PROTO_GEN_DIR})
     target_link_libraries(qminiwasm_grpc PUBLIC gRPC::grpc++ protobuf::libprotobuf)
+endif()
+
+# Optional qutrit Clifford gRPC service
+if(QMINIWASM_WITH_QUTRIT_GRPC)
+    find_package(Protobuf CONFIG REQUIRED)
+    find_package(gRPC CONFIG REQUIRED)
+    if(NOT TARGET protobuf::protoc OR NOT TARGET gRPC::grpc_cpp_plugin)
+        message(FATAL_ERROR "QMINIWASM_WITH_QUTRIT_GRPC requires CMake CONFIG targets protobuf::protoc and gRPC::grpc_cpp_plugin.")
+    endif()
+    set(QUTRIT_PROTO_FILE "${REPO_ROOT}/proto/qutrit_clifford.proto")
+    set(QUTRIT_PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/qutrit_proto_gen")
+    file(MAKE_DIRECTORY ${QUTRIT_PROTO_GEN_DIR})
+    set(QUTRIT_PB_CC "${QUTRIT_PROTO_GEN_DIR}/qutrit_clifford.pb.cc")
+    set(QUTRIT_PB_H "${QUTRIT_PROTO_GEN_DIR}/qutrit_clifford.pb.h")
+    set(QUTRIT_GRPC_CC "${QUTRIT_PROTO_GEN_DIR}/qutrit_clifford.grpc.pb.cc")
+    set(QUTRIT_GRPC_H "${QUTRIT_PROTO_GEN_DIR}/qutrit_clifford.grpc.pb.h")
+    add_custom_command(
+        OUTPUT ${QUTRIT_PB_CC} ${QUTRIT_PB_H} ${QUTRIT_GRPC_CC} ${QUTRIT_GRPC_H}
+        COMMAND protobuf::protoc
+        ARGS
+            --cpp_out=${QUTRIT_PROTO_GEN_DIR}
+            --grpc_out=${QUTRIT_PROTO_GEN_DIR}
+            --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+            -I ${REPO_ROOT}/proto
+            ${QUTRIT_PROTO_FILE}
+        DEPENDS ${QUTRIT_PROTO_FILE}
+        VERBATIM
+    )
+
+    if(NOT QMINIWASM_WITH_QUANTUM)
+        message(FATAL_ERROR "QMINIWASM_WITH_QUTRIT_GRPC requires QMINIWASM_WITH_QUANTUM=ON")
+    endif()
+
+    add_library(qminiwasm_qutrit_grpcsvc STATIC
+        quantum/qutrit_clifford_service.cpp
+        ${QUTRIT_PB_CC}
+        ${QUTRIT_GRPC_CC}
+    )
+    target_include_directories(qminiwasm_qutrit_grpcsvc PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${QUTRIT_PROTO_GEN_DIR}
+    )
+    target_link_libraries(qminiwasm_qutrit_grpcsvc PUBLIC
+        qminiwasm_quantum
+        gRPC::grpc++
+        protobuf::libprotobuf
+    )
+
+    if(MSVC)
+        target_compile_options(qminiwasm_qutrit_grpcsvc PRIVATE /W4 /permissive- /bigobj)
+    else()
+        target_compile_options(qminiwasm_qutrit_grpcsvc PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_executable(qminiwasm_qutrit_clifford_server
+        quantum/qutrit_clifford_server_main.cpp
+    )
+    target_link_libraries(qminiwasm_qutrit_clifford_server PRIVATE qminiwasm_qutrit_grpcsvc)
+endif()
+
+# Optional qutrit training gRPC service
+if(QMINIWASM_WITH_QUTRIT_TRAINING_GRPC)
+    find_package(Protobuf CONFIG REQUIRED)
+    find_package(gRPC CONFIG REQUIRED)
+    if(NOT TARGET protobuf::protoc OR NOT TARGET gRPC::grpc_cpp_plugin)
+        message(FATAL_ERROR "QMINIWASM_WITH_QUTRIT_TRAINING_GRPC requires CMake CONFIG targets protobuf::protoc and gRPC::grpc_cpp_plugin.")
+    endif()
+    set(QUTRIT_TRAINING_PROTO_FILE "${REPO_ROOT}/proto/qutrit_training.proto")
+    set(QUTRIT_TRAINING_PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/qutrit_training_proto_gen")
+    file(MAKE_DIRECTORY ${QUTRIT_TRAINING_PROTO_GEN_DIR})
+    set(QUTRIT_TRAINING_PB_CC "${QUTRIT_TRAINING_PROTO_GEN_DIR}/qutrit_training.pb.cc")
+    set(QUTRIT_TRAINING_PB_H "${QUTRIT_TRAINING_PROTO_GEN_DIR}/qutrit_training.pb.h")
+    set(QUTRIT_TRAINING_GRPC_CC "${QUTRIT_TRAINING_PROTO_GEN_DIR}/qutrit_training.grpc.pb.cc")
+    set(QUTRIT_TRAINING_GRPC_H "${QUTRIT_TRAINING_PROTO_GEN_DIR}/qutrit_training.grpc.pb.h")
+    add_custom_command(
+        OUTPUT ${QUTRIT_TRAINING_PB_CC} ${QUTRIT_TRAINING_PB_H} ${QUTRIT_TRAINING_GRPC_CC} ${QUTRIT_TRAINING_GRPC_H}
+        COMMAND protobuf::protoc
+        ARGS
+            --cpp_out=${QUTRIT_TRAINING_PROTO_GEN_DIR}
+            --grpc_out=${QUTRIT_TRAINING_PROTO_GEN_DIR}
+            --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+            -I ${REPO_ROOT}/proto
+            ${QUTRIT_TRAINING_PROTO_FILE}
+        DEPENDS ${QUTRIT_TRAINING_PROTO_FILE}
+        VERBATIM
+    )
+
+    if(NOT QMINIWASM_WITH_QUANTUM)
+        message(FATAL_ERROR "QMINIWASM_WITH_QUTRIT_TRAINING_GRPC requires QMINIWASM_WITH_QUANTUM=ON")
+    endif()
+
+    add_library(qminiwasm_qutrit_training_grpcsvc STATIC
+        quantum/qutrit_training_service.cpp
+        ${QUTRIT_TRAINING_PB_CC}
+        ${QUTRIT_TRAINING_GRPC_CC}
+    )
+    target_include_directories(qminiwasm_qutrit_training_grpcsvc PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${QUTRIT_TRAINING_PROTO_GEN_DIR}
+    )
+    target_link_libraries(qminiwasm_qutrit_training_grpcsvc PUBLIC
+        qminiwasm_quantum
+        gRPC::grpc++
+        protobuf::libprotobuf
+    )
+
+    if(MSVC)
+        target_compile_options(qminiwasm_qutrit_training_grpcsvc PRIVATE /W4 /permissive- /bigobj)
+    else()
+        target_compile_options(qminiwasm_qutrit_training_grpcsvc PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_executable(qminiwasm_qutrit_training_server
+        quantum/qutrit_training_server_main.cpp
+    )
+    target_link_libraries(qminiwasm_qutrit_training_server PRIVATE qminiwasm_qutrit_training_grpcsvc)
 endif()
 
 # Optional C++20 training engine foundation with gRPC telemetry service
@@ -389,6 +550,12 @@ set(_QMW_CPP_TEST_SRCS
 )
 if(QMINIWASM_WITH_QUANTUM)
     list(APPEND _QMW_CPP_TEST_SRCS tests/test_openqasm_quantum.cpp)
+    list(APPEND _QMW_CPP_TEST_SRCS tests/test_qutrit_tableau.cpp)
+    list(APPEND _QMW_CPP_TEST_SRCS tests/test_error_correction.cpp)
+    list(APPEND _QMW_CPP_TEST_SRCS tests/test_graph_states.cpp)
+    list(APPEND _QMW_CPP_TEST_SRCS tests/test_scrambling.cpp)
+    list(APPEND _QMW_CPP_TEST_SRCS tests/test_attention.cpp)
+    list(APPEND _QMW_CPP_TEST_SRCS tests/test_qutrit_training_service.cpp)
 endif()
 add_executable(qminiwasm_cpp_tests ${_QMW_CPP_TEST_SRCS})
 target_link_libraries(qminiwasm_cpp_tests PRIVATE qminiwasm_core)

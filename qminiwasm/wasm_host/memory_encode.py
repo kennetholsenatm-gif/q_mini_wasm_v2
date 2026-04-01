@@ -21,9 +21,12 @@ import torch
 from qminiwasm.runtime_modes import resolve_impl_mode
 
 try:
-    from qminiwasm._native_ternary import encode_linear_memory_u8 as _native_encode_linear_memory_u8
+    from qminiwasm_cpp_native import encode_linear_memory_u8 as _native_encode_linear_memory_u8
 except ImportError:
-    _native_encode_linear_memory_u8 = None
+    try:
+        from qminiwasm._native_ternary import encode_linear_memory_u8 as _native_encode_linear_memory_u8
+    except ImportError:
+        _native_encode_linear_memory_u8 = None
 
 D_MODEL = 4096
 WLES_PAYLOAD_VERSION = 1
