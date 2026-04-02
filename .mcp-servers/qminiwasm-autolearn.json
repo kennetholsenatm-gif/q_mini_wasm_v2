@@ -1,0 +1,258 @@
+﻿{
+  "name": "qminiwasm-autolearn",
+  "description": "AutoLearn MCP server for self-improving AI agents - converts reasoning traces to deterministic code and manages skill libraries",
+  "tools": [
+    {
+      "name": "capture_reasoning_trace",
+      "description": "Capture AI agent reasoning steps for crystallization into deterministic code",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "enum": ["quantum_core", "dll_bridge", "go_runtime", "sycl_acceleration", "runtime_engine", "rag_service", "documentation_intelligence", "test_orchestration", "wui_design", "self_learning"],
+            "description": "Name of the AI agent whose reasoning to capture"
+          },
+          "task_description": {
+            "type": "string",
+            "description": "Description of the task being performed"
+          },
+          "reasoning_steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {"type": "integer"},
+                "thought": {"type": "string"},
+                "action": {"type": "string"},
+                "result": {"type": "string"}
+              }
+            },
+            "description": "Array of reasoning steps with thoughts, actions, and results"
+          },
+          "context": {
+            "type": "object",
+            "description": "Additional context for the reasoning trace"
+          }
+        },
+        "required": ["agent_name", "task_description", "reasoning_steps"]
+      }
+    },
+    {
+      "name": "crystallize_skill",
+      "description": "Convert a captured reasoning trace into a deterministic, reusable skill",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "trace_id": {
+            "type": "string",
+            "description": "ID of the reasoning trace to crystallize"
+          },
+          "skill_name": {
+            "type": "string",
+            "description": "Name for the new skill"
+          },
+          "target_agent": {
+            "type": "string",
+            "description": "Agent to receive the crystallized skill"
+          },
+          "validation_required": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to validate the skill before adding to library"
+          }
+        },
+        "required": ["trace_id", "skill_name"]
+      }
+    },
+    {
+      "name": "evaluate_agent_performance",
+      "description": "Evaluate an AI agent's performance against defined metrics",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Name of the agent to evaluate"
+          },
+          "evaluation_type": {
+            "type": "string",
+            "enum": ["correctness", "performance", "coverage", "integration", "full"],
+            "default": "full",
+            "description": "Type of evaluation to perform"
+          },
+          "include_history": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to include historical performance data"
+          }
+        },
+        "required": ["agent_name"]
+      }
+    },
+    {
+      "name": "detect_improvement_opportunity",
+      "description": "Analyze agent performance to detect improvement opportunities",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Name of the agent to analyze"
+          },
+          "analysis_depth": {
+            "type": "string",
+            "enum": ["shallow", "moderate", "deep"],
+            "default": "moderate",
+            "description": "Depth of analysis to perform"
+          },
+          "focus_areas": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific areas to focus analysis on"
+          }
+        },
+        "required": ["agent_name"]
+      }
+    },
+    {
+      "name": "generate_improvement_plan",
+      "description": "Generate an improvement plan for an AI agent based on detected opportunities",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Name of the agent to improve"
+          },
+          "improvement_opportunity_id": {
+            "type": "string",
+            "description": "ID of the detected improvement opportunity"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"],
+            "default": "medium",
+            "description": "Priority of the improvement"
+          }
+        },
+        "required": ["agent_name", "improvement_opportunity_id"]
+      }
+    },
+    {
+      "name": "spread_improvement",
+      "description": "Spread a validated improvement across all relevant AI agents",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "improvement_id": {
+            "type": "string",
+            "description": "ID of the validated improvement to spread"
+          },
+          "target_agents": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific agents to spread to (empty = all applicable)"
+          },
+          "validation_required": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to validate on each target agent"
+          }
+        },
+        "required": ["improvement_id"]
+      }
+    },
+    {
+      "name": "get_skill_library",
+      "description": "Retrieve the current skill library for an agent or all agents",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Name of the agent (empty for all agents)"
+          },
+          "include_stats": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to include usage statistics"
+          }
+        }
+      }
+    },
+    {
+      "name": "update_managed_memory",
+      "description": "Update the managed memory/context for an agent's learning",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Name of the agent"
+          },
+          "memory_type": {
+            "type": "string",
+            "enum": ["short_term", "long_term", "working", "episodic"],
+            "default": "working",
+            "description": "Type of memory to update"
+          },
+          "content": {
+            "type": "object",
+            "description": "Memory content to store"
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "default": 86400,
+            "description": "Time-to-live in seconds"
+          }
+        },
+        "required": ["agent_name", "content"]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://config/autolearn.json",
+      "name": "autolearn_config",
+      "description": "Main AutoLearn configuration"
+    },
+    {
+      "uri": "file://config/metrics.json",
+      "name": "metrics_config",
+      "description": "Discrete metrics configuration for all agents"
+    },
+    {
+      "uri": "file://config/evaluation.json",
+      "name": "evaluation_config",
+      "description": "AutoLearn School evaluation framework"
+    },
+    {
+      "uri": "file://config/autolearn-memory/skill-libraries.json",
+      "name": "skill_libraries",
+      "description": "Accumulated skill libraries from all agents"
+    },
+    {
+      "uri": "file://config/autolearn-memory/improvement-history.json",
+      "name": "improvement_history",
+      "description": "History of all improvements and their spread"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "improvement_analysis",
+      "description": "Prompt template for analyzing improvement opportunities",
+      "template": "Analyze the performance of {{agent_name}} agent. Current metrics: {{metrics}}. Historical trend: {{trend}}. Identify specific improvement opportunities and their potential impact."
+    },
+    {
+      "name": "skill_crystallization",
+      "description": "Prompt template for crystallizing reasoning into skills",
+      "template": "Convert the following reasoning trace into a deterministic, reusable skill for {{target_agent}}. Trace: {{trace}}. Ensure the skill is testable, measurable, and can be validated automatically."
+    },
+    {
+      "name": "cross_agent_spread",
+      "description": "Prompt template for spreading improvements across agents",
+      "template": "The improvement {{improvement_description}} was validated in {{source_agent}}. Determine which other agents ({{target_agents}}) can benefit from this improvement and how to adapt it for each."
+    }
+  ]
+}

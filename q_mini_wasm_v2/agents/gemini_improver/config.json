@@ -1,0 +1,30 @@
+{
+  "name": "gemini-agent-improver",
+  "version": "1.0.0",
+  "description": "Auto-improves MCP agents using Gemini API + LangGraph",
+  "model": {
+    "provider": "google",
+    "name": "gemini-2.0-flash",
+    "temperature": 0.7,
+    "max_retries": 2
+  },
+  "agent_config": {
+    "max_steps": 10,
+    "stream_mode": "values",
+    "tools": [
+      "analyze_mcp_server",
+      "suggest_tool_improvement",
+      "evolve_schema"
+    ]
+  },
+  "integration": {
+    "mcp_servers_dir": ".mcp-servers",
+    "config_dir": "config",
+    "output_dir": "agents/gemini_improver/output"
+  },
+  "free_tier_limits": {
+    "requests_per_minute": 60,
+    "tokens_per_minute": 32000,
+    "requests_per_day": 1500
+  }
+}

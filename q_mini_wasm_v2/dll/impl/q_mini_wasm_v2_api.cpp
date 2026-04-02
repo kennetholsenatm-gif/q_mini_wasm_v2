@@ -8,8 +8,25 @@
 #include <memory>
 #include <unordered_map>
 #include <mutex>
+#include <iostream>
 
 using namespace q_mini_wasm_v2;
+
+// ============================================================================
+// Error Messages
+// ============================================================================
+
+static const char* ERROR_MESSAGES[] = {
+    "Success",                      // Q_MINI_WASM_V2_OK
+    "Invalid or null handle",       // Q_MINI_WASM_V2_ERROR_INVALID_HANDLE
+    "Invalid argument value",       // Q_MINI_WASM_V2_ERROR_INVALID_ARGUMENT
+    "Index or value out of range",  // Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE
+    "Memory allocation failed",     // Q_MINI_WASM_V2_ERROR_ALLOCATION_FAILED
+    "Internal error",               // Q_MINI_WASM_V2_ERROR_INTERNAL
+    "Operation not supported"       // Q_MINI_WASM_V2_ERROR_NOT_SUPPORTED
+};
+
+static const size_t ERROR_MESSAGES_COUNT = sizeof(ERROR_MESSAGES) / sizeof(ERROR_MESSAGES[0]);
 
 // ============================================================================
 // Handle Management
@@ -39,6 +56,38 @@ std::shared_ptr<T> get_handle(void* handle) {
 void release_handle(void* handle) {
     std::lock_guard<std::mutex> lock(g_handles_mutex);
     g_handles.erase(handle);
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_error_string(int error_code) {
+    // Convert negative error code to index
+    int index = -error_code;
+    if (index < 0 || static_cast<size_t>(index) >= ERROR_MESSAGES_COUNT) {
+        return "Unknown error";
+    }
+    return ERROR_MESSAGES[index];
+}
+
+Q_MINI_WASM_V2_API int q_mini_wasm_v2_is_valid_handle(void* handle) {
+    if (handle == nullptr) {
+        return 0;
+    }
+    std::lock_guard<std::mutex> lock(g_handles_mutex);
+    return g_handles.find(handle) != g_handles.end() ? 1 : 0;
+}
+
+static const char* VERSION = "1.0.0";
+static const char* BUILD_INFO = "q_mini_wasm_v2 - Quantum-Classical Hybrid Framework";
+
+Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_version() {
+    return VERSION;
+}
+
+Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_build_info() {
+    return BUILD_INFO;
 }
 
 // ============================================================================
@@ -77,53 +126,68 @@ Q_MINI_WASM_V2_API void trit_unpack_5(uint8_t byte, int8_t trits[5]) {
 // ============================================================================
 
 Q_MINI_WASM_V2_API void* tableau_create(size_t num_qutrits) {
-    auto tableau = core::stabilizer::create_tableau(num_qutrits);
-    return make_handle(std::move(tableau));
+    if (num_qutrits == 0) {
+        return nullptr;
+    }
+    try {
+        auto tableau = core::stabilizer::create_tableau(num_qutrits);
+        return make_handle(std::move(tableau));
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 Q_MINI_WASM_V2_API void tableau_destroy(void* handle) {
-    release_handle(handle);
+    if (handle != nullptr) {
+        release_handle(handle);
+    }
 }
 
 Q_MINI_WASM_V2_API int tableau_apply_hadamard(void* handle, size_t qutrit) {
     auto tableau = get_handle<core::stabilizer::StabilizerTableau>(handle);
-    if (!tableau) return -1;
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
     
     try {
         tableau->apply_hadamard(qutrit);
-        return 0;
+        return Q_MINI_WASM_V2_OK;
+    } catch (const std::out_of_range&) {
+        return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
     } catch (...) {
-        return -2;
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
     }
 }
 
 Q_MINI_WASM_V2_API int tableau_apply_phase(void* handle, size_t qutrit) {
     auto tableau = get_handle<core::stabilizer::StabilizerTableau>(handle);
-    if (!tableau) return -1;
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
     
     try {
         tableau->apply_phase(qutrit);
-        return 0;
+        return Q_MINI_WASM_V2_OK;
+    } catch (const std::out_of_range&) {
+        return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
     } catch (...) {
-        return -2;
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
     }
 }
 
 Q_MINI_WASM_V2_API int tableau_apply_csum(void* handle, size_t control, size_t target) {
     auto tableau = get_handle<core::stabilizer::StabilizerTableau>(handle);
-    if (!tableau) return -1;
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
     
     try {
         tableau->apply_csum(control, target);
-        return 0;
+        return Q_MINI_WASM_V2_OK;
+    } catch (const std::out_of_range&) {
+        return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
     } catch (...) {
-        return -2;
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
     }
 }
 
 Q_MINI_WASM_V2_API size_t tableau_measure_all(void* handle, int8_t* outcomes, size_t max_outcomes) {
     auto tableau = get_handle<core::stabilizer::StabilizerTableau>(handle);
-    if (!tableau) return 0;
+    if (!tableau || outcomes == nullptr || max_outcomes == 0) return 0;
     
     try {
         auto measurements = tableau->measure_all();
@@ -154,13 +218,25 @@ Q_MINI_WASM_V2_API size_t tableau_num_qutrits(void* handle) {
 // ============================================================================
 
 Q_MINI_WASM_V2_API void* moe_router_create(size_t total_experts, size_t active_experts, size_t routing_qutrits) {
-    core::moe::ExpertConfig config{total_experts, active_experts, routing_qutrits};
-    auto router = core::moe::create_moe_router(config);
-    return make_handle(std::move(router));
+    if (total_experts == 0 || active_experts == 0 || routing_qutrits == 0) {
+        return nullptr;
+    }
+    if (active_experts > total_experts) {
+        return nullptr;
+    }
+    try {
+        core::moe::ExpertConfig config{total_experts, active_experts, routing_qutrits};
+        auto router = core::moe::create_moe_router(config);
+        return make_handle(std::move(router));
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 Q_MINI_WASM_V2_API void moe_router_destroy(void* handle) {
-    release_handle(handle);
+    if (handle != nullptr) {
+        release_handle(handle);
+    }
 }
 
 Q_MINI_WASM_V2_API size_t moe_router_route_topk(
@@ -171,7 +247,7 @@ Q_MINI_WASM_V2_API size_t moe_router_route_topk(
     size_t max_selected
 ) {
     auto router = get_handle<core::moe::MoERouter>(handle);
-    if (!router) return 0;
+    if (!router || input == nullptr || selected == nullptr || input_size == 0 || max_selected == 0) return 0;
     
     try {
         std::vector<core::ternary::Trit> input_vec(input_size);
@@ -201,19 +277,28 @@ Q_MINI_WASM_V2_API size_t moe_router_capacity(void* handle) {
 // ============================================================================
 
 Q_MINI_WASM_V2_API void* ff_learner_create(size_t num_layers, size_t neurons_per_layer, double learning_rate) {
-    core::learning::FFConfig config{
-        num_layers,
-        neurons_per_layer,
-        learning_rate,
-        1.0,   // positive_threshold
-        -1.0   // negative_threshold
-    };
-    auto learner = core::learning::create_ff_learner(config);
-    return make_handle(std::move(learner));
+    if (num_layers == 0 || neurons_per_layer == 0 || learning_rate <= 0.0) {
+        return nullptr;
+    }
+    try {
+        core::learning::FFConfig config{
+            num_layers,
+            neurons_per_layer,
+            learning_rate,
+            1.0,   // positive_threshold
+            -1.0   // negative_threshold
+        };
+        auto learner = core::learning::create_ff_learner(config);
+        return make_handle(std::move(learner));
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 Q_MINI_WASM_V2_API void ff_learner_destroy(void* handle) {
-    release_handle(handle);
+    if (handle != nullptr) {
+        release_handle(handle);
+    }
 }
 
 Q_MINI_WASM_V2_API size_t ff_learner_forward(
@@ -224,7 +309,7 @@ Q_MINI_WASM_V2_API size_t ff_learner_forward(
     size_t output_size
 ) {
     auto learner = get_handle<core::learning::ForwardForwardLearner>(handle);
-    if (!learner) return 0;
+    if (!learner || input == nullptr || output == nullptr || input_size == 0 || output_size == 0) return 0;
     
     try {
         std::vector<core::ternary::Trit> input_vec(input_size);
@@ -249,7 +334,7 @@ Q_MINI_WASM_V2_API double ff_learner_goodness(
     size_t size
 ) {
     auto learner = get_handle<core::learning::ForwardForwardLearner>(handle);
-    if (!learner) return 0.0;
+    if (!learner || activations == nullptr || size == 0) return 0.0;
     
     try {
         std::vector<core::ternary::Trit> activations_vec(size);
@@ -268,13 +353,19 @@ Q_MINI_WASM_V2_API double ff_learner_goodness(
 // ============================================================================
 
 Q_MINI_WASM_V2_API void* orchestrator_create(size_t num_threads) {
-    runtime::RuntimeConfig config{num_threads, 100, true, false};
-    auto orchestrator = runtime::create_orchestrator(config);
-    return make_handle(std::move(orchestrator));
+    try {
+        runtime::RuntimeConfig config{num_threads, 100, true, false};
+        auto orchestrator = runtime::create_orchestrator(config);
+        return make_handle(std::move(orchestrator));
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 Q_MINI_WASM_V2_API void orchestrator_destroy(void* handle) {
-    release_handle(handle);
+    if (handle != nullptr) {
+        release_handle(handle);
+    }
 }
 
 Q_MINI_WASM_V2_API void orchestrator_wait_all(void* handle) {
@@ -288,19 +379,4 @@ Q_MINI_WASM_V2_API int orchestrator_has_pending(void* handle) {
     auto orchestrator = get_handle<runtime::RuntimeOrchestrator>(handle);
     if (!orchestrator) return 0;
     return orchestrator->has_pending_tasks() ? 1 : 0;
-}
-
-// ============================================================================
-// Version Information
-// ============================================================================
-
-static const char* VERSION = "1.0.0";
-static const char* BUILD_INFO = "q_mini_wasm_v2 - Quantum-Classical Hybrid Framework";
-
-Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_version() {
-    return VERSION;
-}
-
-Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_build_info() {
-    return BUILD_INFO;
 }

@@ -1,0 +1,192 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "Cross-agent improvement spread mechanism configuration",
+  
+  "spread_mechanism": {
+    "enabled": true,
+    "mode": "validated_improvements",
+    "auto_spread": true,
+    "validation_required": true
+  },
+  
+  "spread_rules": {
+    "quantum_core": {
+      "can_spread_to": ["dll_bridge", "go_runtime", "sycl_acceleration", "runtime_engine", "test_orchestration"],
+      "spreadable_improvements": [
+        "gf3_arithmetic_optimization",
+        "stabilizer_tableau_correctness",
+        "clifford_gate_verification",
+        "energy_efficiency_optimization"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "regression_check": true,
+        "performance_validation": true
+      }
+    },
+    
+    "dll_bridge": {
+      "can_spread_to": ["go_runtime", "wui_design", "test_orchestration"],
+      "spreadable_improvements": [
+        "type_mapping_accuracy",
+        "memory_safety_checks",
+        "binding_generation_optimization"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "memory_safety_check": true
+      }
+    },
+    
+    "go_runtime": {
+      "can_spread_to": ["dll_bridge", "rag_service", "test_orchestration"],
+      "spreadable_improvements": [
+        "error_handling_patterns",
+        "concurrency_safety",
+        "grpc_optimization"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "race_condition_check": true
+      }
+    },
+    
+    "sycl_acceleration": {
+      "can_spread_to": ["runtime_engine", "quantum_core"],
+      "spreadable_improvements": [
+        "gpu_kernel_optimization",
+        "memory_bandwidth_improvement",
+        "parallel_efficiency_enhancement"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "performance_validation": true,
+        "device_compatibility_check": true
+      }
+    },
+    
+    "runtime_engine": {
+      "can_spread_to": ["sycl_acceleration", "wui_design"],
+      "spreadable_improvements": [
+        "wasm_optimization",
+        "memory_management_improvement",
+        "threading_stability_enhancement"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "memory_leak_check": true
+      }
+    },
+    
+    "rag_service": {
+      "can_spread_to": ["documentation_intelligence", "test_orchestration"],
+      "spreadable_improvements": [
+        "retrieval_accuracy_improvement",
+        "context_optimization_technique",
+        "indexing_efficiency"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "accuracy_validation": true
+      }
+    },
+    
+    "documentation_intelligence": {
+      "can_spread_to": ["rag_service", "wui_design", "test_orchestration"],
+      "spreadable_improvements": [
+        "cognitive_ergonomics_patterns",
+        "api_documentation_generation",
+        "wiki_sync_optimization"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "cognitive_ergonomics_check": true
+      }
+    },
+    
+    "test_orchestration": {
+      "can_spread_to": ["quantum_core", "dll_bridge", "go_runtime", "sycl_acceleration", "runtime_engine", "rag_service", "documentation_intelligence", "wui_design"],
+      "spreadable_improvements": [
+        "test_coverage_enhancement",
+        "regression_detection_improvement",
+        "multi_language_coordination"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "coverage_validation": true
+      }
+    },
+    
+    "wui_design": {
+      "can_spread_to": ["documentation_intelligence"],
+      "spreadable_improvements": [
+        "visualization_accuracy_improvement",
+        "cognitive_css_optimization",
+        "interaction_responsiveness_enhancement"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "visual_regression_check": true
+      }
+    },
+    
+    "self_learning": {
+      "can_spread_to": ["quantum_core", "dll_bridge", "go_runtime", "sycl_acceleration", "runtime_engine", "rag_service", "documentation_intelligence", "test_orchestration", "wui_design"],
+      "spreadable_improvements": [
+        "pattern_detection_optimization",
+        "tool_suggestion_relevance_improvement",
+        "schema_evolution_enhancement",
+        "learning_rate_optimization"
+      ],
+      "spread_validation": {
+        "test_required": true,
+        "pattern_validation": true
+      }
+    }
+  },
+  
+  "knowledge_graph": {
+    "enabled": true,
+    "storage": "config/autolearn-memory/knowledge-graph.json",
+    "auto_update": true,
+    "cross_agent_linking": true
+  },
+  
+  "spread_workflow": {
+    "detection": {
+      "method": "metric_comparison",
+      "threshold": 0.05,
+      "frequency": "per_improvement_cycle"
+    },
+    "analysis": {
+      "method": "pattern_matching",
+      "depth": "comprehensive",
+      "consider_context": true
+    },
+    "adaptation": {
+      "method": "context_aware_transformation",
+      "validate_before_adapt": true,
+      "preserve_core_improvement": true
+    },
+    "validation": {
+      "method": "test_and_compare",
+      "require_all_tests_pass": true,
+      "regression_check": true
+    },
+    "deployment": {
+      "method": "gradual_rollout",
+      "validation_gates": ["unit_tests", "integration_tests", "performance_tests"],
+      "rollback_on_failure": true
+    }
+  },
+  
+  "reporting": {
+    "spread_reports": {
+      "enabled": true,
+      "frequency": "per_spread",
+      "location": "reports/autolearn/spread",
+      "contents": ["source_agent", "target_agents", "improvement_description", "validation_results", "spread_success"]
+    }
+  }
+}

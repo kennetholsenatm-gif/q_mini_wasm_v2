@@ -365,7 +365,7 @@ func main() {
 
 	gateway := NewGateway(config)
 
-	// Initialize RAG service
+	// Initialize RAG service with improved configuration
 	ragConfig := rag.ServiceConfig{
 		Qdrant: rag.QdrantConfig{
 			Host:           config.QdrantHost,
@@ -387,8 +387,20 @@ func main() {
 			ComplexityWeight: 0.6,
 			ContextWeight:    0.4,
 		},
-		ProjectRoot: config.ProjectRoot,
-		AutoIndex:   true,
+		HybridSearch: rag.HybridSearchConfig{
+			SemanticWeight:  0.7,
+			KeywordWeight:   0.3,
+			RerankTopK:      20,
+			MinScore:        0.3,
+		},
+		Cache: rag.CacheConfig{
+			MaxSize:        1000,
+			TTL:            5 * time.Minute,
+			EvictionPolicy: "lru",
+		},
+		ProjectRoot:   config.ProjectRoot,
+		AutoIndex:     true,
+		EmbeddingType: "placeholder", // Can be changed to "tfidf" or "composite"
 	}
 
 	ragService, err := rag.NewService(ragConfig)

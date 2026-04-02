@@ -1,0 +1,148 @@
+{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "Auto-improvement cycle configuration for agent ecosystem",
+  
+  "gemini": {
+    "api_key_env": "GEMINI_API_KEY",
+    "model": "gemini-3-flash-preview",
+    "temperature": 0.7,
+    "max_tokens": 8192,
+    "rate_limits": {
+      "rpm": 15,
+      "tpm": 1000000,
+      "rpd": 1500
+    },
+    "batch_size": 10,
+    "cache_ttl": 3600
+  },
+  
+  "agents": {
+    "research_agent": {
+      "name": "ResearchAgent",
+      "description": "Analyzes patterns and gathers information for improvement",
+      "system_prompt": "You are a research agent that analyzes code patterns, performance metrics, and improvement opportunities. Focus on identifying recurring issues and suggesting optimizations.",
+      "tools": ["search_web", "analyze_patterns", "collect_metrics"],
+      "max_iterations": 5,
+      "improvement_cycle_frequency": "daily"
+    },
+    "analysis_agent": {
+      "name": "AnalysisAgent",
+      "description": "Evaluates agent performance and identifies improvement areas",
+      "system_prompt": "You are an analysis agent that evaluates agent performance, identifies bottlenecks, and suggests improvements. Use data-driven approaches.",
+      "tools": ["evaluate_performance", "identify_bottlenecks", "suggest_improvements"],
+      "max_iterations": 3,
+      "improvement_cycle_frequency": "weekly"
+    },
+    "code_agent": {
+      "name": "CodeAgent",
+      "description": "Generates and refines code improvements",
+      "system_prompt": "You are a code generation agent that implements improvements based on analysis. Focus on clean, efficient, and maintainable code.",
+      "tools": ["generate_code", "refactor_code", "validate_code"],
+      "max_iterations": 10,
+      "improvement_cycle_frequency": "on_demand"
+    },
+    "test_agent": {
+      "name": "TestAgent",
+      "description": "Validates improvements through comprehensive testing",
+      "system_prompt": "You are a testing agent that validates improvements through unit tests, integration tests, and performance benchmarks.",
+      "tools": ["run_tests", "generate_tests", "measure_performance"],
+      "max_iterations": 7,
+      "improvement_cycle_frequency": "per_improvement"
+    }
+  },
+  
+  "improvement_cycle": {
+    "phases": [
+      {
+        "name": "analysis",
+        "description": "Analyze current performance and identify areas for improvement",
+        "duration_hours": 24,
+        "success_criteria": {
+          "min_patterns_identified": 3,
+          "confidence_threshold": 0.8
+        }
+      },
+      {
+        "name": "planning",
+        "description": "Create improvement plan based on analysis",
+        "duration_hours": 12,
+        "success_criteria": {
+          "plan_completeness": 0.9,
+          "risk_assessment_completed": true
+        }
+      },
+      {
+        "name": "implementation",
+        "description": "Implement improvements",
+        "duration_hours": 48,
+        "success_criteria": {
+          "code_quality_score": 0.85,
+          "test_coverage": 0.8
+        }
+      },
+      {
+        "name": "validation",
+        "description": "Validate improvements through testing",
+        "duration_hours": 24,
+        "success_criteria": {
+          "all_tests_pass": true,
+          "performance_improvement": 0.1
+        }
+      },
+      {
+        "name": "deployment",
+        "description": "Deploy validated improvements",
+        "duration_hours": 8,
+        "success_criteria": {
+          "deployment_success": true,
+          "rollback_plan_exists": true
+        }
+      }
+    ],
+    "max_concurrent_improvements": 3,
+    "improvement_cooldown_days": 7,
+    "rollback_threshold": 0.95
+  },
+  
+  "monitoring": {
+    "metrics": [
+      "task_completion_rate",
+      "response_time",
+      "token_usage",
+      "error_rate",
+      "user_satisfaction"
+    ],
+    "alert_thresholds": {
+      "error_rate": 0.05,
+      "response_time_seconds": 30,
+      "token_usage_per_day": 1200
+    },
+    "retention_days": 30
+  },
+  
+  "integration": {
+    "mcp_servers": [
+      "qminiwasm-self-learning",
+      "qminiwasm-doc-intelligence",
+      "qminiwasm-test-orchestrator"
+    ],
+    "hooks": {
+      "pre_improvement": "scripts/pre_improvement_check.py",
+      "post_improvement": "scripts/post_improvement_validation.py",
+      "on_failure": "scripts/handle_improvement_failure.py"
+    },
+    "notifications": {
+      "slack_webhook_env": "SLACK_WEBHOOK_URL",
+      "email_recipients": ["team@q_mini_wasm_v2.dev"]
+    }
+  },
+  
+  "security": {
+    "api_key_rotation_days": 30,
+    "max_concurrent_requests": 5,
+    "input_validation": "strict",
+    "output_sanitization": true,
+    "audit_logging": true
+  }
+}

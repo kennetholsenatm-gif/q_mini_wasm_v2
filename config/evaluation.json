@@ -1,0 +1,440 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "AutoLearn School evaluation framework for testing AI agent improvements",
+  
+  "evaluation_framework": {
+    "enabled": true,
+    "mode": "continuous",
+    "evaluation_frequency": "per_improvement_cycle",
+    "passing_threshold": 0.85,
+    "regression_threshold": 0.05
+  },
+  
+  "teacher_agent": {
+    "name": "self_learning",
+    "role": "Evaluate student agents and provide improvement guidance",
+    "evaluation_methods": [
+      "test_validation",
+      "metric_comparison",
+      "pattern_analysis",
+      "regression_detection"
+    ],
+    "memory_access": "full_project_context",
+    "learning_sources": [
+      "git_history",
+      "test_results",
+      "build_logs",
+      "metric_trends"
+    ]
+  },
+  
+  "student_evaluations": {
+    "quantum_core": {
+      "evaluation_criteria": {
+        "correctness_tests": {
+          "weight": 0.35,
+          "tests": [
+            "trit_operations_gf3",
+            "stabilizer_tableau_correctness",
+            "clifford_gate_properties",
+            "entanglement_entropy_calculation"
+          ],
+          "passing_score": 0.95
+        },
+        "performance_tests": {
+          "weight": 0.25,
+          "tests": [
+            "tableau_update_complexity",
+            "energy_efficiency_benchmark",
+            "memory_usage_optimization"
+          ],
+          "passing_score": 0.85
+        },
+        "coverage_tests": {
+          "weight": 0.20,
+          "tests": [
+            "gf3_arithmetic_coverage",
+            "edge_case_handling",
+            "error_condition_coverage"
+          ],
+          "passing_score": 0.80
+        },
+        "integration_tests": {
+          "weight": 0.20,
+          "tests": [
+            "moe_router_integration",
+            "forward_forward_learning",
+            "orchestrator_async_operations"
+          ],
+          "passing_score": 0.90
+        }
+      },
+      "improvement_triggers": [
+        "test_failure",
+        "performance_regression",
+        "coverage_drop",
+        "energy_efficiency_degradation"
+      ]
+    },
+    
+    "dll_bridge": {
+      "evaluation_criteria": {
+        "correctness_tests": {
+          "weight": 0.40,
+          "tests": [
+            "type_mapping_accuracy",
+            "memory_safety_validation",
+            "api_signature_preservation"
+          ],
+          "passing_score": 0.98
+        },
+        "coverage_tests": {
+          "weight": 0.30,
+          "tests": [
+            "api_exposure_coverage",
+            "language_binding_completeness",
+            "error_propagation_coverage"
+          ],
+          "passing_score": 0.90
+        },
+        "integration_tests": {
+          "weight": 0.30,
+          "tests": [
+            "go_cgo_integration",
+            "python_ctypes_integration",
+            "wasm_binding_integration"
+          ],
+          "passing_score": 0.95
+        }
+      },
+      "improvement_triggers": [
+        "binding_generation_failure",
+        "type_mapping_error",
+        "memory_leak_detected",
+        "api_coverage_drop"
+      ]
+    },
+    
+    "go_runtime": {
+      "evaluation_criteria": {
+        "correctness_tests": {
+          "weight": 0.35,
+          "tests": [
+            "cgo_binding_accuracy",
+            "grpc_service_correctness",
+            "mcp_protocol_compliance"
+          ],
+          "passing_score": 0.98
+        },
+        "reliability_tests": {
+          "weight": 0.30,
+          "tests": [
+            "build_success_rate",
+            "error_handling_coverage",
+            "concurrency_safety"
+          ],
+          "passing_score": 0.95
+        },
+        "performance_tests": {
+          "weight": 0.20,
+          "tests": [
+            "request_latency",
+            "throughput_under_load",
+            "memory_efficiency"
+          ],
+          "passing_score": 0.85
+        },
+        "integration_tests": {
+          "weight": 0.15,
+          "tests": [
+            "quantum_engine_integration",
+            "rag_service_integration",
+            "dll_bridge_compatibility"
+          ],
+          "passing_score": 0.90
+        }
+      },
+      "improvement_triggers": [
+        "build_failure",
+        "test_failure",
+        "performance_regression",
+        "concurrency_bug"
+      ]
+    },
+    
+    "sycl_acceleration": {
+      "evaluation_criteria": {
+        "correctness_tests": {
+          "weight": 0.35,
+          "tests": [
+            "kernel_output_correctness",
+            "gf3_gpu_arithmetic",
+            "parallel_reduction_accuracy"
+          ],
+          "passing_score": 1.0
+        },
+        "performance_tests": {
+          "weight": 0.40,
+          "tests": [
+            "gpu_utilization_benchmark",
+            "memory_bandwidth_test",
+            "parallel_efficiency_measurement"
+          ],
+          "passing_score": 0.85
+        },
+        "reliability_tests": {
+          "weight": 0.25,
+          "tests": [
+            "kernel_compilation_success",
+            "memory_allocation_stability",
+            "device_compatibility"
+          ],
+          "passing_score": 0.98
+        }
+      },
+      "improvement_triggers": [
+        "kernel_compilation_failure",
+        "incorrect_gpu_output",
+        "performance_degradation",
+        "memory_allocation_error"
+      ]
+    },
+    
+    "runtime_engine": {
+      "evaluation_criteria": {
+        "correctness_tests": {
+          "weight": 0.35,
+          "tests": [
+            "wasm_execution_correctness",
+            "threading_synchronization",
+            "memory_management_safety"
+          ],
+          "passing_score": 1.0
+        },
+        "performance_tests": {
+          "weight": 0.35,
+          "tests": [
+            "wasm_vs_native_speedup",
+            "memory_overhead_measurement",
+            "startup_time_optimization"
+          ],
+          "passing_score": 0.80
+        },
+        "reliability_tests": {
+          "weight": 0.30,
+          "tests": [
+            "compilation_success_rate",
+            "threading_stability",
+            "resource_cleanup"
+          ],
+          "passing_score": 0.98
+        }
+      },
+      "improvement_triggers": [
+        "wasm_compilation_failure",
+        "execution_error",
+        "memory_leak",
+        "threading_deadlock"
+      ]
+    },
+    
+    "rag_service": {
+      "evaluation_criteria": {
+        "accuracy_tests": {
+          "weight": 0.40,
+          "tests": [
+            "retrieval_precision",
+            "retrieval_recall",
+            "context_relevance"
+          ],
+          "passing_score": 0.90
+        },
+        "performance_tests": {
+          "weight": 0.30,
+          "tests": [
+            "query_response_time",
+            "indexing_throughput",
+            "memory_usage"
+          ],
+          "passing_score": 0.85
+        },
+        "coverage_tests": {
+          "weight": 0.30,
+          "tests": [
+            "codebase_indexing_completeness",
+            "language_support_coverage",
+            "update_frequency"
+          ],
+          "passing_score": 0.95
+        }
+      },
+      "improvement_triggers": [
+        "retrieval_accuracy_drop",
+        "query_timeout",
+        "indexing_failure",
+        "coverage_gap"
+      ]
+    },
+    
+    "documentation_intelligence": {
+      "evaluation_criteria": {
+        "completeness_tests": {
+          "weight": 0.35,
+          "tests": [
+            "api_documentation_coverage",
+            "example_completeness",
+            "reference_accuracy"
+          ],
+          "passing_score": 0.95
+        },
+        "quality_tests": {
+          "weight": 0.35,
+          "tests": [
+            "cognitive_ergonomics_compliance",
+            "readability_score",
+            "visual_hierarchy_validation"
+          ],
+          "passing_score": 0.90
+        },
+        "freshness_tests": {
+          "weight": 0.30,
+          "tests": [
+            "documentation_update_timeliness",
+            "wiki_sync_success",
+            "changelog_accuracy"
+          ],
+          "passing_score": 0.95
+        }
+      },
+      "improvement_triggers": [
+        "documentation_gap_detected",
+        "cognitive_ergonomics_violation",
+        "wiki_sync_failure",
+        "outdated_documentation"
+      ]
+    },
+    
+    "test_orchestration": {
+      "evaluation_criteria": {
+        "coverage_tests": {
+          "weight": 0.35,
+          "tests": [
+            "line_coverage_measurement",
+            "branch_coverage_measurement",
+            "function_coverage_measurement"
+          ],
+          "passing_score": 0.80
+        },
+        "reliability_tests": {
+          "weight": 0.35,
+          "tests": [
+            "test_pass_rate",
+            "flaky_test_detection",
+            "regression_detection_rate"
+          ],
+          "passing_score": 0.98
+        },
+        "coordination_tests": {
+          "weight": 0.30,
+          "tests": [
+            "multi_language_test_coordination",
+            "parallel_test_execution",
+            "test_isolation"
+          ],
+          "passing_score": 0.95
+        }
+      },
+      "improvement_triggers": [
+        "coverage_drop",
+        "test_failure_spike",
+        "regression_missed",
+        "coordination_failure"
+      ]
+    },
+    
+    "wui_design": {
+      "evaluation_criteria": {
+        "correctness_tests": {
+          "weight": 0.35,
+          "tests": [
+            "visualization_accuracy",
+            "data_binding_correctness",
+            "interaction_responsiveness"
+          ],
+          "passing_score": 0.98
+        },
+        "quality_tests": {
+          "weight": 0.35,
+          "tests": [
+            "cognitive_css_compliance",
+            "accessibility_standards",
+            "responsive_design"
+          ],
+          "passing_score": 0.90
+        },
+        "performance_tests": {
+          "weight": 0.30,
+          "tests": [
+            "build_success_rate",
+            "rendering_performance",
+            "memory_usage"
+          ],
+          "passing_score": 0.95
+        }
+      },
+      "improvement_triggers": [
+        "visualization_error",
+        "css_violation",
+        "build_failure",
+        "performance_regression"
+      ]
+    }
+  },
+  
+  "improvement_workflow": {
+    "detection": {
+      "method": "continuous_monitoring",
+      "triggers": "student_evaluations.improvement_triggers",
+      "sensitivity": "high"
+    },
+    "analysis": {
+      "method": "root_cause_analysis",
+      "depth": "comprehensive",
+      "pattern_matching": true
+    },
+    "solution": {
+      "generation": "autolearn_mcp",
+      "validation": "auto_testing",
+      "approval": "teacher_agent"
+    },
+    "deployment": {
+      "method": "gradual_rollout",
+      "validation_gates": [
+        "unit_tests",
+        "integration_tests",
+        "performance_tests",
+        "regression_tests"
+      ],
+      "rollback_capability": true
+    },
+    "spread": {
+      "method": "knowledge_graph_propagation",
+      "validation": "cross_agent_testing",
+      "documentation": "auto_generated"
+    }
+  },
+  
+  "reporting": {
+    "frequency": "daily",
+    "format": "markdown",
+    "location": "reports/autolearn",
+    "contents": [
+      "evaluation_summary",
+      "improvement_log",
+      "metric_trends",
+      "regression_alerts",
+      "cross_agent_knowledge_transfer"
+    ]
+  }
+}
