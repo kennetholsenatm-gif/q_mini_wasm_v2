@@ -13,22 +13,29 @@ import (
 
 // ServiceConfig holds RAG service configuration
 type ServiceConfig struct {
-	Qdrant      QdrantConfig      `json:"qdrant"`
-	Chunker     ChunkConfig       `json:"chunker"`
-	Scaler      TokenScalerConfig `json:"scaler"`
-	ProjectRoot string            `json:"project_root"`
-	AutoIndex   bool              `json:"auto_index"`
+	Qdrant        QdrantConfig        `json:"qdrant"`
+	Chunker       ChunkConfig         `json:"chunker"`
+	Scaler        TokenScalerConfig   `json:"scaler"`
+	HybridSearch  HybridSearchConfig  `json:"hybrid_search"`
+	Cache         CacheConfig         `json:"cache"`
+	ProjectRoot   string              `json:"project_root"`
+	AutoIndex     bool                `json:"auto_index"`
+	EmbeddingType string              `json:"embedding_type"` // "placeholder", "tfidf", "composite"
 }
 
 // Service is the main RAG service
 type Service struct {
-	config    ServiceConfig
-	qdrant    *QdrantClient
-	chunker   *Chunker
-	scaler    *TokenScaler
-	mu        sync.RWMutex
-	metrics   *Metrics
-	isRunning bool
+	config           ServiceConfig
+	qdrant           *QdrantClient
+	chunker          *Chunker
+	scaler           *TokenScaler
+	embeddingService EmbeddingService
+	hybridSearch     *HybridSearchService
+	embeddingCache   *EmbeddingCache
+	queryCache       *QueryCache
+	mu               sync.RWMutex
+	metrics          *Metrics
+	isRunning        bool
 }
 
 // Metrics tracks RAG performance
@@ -36,6 +43,8 @@ type Metrics struct {
 	TotalDocuments   int64   `json:"total_documents"`
 	TotalChunks      int64   `json:"total_chunks"`
 	TotalQueries     int64   `json:"total_queries"`
+	CacheHits        int64   `json:"cache_hits"`
+	CacheMisses      int64   `json:"cache_misses"`
 	AvgLatencyMs     float64 `json:"avg_latency_ms"`
 	AvgTokensSaved   float64 `json:"avg_tokens_saved"`
 	CacheHitRate     float64 `json:"cache_hit_rate"`
@@ -56,12 +65,33 @@ func NewService(config ServiceConfig) (*Service, error) {
 	// Create scaler
 	scaler := NewTokenScaler(config.Scaler)
 
+	// Create embedding service based on config
+	var embeddingService EmbeddingService
+	switch config.EmbeddingType {
+	case "tfidf":
+		// TF-IDF would require vocabulary building
+		embeddingService = NewPlaceholderEmbeddingService(int(config.Qdrant.VectorSize))
+	default:
+		embeddingService = NewPlaceholderEmbeddingService(int(config.Qdrant.VectorSize))
+	}
+
+	// Create caches
+	embeddingCache := NewEmbeddingCache(config.Cache)
+	queryCache := NewQueryCache(config.Cache)
+
+	// Create hybrid search service
+	hybridSearch := NewHybridSearchService(config.HybridSearch, embeddingService, qdrant)
+
 	service := &Service{
-		config:  config,
-		qdrant:  qdrant,
-		chunker: chunker,
-		scaler:  scaler,
-		metrics: &Metrics{},
+		config:           config,
+		qdrant:           qdrant,
+		chunker:          chunker,
+		scaler:           scaler,
+		embeddingService: embeddingService,
+		hybridSearch:     hybridSearch,
+		embeddingCache:   embeddingCache,
+		queryCache:       queryCache,
+		metrics:          &Metrics{},
 	}
 
 	return service, nil
@@ -110,6 +140,19 @@ func (s *Service) Stop() error {
 func (s *Service) RetrieveContext(ctx context.Context, query string, maxTokens int, contextType string) (*RetrieveResult, error) {
 	start := time.Now()
 
+	// Check query cache first
+	if cached, ok := s.queryCache.Get(query, maxTokens, contextType); ok {
+		s.metrics.mu.Lock()
+		s.metrics.CacheHits++
+		s.metrics.mu.Unlock()
+		log.Printf("Query cache hit for: %s", query[:minInt(50, len(query))])
+		return cached, nil
+	}
+
+	s.metrics.mu.Lock()
+	s.metrics.CacheMisses++
+	s.metrics.mu.Unlock()
+
 	// Scale tokens
 	scaleResult := s.scaler.Scale(ScaleRequest{
 		Query:       query,
@@ -117,9 +160,62 @@ func (s *Service) RetrieveContext(ctx context.Context, query string, maxTokens i
 		ContextType: contextType,
 	})
 
-	// Generate query embedding (placeholder - needs actual embedding model)
-	// In production, this would call an embedding service
-	queryVector := s.generatePlaceholderEmbedding(query)
+	// Use hybrid search
+	hybridResults, err := s.hybridSearch.Search(ctx, query, 10, 0.3)
+	if err != nil {
+		// Fallback to simple semantic search
+		log.Printf("Hybrid search failed, falling back to semantic search: %v", err)
+		return s.fallbackRetrieve(ctx, query, scaleResult)
+	}
+
+	// Build response within token budget
+	var chunks []ContextChunkInfo
+	totalTokens := 0
+
+	for _, hr := range hybridResults {
+		tokenCount := len(hr.Result.Content) / 4
+		if totalTokens+tokenCount > scaleResult.RecommendedTokens {
+			break
+		}
+
+		chunks = append(chunks, ContextChunkInfo{
+			Content:    hr.Result.Content,
+			SourceFile: hr.Result.SourceFile,
+			StartLine:  hr.Result.StartLine,
+			EndLine:    hr.Result.EndLine,
+			Score:      hr.CombinedScore,
+			ChunkType:  hr.Result.ChunkType,
+		})
+		totalTokens += tokenCount
+	}
+
+	// Update metrics
+	latency := time.Since(start).Milliseconds()
+	s.updateMetrics(latency, totalTokens, scaleResult.RecommendedTokens)
+
+	result := &RetrieveResult{
+		Chunks:          chunks,
+		TotalTokens:     totalTokens,
+		ScalingInfo:     scaleResult,
+		LatencyMs:       latency,
+		QueryComplexity: scaleResult.ComplexityScore,
+	}
+
+	// Cache the result
+	s.queryCache.Set(query, maxTokens, contextType, result)
+
+	return result, nil
+}
+
+// fallbackRetrieve uses simple semantic search when hybrid search fails
+func (s *Service) fallbackRetrieve(ctx context.Context, query string, scaleResult ScaleResult) (*RetrieveResult, error) {
+	start := time.Now()
+
+	// Generate query embedding with caching
+	queryVector, err := s.getEmbedding(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate embedding: %w", err)
+	}
 
 	// Search Qdrant
 	results, err := s.qdrant.Search(ctx, queryVector, 10, 0.5)
@@ -147,17 +243,35 @@ func (s *Service) RetrieveContext(ctx context.Context, query string, maxTokens i
 		totalTokens += r.TokenCount()
 	}
 
-	// Update metrics
 	latency := time.Since(start).Milliseconds()
 	s.updateMetrics(latency, totalTokens, scaleResult.RecommendedTokens)
 
 	return &RetrieveResult{
-		Chunks:         chunks,
-		TotalTokens:    totalTokens,
-		ScalingInfo:    scaleResult,
-		LatencyMs:      latency,
+		Chunks:          chunks,
+		TotalTokens:     totalTokens,
+		ScalingInfo:     scaleResult,
+		LatencyMs:       latency,
 		QueryComplexity: scaleResult.ComplexityScore,
 	}, nil
+}
+
+// getEmbedding gets embedding with caching
+func (s *Service) getEmbedding(ctx context.Context, text string) ([]float32, error) {
+	// Check cache first
+	if cached, ok := s.embeddingCache.Get(text); ok {
+		return cached, nil
+	}
+
+	// Generate embedding
+	embedding, err := s.embeddingService.Embed(ctx, text)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the embedding
+	s.embeddingCache.Set(text, embedding)
+
+	return embedding, nil
 }
 
 // IndexDocument indexes a single document
@@ -180,7 +294,12 @@ func (s *Service) IndexDocument(ctx context.Context, filePath string) error {
 	// Generate embeddings and upsert
 	points := make([]VectorPoint, len(chunks))
 	for i, chunk := range chunks {
-		embedding := s.generatePlaceholderEmbedding(chunk.Content)
+		embedding, err := s.getEmbedding(ctx, chunk.Content)
+		if err != nil {
+			log.Printf("Failed to generate embedding for chunk %d: %v", i, err)
+			continue
+		}
+
 		points[i] = VectorPoint{
 			ID:     chunk.ID,
 			Vector: embedding,
@@ -277,32 +396,26 @@ func (s *Service) determineTags(filePath string) []string {
 	return tags
 }
 
-// generatePlaceholderEmbedding generates a placeholder embedding
-// In production, this would call an actual embedding model
-func (s *Service) generatePlaceholderEmbedding(text string) []float32 {
-	// Simple hash-based placeholder
-	// Replace with actual embedding model in production
-	vector := make([]float32, 384) // Common embedding size
-	for i := range vector {
-		vector[i] = float32(len(text)%100) / 100.0
-	}
-	return vector
-}
-
 // updateMetrics updates service metrics
 func (s *Service) updateMetrics(latencyMs int64, tokensUsed, tokensBudget int) {
 	s.metrics.mu.Lock()
 	defer s.metrics.mu.Unlock()
 
 	s.metrics.TotalQueries++
-	
+
 	// Update average latency
 	s.metrics.AvgLatencyMs = (s.metrics.AvgLatencyMs*float64(s.metrics.TotalQueries-1) + float64(latencyMs)) / float64(s.metrics.TotalQueries)
-	
+
 	// Update tokens saved
 	saved := float64(tokensBudget - tokensUsed)
 	if saved > 0 {
 		s.metrics.AvgTokensSaved = (s.metrics.AvgTokensSaved*float64(s.metrics.TotalQueries-1) + saved) / float64(s.metrics.TotalQueries)
+	}
+
+	// Update cache hit rate
+	total := s.metrics.CacheHits + s.metrics.CacheMisses
+	if total > 0 {
+		s.metrics.CacheHitRate = float64(s.metrics.CacheHits) / float64(total) * 100
 	}
 }
 
@@ -335,4 +448,12 @@ type ContextChunkInfo struct {
 // TokenCount returns estimated token count for a search result
 func (sr SearchResult) TokenCount() int {
 	return len(sr.Content) / 4
+}
+
+// minInt returns the minimum of two integers
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
