@@ -1,0 +1,258 @@
+{
+  "project": "q_mini_wasm_v2",
+  "skills": {
+    "quantum_core": {
+      "name": "Quantum Core Development",
+      "description": "Skills for developing qutrit stabilizer formalism, GF(3) arithmetic, and Clifford gates",
+      "mcp_server": "qminiwasm-core-cpp",
+      "tools": [
+        "compile_ternary_core",
+        "analyze_stabilizer_tableau",
+        "verify_clifford_operations",
+        "kanban_quantum_status"
+      ],
+      "expertise_level": "expert",
+      "prerequisites": ["cpp_17", "quantum_mechanics", "galois_field_theory"],
+      "capabilities": [
+        "qutrit_stabilizer_tableau_operations",
+        "gf3_modulo_arithmetic",
+        "clifford_gate_synthesis",
+        "entanglement_entropy_calculation"
+      ]
+    },
+    
+    "dll_bridge": {
+      "name": "DLL Bridge & Bindings",
+      "description": "Skills for generating language bindings and DLL exports",
+      "mcp_server": "qminiwasm-dll-bridge",
+      "tools": [
+        "dll_compile_quantum_api",
+        "generate_quantum_bindings",
+        "validate_quantum_exports",
+        "kanban_dll_pipeline"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["cpp_17", "cgo", "ffi"],
+      "capabilities": [
+        "go_cgo_binding_generation",
+        "rust_ffi_binding_generation",
+        "python_ctypes_binding_generation",
+        "wasm_binding_generation",
+        "dll_export_validation"
+      ]
+    },
+    
+    "go_runtime": {
+      "name": "Go Gateway Runtime",
+      "description": "Skills for Go gateway with CGO bindings to qutrit engine",
+      "mcp_server": "qminiwasm-go-runtime",
+      "tools": [
+        "go_build_quantum",
+        "go_test_quantum",
+        "cgo_generate_qutrit",
+        "kanban_go_status"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["go_1_26", "cgo", "grpc"],
+      "capabilities": [
+        "go_module_management",
+        "cgo_qutrit_bindings",
+        "grpc_service_implementation",
+        "mcp_protocol_handling"
+      ]
+    },
+    
+    "documentation_intelligence": {
+      "name": "Documentation Intelligence",
+      "description": "Skills for cognitive ergonomics documentation and API reference generation",
+      "mcp_server": "qminiwasm-doc-intelligence",
+      "tools": [
+        "doc_gap_analysis",
+        "cognitive_audit",
+        "wiki_sync",
+        "api_extract"
+      ],
+      "expertise_level": "intermediate",
+      "prerequisites": ["markdown", "cognitive_ergonomics", "ast_analysis"],
+      "capabilities": [
+        "undocumented_api_detection",
+        "cognitive_ergonomics_validation",
+        "github_wiki_generation",
+        "header_ast_analysis"
+      ]
+    },
+    
+    "rag_service": {
+      "name": "RAG Service",
+      "description": "Skills for retrieval-augmented generation and context optimization",
+      "mcp_server": "qminiwasm-rag-service",
+      "tools": [
+        "rag_retrieve_context",
+        "rag_index_document",
+        "rag_get_metrics",
+        "rag_reindex_all",
+        "kanban_rag_status"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["vector_databases", "qdrant", "embeddings"],
+      "capabilities": [
+        "semantic_search",
+        "document_indexing",
+        "context_retrieval",
+        "token_optimization"
+      ]
+    },
+    
+    "runtime_engine": {
+      "name": "WASM Runtime Engine",
+      "description": "Skills for WASM orchestrator with async tableau tracking",
+      "mcp_server": "qminiwasm-runtime-engine",
+      "tools": [
+        "compile_orchestrator",
+        "rust_ffi_generate",
+        "runtime_metrics",
+        "kanban_runtime_status"
+      ],
+      "expertise_level": "expert",
+      "prerequisites": ["wasm", "emscripten", "async_programming", "3d_nand_cim"],
+      "capabilities": [
+        "wasm_compilation",
+        "async_tableau_tracking",
+        "rust_ffi_generation",
+        "cim_integration"
+      ]
+    },
+    
+    "self_learning": {
+      "name": "Self-Learning & Pattern Detection",
+      "description": "Skills for analyzing project patterns and auto-generating tools",
+      "mcp_server": "qminiwasm-self-learning",
+      "tools": [
+        "analyze_patterns",
+        "suggest_tool",
+        "collect_metrics",
+        "evolve_schema"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["git_analysis", "pattern_recognition", "schema_design"],
+      "capabilities": [
+        "git_history_analysis",
+        "build_pattern_detection",
+        "tool_suggestion",
+        "schema_evolution"
+      ]
+    },
+    
+    "sycl_acceleration": {
+      "name": "SYCL GPU Acceleration",
+      "description": "Skills for SYCL GPU kernels for qutrit stabilizer operations",
+      "mcp_server": "qminiwasm-sycl-accelerator",
+      "tools": [
+        "sycl_compile_tableau",
+        "profile_sycl_tableau",
+        "tableau_gpu_optimize",
+        "kanban_sycl_status"
+      ],
+      "expertise_level": "expert",
+      "prerequisites": ["sycl", "gpu_programming", "parallel_algorithms"],
+      "capabilities": [
+        "gpu_kernel_compilation",
+        "kernel_profiling",
+        "gf3_gpu_optimization",
+        "parallel_tableau_updates"
+      ]
+    },
+    
+    "test_orchestration": {
+      "name": "Test Orchestration",
+      "description": "Skills for quantum test automation and multi-language testing",
+      "mcp_server": "qminiwasm-test-orchestrator",
+      "tools": [
+        "run_quantum_tests",
+        "generate_test_report",
+        "kanban_test_gate",
+        "multi_lang_test"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["cpp_testing", "go_testing", "integration_testing"],
+      "capabilities": [
+        "quantum_correctness_testing",
+        "stabilizer_verification",
+        "multi_language_coordination",
+        "coverage_analysis"
+      ]
+    },
+    
+    "wui_design": {
+      "name": "Web UI Design",
+      "description": "Skills for WUI visualization with cognitive CSS",
+      "mcp_server": "qminiwasm-wui-designer",
+      "tools": [
+        "wui_build",
+        "r_analytics_generate",
+        "cognitive_css_audit",
+        "kanban_wui_status"
+      ],
+      "expertise_level": "intermediate",
+      "prerequisites": ["html_css", "wasm_bindings", "cognitive_ergonomics"],
+      "capabilities": [
+        "wasm_ui_building",
+        "r_analytics_integration",
+        "cognitive_css_validation",
+        "qutrit_visualization"
+      ]
+    }
+  },
+  
+  "skill_compositions": {
+    "full_quantum_pipeline": {
+      "description": "Complete quantum-classical development pipeline",
+      "skills": [
+        "quantum_core",
+        "dll_bridge",
+        "go_runtime",
+        "test_orchestration"
+      ],
+      "workflow": "develop -> bind -> integrate -> test"
+    },
+    
+    "documentation_pipeline": {
+      "description": "Complete documentation and knowledge management",
+      "skills": [
+        "documentation_intelligence",
+        "rag_service",
+        "self_learning"
+      ],
+      "workflow": "analyze -> document -> index -> learn"
+    },
+    
+    "acceleration_pipeline": {
+      "description": "GPU acceleration and optimization",
+      "skills": [
+        "quantum_core",
+        "sycl_acceleration",
+        "runtime_engine"
+      ],
+      "workflow": "implement -> accelerate -> profile -> optimize"
+    }
+  },
+  
+  "kanban_integration": {
+    "status_tracking": {
+      "quantum_core": "kanban_quantum_status",
+      "dll_bridge": "kanban_dll_pipeline",
+      "go_runtime": "kanban_go_status",
+      "rag_service": "kanban_rag_status",
+      "runtime_engine": "kanban_runtime_status",
+      "sycl_accelerator": "kanban_sycl_status",
+      "test_orchestrator": "kanban_test_gate",
+      "wui_designer": "kanban_wui_status"
+    },
+    "pipeline_gates": {
+      "code_review": "required",
+      "quantum_expert_review": "recommended_for_core",
+      "test_coverage": ">=80%",
+      "energy_efficiency": "validate_pj_targets"
+    }
+  }
+}

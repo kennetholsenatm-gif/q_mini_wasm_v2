@@ -1,0 +1,157 @@
+{
+  "project": "q_mini_wasm_v2",
+  "git_hooks": {
+    "pre_commit": {
+      "description": "Pre-commit validation for quantum-classical code quality",
+      "enabled": true,
+      "checks": [
+        {
+          "name": "clang_format",
+          "command": "find q_mini_wasm_v2 -name \"*.hpp\" -o -name \"*.cpp\" | xargs clang-format --dry-run --Werror",
+          "description": "Check C++ code formatting",
+          "required": true
+        },
+        {
+          "name": "trit_operation_validation",
+          "command": "python scripts/validate_trit_ops.py",
+          "description": "Validate all trit operations use GF(3) arithmetic",
+          "required": true
+        },
+        {
+          "name": "quantum_imports_check",
+          "command": "grep -r \"#include.*<cmath>\" q_mini_wasm_v2/core && exit 1 || exit 0",
+          "description": "Ensure no floating-point math in quantum core",
+          "required": true
+        },
+        {
+          "name": "go_fmt",
+          "command": "cd q_mini_wasm_v2/go && gofmt -l . | grep . && exit 1 || exit 0",
+          "description": "Check Go code formatting",
+          "required": true
+        },
+        {
+          "name": "wasm_build_check",
+          "command": "emcmake cmake -S q_mini_wasm_v2 -B wasm_check -DBUILD_WASM=ON 2>/dev/null || echo 'WASM build optional'",
+          "description": "Verify WASM build configuration",
+          "required": false
+        }
+      ]
+    },
+    
+    "commit_msg": {
+      "description": "Enforce commit message conventions",
+      "enabled": true,
+      "format": "^(feat|fix|docs|style|refactor|test|chore|quantum)\\(\\w+\\): .{1,72}",
+      "examples": [
+        "feat(core): add CSUM gate implementation for qutrit stabilizer",
+        "fix(moe): correct tropical routing weight calculation",
+        "quantum(stabilizer): optimize tableau update to O(n^2)",
+        "docs(api): update ternary arithmetic reference"
+      ],
+      "quantum_prefixes": {
+        "quantum": "Changes to quantum algorithms or stabilizer formalism",
+        "trit": "Changes to ternary state operations",
+        "tableau": "Changes to stabilizer tableau implementation",
+        "clifford": "Changes to Clifford gate operations"
+      }
+    },
+    
+    "pre_push": {
+      "description": "Pre-push validation",
+      "enabled": true,
+      "checks": [
+        {
+          "name": "cpp_tests",
+          "command": "cd q_mini_wasm_v2/build && ctest --build-config Release --output-on-failure",
+          "description": "Run C++ test suite",
+          "required": true
+        },
+        {
+          "name": "go_tests",
+          "command": "cd q_mini_wasm_v2/go && go test -race ./...",
+          "description": "Run Go tests with race detection",
+          "required": true
+        },
+        {
+          "name": "integration_tests",
+          "command": "cd q_mini_wasm_v2/build && ./q_mini_wasm_v2_tests",
+          "description": "Run integration tests",
+          "required": true
+        },
+        {
+          "name": "energy_benchmark",
+          "command": "python scripts/benchmark_energy.py --quick",
+          "description": "Run quick energy efficiency benchmark",
+          "required": false
+        }
+      ]
+    },
+    
+    "post_commit": {
+      "description": "Post-commit automation",
+      "enabled": true,
+      "actions": [
+        {
+          "name": "update_knowledge_graph",
+          "command": "python scripts/update_knowledge_graph.py",
+          "description": "Update project knowledge graph with new changes",
+          "required": false
+        },
+        {
+          "name": "index_to_rag",
+          "command": "curl -X POST http://localhost:8080/index -d '{\"commit\": \"$(git rev-parse HEAD)\"}'",
+          "description": "Index changes to RAG service",
+          "required": false
+        }
+      ]
+    },
+    
+    "post_merge": {
+      "description": "Post-merge automation",
+      "enabled": true,
+      "actions": [
+        {
+          "name": "rebuild_index",
+          "command": "python scripts/rebuild_index.py",
+          "description": "Rebuild project indices after merge",
+          "required": false
+        },
+        {
+          "name": "generate_changelog",
+          "command": "python scripts/generate_changelog.py",
+          "description": "Generate changelog from merged commits",
+          "required": false
+        }
+      ]
+    }
+  },
+  
+  "quantum_specific_hooks": {
+    "stabilizer_correctness": {
+      "description": "Validate stabilizer tableau after quantum operations",
+      "trigger": "changes_to_core_stabilizer",
+      "checks": [
+        "verify_gottesman_knill_compliance",
+        "check_tableau_dimensions",
+        "validate_modulo3_operations"
+      ]
+    },
+    "clifford_gate_validation": {
+      "description": "Verify Clifford gate implementations",
+      "trigger": "changes_to_clifford_synthesis",
+      "checks": [
+        "verify_hadamard_properties",
+        "verify_phase_properties",
+        "verify_csum_properties"
+      ]
+    },
+    "energy_efficiency": {
+      "description": "Monitor energy efficiency of quantum operations",
+      "trigger": "pre_release",
+      "checks": [
+        "compare_to_baseline",
+        "validate_pj_per_op_target"
+      ]
+    }
+  }
+}
