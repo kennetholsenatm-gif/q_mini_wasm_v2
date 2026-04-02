@@ -1,0 +1,97 @@
+{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "rejected_improvements": [
+    {
+      "id": "rejected_001",
+      "name": "Full Quantum Error Correction",
+      "module": "quantum_core",
+      "description": "Implement full quantum error correction codes for qutrit systems",
+      "rejected_at": "2026-04-02T15:47:19.850431",
+      "rejection_reasons": [
+        "high_complexity",
+        "misalignment"
+      ],
+      "feasibility_assessment": {
+        "technical_complexity": "very_high",
+        "resource_requirements": "extensive",
+        "alignment_score": "low",
+        "potential_value": "medium"
+      },
+      "notes": "Beyond current scope of ternary computing research",
+      "status": "rejected",
+      "review_date": null,
+      "reconsideration_criteria": []
+    },
+    {
+      "id": "rejected_002",
+      "name": "Java JNI Bindings",
+      "module": "dll_bridge",
+      "description": "Add Java Native Interface bindings for C++ quantum engine",
+      "rejected_at": "2026-04-02T15:47:19.851413",
+      "rejection_reasons": [
+        "high_complexity",
+        "maintenance_burden"
+      ],
+      "feasibility_assessment": {
+        "technical_complexity": "very_high",
+        "resource_requirements": "significant",
+        "alignment_score": "low",
+        "potential_value": "low"
+      },
+      "notes": "Very high maintenance burden for limited user base",
+      "status": "rejected",
+      "review_date": null,
+      "reconsideration_criteria": []
+    },
+    {
+      "id": "rejected_003",
+      "name": "GraphQL API",
+      "module": "go_runtime",
+      "description": "Add GraphQL API endpoint alongside existing gRPC/MCP",
+      "rejected_at": "2026-04-02T15:47:19.852553",
+      "rejection_reasons": [
+        "misalignment",
+        "low_value"
+      ],
+      "feasibility_assessment": {
+        "technical_complexity": "high",
+        "resource_requirements": "moderate",
+        "alignment_score": "none",
+        "potential_value": "low"
+      },
+      "notes": "Duplicate functionality, misaligned with MCP/gRPC architecture",
+      "status": "rejected",
+      "review_date": null,
+      "reconsideration_criteria": []
+    }
+  ],
+  "rejection_reasons": {
+    "high_complexity": "Implementation complexity exceeds available resources",
+    "misalignment": "Does not align with project goals or architecture",
+    "maintenance_burden": "Would create excessive maintenance overhead",
+    "low_value": "Potential value does not justify implementation cost",
+    "security_risk": "Introduces security vulnerabilities or risks",
+    "stability_risk": "Could introduce system instability"
+  },
+  "feasibility_criteria": {
+    "technical_complexity": {
+      "low": "Can be implemented with existing expertise",
+      "moderate": "Requires some research or new skills",
+      "high": "Requires significant expertise or external help",
+      "very_high": "Beyond current team capabilities"
+    },
+    "resource_requirements": {
+      "minimal": "Less than 1 week of development",
+      "moderate": "1-4 weeks of development",
+      "significant": "1-3 months of development",
+      "extensive": "More than 3 months of development"
+    },
+    "alignment_score": {
+      "high": "Directly supports core project goals",
+      "medium": "Indirectly supports project goals",
+      "low": "Minimal alignment with project goals",
+      "none": "No alignment with project goals"
+    }
+  }
+}
