@@ -1,0 +1,97 @@
+{
+  "name": "qminiwasm-test-orchestrator",
+  "description": "Test automation for qutrit stabilizer correctness, ternary network validation, Steane code verification",
+  "tools": [
+    {
+      "name": "run_quantum_tests",
+      "description": "Run tests for qutrit operations, stabilizer correctness, and GF(3) arithmetic",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "test_suite": {
+            "type": "string",
+            "enum": ["unit", "integration", "network", "stabilizer", "steane", "all"],
+            "default": "all"
+          },
+          "coverage": {
+            "type": "boolean",
+            "default": true
+          },
+          "parallel": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "generate_test_report",
+      "description": "Generate test report with qutrit operation coverage and stabilizer correctness metrics",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": ["json", "html", "markdown"],
+            "default": "markdown"
+          },
+          "include_coverage": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_test_gate",
+      "description": "Check test status for Kanban deployment gate validation",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "min_coverage": {
+            "type": "number",
+            "default": 80
+          },
+          "require_integration": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "multi_lang_test",
+      "description": "Coordinate tests across C++, Go, and Rust components",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["cpp", "go", "rust", "all"]
+            },
+            "default": ["all"]
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/tests/test_main.cpp",
+      "name": "test_main",
+      "description": "Main test entry point"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/tests/test_network.cpp",
+      "name": "test_network",
+      "description": "Ternary network module tests"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/tests/integration_test.cpp",
+      "name": "integration_test",
+      "description": "Integration test suite for quantum-classical components"
+    }
+  ]
+}

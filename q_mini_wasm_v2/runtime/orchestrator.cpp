@@ -22,8 +22,8 @@ RuntimeOrchestrator::~RuntimeOrchestrator() {
 // ============================================================================
 
 std::future<void> RuntimeOrchestrator::submit_tableau_update(
-    stabilizer::StabilizerTableau& tableau,
-    std::function<void(stabilizer::StabilizerTableau&)> gate_func
+    core::stabilizer::StabilizerTableau& tableau,
+    std::function<void(core::stabilizer::StabilizerTableau&)> gate_func
 ) {
     auto promise = std::make_shared<std::promise<void>>();
     auto future = promise->get_future();
@@ -48,8 +48,8 @@ std::future<void> RuntimeOrchestrator::submit_tableau_update(
 }
 
 std::future<std::vector<size_t>> RuntimeOrchestrator::submit_moe_routing(
-    moe::MoERouter& router,
-    const std::vector<ternary::Trit>& input
+    core::moe::MoERouter& router,
+    const std::vector<core::ternary::Trit>& input
 ) {
     auto promise = std::make_shared<std::promise<std::vector<size_t>>>();
     auto future = promise->get_future();
@@ -73,13 +73,13 @@ std::future<std::vector<size_t>> RuntimeOrchestrator::submit_moe_routing(
     return future;
 }
 
-std::future<learning::LayerGoodness> RuntimeOrchestrator::submit_ff_training(
-    learning::ForwardForwardLearner& learner,
+std::future<core::learning::LayerGoodness> RuntimeOrchestrator::submit_ff_training(
+    core::learning::ForwardForwardLearner& learner,
     size_t layer_idx,
-    const std::vector<std::vector<ternary::Trit>>& positive_data,
-    const std::vector<std::vector<ternary::Trit>>& negative_data
+    const std::vector<std::vector<core::ternary::Trit>>& positive_data,
+    const std::vector<std::vector<core::ternary::Trit>>& negative_data
 ) {
-    auto promise = std::make_shared<std::promise<learning::LayerGoodness>>();
+    auto promise = std::make_shared<std::promise<core::learning::LayerGoodness>>();
     auto future = promise->get_future();
     
     auto task = [&learner, layer_idx, &positive_data, &negative_data, promise]() {
@@ -98,6 +98,35 @@ std::future<learning::LayerGoodness> RuntimeOrchestrator::submit_ff_training(
     }
     queue_cv_.notify_one();
     
+    return future;
+}
+
+std::future<int> RuntimeOrchestrator::submit_steane_polling(
+    const core::steane::QutritSteaneCode& steane,
+    std::vector<core::ternary::Trit>& physical
+) {
+    auto promise = std::make_shared<std::promise<int>>();
+    auto future = promise->get_future();
+
+    auto task = [&steane, &physical, promise]() {
+        try {
+            int corrected_location = -1;
+            if (steane.detect_error(physical)) {
+                corrected_location = steane.correct_error(physical);
+            }
+            promise->set_value(corrected_location);
+        } catch (...) {
+            promise->set_exception(std::current_exception());
+        }
+    };
+
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        task_queue_.push(task);
+        ++active_tasks_;
+    }
+    queue_cv_.notify_one();
+
     return future;
 }
 

@@ -231,7 +231,7 @@ public:
 private:
     std::unique_ptr<AbsmeanQuantizer> quantizer_;
     std::unique_ptr<TernaryLSH> lsh_;
-    double last_sparsity_;
+    mutable double last_sparsity_;
 };
 
 } // namespace q_mini_wasm_v2::core::ingestion

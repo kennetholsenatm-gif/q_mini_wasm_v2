@@ -1,0 +1,92 @@
+{
+  "name": "qminiwasm-go-runtime",
+  "description": "Go gateway with CGO bindings to qutrit engine, MoE routing via quantum-classical bridge",
+  "tools": [
+    {
+      "name": "go_build_quantum",
+      "description": "Build Go modules with CGO bindings to qutrit stabilizer engine and MoE router",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string",
+            "enum": ["gateway", "engine", "all"],
+            "default": "all"
+          },
+          "race_detector": {
+            "type": "boolean",
+            "default": false
+          },
+          "enable_cgo": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "go_test_quantum",
+      "description": "Run Go tests with coverage for quantum-classical integration points",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string",
+            "default": "./..."
+          },
+          "verbose": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "cgo_generate_qutrit",
+      "description": "Generate CGO bindings from qutrit API headers for Go integration",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string",
+            "default": "q_mini_wasm_v2/dll/q_mini_wasm_v2_api.hpp"
+          },
+          "output": {
+            "type": "string",
+            "default": "pkg/engine/bindings.go"
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_go_status",
+      "description": "Get Go module build status for Kanban pipeline with quantum dependency tracking",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_deps": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/go/go.mod",
+      "name": "go_mod",
+      "description": "Go module definition and dependencies"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/go/cmd/gateway",
+      "name": "gateway_cmd",
+      "description": "Gateway command entry point for quantum-classical orchestration"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/go/pkg/engine",
+      "name": "engine_pkg",
+      "description": "Engine package with CGO bindings to qutrit operations"
+    }
+  ]
+}

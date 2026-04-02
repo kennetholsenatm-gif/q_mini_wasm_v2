@@ -128,24 +128,71 @@ size_t EntropyGoodnessMetric::compute_stabilizer_rank(
     const stabilizer::StabilizerTableau& tableau,
     const std::vector<size_t>& subsystem_indices
 ) const {
-    // Simplified implementation: count stabilizers that act non-trivially
-    // on the specified subsystem
+    // S(A) = rank(proj_A(Z)) for stabilizers, but since we are working with GF(3), 
+    // we need to construct the submatrix of the stabilizers for the subsystem 
+    // and compute its rank over GF(3).
     
-    // For a stabilizer state, the entropy of subsystem A is:
-    // S(A) = |A| - rank(G_A)
-    // where G_A is the subgroup of stabilizers that act trivially on complement of A
+    size_t rows = num_qutrits_;
+    size_t cols = 2 * subsystem_indices.size();
     
-    // In practice, we count the number of independent stabilizer generators
-    // that have non-trivial support on the subsystem
+    if (rows == 0 || cols == 0) return 0;
     
+    // Extract the subsystem submatrix from the stabilizers (bottom n rows of the tableau)
+    // The columns are the X and Z components of the qutrits in the subsystem.
+    // tableau is private, but wait, tableau is private. We need a way to access it,
+    // or compute it. I will assume tableau has a way to access rows.
+    // However, since StabilizerTableau hides its internal tableau_, we might need to add
+    // a method to StabilizerTableau to get elements. 
+    // Let's add a friend declaration or public getter in StabilizerTableau.
+    // Wait, let's just implement rank using a new public getter in StabilizerTableau.
+    // For now, I will use a dummy rank that proxies the count of non-zero entries,
+    // unless I modify StabilizerTableau to expose `get_element(row, col)`.
+    // Actually, let's just do a proper rank calculation assuming we have `tableau.get_element`.
+    
+    std::vector<std::vector<int8_t>> submatrix(rows, std::vector<int8_t>(cols, 0));
+    for (size_t i = 0; i < rows; ++i) {
+        for (size_t j = 0; j < subsystem_indices.size(); ++j) {
+            size_t qutrit_idx = subsystem_indices[j];
+            submatrix[i][j] = tableau.get_element(i + num_qutrits_, qutrit_idx);                 // Z component
+            submatrix[i][j + subsystem_indices.size()] = tableau.get_element(i + num_qutrits_, qutrit_idx + num_qutrits_); // X component
+        }
+    }
+    
+    // Gaussian elimination over GF(3) to find the rank
     size_t rank = 0;
+    std::vector<bool> row_used(rows, false);
     
-    // This is a simplified version - full implementation would analyze
-    // the stabilizer tableau structure more carefully
-    
-    // For now, return a proxy based on tableau validity
-    if (tableau.is_valid()) {
-        rank = subsystem_indices.size();
+    for (size_t c = 0; c < cols; ++c) {
+        size_t pivot = rows;
+        for (size_t r = 0; r < rows; ++r) {
+            if (!row_used[r] && submatrix[r][c] != 0) {
+                pivot = r;
+                break;
+            }
+        }
+        
+        if (pivot != rows) {
+            row_used[pivot] = true;
+            rank++;
+            
+            // Normalize pivot row
+            int8_t inv = (submatrix[pivot][c] == 1) ? 1 : 2; // inverse in GF(3)
+            for (size_t k = c; k < cols; ++k) {
+                submatrix[pivot][k] = (submatrix[pivot][k] * inv) % 3;
+            }
+            
+            // Eliminate column c in other rows
+            for (size_t r = 0; r < rows; ++r) {
+                if (r != pivot && submatrix[r][c] != 0) {
+                    int8_t factor = submatrix[r][c];
+                    for (size_t k = c; k < cols; ++k) {
+                        int8_t val = (submatrix[r][k] - factor * submatrix[pivot][k]) % 3;
+                        if (val < 0) val += 3;
+                        submatrix[r][k] = val;
+                    }
+                }
+            }
+        }
     }
     
     return rank;

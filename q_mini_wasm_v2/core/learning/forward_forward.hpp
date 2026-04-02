@@ -91,6 +91,26 @@ public:
      */
     double compute_goodness(const std::vector<ternary::Trit>& activations) const;
 
+    /**
+     * @brief Compute goodness using Entanglement Entropy
+     * @param tableau The state tracking tableau
+     * @return Goodness score (higher = lower entropy = better for positive data)
+     */
+    double compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const;
+
+    /**
+     * @brief Train a layer using Entanglement Entropy metric and Clifford circuits
+     * @param layer_idx Layer index to train
+     * @param positive_data Real training samples
+     * @param negative_data Corrupted/generated negative samples
+     * @return Layer goodness metrics based on Entanglement Entropy
+     */
+    LayerGoodness train_layer_entangled(
+        size_t layer_idx,
+        const std::vector<std::vector<ternary::Trit>>& positive_data,
+        const std::vector<std::vector<ternary::Trit>>& negative_data
+    );
+
     // ========================================================================
     // Forward Pass
     // ========================================================================

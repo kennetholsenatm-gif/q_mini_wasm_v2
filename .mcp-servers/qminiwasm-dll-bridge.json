@@ -1,0 +1,85 @@
+{
+  "name": "qminiwasm-dll-bridge",
+  "description": "QMINIWASM DLL exports for quantum-classical API surface, WASM bindings, Go CGO/Rust FFI integration",
+  "tools": [
+    {
+      "name": "dll_compile_quantum_api",
+      "description": "Compile DLL with quantum-classical API exports for qutrit operations and stabilizer tracking",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": ["windows", "linux", "macos", "all"],
+            "default": "windows"
+          },
+          "arch": {
+            "type": "string",
+            "enum": ["x86_64", "arm64"],
+            "default": "x86_64"
+          },
+          "enable_wasm": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "generate_quantum_bindings",
+      "description": "Generate language bindings (Go CGO, Rust FFI, Python ctypes) for qutrit API",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target_lang": {
+            "type": "string",
+            "enum": ["go", "rust", "python", "wasm", "all"],
+            "default": "all"
+          },
+          "header_path": {
+            "type": "string",
+            "default": "q_mini_wasm_v2/dll/q_mini_wasm_v2_api.hpp"
+          }
+        }
+      }
+    },
+    {
+      "name": "validate_quantum_exports",
+      "description": "Validate DLL exports include qutrit operations, stabilizer updates, and MoE routing functions",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dll_path": {
+            "type": "string",
+            "description": "Path to compiled DLL to validate"
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_dll_pipeline",
+      "description": "Track DLL build status in Kanban pipeline with quantum dependency mapping",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_deps": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/dll/q_mini_wasm_v2_api.hpp",
+      "name": "dll_api_header",
+      "description": "Main DLL API header with quantum-classical exported functions"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/dll/impl/q_mini_wasm_v2_api.cpp",
+      "name": "dll_api_impl",
+      "description": "DLL API implementation for qutrit operations"
+    }
+  ]
+}

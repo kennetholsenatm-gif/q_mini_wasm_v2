@@ -88,6 +88,11 @@ public:
     void apply_pauli_x(size_t j);
     
     /**
+     * @brief Apply Pauli Y gate to qutrit j
+     */
+    void apply_pauli_y(size_t j);
+    
+    /**
      * @brief Apply Pauli Z gate (clock) to qutrit j
      */
     void apply_pauli_z(size_t j);
@@ -132,6 +137,13 @@ public:
      * @brief Check if tableau represents valid stabilizer state
      */
     bool is_valid() const;
+    
+    /**
+     * @brief Access an element from the tableau matrix (for Entropy computations)
+     */
+    int8_t get_element(size_t row, size_t col) const {
+        return tableau_[row][col];
+    }
 
 private:
     size_t n_;  // Number of qutrits

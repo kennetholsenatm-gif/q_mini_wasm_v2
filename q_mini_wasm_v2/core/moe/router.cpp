@@ -36,13 +36,14 @@ std::vector<double> MoERouter::compute_routing_logits(const std::vector<ternary:
     
     for (size_t e = 0; e < config_.total_experts; ++e) {
         // Compute tropical inner product between input and routing weights
-        std::vector<double> input_double(input.size());
-        std::vector<double> weights_double(routing_weights_[e].size());
+        size_t min_size = std::min(input.size(), routing_weights_[e].size());
+        std::vector<double> input_double(min_size);
+        std::vector<double> weights_double(min_size);
         
-        for (size_t i = 0; i < input.size(); ++i) {
+        for (size_t i = 0; i < min_size; ++i) {
             input_double[i] = static_cast<double>(input[i]);
         }
-        for (size_t i = 0; i < routing_weights_[e].size(); ++i) {
+        for (size_t i = 0; i < min_size; ++i) {
             weights_double[i] = static_cast<double>(routing_weights_[e][i]);
         }
         

@@ -1,0 +1,86 @@
+{
+  "name": "qminiwasm-rag-service",
+  "description": "RAG service for token optimization - dual-purpose gateway with MCP and HTTP modes",
+  "command": "q_mini_wasm_v2/go/bin/gateway.exe",
+  "args": ["--mcp"],
+  "env": {
+    "QDRANT_HOST": "localhost",
+    "QDRANT_PORT": "6334",
+    "PROJECT_ROOT": "."
+  },
+  "tools": [
+    {
+      "name": "rag_retrieve_context",
+      "description": "Retrieve relevant context from project documentation and code using RAG",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Query or code context to search for"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "description": "Maximum tokens to return (0 = auto-scale)",
+            "default": 0
+          },
+          "context_type": {
+            "type": "string",
+            "enum": ["code", "documentation", "research", "api", "all"],
+            "default": "all"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "rag_index_document",
+      "description": "Index a document into the RAG vector store",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to the document to index"
+          }
+        },
+        "required": ["file_path"]
+      }
+    },
+    {
+      "name": "rag_get_metrics",
+      "description": "Get RAG service performance metrics",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "rag_reindex_all",
+      "description": "Trigger full re-indexing of all project documents",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string",
+            "description": "Directory to reindex",
+            "default": "q_mini_wasm_v2"
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_rag_status",
+      "description": "Get RAG service status for Kanban pipeline",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_metrics": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  ]
+}

@@ -147,9 +147,11 @@ int QutritSteaneCode::syndrome_to_location(const std::vector<int8_t>& syndrome) 
         key = key * 3 + ((syndrome[i] % 3) + 3) % 3;
     }
     
-    auto it = syndrome_table_.find(key);
-    if (it != syndrome_table_.end()) {
-        return it->second;
+    // Linear search as array replacement for unordered_map missing find
+    for (size_t i = 0; i < syndrome_table_.size(); i += 2) {
+        if (syndrome_table_[i] == key) {
+            return syndrome_table_[i + 1];
+        }
     }
     
     return -1;  // No correctable error
@@ -257,7 +259,8 @@ void QutritSteaneCode::build_syndrome_table() {
             }
             
             // Store in table (note: X and Z errors at same location may have different syndromes)
-            syndrome_table_[key] = static_cast<int>(loc);
+            syndrome_table_.push_back(key);
+            syndrome_table_.push_back(static_cast<int>(loc));
         }
     }
 }

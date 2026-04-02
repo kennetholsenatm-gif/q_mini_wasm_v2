@@ -170,6 +170,8 @@ private:
     
     // Syndrome lookup table for single-qutrit errors
     // Maps syndrome to error location
+    // We use a flat vector since we don't have std::unordered_map
+    // Layout: [key1, val1, key2, val2, ...]
     std::vector<int> syndrome_table_;
     
     /**

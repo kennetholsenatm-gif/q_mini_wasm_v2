@@ -21,10 +21,22 @@ set(CORE_SOURCES
     core/ternary/trit.hpp
     core/stabilizer/tableau.hpp
     core/stabilizer/tableau.cpp
+    core/stabilizer/clifford_synthesis.hpp
+    core/stabilizer/clifford_synthesis.cpp
+    core/steane/qutrit_steane.hpp
+    core/steane/qutrit_steane.cpp
+    core/ingestion/absmean_quantizer.hpp
+    core/ingestion/absmean_quantizer.cpp
+    core/ingestion/clifford_shadow.hpp
+    core/ingestion/clifford_shadow.cpp
+    core/learning/entropy_goodness.hpp
+    core/learning/entropy_goodness.cpp
     core/moe/router.hpp
     core/moe/router.cpp
     core/learning/forward_forward.hpp
     core/learning/forward_forward.cpp
+    core/network.hpp
+    core/network.cpp
 )
 
 set(RUNTIME_SOURCES
@@ -70,8 +82,12 @@ if(BUILD_TESTS)
     add_executable(q_mini_wasm_v2_tests tests/test_main.cpp)
     target_link_libraries(q_mini_wasm_v2_tests PRIVATE q_mini_wasm_v2_core)
     
+    add_executable(q_mini_wasm_v2_network_test tests/test_network.cpp)
+    target_link_libraries(q_mini_wasm_v2_network_test PRIVATE q_mini_wasm_v2_core)
+
     enable_testing()
     add_test(NAME q_mini_wasm_v2_tests COMMAND q_mini_wasm_v2_tests)
+    add_test(NAME q_mini_wasm_v2_network_test COMMAND q_mini_wasm_v2_network_test)
 endif()
 
 # ============================================================================

@@ -1,0 +1,84 @@
+{
+  "name": "qminiwasm-runtime-engine",
+  "description": "WASM orchestrator with async tableau tracking, 3D NAND CIM integration, Rust FFI for qutrit operations",
+  "tools": [
+    {
+      "name": "compile_orchestrator",
+      "description": "Compile WASM orchestrator for async qutrit stabilizer tracking and 3D NAND CIM control",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "build_type": {
+            "type": "string",
+            "enum": ["Debug", "Release", "MinSizeRel"],
+            "default": "Release"
+          },
+          "enable_wasm": {
+            "type": "boolean",
+            "default": true
+          },
+          "enable_cim": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "rust_ffi_generate",
+      "description": "Generate Rust FFI bindings from orchestrator headers for qutrit operations",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string",
+            "default": "q_mini_wasm_v2/runtime/orchestrator.hpp"
+          },
+          "output": {
+            "type": "string",
+            "default": "src/bindings.rs"
+          }
+        }
+      }
+    },
+    {
+      "name": "runtime_metrics",
+      "description": "Collect runtime performance metrics: tableau update latency, 3D NAND throughput, async polling stats",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "enum": ["latency", "throughput", "memory", "cim", "all"],
+            "default": "all"
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_runtime_status",
+      "description": "Track runtime build and deployment status in Kanban pipeline",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_wasm": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/runtime/orchestrator.hpp",
+      "name": "orchestrator_header",
+      "description": "Runtime orchestrator header for WASM execution and async tableau tracking"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/runtime/orchestrator.cpp",
+      "name": "orchestrator_impl",
+      "description": "Runtime orchestrator implementation with 3D NAND CIM integration"
+    }
+  ]
+}

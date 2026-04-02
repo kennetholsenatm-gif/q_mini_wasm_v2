@@ -1,0 +1,89 @@
+{
+  "name": "qminiwasm-wui-designer",
+  "description": "Web UI for QMINIWASM visualization, R analytics for entropy metrics, cognitive CSS for qutrit displays",
+  "tools": [
+    {
+      "name": "wui_build",
+      "description": "Build Web UI with WASM bindings for qutrit visualization and cognitive CSS",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "minify": {
+            "type": "boolean",
+            "default": true
+          },
+          "include_wasm": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "r_analytics_generate",
+      "description": "Generate R analytics integration for entropy metrics and stabilizer state visualization",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": ["graph_node", "dashboard", "entropy", "all"],
+            "default": "all"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": ["htmlwidgets", "shiny", "standalone"],
+            "default": "htmlwidgets"
+          }
+        }
+      }
+    },
+    {
+      "name": "cognitive_css_audit",
+      "description": "Audit CSS for cognitive ergonomics compliance in qutrit visualization",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "default": "q_mini_wasm_v2/wui/styles/cognitive.css"
+          },
+          "strict": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_wui_status",
+      "description": "Track WUI build and deployment status in Kanban pipeline",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_wasm_size": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/wui/index.html",
+      "name": "wui_index",
+      "description": "Main WUI entry point for qutrit visualization"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/wui/components/graph_node.hpp",
+      "name": "graph_node_component",
+      "description": "Graph node web component for stabilizer state display"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/wui/styles/cognitive.css",
+      "name": "cognitive_styles",
+      "description": "Cognitive ergonomics optimized CSS for qutrit visualization"
+    }
+  ]
+}

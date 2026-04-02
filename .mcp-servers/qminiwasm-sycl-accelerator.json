@@ -1,0 +1,82 @@
+{
+  "name": "qminiwasm-sycl-accelerator",
+  "description": "SYCL GPU kernels for qutrit stabilizer tableau operations, GF(3) modulo-3 arithmetic on GPU",
+  "tools": [
+    {
+      "name": "sycl_compile_tableau",
+      "description": "Compile SYCL kernels for GPU-accelerated qutrit stabilizer tableau operations",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": ["cpu", "gpu", "fpga", "auto"],
+            "default": "auto"
+          },
+          "optimization": {
+            "type": "string",
+            "enum": ["O0", "O1", "O2", "O3", "Os"],
+            "default": "O2"
+          }
+        }
+      }
+    },
+    {
+      "name": "profile_sycl_tableau",
+      "description": "Profile SYCL kernel execution for qutrit operations and GPU utilization",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kernel": {
+            "type": "string",
+            "description": "Specific kernel to profile, or 'all'"
+          },
+          "metrics": {
+            "type": "string",
+            "enum": ["execution_time", "memory_bandwidth", "occupancy", "gf3_throughput", "all"],
+            "default": "all"
+          }
+        }
+      }
+    },
+    {
+      "name": "tableau_gpu_optimize",
+      "description": "Optimize qutrit stabilizer operations for GPU parallel execution with GF(3) arithmetic",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["synthesis", "measurement", "stabilizer", "clifford", "all"],
+            "default": "all"
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_sycl_status",
+      "description": "Track SYCL build and GPU kernel status in Kanban pipeline",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_gpu_info": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/sycl/tableau_kernels.hpp",
+      "name": "tableau_kernels_header",
+      "description": "SYCL qutrit tableau kernel declarations"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/sycl/tableau_kernels.cpp",
+      "name": "tableau_kernels_impl",
+      "description": "SYCL qutrit tableau kernel implementations with GF(3) operations"
+    }
+  ]
+}

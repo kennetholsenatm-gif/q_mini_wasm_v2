@@ -12,6 +12,7 @@
 #include "../core/stabilizer/tableau.hpp"
 #include "../core/moe/router.hpp"
 #include "../core/learning/forward_forward.hpp"
+#include "../core/steane/qutrit_steane.hpp"
 
 namespace q_mini_wasm_v2::runtime {
 
@@ -81,8 +82,8 @@ public:
      * @return Future for completion
      */
     std::future<void> submit_tableau_update(
-        stabilizer::StabilizerTableau& tableau,
-        std::function<void(stabilizer::StabilizerTableau&)> gate_func
+        core::stabilizer::StabilizerTableau& tableau,
+        std::function<void(core::stabilizer::StabilizerTableau&)> gate_func
     );
     
     /**
@@ -92,8 +93,8 @@ public:
      * @return Future for routing result
      */
     std::future<std::vector<size_t>> submit_moe_routing(
-        moe::MoERouter& router,
-        const std::vector<ternary::Trit>& input
+        core::moe::MoERouter& router,
+        const std::vector<core::ternary::Trit>& input
     );
     
     /**
@@ -104,11 +105,26 @@ public:
      * @param negative_data Negative samples
      * @return Future for goodness metrics
      */
-    std::future<learning::LayerGoodness> submit_ff_training(
-        learning::ForwardForwardLearner& learner,
+    std::future<core::learning::LayerGoodness> submit_ff_training(
+        core::learning::ForwardForwardLearner& learner,
         size_t layer_idx,
-        const std::vector<std::vector<ternary::Trit>>& positive_data,
-        const std::vector<std::vector<ternary::Trit>>& negative_data
+        const std::vector<std::vector<core::ternary::Trit>>& positive_data,
+        const std::vector<std::vector<core::ternary::Trit>>& negative_data
+    );
+
+    /**
+     * @brief Submit Steane Code Error Polling Task
+     * 
+     * Asynchronously polls the physical qutrit array for errors via syndrome
+     * measurement, and corrects them in-place if found.
+     * 
+     * @param steane Qutrit Steane Code instance
+     * @param physical Array of physical qutrits to check and potentially correct
+     * @return Future containing the index of the corrected qutrit, or -1 if no error
+     */
+    std::future<int> submit_steane_polling(
+        const core::steane::QutritSteaneCode& steane,
+        std::vector<core::ternary::Trit>& physical
     );
     
     /**

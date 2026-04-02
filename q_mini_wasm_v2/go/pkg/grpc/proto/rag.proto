@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package rag;
+
+option go_package = "github.com/q_mini_wasm_v2/gateway/pkg/grpc/proto";
+
+// RAGService provides context retrieval for token optimization
+service RAGService {
+  // RetrieveContext fetches relevant context for a query
+  rpc RetrieveContext(RetrieveContextRequest) returns (RetrieveContextResponse);
+  
+  // IndexDocument adds a document to the vector store
+  rpc IndexDocument(IndexDocumentRequest) returns (IndexDocumentResponse);
+  
+  // StreamContext provides streaming context retrieval for large queries
+  rpc StreamContext(StreamContextRequest) returns (stream StreamContextResponse);
+  
+  // GetMetrics returns RAG performance metrics
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+  
+  // ReindexAll triggers full re-indexing of all documents
+  rpc ReindexAll(ReindexAllRequest) returns (ReindexAllResponse);
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+message RetrieveContextRequest {
+  string query = 1;                    // User query or code context
+  int32 max_tokens = 2;                // Maximum tokens to return (0 = auto-scale)
+  float similarity_threshold = 3;      // Minimum similarity score (0.0-1.0)
+  int32 top_k = 4;                     // Number of results to return
+  repeated string filter_tags = 5;     // Filter by document tags
+  string file_path = 6;                // Current file being edited (for context)
+  ContextType context_type = 7;        // Type of context needed
+}
+
+enum ContextType {
+  CODE = 0;           // Code-related context
+  DOCUMENTATION = 1;  // Documentation context
+  RESEARCH = 2;       // Research paper context
+  API = 3;            // API reference context
+  ALL = 4;            // All context types
+}
+
+message RetrieveContextResponse {
+  repeated ContextChunk chunks = 1;    // Retrieved context chunks
+  int32 total_tokens = 2;              // Total tokens in response
+  float relevance_score = 3;           // Overall relevance score
+  TokenScalingInfo scaling_info = 4;   // Token scaling information
+}
+
+message ContextChunk {
+  string content = 1;                  // Chunk content
+  string source_file = 2;              // Source file path
+  int32 start_line = 3;                // Start line number
+  int32 end_line = 4;                  // End line number
+  float similarity = 5;                // Similarity score
+  repeated string tags = 6;            // Document tags
+  ChunkType chunk_type = 7;            // Type of chunk
+}
+
+enum ChunkType {
+  CODE_CHUNK = 0;      // Code snippet
+  DOC_CHUNK = 1;       // Documentation
+  COMMENT_CHUNK = 2;   // Code comment
+  IMPORT_CHUNK = 3;    // Import/include statement
+  HEADER_CHUNK = 4;    // Header file
+  RESEARCH_CHUNK = 5;  // Research paper section
+}
+
+message TokenScalingInfo {
+  int32 requested_tokens = 1;          // Tokens requested
+  int32 actual_tokens = 2;             // Tokens returned
+  float scaling_factor = 3;            // Scaling factor applied
+  string scaling_reason = 4;           // Reason for scaling
+}
+
+// ============================================================================
+// Indexing Messages
+// ============================================================================
+
+message IndexDocumentRequest {
+  string file_path = 1;                // Document file path
+  string content = 2;                  // Document content
+  repeated string tags = 3;            // Document tags
+  bool force_reindex = 4;              // Force re-indexing
+  ChunkingStrategy chunking_strategy = 5; // Chunking strategy
+}
+
+enum ChunkingStrategy {
+  SEMANTIC = 0;        // Semantic chunking (preserves meaning)
+  CODE_AWARE = 1;      // Code-aware chunking (preserves structure)
+  FIXED_SIZE = 2;      // Fixed-size chunking
+  SENTENCE = 3;        // Sentence-based chunking
+}
+
+message IndexDocumentResponse {
+  string document_id = 1;              // Document ID in vector store
+  int32 chunks_created = 2;            // Number of chunks created
+  int32 total_tokens = 3;              // Total tokens indexed
+  bool success = 4;                    // Success status
+  string error = 5;                    // Error message if any
+}
+
+// ============================================================================
+// Streaming Messages
+// ============================================================================
+
+message StreamContextRequest {
+  string query = 1;                    // Initial query
+  int32 max_tokens_per_chunk = 2;      // Max tokens per streamed chunk
+  bool include_metadata = 3;           // Include metadata in stream
+}
+
+message StreamContextResponse {
+  ContextChunk chunk = 1;              // Current chunk
+  bool is_final = 2;                   // Is this the final chunk?
+  int32 chunk_index = 3;               // Chunk index in stream
+}
+
+// ============================================================================
+// Metrics Messages
+// ============================================================================
+
+message GetMetricsRequest {
+  bool include_details = 1;            // Include detailed metrics
+}
+
+message GetMetricsResponse {
+  int64 total_documents = 1;           // Total documents indexed
+  int64 total_chunks = 2;              // Total chunks indexed
+  int64 total_queries = 3;             // Total queries served
+  float avg_query_latency_ms = 4;      // Average query latency
+  float avg_tokens_saved = 5;          // Average tokens saved per query
+  float cache_hit_rate = 6;            // Cache hit rate
+  repeated FileMetrics file_metrics = 7; // Per-file metrics
+}
+
+message FileMetrics {
+  string file_path = 1;                // File path
+  int64 query_count = 2;               // Queries for this file
+  float avg_relevance = 3;             // Average relevance score
+  int32 chunks_indexed = 4;            // Chunks indexed from this file
+}
+
+// ============================================================================
+// Reindex Messages
+// ============================================================================
+
+message ReindexAllRequest {
+  string directory = 1;                // Directory to reindex
+  bool clear_existing = 2;             // Clear existing index
+  repeated string file_patterns = 3;   // File patterns to include
+}
+
+message ReindexAllResponse {
+  int32 files_indexed = 1;             // Files indexed
+  int32 chunks_created = 2;            // Chunks created
+  int64 total_tokens = 3;              // Total tokens indexed
+  bool success = 4;                    // Success status
+  string error = 5;                    // Error message if any
+}

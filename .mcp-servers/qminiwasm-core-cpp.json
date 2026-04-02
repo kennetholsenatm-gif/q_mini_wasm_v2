@@ -1,0 +1,100 @@
+{
+  "name": "qminiwasm-core-cpp",
+  "description": "QMINIWASM quantum-classical core: 1.58-bit ternary networks, qutrit stabilizer formalism, GF(3) arithmetic, Clifford entanglement",
+  "tools": [
+    {
+      "name": "compile_ternary_core",
+      "description": "Compile core C++ modules with qutrit stabilizer tracking and GF(3) modulo-3 arithmetic",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "module": {
+            "type": "string",
+            "enum": ["network", "ingestion", "learning", "moe", "stabilizer", "steane", "ternary", "all"],
+            "default": "all"
+          },
+          "build_type": {
+            "type": "string",
+            "enum": ["Debug", "Release", "RelWithDebInfo"],
+            "default": "Release"
+          },
+          "enable_sycl": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "analyze_stabilizer_tableau",
+      "description": "Analyze qutrit stabilizer tableau operations over GF(3), track inverse stability matrix updates",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "Path to stabilizer or tableau .cpp/.hpp file"
+          },
+          "check_gottesman_knill": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": ["file"]
+      }
+    },
+    {
+      "name": "verify_clifford_operations",
+      "description": "Verify Clifford gate operations (CSUM, Hadamard, Phase) preserve stabilizer formalism",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_file": {
+            "type": "string"
+          },
+          "gate_types": {
+            "type": "array",
+            "items": {"type": "string"},
+            "default": ["CSUM", "Hadamard", "Phase", "Pauli"]
+          }
+        },
+        "required": ["source_file"]
+      }
+    },
+    {
+      "name": "kanban_quantum_status",
+      "description": "Get ternary network build status for Kanban pipeline with qutrit tracking metrics",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_tableau_metrics": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/core/network.hpp",
+      "name": "network_header",
+      "description": "Main network header for quantum-classical neural architecture"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/core/stabilizer/tableau.hpp",
+      "name": "tableau_header",
+      "description": "Qutrit stabilizer tableau operations over GF(3)"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/core/ternary/trit.hpp",
+      "name": "trit_header",
+      "description": "Ternary computing base types {-1, 0, 1}"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/core/stabilizer/clifford_synthesis.hpp",
+      "name": "clifford_synthesis_header",
+      "description": "Clifford gate synthesis using Eisenstein integers"
+    }
+  ]
+}

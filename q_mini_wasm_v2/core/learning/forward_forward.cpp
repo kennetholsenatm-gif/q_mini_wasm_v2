@@ -1,4 +1,5 @@
 #include "forward_forward.hpp"
+#include "entropy_goodness.hpp"
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -100,6 +101,60 @@ double ForwardForwardLearner::compute_goodness(const std::vector<ternary::Trit>&
         double val = static_cast<double>(act);
         goodness += val * val;
     }
+    return goodness;
+}
+
+double ForwardForwardLearner::compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const {
+    EntropyGoodnessMetric metric(tableau.num_qutrits());
+    return metric.compute_goodness(tableau);
+}
+
+LayerGoodness ForwardForwardLearner::train_layer_entangled(
+    size_t layer_idx,
+    const std::vector<std::vector<ternary::Trit>>& positive_data,
+    const std::vector<std::vector<ternary::Trit>>& negative_data
+) {
+    if (layer_idx >= config_.num_layers) {
+        throw std::out_of_range("Layer index out of range");
+    }
+    
+    LayerGoodness goodness{0.0, 0.0, 0.0};
+    
+    // Compute goodness for positive data
+    double pos_sum = 0.0;
+    for (const auto& sample : positive_data) {
+        auto tableau = stabilizer::create_tableau(std::max(sample.size(), config_.neurons_per_layer));
+        auto activations = entangled_forward(*tableau, sample);
+        pos_sum += compute_entangled_goodness(*tableau);
+    }
+    goodness.positive_goodness = pos_sum / positive_data.size();
+    
+    // Compute goodness for negative data
+    double neg_sum = 0.0;
+    for (const auto& sample : negative_data) {
+        auto tableau = stabilizer::create_tableau(std::max(sample.size(), config_.neurons_per_layer));
+        auto activations = entangled_forward(*tableau, sample);
+        neg_sum += compute_entangled_goodness(*tableau);
+    }
+    goodness.negative_goodness = neg_sum / negative_data.size();
+    
+    goodness.delta = goodness.positive_goodness - goodness.negative_goodness;
+    
+    // Update weights if positive goodness exceeds negative
+    if (goodness.delta > 0) {
+        for (size_t i = 0; i < positive_data.size(); ++i) {
+            auto tableau = stabilizer::create_tableau(std::max(positive_data[i].size(), config_.neurons_per_layer));
+            auto activations = entangled_forward(*tableau, positive_data[i]);
+            update_weights_hebbian(layer_idx, activations, goodness.delta);
+        }
+    } else {
+        for (size_t i = 0; i < negative_data.size(); ++i) {
+            auto tableau = stabilizer::create_tableau(std::max(negative_data[i].size(), config_.neurons_per_layer));
+            auto activations = entangled_forward(*tableau, negative_data[i]);
+            update_weights_hebbian(layer_idx, activations, goodness.delta);
+        }
+    }
+    
     return goodness;
 }
 
