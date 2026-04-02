@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(USE_SYCL "Enable SYCL acceleration for multi-core/multi-thread" OFF)
 option(BUILD_TESTS "Build test suite" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
+option(BUILD_WASM "Build WebAssembly target" OFF)
 
 # ============================================================================
 # Source Files
@@ -90,6 +91,54 @@ install(DIRECTORY core/ DESTINATION include/q_mini_wasm_v2/core
 install(DIRECTORY runtime/ DESTINATION include/q_mini_wasm_v2/runtime
     FILES_MATCHING PATTERN "*.hpp"
 )
+
+
+# ============================================================================
+# WASM Configuration (Optional)
+# ============================================================================
+
+if(BUILD_WASM)
+    # Check for Emscripten
+    if(NOT EMSCRIPTEN)
+        message(WARNING "BUILD_WASM requires Emscripten toolchain")
+    else()
+        add_executable(q_mini_wasm_v2_wasm
+            ${CORE_SOURCES}
+            ${RUNTIME_SOURCES}
+        )
+        
+        target_include_directories(q_mini_wasm_v2_wasm PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        
+        # Emscripten-specific flags
+        target_compile_options(q_mini_wasm_v2_wasm PRIVATE
+            -s USE_PTHREADS=1
+            -s PTHREAD_POOL_SIZE=4
+        )
+        
+        target_link_options(q_mini_wasm_v2_wasm PRIVATE
+            -s WASM=1
+            -s ALLOW_MEMORY_GROWTH=1
+            -s MAXIMUM_MEMORY=4GB
+            -s USE_PTHREADS=1
+            -s PTHREAD_POOL_SIZE=4
+            -s MODULARIZE=1
+            -s EXPORT_NAME="QMiniWasmV2"
+            -s EXPORTED_FUNCTIONS="['_malloc','_free']"
+            -s EXPORTED_RUNTIME_METHODS="['ccall','cwrap']"
+        )
+        
+        set_target_properties(q_mini_wasm_v2_wasm PROPERTIES
+            OUTPUT_NAME "q_mini_wasm_v2"
+            SUFFIX ".js"
+        )
+        
+        install(TARGETS q_mini_wasm_v2_wasm
+            RUNTIME DESTINATION bin/wasm
+        )
+    endif()
+endif()
 
 # ============================================================================
 # Compiler Flags

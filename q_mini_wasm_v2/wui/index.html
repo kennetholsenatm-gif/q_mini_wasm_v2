@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>q_mini_wasm_v2 - Quantum-Classical Hybrid Framework</title>
+    <link rel="stylesheet" href="styles/cognitive.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #3498db 0%, #2c3e50 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .panel h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        /* Metrics display - Miller's Law chunking */
+        .metrics-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .metric-chunk {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .metric-chunk h3 {
+            margin: 0 0 5px 0;
+            font-size: 12px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+        }
+        
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        
+        .metric-unit {
+            font-size: 12px;
+            color: #95a5a6;
+        }
+        
+        /* Node visualization - Gestalt grouping */
+        .graph-container {
+            position: relative;
+            height: 300px;
+            background: #fafafa;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .node {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .node:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        /* Law of Similarity: same type = same color */
+        .node-input { background-color: #9b59b6; border-radius: 8px; }
+        .node-processing { background-color: #3498db; border-radius: 4px; }
+        .node-output { background-color: #2ecc71; border-radius: 50%; }
+        .node-routing { background-color: #e67e22; clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+        
+        /* Visual hierarchy: critical path */
+        .node-critical {
+            border: 3px solid #e74c3c;
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+            z-index: 10;
+        }
+        
+        .node-inactive {
+            opacity: 0.5;
+        }
+        
+        /* Edge connections */
+        .edge {
+            position: absolute;
+            height: 2px;
+            background: #bdc3c7;
+            transform-origin: left center;
+            z-index: 1;
+        }
+        
+        .edge-animated {
+            background: #3498db;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+        
+        /* Progressive disclosure */
+        .node-details {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 100;
+        }
+        
+        .node:hover .node-details {
+            display: block;
+        }
+        
+        .node-details h4 {
+            margin: 0 0 5px 0;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        
+        .node-details p {
+            margin: 0;
+            font-size: 11px;
+            color: #2c3e50;
+        }
+        
+        /* Action buttons - Fitts's Law */
+        .action-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .action-btn {
+            min-width: 100px;
+            min-height: 44px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .action-btn-primary {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .action-btn-primary:hover {
+            background-color: #2980b9;
+        }
+        
+        .action-btn-secondary {
+            background-color: #ecf0f1;
+            color: #2c3e50;
+        }
+        
+        .action-btn-secondary:hover {
+            background-color: #bdc3c7;
+        }
+        
+        /* Error display - flow state preservation */
+        .error-inline {
+            padding: 10px;
+            background: #fff5f5;
+            border: 1px solid #e74c3c;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #c0392b;
+        }
+        
+        .error-inline .resolution {
+            color: #3498db;
+            margin-top: 5px;
+        }
+        
+        /* Loading state */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+        }
+        
+        .loading-overlay.active {
+            display: flex;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #ecf0f1;
+            border-top-color: #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Code block with copy button - Split-attention prevention */
+        .code-block {
+            position: relative;
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            margin-top: 15px;
+            overflow-x: auto;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            min-width: 60px;
+            min-height: 28px;
+            padding: 4px 8px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        
+        .copy-btn:hover {
+            background: #2980b9;
+        }
+        
+        /* Navigation - Hick's Law (5-9 items max) */
+        .nav-menu {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .nav-item {
+            padding: 8px 12px;
+            background: #ecf0f1;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .nav-item:hover {
+            background: #bdc3c7;
+        }
+        
+        .nav-item.active {
+            background: #3498db;
+            color: white;
+        }
+        
+        /* Data array chunking - Miller's Law */
+        .data-chunked {
+            font-family: monospace;
+            font-size: 14px;
+            letter-spacing: 0.1em;
+        }
+        
+        .data-chunk {
+            display: inline-block;
+            padding: 2px 6px;
+            margin: 0 2px;
+            background: rgba(52, 152, 219, 0.1);
+            border-radius: 3px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>q_mini_wasm_v2</h1>
+        <p>Quantum-Classical Hybrid Framework - 1.58-bit Ternary AI</p>
+    </div>
+    
+    <div class="main-container">
+        <!-- Metrics Panel - Miller's Law chunking -->
+        <div class="panel">
+            <h2>System Metrics</h2>
+            
+            <div class="metrics-container">
+                <div class="metric-chunk">
+                    <h3>Performance</h3>
+                    <div class="metric-value" id="throughput">0</div>
+                    <div class="metric-unit">ops/sec</div>
+                </div>
+                <div class="metric-chunk">
+                    <h3>Efficiency</h3>
+                    <div class="metric-value" id="entropy">99.06</div>
+                    <div class="metric-unit">% entropy</div>
+                </div>
+                <div class="metric-chunk">
+                    <h3>Sparsity</h3>
+                    <div class="metric-value" id="sparsity">0</div>
+                    <div class="metric-unit">% zeros</div>
+                </div>
+            </div>
+            
+            <div class="nav-menu">
+                <div class="nav-item active">Tableau</div>
+                <div class="nav-item">MoE</div>
+                <div class="nav-item">Learning</div>
+                <div class="nav-item">Settings</div>
+            </div>
+            
+            <!-- Code example - Split-attention prevention -->
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode()">Copy</button>
+                <pre id="code-example">// Create 4-qutrit tableau
+auto tableau = create_tableau(4);
+tableau->apply_hadamard(0);
+tableau->apply_csum(0, 1);</pre>
+            </div>
+        </div>
+        
+        <!-- Graph Panel - Visual hierarchy and Gestalt -->
+        <div class="panel">
+            <h2>Pipeline Visualization</h2>
+            
+            <div class="graph-container" id="graph">
+                <!-- Nodes will be rendered by JavaScript -->
+                
+                <div class="loading-overlay" id="loading">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+            
+            <div class="action-group">
+                <button class="action-btn action-btn-primary" onclick="runPipeline()">
+                    Run Pipeline
+                </button>
+                <button class="action-btn action-btn-secondary" onclick="resetGraph()">
+                    Reset
+                </button>
+            </div>
+            
+            <!-- Error display - Flow state preservation -->
+            <div class="error-inline" id="error" style="display: none;">
+                <strong>Error:</strong> <span id="error-message"></span>
+                <div class="resolution" id="error-resolution"></div>
+            </div>
+        </div>
+        
+        <!-- Data Panel -->
+        <div class="panel">
+            <h2>Ternary Data</h2>
+            
+            <p>Input (continuous):</p>
+            <div class="data-chunked">
+                <span class="data-chunk">0.82</span>
+                <span class="data-chunk">-0.34</span>
+                <span class="data-chunk">0.01</span>
+                <span class="data-chunk">0.95</span>
+                <span class="data-chunk">-0.67</span>
+            </div>
+            
+            <p style="margin-top: 15px;">Quantized (ternary):</p>
+            <div class="data-chunked" id="quantized">
+                <span class="data-chunk">+1</span>
+                <span class="data-chunk">-1</span>
+                <span class="data-chunk"> 0</span>
+                <span class="data-chunk">+1</span>
+                <span class="data-chunk">-1</span>
+            </div>
+            
+            <p style="margin-top: 15px;">Packed (5-trit → 8-bit):</p>
+            <div class="data-chunked">
+                <span class="data-chunk" style="background: rgba(46, 204, 113, 0.1);">0xA3</span>
+            </div>
+        </div>
+        
+        <!-- Info Panel -->
+        <div class="panel">
+            <h2>Research Foundation</h2>
+            
+            <div style="font-size: 13px; line-height: 1.6;">
+                <p><strong>1.58-bit Ternary:</strong> Operates in {+1, 0, -1} state space with 99.06% entropy efficiency via 5-trit-to-8-bit packing.</p>
+                
+                <p style="margin-top: 10px;"><strong>Gottesman-Knill:</strong> O(n²) simulation of qutrit Clifford circuits without exponential overhead.</p>
+                
+                <p style="margin-top: 10px;"><strong>Tropical Geometry:</strong> Max-plus semiring MoE routing with combinatorial depth C(n,k).</p>
+                
+                <p style="margin-top: 10px;"><strong>Forward-Forward:</strong> Teacherless self-supervised learning replacing backpropagation.</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Node definitions for graph visualization
+        const nodes = [
+            { id: 'input', type: 'input', x: 50, y: 120, label: 'Input', critical: false },
+            { id: 'quantize', type: 'processing', x: 150, y: 80, label: 'Absmean', critical: false },
+            { id: 'hash', type: 'processing', x: 150, y: 160, label: 'TLSH', critical: false },
+            { id: 'tableau', type: 'processing', x: 280, y: 120, label: 'Tableau', critical: true },
+            { id: 'router', type: 'routing', x: 400, y: 80, label: 'MoE', critical: true },
+            { id: 'expert1', type: 'processing', x: 520, y: 50, label: 'Expert 1', critical: false },
+            { id: 'expert2', type: 'processing', x: 520, y: 120, label: 'Expert 2', critical: false },
+            { id: 'expert3', type: 'processing', x: 520, y: 190, label: 'Expert 3', critical: false },
+            { id: 'output', type: 'output', x: 650, y: 120, label: 'Output', critical: false }
+        ];
+        
+        const edges = [
+            { from: 'input', to: 'quantize' },
+            { from: 'input', to: 'hash' },
+            { from: 'quantize', to: 'tableau' },
+            { from: 'hash', to: 'tableau' },
+            { from: 'tableau', to: 'router' },
+            { from: 'router', to: 'expert1' },
+            { from: 'router', to: 'expert2' },
+            { from: 'router', to: 'expert3' },
+            { from: 'expert1', to: 'output' },
+            { from: 'expert2', to: 'output' },
+            { from: 'expert3', to: 'output' }
+        ];
+        
+        function renderGraph() {
+            const container = document.getElementById('graph');
+            
+            // Clear existing elements
+            container.innerHTML = '<div class="loading-overlay" id="loading"><div class="loading-spinner"></div></div>';
+            
+            // Render edges first (below nodes)
+            edges.forEach(edge => {
+                const fromNode = nodes.find(n => n.id === edge.from);
+                const toNode = nodes.find(n => n.id === edge.to);
+                
+                const dx = toNode.x - fromNode.x;
+                const dy = toNode.y - fromNode.y;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                
+                const edgeEl = document.createElement('div');
+                edgeEl.className = 'edge';
+                edgeEl.style.left = (fromNode.x + 30) + 'px';
+                edgeEl.style.top = (fromNode.y + 30) + 'px';
+                edgeEl.style.width = length + 'px';
+                edgeEl.style.transform = `rotate(${angle}deg)`;
+                container.appendChild(edgeEl);
+            });
+            
+            // Render nodes
+            nodes.forEach(node => {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = `node node-${node.type}`;
+                if (node.critical) nodeEl.classList.add('node-critical');
+                nodeEl.style.left = node.x + 'px';
+                nodeEl.style.top = node.y + 'px';
+                nodeEl.textContent = node.label;
+                
+                // Progressive disclosure details
+                const details = document.createElement('div');
+                details.className = 'node-details';
+                details.innerHTML = `
+                    <h4>${node.label}</h4>
+                    <p>Type: ${node.type}</p>
+                    <p>Status: ${node.critical ? 'Critical' : 'Active'}</p>
+                `;
+                nodeEl.appendChild(details);
+                
+                container.appendChild(nodeEl);
+            });
+        }
+        
+        function runPipeline() {
+            const loading = document.getElementById('loading');
+            loading.classList.add('active');
+            
+            // Simulate pipeline execution
+            setTimeout(() => {
+                loading.classList.remove('active');
+                
+                // Update metrics
+                document.getElementById('throughput').textContent = '1.2M';
+                document.getElementById('sparsity').textContent = '35';
+                
+                // Animate edges
+                document.querySelectorAll('.edge').forEach(edge => {
+                    edge.classList.add('edge-animated');
+                });
+                
+                setTimeout(() => {
+                    document.querySelectorAll('.edge').forEach(edge => {
+                        edge.classList.remove('edge-animated');
+                    });
+                }, 3000);
+            }, 1500);
+        }
+        
+        function resetGraph() {
+            document.getElementById('throughput').textContent = '0';
+            document.getElementById('sparsity').textContent = '0';
+            document.getElementById('error').style.display = 'none';
+        }
+        
+        function copyCode() {
+            const code = document.getElementById('code-example').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                }, 2000);
+            });
+        }
+        
+        // Initialize
+        renderGraph();
+    </script>
+</body>
+</html>
