@@ -1,0 +1,145 @@
+{
+  "name": "qminiwasm-self-learning",
+  "description": "Self-learning MCP that analyzes project patterns and auto-generates tools",
+  "tools": [
+    {
+      "name": "analyze_patterns",
+      "description": "Analyze git history and build artifacts to detect recurring operational patterns",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": ["git", "build", "all"],
+            "default": "all"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "suggest_tool",
+      "description": "Suggest a new MCP tool based on detected patterns",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pattern_id": {
+            "type": "string"
+          }
+        },
+        "required": ["pattern_id"]
+      }
+    },
+    {
+      "name": "collect_metrics",
+      "description": "Collect usage metrics from local git and build artifacts",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "metric_type": {
+            "type": "string",
+            "enum": ["build_frequency", "file_hotspots", "test_coverage", "commit_velocity"],
+            "default": "build_frequency"
+          }
+        }
+      }
+    },
+    {
+      "name": "evolve_schema",
+      "description": "Analyze validation errors and suggest schema improvements",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tool_name": {
+            "type": "string"
+          }
+        },
+        "required": ["tool_name"]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://mcp-learned-patterns.json",
+      "name": "learned_patterns",
+      "description": "Accumulated patterns from local git/build analysis"
+    }
+  ]
+}
+</content>
+<write_to_file>
+<path>.mcp-servers/qminiwasm-doc-intelligence.json</path>
+<content>
+{
+  "name": "qminiwasm-doc-intelligence",
+  "description": "Documentation intelligence MCP with cognitive ergonomics feedback loop",
+  "tools": [
+    {
+      "name": "doc_gap_analysis",
+      "description": "Scan codebase for undocumented public APIs and generate stubs",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string",
+            "default": "q_mini_wasm_v2"
+          }
+        }
+      }
+    },
+    {
+      "name": "cognitive_audit",
+      "description": "Run cognitive ergonomics linter and return actionable violations",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "default": "docs/"
+          }
+        }
+      }
+    },
+    {
+      "name": "wiki_sync",
+      "description": "Generate and push validated docs to GitHub Wiki",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "api_extract",
+      "description": "Extract API signatures from C++ headers via AST analysis",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "header_path": {
+            "type": "string"
+          }
+        },
+        "required": ["header_path"]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://docs/api/core-reference.md",
+      "name": "api_reference",
+      "description": "Current API reference documentation"
+    },
+    {
+      "uri": "file://docs/wiki-pipeline/cognitive_linter.py",
+      "name": "cognitive_linter",
+      "description": "Cognitive ergonomics linter implementation"
+    }
+  ]
+}

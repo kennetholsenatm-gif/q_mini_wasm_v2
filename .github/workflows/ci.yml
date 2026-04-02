@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: Release
+  CMAKE_GENERATOR: "Visual Studio 17 2022"
+
+jobs:
+  # ===========================================================================
+  # LINT & STATIC ANALYSIS
+  # ===========================================================================
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check C++ formatting
+        run: |
+          sudo apt-get install -y clang-format
+          find q_mini_wasm_v2 -name "*.hpp" -o -name "*.cpp" | head -20
+          # Format check (non-blocking initially)
+          find q_mini_wasm_v2 -name "*.hpp" -o -name "*.cpp" \
+            -exec clang-format --dry-run --Werror {} \; || echo "::warning::Format issues found"
+
+  # ===========================================================================
+  # BUILD MATRIX
+  # ===========================================================================
+  build:
+    name: Build (${{ matrix.os }}, SYCL=${{ matrix.sycl }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            sycl: "OFF"
+            build_type: "Release"
+          - os: windows-latest
+            sycl: "OFF"
+            build_type: "Debug"
+          - os: ubuntu-latest
+            sycl: "OFF"
+            build_type: "Release"
+          - os: ubuntu-latest
+            sycl: "OFF"
+            build_type: "Debug"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: |
+          cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DBUILD_TESTS=ON \
+            -DUSE_SYCL=${{ matrix.sycl }}
+        shell: bash
+
+      - name: Build
+        run: cmake --build q_mini_wasm_v2/build --config ${{ matrix.build_type }} -j$(nproc 2>/dev/null || echo 4)
+        shell: bash
+
+      - name: Upload build artifacts
+        if: matrix.build_type == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}-sycl${{ matrix.sycl }}
+          path: |
+            q_mini_wasm_v2/build/**/q_mini_wasm_v2_core.*
+            q_mini_wasm_v2/build/**/q_mini_wasm_v2_tests*
+            q_mini_wasm_v2/build/**/q_mini_wasm_v2_network_test*
+          retention-days: 7
+
+  # ===========================================================================
+  # TEST
+  # ===========================================================================
+  test:
+    name: Test (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure & Build
+        run: |
+          cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTS=ON \
+            -DUSE_SYCL=OFF
+          cmake --build q_mini_wasm_v2/build --config Release -j$(nproc 2>/dev/null || echo 4)
+        shell: bash
+
+      - name: Run tests
+        working-directory: q_mini_wasm_v2/build
+        run: ctest --build-config Release --output-on-failure --timeout 120
+        shell: bash
+
+  # ===========================================================================
+  # SYCL BUILD (Linux only, if SYCL SDK available)
+  # ===========================================================================
+  sycl-build:
+    name: SYCL Build
+    needs: lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for SYCL
+        id: sycl-check
+        run: |
+          if command -v icpx &> /dev/null; then
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "::notice::SYCL SDK not available in this environment"
+          fi
+
+      - name: Configure & Build with SYCL
+        if: steps.sycl-check.outputs.available == 'true'
+        run: |
+          cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTS=ON \
+            -DUSE_SYCL=ON
+          cmake --build q_mini_wasm_v2/build --config Release -j$(nproc)
+        shell: bash
+
+      - name: Run SYCL tests
+        if: steps.sycl-check.outputs.available == 'true'
+        working-directory: q_mini_wasm_v2/build
+        run: ctest --build-config Release --output-on-failure --timeout 120
+        shell: bash

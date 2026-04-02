@@ -1,0 +1,70 @@
+{
+  "name": "qminiwasm-doc-intelligence",
+  "description": "Documentation intelligence MCP with cognitive ergonomics feedback loop",
+  "tools": [
+    {
+      "name": "doc_gap_analysis",
+      "description": "Scan codebase for undocumented public APIs and generate stubs",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string",
+            "default": "q_mini_wasm_v2"
+          }
+        }
+      }
+    },
+    {
+      "name": "cognitive_audit",
+      "description": "Run cognitive ergonomics linter and return actionable violations",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "default": "docs/"
+          }
+        }
+      }
+    },
+    {
+      "name": "wiki_sync",
+      "description": "Generate and push validated docs to GitHub Wiki",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "api_extract",
+      "description": "Extract API signatures from C++ headers via AST analysis",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "header_path": {
+            "type": "string"
+          }
+        },
+        "required": ["header_path"]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://docs/api/core-reference.md",
+      "name": "api_reference",
+      "description": "Current API reference documentation"
+    },
+    {
+      "uri": "file://docs/wiki-pipeline/cognitive_linter.py",
+      "name": "cognitive_linter",
+      "description": "Cognitive ergonomics linter implementation"
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'q_mini_wasm_v2/**/*.hpp'
+      - 'q_mini_wasm_v2/**/*.cpp'
+      - 'README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  # ===========================================================================
+  # COGNITIVE ERGONOMICS LINT
+  # ===========================================================================
+  cognitive-lint:
+    name: Cognitive Ergonomics Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run cognitive linter
+        run: |
+          echo "Checking documentation against Cognitive Ergonomics principles..."
+          python3 docs/wiki-pipeline/cognitive_linter.py docs/ || echo "::warning::Cognitive ergonomics violations found"
+
+  # ===========================================================================
+  # WIKI SYNC
+  # ===========================================================================
+  wiki-sync:
+    name: Sync Wiki
+    needs: cognitive-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate wiki pages
+        run: python3 docs/wiki-pipeline/generate_wiki.py
+
+      - name: Push to wiki
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: wiki
+
+      - name: Update wiki
+        run: |
+          cp -r wiki-output/* wiki/
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "docs: auto-update wiki from ${{ github.sha }}"
+          git push
+        continue-on-error: true
+
+  # ===========================================================================
+  # GITHUB PAGES
+  # ===========================================================================
+  pages:
+    name: Deploy Pages
+    needs: cognitive-lint
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build docs site
+        run: |
+          mkdir -p site
+          cp -r docs/* site/ 2>/dev/null || true
+          cp README.md site/index.md
+          # Generate simple HTML wrapper
+          cat > site/index.html << 'HTML'
+          <!DOCTYPE html>
+          <html><head>
+          <title>q_mini_wasm_v2 Documentation</title>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; line-height: 1.6; }
+            a { color: #0969da; }
+          </style>
+          </head><body>
+          <h1>q_mini_wasm_v2 Documentation</h1>
+          <p>See the <a href="https://github.com/kennetholsenatm-gif/q_mini_wasm_v2/wiki">GitHub Wiki</a> for full documentation.</p>
+          <h2>Research Papers</h2>
+          <ul>
+            <li><a href="research/Cognitive Ergonomics Model Protocol Research.md">Cognitive Ergonomics</a></li>
+            <li><a href="research/Enhancing Framework with Clifford Entanglement.md">Clifford Entanglement</a></li>
+            <li><a href="research/QMINIWASM_ Quantum-Classical Framework Synthesis.md">Framework Synthesis</a></li>
+          </ul>
+          </body></html>
+          HTML
+
+      - uses: actions/configure-pages@v4
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
