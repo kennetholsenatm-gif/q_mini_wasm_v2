@@ -1,0 +1,131 @@
+﻿name: Python Auto-Rewrite Pipeline
+
+on:
+  push:
+    paths:
+      - '**/*.py'
+  pull_request:
+    paths:
+      - '**/*.py'
+  schedule:
+    - cron: '0 3 * * 6'
+  workflow_dispatch:
+    inputs:
+      target_language:
+        description: 'Target language for rewrite'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - r
+          - cpp
+          - rust
+          - go
+      force_rewrite:
+        description: 'Force rewrite even if no Python files changed'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+jobs:
+  detect-python:
+    name: Detect Python Files
+    runs-on: ubuntu-latest
+    outputs:
+      python_files: ${{ steps.detect.outputs.python_files }}
+      has_python: ${{ steps.detect.outputs.has_python }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect Python files
+        id: detect
+        run: |
+          PYTHON_FILES=$(find . -name '*.py' -type f | grep -v '__pycache__' | grep -v '.git' | jq -R -s -c 'split("\n") | map(select(. != `))')
+          if [ '$PYTHON_FILES' = '[]' ]; then
+            echo 'has_python=false' >> $GITHUB_OUTPUT
+            echo 'python_files=[]' >> $GITHUB_OUTPUT
+          else
+            echo 'has_python=true' >> $GITHUB_OUTPUT
+            echo 'python_files=$PYTHON_FILES' >> $GITHUB_OUTPUT
+          fi
+
+  analyze-python:
+    name: Analyze Python Code
+    needs: detect-python
+    if: needs.detect-python.outputs.has_python == 'true' || github.event.inputs.force_rewrite == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Analyze Python files
+        run: |
+          mkdir -p reports/python-analysis
+          python scripts/detect_python_files.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-analysis-${{ github.run_id }}
+          path: reports/python-analysis/
+          retention-days: 30
+
+  generate-rewrites:
+    name: Generate Rewrites
+    needs: analyze-python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-analysis-${{ github.run_id }}
+          path: reports/python-analysis/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install google-generativeai jinja2
+      - name: Generate rewrites
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python scripts/generate_rewrites.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-rewrites-${{ github.run_id }}
+          path: |
+            r_agents/
+            cpp_linter/
+            rust_cache/
+            go_cli/
+            reports/python-analysis/rewrites.json
+          retention-days: 30
+
+  create-pr:
+    name: Create Pull Request
+    needs: generate-rewrites
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-rewrites-${{ github.run_id }}
+          path: .
+      - uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'Auto-rewrite: Python files converted to R/C++/Rust/Go'
+          title: 'Auto-Rewrite: Python Code Converted to Optimal Languages'
+          body: |
+            ## Python Auto-Rewrite Pipeline Results
+            
+            This PR contains automatically generated rewrites of Python code to more optimal languages.
+            
+            See reports/python-analysis/rewrites.json for details.
+          branch: auto/python-rewrite-${{ github.run_id }}
+          labels: auto-rewrite,python-migration

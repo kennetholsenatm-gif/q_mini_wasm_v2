@@ -1,0 +1,48 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "AutoLearn integration for Python auto-rewrite pipeline",
+  "python_rewrite": {
+    "enabled": true,
+    "description": "Automatically detect and rewrite Python code to optimal languages",
+    "detection": {
+      "file_patterns": ["*.py"],
+      "exclude_patterns": ["__pycache__/*", "venv/*", ".git/*"]
+    },
+    "target_languages": {
+      "r": {
+        "description": "Auto-improvement infrastructure, data analysis, statistics",
+        "file_patterns": ["*agent*", "*improvement*", "*research*", "*analysis*"]
+      },
+      "cpp": {
+        "description": "Performance-critical parsing, regex, computation",
+        "file_patterns": ["*linter*", "*parser*", "*compute*"]
+      },
+      "rust": {
+        "description": "Systems programming, concurrency, caching",
+        "file_patterns": ["*cache*", "*rate*", "*concurrent*"]
+      },
+      "go": {
+        "description": "CLI, HTTP services, network programming",
+        "file_patterns": ["*cli*", "*http*", "*server*"]
+      }
+    },
+    "ci_cd_hooks": {
+      "pre_commit": {
+        "enabled": true,
+        "checks": [
+          {
+            "name": "detect_new_python",
+            "command": "python scripts/detect_python_files.py",
+            "description": "Detect new Python files and suggest rewrites",
+            "required": false
+          }
+        ]
+      },
+      "weekly": {
+        "enabled": true,
+        "workflow": "python-rewrite-pipeline"
+      }
+    }
+  }
+}
