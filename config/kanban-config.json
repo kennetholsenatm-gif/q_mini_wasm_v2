@@ -1,0 +1,47 @@
+{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "Kanban configuration for RAG and MCP server integration",
+  "mcp_servers": [
+    "qminiwasm-rag-service",
+    "qminiwasm-autolearn",
+    "qminiwasm-core-cpp",
+    "qminiwasm-dll-bridge",
+    "qminiwasm-go-runtime",
+    "qminiwasm-runtime-engine",
+    "qminiwasm-sycl-accelerator",
+    "qminiwasm-test-orchestrator",
+    "qminiwasm-wui-designer"
+  ],
+  "rag_service": {
+    "enabled": true,
+    "server": "qminiwasm-rag-service",
+    "tools": [
+      "rag_retrieve_context",
+      "rag_index_document",
+      "rag_get_metrics",
+      "rag_reindex_all",
+      "kanban_rag_status"
+    ]
+  },
+  "kanban_integration": {
+    "enabled": true,
+    "status_tracking": {
+      "quantum_core": "kanban_quantum_status",
+      "dll_bridge": "kanban_dll_pipeline",
+      "go_runtime": "kanban_go_status",
+      "rag_service": "kanban_rag_status",
+      "runtime_engine": "kanban_runtime_status",
+      "sycl_accelerator": "kanban_sycl_status",
+      "test_orchestrator": "kanban_test_gate",
+      "wui_designer": "kanban_wui_status"
+    },
+    "pipeline_gates": {
+      "code_review": "required",
+      "quantum_expert_review": "recommended_for_core",
+      "test_coverage": ">=80%",
+      "energy_efficiency": "validate_pj_targets",
+      "autolearn_validation": "required_for_improvements"
+    }
+  }
+}
