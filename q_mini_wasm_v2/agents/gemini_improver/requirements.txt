@@ -1,0 +1,6 @@
+langgraph>=0.0.20
+langchain-google-genai>=1.0.0
+langchain-core>=0.1.0
+pydantic>=2.0.0
+geopy>=2.0.0
+requests>=2.28.0
