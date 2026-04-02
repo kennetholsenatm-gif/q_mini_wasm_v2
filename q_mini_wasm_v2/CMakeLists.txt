@@ -12,6 +12,7 @@ option(USE_SYCL "Enable SYCL acceleration for multi-core/multi-thread" OFF)
 option(BUILD_TESTS "Build test suite" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BUILD_WASM "Build WebAssembly target" OFF)
+option(BUILD_DLL "Build DLL with C API" ON)
 
 # ============================================================================
 # Source Files
@@ -48,18 +49,64 @@ set(SYCL_SOURCES
     sycl/tableau_kernels.hpp
 )
 
+set(DLL_SOURCES
+    dll/q_mini_wasm_v2_api.hpp
+    dll/impl/q_mini_wasm_v2_api.cpp
+)
+
 # ============================================================================
 # Library Target
 # ============================================================================
 
 add_library(q_mini_wasm_v2_core
-    ${CORE_SOURCES}
-    ${RUNTIME_SOURCES}
+    \
+    \
 )
 
 target_include_directories(q_mini_wasm_v2_core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
+    \
 )
+
+# ============================================================================
+# DLL Target (C API)
+# ============================================================================
+
+if(BUILD_DLL)
+    add_library(q_mini_wasm_v2_dll SHARED
+        \
+    )
+    
+    target_link_libraries(q_mini_wasm_v2_dll PRIVATE
+        q_mini_wasm_v2_core
+    )
+    
+    target_include_directories(q_mini_wasm_v2_dll PUBLIC
+        \
+    )
+    
+    # Set DLL export macro
+    target_compile_definitions(q_mini_wasm_v2_dll PRIVATE
+        Q_MINI_WASM_V2_EXPORTS
+    )
+    
+    # Set output name
+    set_target_properties(q_mini_wasm_v2_dll PROPERTIES
+        OUTPUT_NAME "q_mini_wasm_v2"
+        PREFIX ""
+    )
+    
+    # Install DLL
+    install(TARGETS q_mini_wasm_v2_dll
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+    
+    # Install DLL header
+    install(FILES dll/q_mini_wasm_v2_api.hpp
+        DESTINATION include/q_mini_wasm_v2/dll
+    )
+endif()
 
 # ============================================================================
 # SYCL Configuration (Optional)
@@ -71,7 +118,7 @@ if(USE_SYCL)
     target_link_libraries(q_mini_wasm_v2_core PUBLIC IntelSYCL::SYCL_CXX)
     
     # Add SYCL kernel sources
-    target_sources(q_mini_wasm_v2_core PRIVATE ${SYCL_SOURCES})
+    target_sources(q_mini_wasm_v2_core PRIVATE \)
 endif()
 
 # ============================================================================
@@ -84,7 +131,25 @@ if(BUILD_TESTS)
     
     add_executable(q_mini_wasm_v2_network_test tests/test_network.cpp)
     target_link_libraries(q_mini_wasm_v2_network_test PRIVATE q_mini_wasm_v2_core)
-
+    
+    # DLL integration test
+    if(BUILD_DLL)
+        add_executable(q_mini_wasm_v2_dll_test tests/integration_test.cpp)
+        target_link_libraries(q_mini_wasm_v2_dll_test PRIVATE
+            q_mini_wasm_v2_dll
+            q_mini_wasm_v2_core
+        )
+        add_test(NAME q_mini_wasm_v2_dll_test COMMAND q_mini_wasm_v2_dll_test)
+        
+        # DLL API test
+        add_executable(q_mini_wasm_v2_dll_api_test tests/test_dll_api.cpp)
+        target_link_libraries(q_mini_wasm_v2_dll_api_test PRIVATE
+            q_mini_wasm_v2_dll
+            q_mini_wasm_v2_core
+        )
+        add_test(NAME q_mini_wasm_v2_dll_api_test COMMAND q_mini_wasm_v2_dll_api_test)
+    endif()
+    
     enable_testing()
     add_test(NAME q_mini_wasm_v2_tests COMMAND q_mini_wasm_v2_tests)
     add_test(NAME q_mini_wasm_v2_network_test COMMAND q_mini_wasm_v2_network_test)
@@ -108,7 +173,6 @@ install(DIRECTORY runtime/ DESTINATION include/q_mini_wasm_v2/runtime
     FILES_MATCHING PATTERN "*.hpp"
 )
 
-
 # ============================================================================
 # WASM Configuration (Optional)
 # ============================================================================
@@ -119,12 +183,12 @@ if(BUILD_WASM)
         message(WARNING "BUILD_WASM requires Emscripten toolchain")
     else()
         add_executable(q_mini_wasm_v2_wasm
-            ${CORE_SOURCES}
-            ${RUNTIME_SOURCES}
+            \
+            \
         )
         
         target_include_directories(q_mini_wasm_v2_wasm PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}
+            \
         )
         
         # Emscripten-specific flags
@@ -162,14 +226,14 @@ endif()
 
 # Enable warnings
 target_compile_options(q_mini_wasm_v2_core PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
+    \$<\$<CXX_COMPILER_ID:MSVC>:/W4>
+    \$<\$<NOT:\$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )
 
 # Release optimizations
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(q_mini_wasm_v2_core PRIVATE
-        $<$<CXX_COMPILER_ID:MSVC>:/O2>
-        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-O3>
+        \$<\$<CXX_COMPILER_ID:MSVC>:/O2>
+        \$<\$<NOT:\$<CXX_COMPILER_ID:MSVC>>:-O3>
     )
 endif()
