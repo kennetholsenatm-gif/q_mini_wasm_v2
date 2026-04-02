@@ -1,3 +1,0 @@
-# Trivy ignore file: list CVE IDs or package names for accepted risks or false positives.
-# One entry per line; add a comment with justification. See:
-# https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/

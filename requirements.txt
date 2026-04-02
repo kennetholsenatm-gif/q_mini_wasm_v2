@@ -1,8 +1,0 @@
-# Q-Mini-WASM Hybrid Architecture Dependencies
-# Included from separated requirements files
-
--r requirements/core.txt
--r requirements/quantum.txt
--r requirements/hardware.txt
--r requirements/wasm.txt
--r requirements/dev.txt

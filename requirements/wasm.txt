@@ -1,4 +1,0 @@
-# WASM compilation and execution (align with setuptools install_requires)
-wasmtime>=14.0.0
-pywasm>=2.0.0
-cffi>=2.0.0

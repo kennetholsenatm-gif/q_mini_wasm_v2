@@ -1,3 +1,0 @@
-# SYCL Hardware Requirements
-dpctl>=0.15.0
-numpy>=1.22.0
