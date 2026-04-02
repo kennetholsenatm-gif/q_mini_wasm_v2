@@ -1,0 +1,512 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "Discrete metrics for AutoLearn-improvable AI agent skills",
+  
+  "metrics_framework": {
+    "collection_enabled": true,
+    "baseline_established": false,
+    "improvement_tracking": true,
+    "regression_detection": true,
+    "storage": "config/metrics-history.json"
+  },
+  
+  "skill_metrics": {
+    "quantum_core": {
+      "description": "Metrics for quantum core development skill",
+      "metrics": {
+        "trit_operation_correctness": {
+          "type": "accuracy",
+          "description": "Percentage of trit operations returning correct GF(3) results",
+          "measure": "passed_tests / total_tests",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "test_and_fix"
+        },
+        "gf3_arithmetic_coverage": {
+          "type": "coverage",
+          "description": "Percentage of GF(3) arithmetic operations covered by tests",
+          "measure": "tested_operations / total_operations",
+          "target": 0.95,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "add_tests"
+        },
+        "stabilizer_correctness_score": {
+          "type": "accuracy",
+          "description": "Correctness of stabilizer tableau operations",
+          "measure": "correct_tableau_states / total_tested_states",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "verify_and_correct"
+        },
+        "clifford_gate_accuracy": {
+          "type": "accuracy",
+          "description": "Accuracy of Clifford gate implementations (H, S, CSUM)",
+          "measure": "correct_gates / total_gate_tests",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "verify_gates"
+        },
+        "energy_efficiency_pj": {
+          "type": "performance",
+          "description": "Energy consumption in picojoules per operation",
+          "measure": "total_energy / total_operations",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "optimize_algorithms"
+        }
+      }
+    },
+    
+    "dll_bridge": {
+      "description": "Metrics for DLL bridge and bindings skill",
+      "metrics": {
+        "binding_generation_success": {
+          "type": "accuracy",
+          "description": "Success rate of generating language bindings",
+          "measure": "successful_generations / total_attempts",
+          "target": 0.98,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_generation_logic"
+        },
+        "api_coverage_percentage": {
+          "type": "coverage",
+          "description": "Percentage of C++ APIs exposed through bindings",
+          "measure": "exposed_apis / total_apis",
+          "target": 0.90,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "add_bindings"
+        },
+        "type_mapping_accuracy": {
+          "type": "accuracy",
+          "description": "Accuracy of type mappings between C++ and target languages",
+          "measure": "correct_mappings / total_mappings",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "verify_mappings"
+        },
+        "memory_safety_score": {
+          "type": "safety",
+          "description": "Memory safety of generated bindings (no leaks, bounds checking)",
+          "measure": "safe_operations / total_operations",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "add_safety_checks"
+        }
+      }
+    },
+    
+    "go_runtime": {
+      "description": "Metrics for Go gateway runtime skill",
+      "metrics": {
+        "build_success_rate": {
+          "type": "reliability",
+          "description": "Percentage of successful Go builds",
+          "measure": "successful_builds / total_builds",
+          "target": 0.99,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_build_errors"
+        },
+        "cgo_binding_accuracy": {
+          "type": "accuracy",
+          "description": "Accuracy of CGO bindings to C++ quantum engine",
+          "measure": "correct_bindings / total_bindings",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "verify_cgo_bindings"
+        },
+        "error_handling_coverage": {
+          "type": "coverage",
+          "description": "Percentage of error paths properly handled",
+          "measure": "handled_errors / total_error_paths",
+          "target": 0.95,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "add_error_handling"
+        },
+        "test_pass_rate": {
+          "type": "reliability",
+          "description": "Percentage of Go tests passing",
+          "measure": "passed_tests / total_tests",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_failing_tests"
+        }
+      }
+    },
+    
+    "sycl_acceleration": {
+      "description": "Metrics for SYCL GPU acceleration skill",
+      "metrics": {
+        "kernel_compilation_success": {
+          "type": "reliability",
+          "description": "Success rate of SYCL kernel compilation",
+          "measure": "successful_compilations / total_attempts",
+          "target": 0.98,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_kernel_code"
+        },
+        "gpu_utilization_percentage": {
+          "type": "performance",
+          "description": "GPU utilization during kernel execution",
+          "measure": "active_gpu_time / total_execution_time",
+          "target": 0.85,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "optimize_kernels"
+        },
+        "memory_bandwidth_efficiency": {
+          "type": "performance",
+          "description": "Memory bandwidth utilization efficiency",
+          "measure": "actual_bandwidth / theoretical_bandwidth",
+          "target": 0.80,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "optimize_memory_access"
+        },
+        "parallel_efficiency_score": {
+          "type": "performance",
+          "description": "Parallel execution efficiency across GPU cores",
+          "measure": "speedup / num_cores",
+          "target": 0.90,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "improve_parallelism"
+        }
+      }
+    },
+    
+    "runtime_engine": {
+      "description": "Metrics for WASM runtime engine skill",
+      "metrics": {
+        "wasm_compilation_success": {
+          "type": "reliability",
+          "description": "Success rate of WASM compilation",
+          "measure": "successful_compilations / total_attempts",
+          "target": 0.98,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_wasm_build"
+        },
+        "execution_speedup_vs_native": {
+          "type": "performance",
+          "description": "WASM execution speed relative to native",
+          "measure": "native_time / wasm_time",
+          "target": 0.85,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "optimize_wasm"
+        },
+        "memory_overhead_ratio": {
+          "type": "efficiency",
+          "description": "WASM memory overhead compared to native",
+          "measure": "wasm_memory / native_memory",
+          "target": 1.2,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "reduce_memory_usage"
+        },
+        "threading_stability": {
+          "type": "reliability",
+          "description": "Stability of WASM threading implementation",
+          "measure": "stable_thread_ops / total_thread_ops",
+          "target": 0.99,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_threading_issues"
+        }
+      }
+    },
+    
+    "rag_service": {
+      "description": "Metrics for RAG service skill",
+      "metrics": {
+        "retrieval_accuracy": {
+          "type": "accuracy",
+          "description": "Accuracy of document retrieval",
+          "measure": "relevant_retrieved / total_retrieved",
+          "target": 0.90,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "improve_embeddings"
+        },
+        "context_optimization_score": {
+          "type": "efficiency",
+          "description": "Token optimization effectiveness",
+          "measure": "reduced_tokens / original_tokens",
+          "target": 0.70,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "optimize_chunking"
+        },
+        "index_coverage": {
+          "type": "coverage",
+          "description": "Percentage of codebase indexed",
+          "measure": "indexed_files / total_files",
+          "target": 0.95,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "add_indexing"
+        },
+        "query_response_time_ms": {
+          "type": "performance",
+          "description": "Average query response time in milliseconds",
+          "measure": "total_response_time / num_queries",
+          "target": 100,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "optimize_queries"
+        }
+      }
+    },
+    
+    "documentation_intelligence": {
+      "description": "Metrics for documentation intelligence skill",
+      "metrics": {
+        "api_documentation_coverage": {
+          "type": "coverage",
+          "description": "Percentage of public APIs documented",
+          "measure": "documented_apis / total_apis",
+          "target": 0.95,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "generate_docs"
+        },
+        "cognitive_ergonomics_score": {
+          "type": "quality",
+          "description": "Cognitive ergonomics compliance score",
+          "measure": "compliant_elements / total_elements",
+          "target": 0.90,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "apply_ergonomics"
+        },
+        "wiki_sync_success_rate": {
+          "type": "reliability",
+          "description": "Success rate of wiki synchronization",
+          "measure": "successful_syncs / total_syncs",
+          "target": 0.98,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_sync_issues"
+        },
+        "documentation_freshness_days": {
+          "type": "quality",
+          "description": "Average age of documentation in days",
+          "measure": "sum(doc_ages) / num_docs",
+          "target": 7,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "auto_update_docs"
+        }
+      }
+    },
+    
+    "test_orchestration": {
+      "description": "Metrics for test orchestration skill",
+      "metrics": {
+        "test_coverage_percentage": {
+          "type": "coverage",
+          "description": "Overall test coverage",
+          "measure": "covered_lines / total_lines",
+          "target": 0.80,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "add_tests"
+        },
+        "test_pass_rate": {
+          "type": "reliability",
+          "description": "Percentage of tests passing",
+          "measure": "passed_tests / total_tests",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_failing_tests"
+        },
+        "multi_lang_coordination_score": {
+          "type": "quality",
+          "description": "Effectiveness of multi-language test coordination",
+          "measure": "coordinated_tests / total_tests",
+          "target": 0.95,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "improve_coordination"
+        },
+        "regression_detection_rate": {
+          "type": "reliability",
+          "description": "Percentage of regressions detected",
+          "measure": "detected_regressions / total_regressions",
+          "target": 0.98,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "enhance_detection"
+        }
+      }
+    },
+    
+    "wui_design": {
+      "description": "Metrics for Web UI design skill",
+      "metrics": {
+        "build_success_rate": {
+          "type": "reliability",
+          "description": "Success rate of WUI builds",
+          "measure": "successful_builds / total_builds",
+          "target": 0.98,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "fix_build_errors"
+        },
+        "cognitive_css_compliance": {
+          "type": "quality",
+          "description": "Compliance with cognitive ergonomics CSS standards",
+          "measure": "compliant_rules / total_rules",
+          "target": 0.95,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "apply_cognitive_css"
+        },
+        "visualization_accuracy": {
+          "type": "accuracy",
+          "description": "Accuracy of quantum state visualization",
+          "measure": "correct_visualizations / total_visualizations",
+          "target": 1.0,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "verify_visualizations"
+        },
+        "user_interaction_responsiveness": {
+          "type": "performance",
+          "description": "Responsiveness of UI interactions in milliseconds",
+          "measure": "total_response_time / num_interactions",
+          "target": 50,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "optimize_interactions"
+        }
+      }
+    },
+    
+    "self_learning": {
+      "description": "Metrics for self-learning and pattern detection skill",
+      "metrics": {
+        "pattern_detection_accuracy": {
+          "type": "accuracy",
+          "description": "Accuracy of pattern detection in codebase",
+          "measure": "correct_patterns / total_detected",
+          "target": 0.90,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "improve_detection"
+        },
+        "tool_suggestion_relevance": {
+          "type": "quality",
+          "description": "Relevance of suggested tools to detected patterns",
+          "measure": "relevant_suggestions / total_suggestions",
+          "target": 0.85,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "refine_suggestions"
+        },
+        "schema_evolution_success": {
+          "type": "reliability",
+          "description": "Success rate of schema evolution",
+          "measure": "successful_evolutions / total_attempts",
+          "target": 0.95,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "improve_evolution"
+        },
+        "learning_rate_per_cycle": {
+          "type": "performance",
+          "description": "Number of new patterns learned per improvement cycle",
+          "measure": "new_patterns / cycle_count",
+          "target": 5,
+          "current": 0.0,
+          "discrete": true,
+          "testable": true,
+          "improvement_method": "increase_learning"
+        }
+      }
+    }
+  },
+  
+  "aggregate_metrics": {
+    "overall_framework_health": {
+      "type": "composite",
+      "description": "Overall health score of the framework",
+      "measure": "weighted_average(all_skill_metrics)",
+      "target": 0.90,
+      "current": 0.0,
+      "discrete": true
+    },
+    "improvement_velocity": {
+      "type": "performance",
+      "description": "Rate of metric improvements per cycle",
+      "measure": "improved_metrics / total_metrics",
+      "target": 0.10,
+      "current": 0.0,
+      "discrete": true
+    },
+    "cross_agent_knowledge_spread": {
+      "type": "quality",
+      "description": "Effectiveness of knowledge spread across agents",
+      "measure": "shared_improvements / total_improvements",
+      "target": 0.80,
+      "current": 0.0,
+      "discrete": true
+    }
+  }
+}

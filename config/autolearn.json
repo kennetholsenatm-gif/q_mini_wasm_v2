@@ -1,0 +1,88 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "autolearn": {
+    "enabled": true,
+    "mode": "full",
+    "description": "AutoLearn integration for self-improving AI agents across quantum-classical hybrid framework",
+    
+    "mcp_integration": {
+      "enabled": true,
+      "server_name": "qminiwasm-autolearn",
+      "crystallization_enabled": true,
+      "reasoning_trace_capture": true,
+      "skill_library_auto_build": true
+    },
+    
+    "school_integration": {
+      "enabled": true,
+      "teacher_agent": "self_learning",
+      "student_agents": [
+        "quantum_core",
+        "dll_bridge",
+        "go_runtime",
+        "sycl_acceleration",
+        "runtime_engine",
+        "rag_service",
+        "documentation_intelligence",
+        "test_orchestration",
+        "wui_design"
+      ],
+      "managed_memory": {
+        "enabled": true,
+        "context_window": 8192,
+        "persistence": "file_based",
+        "memory_path": "config/autolearn-memory"
+      },
+      "testing": {
+        "enabled": true,
+        "test_frequency": "per_commit",
+        "passing_threshold": 0.85,
+        "regression_detection": true
+      }
+    },
+    
+    "improvement_cycles": {
+      "enabled": true,
+      "cycle_interval_hours": 24,
+      "max_improvements_per_cycle": 5,
+      "validation_required": true,
+      "auto_deploy": false
+    },
+    
+    "spread_mechanism": {
+      "enabled": true,
+      "propagation_mode": "validated_improvements",
+      "cross_agent_learning": true,
+      "knowledge_graph_integration": true,
+      "spread_validation": {
+        "required_tests_pass": true,
+        "peer_review": "auto",
+        "regression_check": true
+      }
+    }
+  },
+  
+  "metrics": {
+    "tracking_enabled": true,
+    "storage": "config/metrics-history.json",
+    "reporting": {
+      "frequency": "daily",
+      "format": "json",
+      "location": "reports/autolearn"
+    }
+  },
+  
+  "integration_points": {
+    "existing_mcp_servers": [
+      "qminiwasm-self-learning",
+      "qminiwasm-test-orchestrator",
+      "qminiwasm-core-cpp"
+    ],
+    "ci_cd_hooks": {
+      "pre_commit": "autolearn_validate",
+      "post_merge": "autolearn_learn",
+      "pre_release": "autolearn_evaluate"
+    }
+  }
+}

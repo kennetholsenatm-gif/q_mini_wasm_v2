@@ -1,0 +1,75 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "Skill libraries accumulated through AutoLearn improvement cycles",
+  
+  "skill_libraries": {
+    "quantum_core": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "dll_bridge": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "go_runtime": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "sycl_acceleration": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "runtime_engine": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "rag_service": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "documentation_intelligence": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "test_orchestration": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "wui_design": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    },
+    "self_learning": {
+      "total_skills": 0,
+      "crystallized_from_traces": 0,
+      "last_updated": null,
+      "skills": []
+    }
+  },
+  
+  "cross_agent_skills": {
+    "total_shared": 0,
+    "spread_count": 0,
+    "last_spread": null,
+    "shared_improvements": []
+  }
+}

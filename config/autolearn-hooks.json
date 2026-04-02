@@ -1,0 +1,144 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "AutoLearn integration hooks for CI/CD and development workflows",
+  
+  "git_hooks": {
+    "pre_commit": {
+      "enabled": true,
+      "autolearn_checks": [
+        {
+          "name": "validate_metrics",
+          "command": "python scripts/autolearn_validate_metrics.py",
+          "description": "Validate that all agent metrics are properly defined and testable",
+          "required": true
+        },
+        {
+          "name": "check_skill_definitions",
+          "command": "python scripts/autolearn_check_skills.py",
+          "description": "Ensure all skills have AutoLearn configurations",
+          "required": true
+        }
+      ]
+    },
+    
+    "post_commit": {
+      "enabled": true,
+      "autolearn_actions": [
+        {
+          "name": "capture_reasoning",
+          "command": "python scripts/autolearn_capture_reasoning.py",
+          "description": "Capture reasoning traces from recent changes",
+          "required": false
+        },
+        {
+          "name": "update_metrics",
+          "command": "python scripts/autolearn_update_metrics.py",
+          "description": "Update metrics based on commit changes",
+          "required": true
+        }
+      ]
+    },
+    
+    "pre_push": {
+      "enabled": true,
+      "autolearn_checks": [
+        {
+          "name": "run_agent_evaluations",
+          "command": "python scripts/autolearn_evaluate_agents.py",
+          "description": "Run evaluations for all AI agents",
+          "required": true
+        },
+        {
+          "name": "detect_improvements",
+          "command": "python scripts/autolearn_detect_improvements.py",
+          "description": "Detect improvement opportunities from recent changes",
+          "required": false
+        }
+      ]
+    }
+  },
+  
+  "ci_cd_integration": {
+    "github_actions": {
+      "enabled": true,
+      "workflows": {
+        "autolearn_evaluation": {
+          "trigger": "push_to_main_or_develop",
+          "jobs": [
+            {
+              "name": "evaluate_all_agents",
+              "steps": [
+                "checkout_code",
+                "run_autolearn_evaluations",
+                "generate_improvement_report",
+                "update_metrics_history"
+              ]
+            }
+          ]
+        },
+        "autolearn_improvement_cycle": {
+          "trigger": "weekly_cron",
+          "jobs": [
+            {
+              "name": "run_improvement_cycle",
+              "steps": [
+                "checkout_code",
+                "evaluate_agents",
+                "detect_opportunities",
+                "generate_improvements",
+                "validate_improvements",
+                "spread_improvements",
+                "update_skill_libraries"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  
+  "mcp_hooks": {
+    "pre_tool_use": {
+      "enabled": true,
+      "actions": [
+        {
+          "name": "capture_tool_usage",
+          "tool_pattern": "*",
+          "action": "log_usage_for_learning"
+        }
+      ]
+    },
+    
+    "post_tool_use": {
+      "enabled": true,
+      "actions": [
+        {
+          "name": "evaluate_tool_result",
+          "tool_pattern": "*",
+          "action": "evaluate_and_learn"
+        },
+        {
+          "name": "crystallize_if_successful",
+          "tool_pattern": "*",
+          "action": "crystallize_skill_on_success",
+          "condition": "result.success == true && result.novel == true"
+        }
+      ]
+    }
+  },
+  
+  "kanban_integration": {
+    "improvement_cards": {
+      "enabled": true,
+      "auto_create": true,
+      "columns": {
+        "detected": "AutoLearn: Detected Opportunities",
+        "planned": "AutoLearn: Planned Improvements",
+        "in_progress": "AutoLearn: In Progress",
+        "validated": "AutoLearn: Validated",
+        "spread": "AutoLearn: Spread Complete"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+﻿{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "History of all improvements and their spread across agents",
+  
+  "improvement_cycles": [],
+  
+  "improvements": {
+    "total": 0,
+    "validated": 0,
+    "spread": 0,
+    "regressions": 0,
+    "last_cycle": null
+  },
+  
+  "spread_history": {
+    "total_spreads": 0,
+    "successful_spreads": 0,
+    "failed_spreads": 0,
+    "last_spread": null,
+    "spreads": []
+  },
+  
+  "metric_history": {
+    "snapshots": [],
+    "trends": {}
+  },
+  
+  "regression_history": {
+    "total": 0,
+    "resolved": 0,
+    "unresolved": 0,
+    "regressions": []
+  }
+}
