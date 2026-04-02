@@ -1,0 +1,98 @@
+﻿syntax = "proto3";
+
+package hooks;
+
+option go_package = "github.com/q_mini_wasm_v2/gateway/pkg/grpc/hooks";
+
+// HookService provides gRPC interface for executing hooks
+service HookService {
+  // Execute pre-commit hook
+  rpc ExecutePreCommit(PreCommitRequest) returns (HookResponse);
+  
+  // Validate commit message format
+  rpc ValidateCommitMessage(CommitMessageRequest) returns (HookResponse);
+  
+  // Execute pre-push hook
+  rpc ExecutePrePush(PrePushRequest) returns (HookResponse);
+  
+  // Execute post-commit hook
+  rpc ExecutePostCommit(PostCommitRequest) returns (HookResponse);
+  
+  // Execute post-merge hook
+  rpc ExecutePostMerge(PostMergeRequest) returns (HookResponse);
+  
+  // Get hook configuration
+  rpc GetHookConfig(HookConfigRequest) returns (HookConfigResponse);
+  
+  // Update hook configuration
+  rpc UpdateHookConfig(UpdateHookConfigRequest) returns (HookResponse);
+}
+
+// Request/Response Messages
+message PreCommitRequest {
+  string repo_path = 1;
+  repeated string staged_files = 2;
+  string branch = 3;
+}
+
+message CommitMessageRequest {
+  string message = 1;
+  string branch = 2;
+}
+
+message PrePushRequest {
+  string repo_path = 1;
+  string remote = 2;
+  string branch = 3;
+}
+
+message PostCommitRequest {
+  string repo_path = 1;
+  string commit_hash = 2;
+  string message = 3;
+  string branch = 4;
+}
+
+message PostMergeRequest {
+  string repo_path = 1;
+  string merge_commit = 2;
+  repeated string merged_branches = 3;
+}
+
+message HookConfigRequest {
+  string hook_type = 1;
+}
+
+message HookConfigResponse {
+  bool enabled = 1;
+  repeated HookCheck checks = 2;
+  repeated HookAction actions = 3;
+}
+
+message UpdateHookConfigRequest {
+  string hook_type = 1;
+  bool enabled = 2;
+  repeated HookCheck checks = 3;
+}
+
+message HookResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string errors = 3;
+  repeated string warnings = 4;
+  map<string, string> metadata = 5;
+}
+
+message HookCheck {
+  string name = 1;
+  string command = 2;
+  string description = 3;
+  bool required = 4;
+}
+
+message HookAction {
+  string name = 1;
+  string command = 2;
+  string description = 3;
+  bool required = 4;
+}
