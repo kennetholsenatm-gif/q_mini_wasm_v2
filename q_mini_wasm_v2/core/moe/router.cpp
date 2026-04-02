@@ -103,9 +103,28 @@ double MoERouter::tropical_inner_product(
     }
     
     // Tropical inner product: max_i(a_i + b_i)
+    // Based on research: "Sparsity is Combinatorial Depth: Quantifying MoE 
+    // Expressivity via Tropical Geometry"
+    //
+    // The tropical inner product is defined as:
+    // ⟨a, b⟩_trop = max_i(a_i ⊗ b_i) = max_i(a_i + b_i)
+    //
+    // This operation is the max-plus algebra equivalent of the standard dot product.
+    // It satisfies the tropical triangle inequality and induces a tropical metric.
+    
     double result = -std::numeric_limits<double>::infinity();
+    
     for (size_t i = 0; i < a.size(); ++i) {
-        result = tropical_add(result, tropical_multiply(a[i], b[i]));
+        // Tropical multiplication: a ⊗ b = a + b
+        double tropical_product = tropical_multiply(a[i], b[i]);
+        
+        // Tropical addition: a ⊕ b = max(a, b)
+        result = tropical_add(result, tropical_product);
+    }
+    
+    // Handle case where all products were -infinity
+    if (result == -std::numeric_limits<double>::infinity()) {
+        return 0.0;
     }
     
     return result;
