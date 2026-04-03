@@ -1,8 +1,38 @@
 {
   "project": "q_mini_wasm_v2",
   "version": "1.0.0",
-  "description": "Quantum-Classical Hybrid Framework with Ternary Neural Networks",
-  
+  "description": "AI Coding Assistant Configuration for Cline",
+
+  "cline_behavior_rules": {
+    "tool_usage": {
+      "one_tool_per_message": true,
+      "wait_for_confirmation": true,
+      "use_replace_in_file_for_edits": "prefer_over_write_to_file",
+      "use_write_to_file_for_new_files": true,
+      "never_assume_tool_success": true
+    },
+    "communication": {
+      "be_direct_and_technical": true,
+      "no_conversational_openers": ["Great", "Certainly", "Okay", "Sure"],
+      "use_task_progress_parameter": true,
+      "end_with_attempt_completion": true,
+      "never_end_with_questions": true
+    },
+    "file_editing": {
+      "prefer_replace_in_file": true,
+      "use_write_to_file_for_large_changes": true,
+      "include_complete_lines_in_search_blocks": true,
+      "list_search_replace_blocks_in_order": true,
+      "wait_for_auto_formatting": true
+    },
+    "error_handling": {
+      "verify_before_proceeding": true,
+      "check_exit_status": true,
+      "run_follow_up_checks": true,
+      "never_assume_success_without_confirmation": true
+    }
+  },
+
   "coding_standards": {
     "cpp": {
       "standard": "C++17",
@@ -46,14 +76,48 @@
       "error_handling": "explicit_error_returns",
       "concurrency": "goroutines_and_channels"
     },
+    "python": {
+      "version": ">=3.10",
+      "style": {
+        "naming_convention": "snake_case",
+        "indentation": "4_spaces",
+        "line_length": 100,
+        "type_hints": "required_for_public_functions"
+      },
+      "packaging": {
+        "format": "pyproject.toml",
+        "virtual_env": "required"
+      }
+    },
     "wasm": {
       "target": "emscripten",
       "memory_management": "dynamic_growth",
       "max_memory": "4GB",
       "threading": "pthreads"
+    },
+    "javascript": {
+      "version": "ES2022+",
+      "style": {
+        "naming_convention": "camelCase",
+        "indentation": "2_spaces",
+        "semicolons": "required",
+        "quotes": "single"
+      }
     }
   },
-  
+
+  "documentation_rules": {
+    "cognitive_ergonomics_compliance": true,
+    "api_documentation": "auto_generated_from_headers",
+    "research_references": "required_for_quantum_algorithms",
+    "visual_hierarchy": "gestalt_principles",
+    "cline_documentation": {
+      "explain_changes": "required",
+      "include_context": true,
+      "reference_file_paths": true
+    }
+  },
+
   "architecture_rules": {
     "module_separation": {
       "core": "pure_cpp_quantum_operations",
@@ -69,7 +133,7 @@
       "quantum_logic_isolation": "strict"
     }
   },
-  
+
   "testing_rules": {
     "coverage_requirements": {
       "unit_tests": ">=80%",
@@ -84,19 +148,35 @@
       "moe_routing_validation",
       "forward_forward_learning",
       "sycl_kernels"
-    ]
+    ],
+    "cline_testing": {
+      "run_existing_tests_before_completion": true,
+      "prefer_existing_test_suite": true,
+      "update_test_assertions_only_when_explicitly_requested": true
+    }
   },
-  
-  "documentation_rules": {
-    "cognitive_ergonomics_compliance": true,
-    "api_documentation": "auto_generated_from_headers",
-    "research_references": "required_for_quantum_algorithms",
-    "visual_hierarchy": "gestalt_principles"
-  },
-  
+
   "security_rules": {
     "memory_safety": "bounds_checking_required",
     "input_validation": "strict_for_all_external_inputs",
-    "quantum_state_isolation": "prevent_classical_contamination"
+    "quantum_state_isolation": "prevent_classical_contamination",
+    "cline_security": {
+      "never_include_harmful_instructions": true,
+      "validate_command_arguments": true,
+      "escape_untrusted_input": true
+    }
+  },
+
+  "mcp_integration_rules": {
+    "server_management": {
+      "check_server_availability": true,
+      "handle_connection_errors_gracefully": true,
+      "use_appropriate_server_for_task": true
+    },
+    "tool_selection": {
+      "prefer_domain_specific_servers": true,
+      "fall_back_to_general_tools": true,
+      "combine_multiple_servers_when_needed": true
+    }
   }
 }

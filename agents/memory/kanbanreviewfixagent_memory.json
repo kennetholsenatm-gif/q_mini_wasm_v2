@@ -1,0 +1,31 @@
+{
+  "short_term": {},
+  "long_term": {},
+  "patterns": [
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 0,
+      "stuck_cards": 0,
+      "error_cards": 0,
+      "issue_cards": 0,
+      "timestamp": "2026-04-02T17:04:06.337918"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 0,
+      "stuck_cards": 0,
+      "error_cards": 0,
+      "issue_cards": 0,
+      "timestamp": "2026-04-02T17:04:12.967067"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 0,
+      "stuck_cards": 0,
+      "error_cards": 0,
+      "issue_cards": 0,
+      "timestamp": "2026-04-02T17:04:19.248486"
+    }
+  ],
+  "improvements": []
+}

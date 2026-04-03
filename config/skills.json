@@ -1,347 +1,438 @@
-﻿{
+{
   "project": "q_mini_wasm_v2",
+  "cline_skills": {
+    "file_operations": {
+      "name": "File Operations",
+      "description": "Core file reading, writing, and editing capabilities",
+      "tools": [
+        "read_file",
+        "write_to_file",
+        "replace_in_file",
+        "list_files",
+        "search_files"
+      ],
+      "expertise_level": "expert",
+      "rules": {
+        "prefer_replace_in_file_for_edits": true,
+        "use_write_to_file_for_new_files": true,
+        "always_read_before_editing": true,
+        "wait_for_confirmation_between_operations": true
+      }
+    },
+    "code_analysis": {
+      "name": "Code Analysis",
+      "description": "Understanding code structure, patterns, and definitions",
+      "tools": [
+        "list_code_definition_names",
+        "search_files",
+        "read_file"
+      ],
+      "expertise_level": "expert",
+      "capabilities": [
+        "pattern_recognition",
+        "dependency_analysis",
+        "architecture_understanding",
+        "bug_detection"
+      ]
+    },
+    "command_execution": {
+      "name": "Command Execution",
+      "description": "Running CLI commands and system operations",
+      "tools": [
+        "execute_command"
+      ],
+      "expertise_level": "advanced",
+      "rules": {
+        "never_include_harmful_instructions": true,
+        "tailor_commands_to_os": true,
+        "prefer_non_interactive": true,
+        "provide_clear_explanations": true
+      }
+    },
+    "task_management": {
+      "name": "Task Management",
+      "description": "Tracking progress and managing complex multi-step tasks",
+      "tools": [
+        "task_progress"
+      ],
+      "expertise_level": "expert",
+      "capabilities": [
+        "checklist_management",
+        "progress_tracking",
+        "scope_adaptation",
+        "milestone_identification"
+      ]
+    }
+  },
+
   "skills": {
-    "quantum_core": {
-      "name": "Quantum Core Development",
-      "description": "Skills for developing qutrit stabilizer formalism, GF(3) arithmetic, and Clifford gates",
-      "mcp_server": "qminiwasm-core-cpp",
+    "python_programming": {
+      "name": "Python Programming",
+      "description": "Python development, testing, and package management",
+      "mcp_server": "qminiwasm-python-programming",
       "tools": [
-        "compile_ternary_core",
-        "analyze_stabilizer_tableau",
-        "verify_clifford_operations",
-        "kanban_quantum_status"
+        "python_run",
+        "python_test",
+        "python_analyze",
+        "python_refactor",
+        "python_document",
+        "python_profile"
       ],
       "expertise_level": "expert",
-      "prerequisites": ["cpp_17", "quantum_mechanics", "galois_field_theory"],
+      "prerequisites": ["python_3_10", "virtual_env", "pytest"],
       "capabilities": [
-        "qutrit_stabilizer_tableau_operations",
-        "gf3_modulo_arithmetic",
-        "clifford_gate_synthesis",
-        "entanglement_entropy_calculation"
+        "script_development",
+        "test_automation",
+        "code_analysis",
+        "refactoring",
+        "documentation_generation",
+        "performance_profiling"
       ],
       "autolearn": {
         "enabled": true,
-        "metrics": ["trit_operation_correctness", "gf3_arithmetic_coverage", "stabilizer_correctness_score", "clifford_gate_accuracy", "energy_efficiency_pj"],
-        "improvement_triggers": ["test_failure", "performance_regression", "coverage_drop", "energy_efficiency_degradation"],
+        "metrics": ["test_pass_rate", "code_quality_score", "documentation_coverage", "performance_improvement"],
+        "improvement_triggers": ["test_failure", "code_smell_detected", "documentation_gap", "performance_regression"],
         "skill_crystallization": true,
         "memory_enabled": true
       }
     },
-    
-    "dll_bridge": {
-      "name": "DLL Bridge & Bindings",
-      "description": "Skills for generating language bindings and DLL exports",
-      "mcp_server": "qminiwasm-dll-bridge",
+    "cpp_programming": {
+      "name": "C++ Programming",
+      "description": "C++ development, compilation, and optimization",
+      "mcp_server": "qminiwasm-cpp-programming",
       "tools": [
-        "dll_compile_quantum_api",
-        "generate_quantum_bindings",
-        "validate_quantum_exports",
-        "kanban_dll_pipeline"
-      ],
-      "expertise_level": "advanced",
-      "prerequisites": ["cpp_17", "cgo", "ffi"],
-      "capabilities": [
-        "go_cgo_binding_generation",
-        "rust_ffi_binding_generation",
-        "python_ctypes_binding_generation",
-        "wasm_binding_generation",
-        "dll_export_validation"
-      ],
-      "autolearn": {
-        "enabled": true,
-        "metrics": ["binding_generation_success", "api_coverage_percentage", "type_mapping_accuracy", "memory_safety_score"],
-        "improvement_triggers": ["binding_generation_failure", "type_mapping_error", "memory_leak_detected", "api_coverage_drop"],
-        "skill_crystallization": true,
-        "memory_enabled": true
-      }
-    },
-    
-    "go_runtime": {
-      "name": "Go Gateway Runtime",
-      "description": "Skills for Go gateway with CGO bindings to qutrit engine",
-      "mcp_server": "qminiwasm-go-runtime",
-      "tools": [
-        "go_build_quantum",
-        "go_test_quantum",
-        "cgo_generate_qutrit",
-        "kanban_go_status"
-      ],
-      "expertise_level": "advanced",
-      "prerequisites": ["go_1_26", "cgo", "grpc"],
-      "capabilities": [
-        "go_module_management",
-        "cgo_qutrit_bindings",
-        "grpc_service_implementation",
-        "mcp_protocol_handling"
-      ],
-      "autolearn": {
-        "enabled": true,
-        "metrics": ["build_success_rate", "cgo_binding_accuracy", "error_handling_coverage", "test_pass_rate"],
-        "improvement_triggers": ["build_failure", "test_failure", "performance_regression", "concurrency_bug"],
-        "skill_crystallization": true,
-        "memory_enabled": true
-      }
-    },
-    
-    "documentation_intelligence": {
-      "name": "Documentation Intelligence",
-      "description": "Skills for cognitive ergonomics documentation and API reference generation",
-      "mcp_server": "qminiwasm-doc-intelligence",
-      "tools": [
-        "doc_gap_analysis",
-        "cognitive_audit",
-        "wiki_sync",
-        "api_extract"
-      ],
-      "expertise_level": "intermediate",
-      "prerequisites": ["markdown", "cognitive_ergonomics", "ast_analysis"],
-      "capabilities": [
-        "undocumented_api_detection",
-        "cognitive_ergonomics_validation",
-        "github_wiki_generation",
-        "header_ast_analysis"
-      ],
-      "autolearn": {
-        "enabled": true,
-        "metrics": ["api_documentation_coverage", "cognitive_ergonomics_score", "wiki_sync_success_rate", "documentation_freshness_days"],
-        "improvement_triggers": ["documentation_gap_detected", "cognitive_ergonomics_violation", "wiki_sync_failure", "outdated_documentation"],
-        "skill_crystallization": true,
-        "memory_enabled": true
-      }
-    },
-    
-    "rag_service": {
-      "name": "RAG Service",
-      "description": "Skills for retrieval-augmented generation and context optimization",
-      "mcp_server": "qminiwasm-rag-service",
-      "tools": [
-        "rag_retrieve_context",
-        "rag_index_document",
-        "rag_get_metrics",
-        "rag_reindex_all",
-        "kanban_rag_status"
-      ],
-      "expertise_level": "advanced",
-      "prerequisites": ["vector_databases", "qdrant", "embeddings"],
-      "capabilities": [
-        "semantic_search",
-        "document_indexing",
-        "context_retrieval",
-        "token_optimization"
-      ],
-      "autolearn": {
-        "enabled": true,
-        "metrics": ["retrieval_accuracy", "context_optimization_score", "index_coverage", "query_response_time_ms"],
-        "improvement_triggers": ["retrieval_accuracy_drop", "query_timeout", "indexing_failure", "coverage_gap"],
-        "skill_crystallization": true,
-        "memory_enabled": true
-      }
-    },
-    
-    "runtime_engine": {
-      "name": "WASM Runtime Engine",
-      "description": "Skills for WASM orchestrator with async tableau tracking",
-      "mcp_server": "qminiwasm-runtime-engine",
-      "tools": [
-        "compile_orchestrator",
-        "rust_ffi_generate",
-        "runtime_metrics",
-        "kanban_runtime_status"
+        "cpp_compile",
+        "cpp_build",
+        "cpp_test",
+        "cpp_analyze",
+        "cpp_refactor",
+        "cpp_document"
       ],
       "expertise_level": "expert",
-      "prerequisites": ["wasm", "emscripten", "async_programming", "3d_nand_cim"],
+      "prerequisites": ["cpp_17", "cmake", "clang"],
       "capabilities": [
-        "wasm_compilation",
-        "async_tableau_tracking",
-        "rust_ffi_generation",
-        "cim_integration"
+        "cmake_project_management",
+        "cross_compilation",
+        "static_analysis",
+        "memory_debugging",
+        "performance_optimization"
       ],
       "autolearn": {
         "enabled": true,
-        "metrics": ["wasm_compilation_success", "execution_speedup_vs_native", "memory_overhead_ratio", "threading_stability"],
-        "improvement_triggers": ["wasm_compilation_failure", "execution_error", "memory_leak", "threading_deadlock"],
+        "metrics": ["build_success_rate", "test_coverage", "static_analysis_score", "compilation_time"],
+        "improvement_triggers": ["build_failure", "test_failure", "memory_leak_detected", "compilation_regression"],
         "skill_crystallization": true,
         "memory_enabled": true
       }
     },
-    
-    "self_learning": {
-      "name": "Self-Learning & Pattern Detection",
-      "description": "Skills for analyzing project patterns and auto-generating tools",
-      "mcp_server": "qminiwasm-self-learning",
+    "wasm_compilation": {
+      "name": "WebAssembly Compilation",
+      "description": "Compiling and optimizing WebAssembly modules",
+      "mcp_server": "qminiwasm-wasm",
       "tools": [
-        "analyze_patterns",
-        "suggest_tool",
-        "collect_metrics",
-        "evolve_schema"
+        "wasm_compile",
+        "wasm_optimize",
+        "wasm_validate",
+        "wasm_link",
+        "wasm_deploy",
+        "wasm_debug"
       ],
       "expertise_level": "advanced",
-      "prerequisites": ["git_analysis", "pattern_recognition", "schema_design"],
+      "prerequisites": ["emscripten", "wasm32_target", "wasm_opt"],
       "capabilities": [
-        "git_history_analysis",
-        "build_pattern_detection",
-        "tool_suggestion",
-        "schema_evolution"
+        "wasm_module_compilation",
+        "optimization_pipeline",
+        "module_validation",
+        "multi_module_linking",
+        "browser_deployment"
       ],
       "autolearn": {
         "enabled": true,
-        "metrics": ["pattern_detection_accuracy", "tool_suggestion_relevance", "schema_evolution_success", "learning_rate_per_cycle"],
-        "improvement_triggers": ["pattern_detection_failure", "irrelevant_suggestion", "schema_evolution_failure", "learning_stagnation"],
+        "metrics": ["compilation_success", "module_size_reduction", "execution_speedup", "memory_efficiency"],
+        "improvement_triggers": ["compilation_failure", "size_regression", "performance_degradation", "compatibility_issue"],
         "skill_crystallization": true,
-        "memory_enabled": true,
-        "is_teacher": true
+        "memory_enabled": true
       }
     },
-    
-    "sycl_acceleration": {
-      "name": "SYCL GPU Acceleration",
-      "description": "Skills for SYCL GPU kernels for qutrit stabilizer operations",
-      "mcp_server": "qminiwasm-sycl-accelerator",
+    "security_operations": {
+      "name": "Security Operations",
+      "description": "Security scanning, auditing, and vulnerability management",
+      "mcp_server": "qminiwasm-security",
       "tools": [
-        "sycl_compile_tableau",
-        "profile_sycl_tableau",
-        "tableau_gpu_optimize",
-        "kanban_sycl_status"
+        "security_scan",
+        "security_audit",
+        "security_configure",
+        "security_monitor",
+        "security_response",
+        "security_report"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["static_analysis", "dependency_scanning", "vulnerability_databases"],
+      "capabilities": [
+        "vulnerability_detection",
+        "dependency_auditing",
+        "security_configuration",
+        "incident_response",
+        "compliance_reporting"
+      ],
+      "autolearn": {
+        "enabled": true,
+        "metrics": ["vulnerability_detection_rate", "false_positive_rate", "remediation_success", "compliance_score"],
+        "improvement_triggers": ["vulnerability_missed", "false_positive_spike", "remediation_failure", "compliance_violation"],
+        "skill_crystallization": true,
+        "memory_enabled": true
+      }
+    },
+    "ai_ml_operations": {
+      "name": "AI/ML Operations",
+      "description": "Machine learning model training, inference, and optimization",
+      "mcp_server": "qminiwasm-ai-ml",
+      "tools": [
+        "ai_train",
+        "ai_infer",
+        "ai_optimize",
+        "ai_evaluate",
+        "ai_visualize",
+        "ai_export"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["pytorch", "numpy", "scikit_learn"],
+      "capabilities": [
+        "model_training",
+        "inference_optimization",
+        "model_evaluation",
+        "result_visualization",
+        "model_export"
+      ],
+      "autolearn": {
+        "enabled": true,
+        "metrics": ["training_accuracy", "inference_speed", "model_size", "generalization_score"],
+        "improvement_triggers": ["accuracy_drop", "inference_slowdown", "overfitting_detected", "export_failure"],
+        "skill_crystallization": true,
+        "memory_enabled": true
+      }
+    },
+    "git_operations": {
+      "name": "Git Operations",
+      "description": "Git version control, branching, and collaboration",
+      "mcp_server": "qminiwasm-git-documentation",
+      "tools": [
+        "git_status",
+        "git_log",
+        "git_diff",
+        "git_branch",
+        "git_commit",
+        "git_push",
+        "git_pull"
       ],
       "expertise_level": "expert",
-      "prerequisites": ["sycl", "gpu_programming", "parallel_algorithms"],
+      "prerequisites": ["git", "github_cli"],
       "capabilities": [
-        "gpu_kernel_compilation",
-        "kernel_profiling",
-        "gf3_gpu_optimization",
-        "parallel_tableau_updates"
-      ],
-      "autolearn": {
-        "enabled": true,
-        "metrics": ["kernel_compilation_success", "gpu_utilization_percentage", "memory_bandwidth_efficiency", "parallel_efficiency_score"],
-        "improvement_triggers": ["kernel_compilation_failure", "incorrect_gpu_output", "performance_degradation", "memory_allocation_error"],
-        "skill_crystallization": true,
-        "memory_enabled": true
-      }
+        "change_tracking",
+        "branch_management",
+        "commit_workflow",
+        "remote_synchronization",
+        "conflict_resolution"
+      ]
     },
-    
-    "test_orchestration": {
-      "name": "Test Orchestration",
-      "description": "Skills for quantum test automation and multi-language testing",
-      "mcp_server": "qminiwasm-test-orchestrator",
+    "cognitive_ergonomics": {
+      "name": "Cognitive Ergonomics",
+      "description": "Applying cognitive science principles to documentation and UI design",
+      "mcp_server": "qminiwasm-cognitive-ergonomics",
       "tools": [
-        "run_quantum_tests",
-        "generate_test_report",
-        "kanban_test_gate",
-        "multi_lang_test"
+        "lint_toml_ergonomics",
+        "lint_doc_ergonomics"
       ],
       "expertise_level": "advanced",
-      "prerequisites": ["cpp_testing", "go_testing", "integration_testing"],
+      "prerequisites": ["miller_law", "gestalt_principles", "chunking"],
       "capabilities": [
-        "quantum_correctness_testing",
-        "stabilizer_verification",
-        "multi_language_coordination",
-        "coverage_analysis"
+        "documentation_optimization",
+        "schema_design_review",
+        "cognitive_load_assessment",
+        "visual_hierarchy_analysis"
+      ]
+    },
+    "edge_computing": {
+      "name": "Edge Computing",
+      "description": "Deploying and managing applications on edge devices",
+      "mcp_server": "qminiwasm-edge-computing",
+      "tools": [
+        "edge_deploy",
+        "edge_monitor",
+        "edge_configure",
+        "edge_update",
+        "edge_security",
+        "edge_logs"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["docker", "kubernetes", "iot_protocols"],
+      "capabilities": [
+        "edge_deployment",
+        "performance_monitoring",
+        "configuration_management",
+        "firmware_updates",
+        "security_management"
+      ]
+    },
+    "quantum_computing": {
+      "name": "Quantum Computing",
+      "description": "Quantum circuit simulation, optimization, and analysis",
+      "mcp_server": "qminiwasm-quantum-computing",
+      "tools": [
+        "quantum_simulate",
+        "quantum_optimize",
+        "quantum_analyze",
+        "quantum_compile",
+        "quantum_run",
+        "quantum_visualize"
+      ],
+      "expertise_level": "expert",
+      "prerequisites": ["quantum_mechanics", "linear_algebra", "qiskit"],
+      "capabilities": [
+        "circuit_simulation",
+        "gate_optimization",
+        "noise_analysis",
+        "hardware_deployment",
+        "visualization"
       ],
       "autolearn": {
         "enabled": true,
-        "metrics": ["test_coverage_percentage", "test_pass_rate", "multi_lang_coordination_score", "regression_detection_rate"],
-        "improvement_triggers": ["coverage_drop", "test_failure_spike", "regression_missed", "coordination_failure"],
+        "metrics": ["simulation_accuracy", "optimization_ratio", "fidelity_score", "gate_count_reduction"],
+        "improvement_triggers": ["simulation_error", "optimization_failure", "fidelity_drop", "compilation_error"],
         "skill_crystallization": true,
         "memory_enabled": true
       }
     },
-    
-    "wui_design": {
-      "name": "Web UI Design",
-      "description": "Skills for WUI visualization with cognitive CSS",
-      "mcp_server": "qminiwasm-wui-designer",
+    "native_compilation": {
+      "name": "Native Compilation",
+      "description": "Compiling and optimizing native binaries",
+      "mcp_server": "qminiwasm-native",
       "tools": [
-        "wui_build",
-        "r_analytics_generate",
-        "cognitive_css_audit",
-        "kanban_wui_status"
+        "native_compile",
+        "native_optimize",
+        "native_profile",
+        "native_debug",
+        "native_deploy",
+        "native_monitor"
       ],
-      "expertise_level": "intermediate",
-      "prerequisites": ["html_css", "wasm_bindings", "cognitive_ergonomics"],
+      "expertise_level": "expert",
+      "prerequisites": ["gcc", "clang", "profiling_tools"],
       "capabilities": [
-        "wasm_ui_building",
-        "r_analytics_integration",
-        "cognitive_css_validation",
-        "qutrit_visualization"
+        "cross_platform_compilation",
+        "binary_optimization",
+        "performance_profiling",
+        "debugging",
+        "deployment_automation"
+      ]
+    },
+    "tpem_operations": {
+      "name": "TPEM Operations",
+      "description": "Tiny Prediction and Estimation Module artifact management",
+      "mcp_server": "qminiwasm-tpem",
+      "tools": [
+        "tpem_generate",
+        "tpem_validate",
+        "tpem_process",
+        "tpem_deploy",
+        "tpem_monitor",
+        "tpem_report"
       ],
-      "autolearn": {
-        "enabled": true,
-        "metrics": ["build_success_rate", "cognitive_css_compliance", "visualization_accuracy", "user_interaction_responsiveness"],
-        "improvement_triggers": ["visualization_error", "css_violation", "build_failure", "performance_regression"],
-        "skill_crystallization": true,
-        "memory_enabled": true
-      }
+      "expertise_level": "advanced",
+      "prerequisites": ["wasm", "ml_models", "edge_deployment"],
+      "capabilities": [
+        "artifact_generation",
+        "schema_validation",
+        "optimization",
+        "edge_deployment",
+        "performance_monitoring"
+      ]
+    },
+    "graph_optimization": {
+      "name": "OmniGraph Optimization",
+      "description": "Refactoring procedural code into declarative graph structures",
+      "mcp_server": "omnigraph-structure-optimizer",
+      "tools": [
+        "lint_procedural_code",
+        "optimize_graph_dependencies"
+      ],
+      "expertise_level": "advanced",
+      "prerequisites": ["dag_concepts", "pipeline_architecture", "dependency_analysis"],
+      "capabilities": [
+        "procedural_pattern_detection",
+        "graph_refactoring_suggestions",
+        "dependency_optimization",
+        "cyclic_dependency_detection"
+      ]
     }
   },
-  
+
   "skill_compositions": {
-    "full_quantum_pipeline": {
-      "description": "Complete quantum-classical development pipeline",
+    "full_stack_development": {
+      "description": "Complete development pipeline across all languages",
       "skills": [
-        "quantum_core",
-        "dll_bridge",
-        "go_runtime",
-        "test_orchestration"
+        "python_programming",
+        "cpp_programming",
+        "wasm_compilation",
+        "git_operations"
       ],
-      "workflow": "develop -> bind -> integrate -> test"
+      "workflow": "develop -> compile -> test -> deploy"
     },
-    
+    "security_pipeline": {
+      "description": "Security-focused development and deployment",
+      "skills": [
+        "security_operations",
+        "cpp_programming",
+        "python_programming",
+        "edge_computing"
+      ],
+      "workflow": "scan -> fix -> validate -> deploy"
+    },
+    "quantum_pipeline": {
+      "description": "Quantum algorithm development and deployment",
+      "skills": [
+        "quantum_computing",
+        "cpp_programming",
+        "wasm_compilation",
+        "edge_computing"
+      ],
+      "workflow": "simulate -> optimize -> compile -> deploy"
+    },
     "documentation_pipeline": {
-      "description": "Complete documentation and knowledge management",
+      "description": "Documentation generation and optimization",
       "skills": [
-        "documentation_intelligence",
-        "rag_service",
-        "self_learning"
+        "cognitive_ergonomics",
+        "python_programming",
+        "git_operations"
       ],
-      "workflow": "analyze -> document -> index -> learn"
+      "workflow": "analyze -> generate -> optimize -> publish"
     },
-    
-    "acceleration_pipeline": {
-      "description": "GPU acceleration and optimization",
+    "edge_ai_pipeline": {
+      "description": "AI model deployment to edge devices",
       "skills": [
-        "quantum_core",
-        "sycl_acceleration",
-        "runtime_engine"
+        "ai_ml_operations",
+        "tpem_operations",
+        "edge_computing",
+        "native_compilation"
       ],
-      "workflow": "implement -> accelerate -> profile -> optimize"
-    },
-    
-    "autolearn_pipeline": {
-      "description": "AutoLearn self-improvement pipeline",
-      "skills": [
-        "self_learning",
-        "test_orchestration",
-        "quantum_core",
-        "dll_bridge",
-        "go_runtime",
-        "sycl_acceleration",
-        "runtime_engine",
-        "rag_service",
-        "documentation_intelligence",
-        "wui_design"
-      ],
-      "workflow": "evaluate -> detect -> improve -> validate -> spread"
+      "workflow": "train -> optimize -> package -> deploy"
     }
   },
-  
+
   "kanban_integration": {
     "status_tracking": {
-      "quantum_core": "kanban_quantum_status",
-      "dll_bridge": "kanban_dll_pipeline",
-      "go_runtime": "kanban_go_status",
-      "rag_service": "kanban_rag_status",
-      "runtime_engine": "kanban_runtime_status",
-      "sycl_accelerator": "kanban_sycl_status",
-      "test_orchestrator": "kanban_test_gate",
-      "wui_designer": "kanban_wui_status"
+      "python_programming": "kanban_python_status",
+      "cpp_programming": "kanban_cpp_status",
+      "wasm_compilation": "kanban_wasm_status",
+      "security_operations": "kanban_security_status",
+      "ai_ml_operations": "kanban_ai_status",
+      "quantum_computing": "kanban_quantum_status",
+      "edge_computing": "kanban_edge_status"
     },
     "pipeline_gates": {
       "code_review": "required",
-      "quantum_expert_review": "recommended_for_core",
       "test_coverage": ">=80%",
-      "energy_efficiency": "validate_pj_targets",
-      "autolearn_validation": "required_for_improvements"
+      "security_scan": "required",
+      "documentation": "required_for_public_apis"
     }
   }
 }

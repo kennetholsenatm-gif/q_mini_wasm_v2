@@ -1,0 +1,159 @@
+name: Auto PR with Detailed Messages
+
+on:
+  push:
+    branches: [ develop, feature/*, fix/* ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Base branch for PR'
+        required: false
+        default: 'main'
+        type: string
+      include_stats:
+        description: 'Include file change statistics'
+        required: false
+        default: true
+        type: boolean
+      include_commits:
+        description: 'Include commit history'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  generate-detailed-pr:
+    name: Generate Detailed PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Get branch information
+        id: branch-info
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "source_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+            echo "base_branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+          else
+            echo "source_branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+            echo "base_branch=${{ github.event.inputs.base_branch || 'main' }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Generate PR body
+        id: generate-pr-body
+        run: |
+          # Generate detailed PR body
+          python scripts/generate_pr.py \
+            --branch "${{ steps.branch-info.outputs.source_branch }}" \
+            --base "${{ steps.branch-info.outputs.base_branch }}" \
+            --output pr-body.md \
+            --format markdown \
+            ${{ github.event.inputs.include_stats == 'true' && '--include-stats' || '' }} \
+            ${{ github.event.inputs.include_commits == 'true' && '--include-commits' || '' }}
+          
+          # Also generate JSON for automation
+          python scripts/generate_pr.py \
+            --branch "${{ steps.branch-info.outputs.source_branch }}" \
+            --base "${{ steps.branch-info.outputs.base_branch }}" \
+            --output pr-data.json \
+            --format json
+      
+      - name: Generate PR title
+        id: generate-title
+        run: |
+          # Extract commit messages for title
+          COMMIT_COUNT=$(git log --oneline "${{ steps.branch-info.outputs.base_branch }}..${{ steps.branch-info.outputs.source_branch }}" | wc -l)
+          FIRST_COMMIT=$(git log --format="%s" -1 "${{ steps.branch-info.outputs.base_branch }}..${{ steps.branch-info.outputs.source_branch }}")
+          
+          # Determine PR type based on branch name
+          SOURCE_BRANCH="${{ steps.branch-info.outputs.source_branch }}"
+          if [[ "$SOURCE_BRANCH" == feature/* ]]; then
+            PR_TYPE="feat"
+          elif [[ "$SOURCE_BRANCH" == fix/* ]]; then
+            PR_TYPE="fix"
+          elif [[ "$SOURCE_BRANCH" == docs/* ]]; then
+            PR_TYPE="docs"
+          else
+            PR_TYPE="chore"
+          fi
+          
+          # Generate title
+          if [ "$COMMIT_COUNT" -eq 1 ]; then
+            echo "title=${PR_TYPE}: ${FIRST_COMMIT}" >> $GITHUB_OUTPUT
+          else
+            echo "title=${PR_TYPE}: ${COMMIT_COUNT} changes from ${SOURCE_BRANCH}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create or Update Pull Request
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "${{ steps.generate-title.outputs.title }}"
+          title: "${{ steps.generate-title.outputs.title }}"
+          body-path: pr-body.md
+          branch: "${{ steps.branch-info.outputs.source_branch }}"
+          base: "${{ steps.branch-info.outputs.base_branch }}"
+          labels: |
+            automated
+            detailed-pr
+          assignees: ${{ github.actor }}
+          reviewers: ${{ github.actor }}
+          delete-branch: false
+          draft: false
+      
+      - name: Update existing PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const prBody = fs.readFileSync('pr-body.md', 'utf8');
+            
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: prBody
+            });
+      
+      - name: Upload PR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-details-${{ github.run_id }}
+          path: |
+            pr-body.md
+            pr-data.json
+          retention-days: 30
+      
+      - name: Summary
+        run: |
+          echo "## 📋 PR Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Branch:** ${{ steps.branch-info.outputs.source_branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Base Branch:** ${{ steps.branch-info.outputs.base_branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "**PR Title:** ${{ steps.generate-title.outputs.title }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Generated PR Body" >> $GITHUB_STEP_SUMMARY
+          echo '```markdown' >> $GITHUB_STEP_SUMMARY
+          cat pr-body.md >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

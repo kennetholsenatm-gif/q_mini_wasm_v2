@@ -2,7 +2,6 @@
   "project": "q_mini_wasm_v2",
   "version": "1.0.0",
   "description": "Auto-improvement cycle configuration for agent ecosystem",
-  
   "gemini": {
     "api_key_env": "GEMINI_API_KEY",
     "model": "gemini-3-flash-preview",
@@ -16,13 +15,16 @@
     "batch_size": 10,
     "cache_ttl": 3600
   },
-  
   "agents": {
     "research_agent": {
       "name": "ResearchAgent",
       "description": "Analyzes patterns and gathers information for improvement",
       "system_prompt": "You are a research agent that analyzes code patterns, performance metrics, and improvement opportunities. Focus on identifying recurring issues and suggesting optimizations.",
-      "tools": ["search_web", "analyze_patterns", "collect_metrics"],
+      "tools": [
+        "search_web",
+        "analyze_patterns",
+        "collect_metrics"
+      ],
       "max_iterations": 5,
       "improvement_cycle_frequency": "daily"
     },
@@ -30,7 +32,11 @@
       "name": "AnalysisAgent",
       "description": "Evaluates agent performance and identifies improvement areas",
       "system_prompt": "You are an analysis agent that evaluates agent performance, identifies bottlenecks, and suggests improvements. Use data-driven approaches.",
-      "tools": ["evaluate_performance", "identify_bottlenecks", "suggest_improvements"],
+      "tools": [
+        "evaluate_performance",
+        "identify_bottlenecks",
+        "suggest_improvements"
+      ],
       "max_iterations": 3,
       "improvement_cycle_frequency": "weekly"
     },
@@ -38,7 +44,11 @@
       "name": "CodeAgent",
       "description": "Generates and refines code improvements",
       "system_prompt": "You are a code generation agent that implements improvements based on analysis. Focus on clean, efficient, and maintainable code.",
-      "tools": ["generate_code", "refactor_code", "validate_code"],
+      "tools": [
+        "generate_code",
+        "refactor_code",
+        "validate_code"
+      ],
       "max_iterations": 10,
       "improvement_cycle_frequency": "on_demand"
     },
@@ -46,12 +56,43 @@
       "name": "TestAgent",
       "description": "Validates improvements through comprehensive testing",
       "system_prompt": "You are a testing agent that validates improvements through unit tests, integration tests, and performance benchmarks.",
-      "tools": ["run_tests", "generate_tests", "measure_performance"],
+      "tools": [
+        "run_tests",
+        "generate_tests",
+        "measure_performance"
+      ],
       "max_iterations": 7,
       "improvement_cycle_frequency": "per_improvement"
+    },
+    "documentation_agent": {
+      "name": "DocumentationAgent",
+      "description": "Generates and maintains documentation with cognitive ergonomics",
+      "system_prompt": "You are a documentation agent that generates and maintains up-to-date documentation using cognitive ergonomics principles. Create Mermaid diagrams for architecture, data flow, and user journeys.",
+      "tools": [
+        "scan_changes",
+        "generate_diagrams",
+        "update_docs",
+        "validate_docs",
+        "sync_wiki"
+      ],
+      "max_iterations": 5,
+      "improvement_cycle_frequency": "per_ci_cd",
+      "cognitive_ergonomics": {
+        "max_line_length": 75,
+        "max_paragraph_lines": 4,
+        "max_code_block_lines": 15,
+        "header_interval_words": 200,
+        "max_nav_depth": 3
+      },
+      "diagrams": {
+        "architecture": true,
+        "data_flow": true,
+        "user_journey": true,
+        "component_interaction": true,
+        "build_pipeline": true
+      }
     }
   },
-  
   "improvement_cycle": {
     "phases": [
       {
@@ -104,7 +145,6 @@
     "improvement_cooldown_days": 7,
     "rollback_threshold": 0.95
   },
-  
   "monitoring": {
     "metrics": [
       "task_completion_rate",
@@ -120,7 +160,6 @@
     },
     "retention_days": 30
   },
-  
   "integration": {
     "mcp_servers": [
       "qminiwasm-self-learning",
@@ -134,10 +173,11 @@
     },
     "notifications": {
       "slack_webhook_env": "SLACK_WEBHOOK_URL",
-      "email_recipients": ["team@q_mini_wasm_v2.dev"]
+      "email_recipients": [
+        "team@q_mini_wasm_v2.dev"
+      ]
     }
   },
-  
   "security": {
     "api_key_rotation_days": 30,
     "max_concurrent_requests": 5,

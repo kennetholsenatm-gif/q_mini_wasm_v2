@@ -1,0 +1,89 @@
+name: Kanban Review Fix
+
+on:
+  schedule:
+    - cron: 0 8 * * 1-5  # Run at 8 AM UTC Monday-Friday
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'scan'
+        type: choice
+        options:
+          - scan
+          - fix
+          - report
+
+jobs:
+  kanban-review-fix:
+    name: Fix Stuck Kanban Review Cards
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          cd agents
+          pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt"
+        shell: bash
+      
+      - name: Run Kanban Review Fix
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          echo "Running Kanban Review Fix Agent..."
+          python -m agents.cli kanban-review --action ${{ github.event.inputs.action || 'scan' }} --verbose
+        shell: bash
+      
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanban-review-fix-report
+          path: reports/kanban-review-fix-report.json
+          retention-days: 30
+      
+      - name: Create issue if stuck cards found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reportPath = 'reports/kanban-review-fix-report.json';
+            
+            if (fs.existsSync(reportPath)) {
+              const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+              const stuckCards = report.summary?.stuck_cards || 0;
+              
+              if (stuckCards > 0) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `🚨 ${stuckCards} Kanban cards stuck in review`,
+                  body: `## Kanban Review Fix Report\n\n` +
+                        `**Generated:** ${report.generated_at}\n\n` +
+                        `### Summary\n` +
+                        `- Total Review Cards: ${report.summary.total_review_cards}\n` +
+                        `- Stuck Cards: ${stuckCards}\n` +
+                        `- Cards with Errors: ${report.summary.cards_with_errors}\n` +
+                        `- Cards with Issues: ${report.summary.cards_with_issues}\n` +
+                        `- Avg Stuck Hours: ${report.summary.avg_stuck_hours?.toFixed(1) || 0}\n\n` +
+                        `### Recommendations\n` +
+                        (report.recommendations || []).map(r => `- ${r}`).join('\n') + `\n\n` +
+                        `### Action Required\n` +
+                        `Please review the stuck cards and take appropriate action:\n` +
+                        `1. Review cards with errors and fix blocking issues\n` +
+                        `2. Create fix cards for non-blocking issues\n` +
+                        `3. Escalate cards pending approval for too long\n\n` +
+                        `**Automated Fix Available:** Run \`python -m agents.cli kanban-review --action fix\``,
+                  labels: ['kanban', 'review', 'automated']
+                });
+              }
+            }

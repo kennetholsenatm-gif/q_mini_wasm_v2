@@ -33,6 +33,7 @@ __author__ = "q_mini_wasm_v2 team"
 # Import only available modules
 from .base_agent import BaseAgent, AgentConfig, TaskResult, AgentMemory
 from .research_agent import ResearchAgent
+from .research_alignment_agent import ResearchAlignmentAgent
 from .improvement_cycle import ImprovementCycle
 
 # Import LLM module
@@ -44,7 +45,18 @@ __all__ = [
     "TaskResult",
     "AgentMemory",
     "ResearchAgent",
+    "ResearchAlignmentAgent",
     "ImprovementCycle",
     "GeminiService",
     "GeminiConfig",
 ]
+
+# Import Kanban Review Fix Agent
+from .kanban_review_fix_agent import KanbanReviewFixAgent, ReviewCard, ReviewStatus, CardAction
+
+__all__.extend([
+    "KanbanReviewFixAgent",
+    "ReviewCard",
+    "ReviewStatus",
+    "CardAction",
+])
