@@ -125,6 +125,40 @@ class GitAnalyzer:
         
         return stats
     
+    def get_file_categories(self, files: List[str]) -> Dict[str, List[str]]:
+        """Categorize files by type."""
+        categories = {
+            'source': [],
+            'tests': [],
+            'docs': [],
+            'config': [],
+            'ci_cd': [],
+            'scripts': [],
+            'other': []
+        }
+        
+        for file in files:
+            path = Path(file)
+            parts = path.parts
+            file_lower = file.lower()
+            
+            if '.github' in parts or 'workflow' in file_lower:
+                categories['ci_cd'].append(file)
+            elif 'test' in file_lower or 'spec' in file_lower:
+                categories['tests'].append(file)
+            elif file.endswith(('.md', '.rst', '.txt')):
+                categories['docs'].append(file)
+            elif file.endswith(('.json', '.yml', '.yaml', '.toml', '.ini', '.cfg')):
+                categories['config'].append(file)
+            elif 'script' in parts or file.endswith('.sh'):
+                categories['scripts'].append(file)
+            elif file.endswith(('.py', '.js', '.ts', '.go', '.rs', '.cpp', '.c', '.h', '.hpp')):
+                categories['source'].append(file)
+            else:
+                categories['other'].append(file)
+        
+        return {k: v for k, v in categories.items() if v}
+    
     def generate_pr_body(self, base: str, head: str, 
                          include_stats: bool = True, include_commits: bool = True) -> str:
         """Generate markdown PR body."""
@@ -171,7 +205,7 @@ class GitAnalyzer:
             sections.append("|------|---------|--------|------|")
             for commit in commits[:30]:
                 short_msg = commit['subject'][:50] + ("..." if len(commit['subject']) > 50 else "")
-                sections.append(f"| `{commit['short_hash']}` | {short_msg} | {commit['author']} | {commit['date']} |")
+                sections.append(f"| `{commit['short_hash']}` | {short_msg} | {commit['author_name']} | {commit['date']} |")
             sections.append("")
         
         # Footer
@@ -179,6 +213,39 @@ class GitAnalyzer:
         sections.append(f"*Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
         
         return "\n".join(sections)
+    
+    def generate_json(self, base: str, head: str) -> str:
+        """Generate JSON PR body."""
+        
+        commits = self.get_commits_between(base, head)
+        changed_files = self.get_changed_files(base, head)
+        stats = self.get_diff_stats(base, head)
+        
+        # Combine all changed files
+        all_files = []
+        for file_list in changed_files.values():
+            all_files.extend(file_list)
+        
+        categories = self.get_file_categories(all_files)
+        
+        output = {
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "base_branch": base,
+                "head_branch": head
+            },
+            "summary": {
+                "commits": len(commits),
+                "files_changed": stats['files_changed'],
+                "insertions": stats['insertions'],
+                "deletions": stats['deletions']
+            },
+            "files": changed_files,
+            "categories": categories,
+            "commits": commits
+        }
+        
+        return json.dumps(output, indent=2)
 
 
 def main():
@@ -193,159 +260,32 @@ def main():
     
     args = parser.parse_args()
     
-    # For now, just print a simple output
-    print("PR body generation functionality ready")
+    # Create analyzer
+    analyzer = GitAnalyzer(args.repo_path)
+    
+    # Get branch names
+    head_branch = args.branch or analyzer.get_current_branch()
+    base_branch = args.base
+    
+    # Generate output
+    if args.format == 'json':
+        output = analyzer.generate_json(base_branch, head_branch)
+    else:
+        output = analyzer.generate_pr_body(
+            base_branch,
+            head_branch,
+            include_stats=args.include_stats,
+            include_commits=args.include_commits
+        )
+    
+    # Output
+    if args.output:
+        with open(args.output, 'w', encoding='utf-8') as f:
+            f.write(output)
+        print(f"PR body written to {args.output}")
+    else:
+        print(output)
 
 
 if __name__ == '__main__':
     main()
-    
-    def get_changed_files(self, base: str, head: str) -> Dict[str, List[str]]:
-        """Get changed files between branches categorized by status."""
-        output = self.run_git_command(["diff", "--name-status", f"{base}...{head}"])
-        
-        files = {
-            'added': [],
-            'modified': [],
-            'deleted': [],
-            'renamed': []
-        }
-        
-        if not output:
-            return files
-        
-        for line in output.split('\n'):
-            if not line:
-                continue
-            parts = line.split('\t')
-            status = parts[0]
-            
-            if status == 'A' and len(parts) >= 2:
-                files['added'].append(parts[1])
-            elif status == 'M' and len(parts) >= 2:
-                files['modified'].append(parts[1])
-            elif status == 'D' and len(parts) >= 2:
-                files['deleted'].append(parts[1])
-            elif status.startswith('R') and len(parts) >= 3:
-                files['renamed'].append(f"{parts[1]} → {parts[2]}")
-        
-        return files
-    
-    def get_diff_stats(self, base: str, head: str) -> Dict:
-        """Get diff statistics."""
-        output = self.run_git_command(["diff", "--stat", f"{base}...{head}"])
-        
-        if not output:
-            return {'files_changed': 0, 'insertions': 0, 'deletions': 0}
-        
-        lines = output.split('\n')
-        summary_line = lines[-1] if lines else ""
-        
-        stats = {'files_changed': 0, 'insertions': 0, 'deletions': 0}
-        
-        if 'file' in summary_line:
-            parts = summary_line.split(',')
-            for part in parts:
-                part = part.strip()
-                if 'file' in part:
-                    stats['files_changed'] = int(part.split()[0])
-                elif 'insertion' in part:
-                    stats['insertions'] = int(part.split()[0])
-                elif 'deletion' in part:
-                    stats['deletions'] = int(part.split()[0])
-        
-        return stats
-    
-    def get_file_categories(self, files: List[str]) -> Dict[str, List[str]]:
-        """Categorize files by type."""
-        categories = {
-            'source': [],
-            'tests': [],
-            'docs': [],
-            'config': [],
-            'ci_cd': [],
-            'scripts': [],
-            'other': []
-        }
-        
-        for file in files:
-            path = Path(file)
-            parts = path.parts
-            
-            if '.github' in parts or 'workflow' in file.lower():
-                categories['ci_cd'].append(file)
-            elif 'test' in file.lower() or 'spec' in file.lower():
-                categories['tests'].append(file)
-            elif file.endswith(('.md', '.rst', '.txt')):
-                categories['docs'].append(file)
-            elif file.endswith(('.json', '.yml', '.yaml', '.toml', '.ini', '.cfg')):
-                categories['config'].append(file)
-            elif 'script' in parts or file.endswith('.sh'):
-                categories['scripts'].append(file)
-            elif file.endswith(('.py', '.js', '.ts', '.go', '.rs', '.cpp', '.c', '.h', '.hpp')):
-                categories['source'].append(file)
-            else:
-                categories['other'].append(file)
-        
-        return {k: v for k, v in categories.items() if v}
-
-
-class PRBodyGenerator:
-    """Generates detailed PR body content."""
-    
-    def __init__(self, analyzer: GitAnalyzer):
-        self.analyzer = analyzer
-    
-    def generate_markdown(self, 
-                         base: str,
-                         head: str,
-                         include_stats: bool = True,
-                         include_commits: bool = True,
-                         custom_sections: Optional[Dict] = None) -> str:
-        """Generate markdown PR body."""
-        
-        commits = self.analyzer.get_commits_between(base, head)
-        changed_files = self.analyzer.get_changed_files(base, head)
-        stats = self.analyzer.get_diff_stats(base, head)
-        
-        # Combine all changed files
-        all_files = []
-        for file_list in changed_files.values():
-            all_files.extend(file_list)
-        
-        categories = self.analyzer.get_file_categories(all_files)
-        
-        sections = []
-        
-        # Header
-        sections.append("## 📋 Pull Request Summary\n")
-        
-        # Overview section
-        sections.append("### 🎯 Overview\n")
-        if commits:
-            sections.append(f"This PR includes **{len(commits)} commit(s)** ")
-            sections.append(f"from `{head}` to `{base}`.\n")
-        
-        # Change summary
-        if include_stats and stats['files_changed'] > 0:
-            sections.append("### 📊 Change Statistics\n")
-            sections.append("| Metric | Count |")
-            sections.append("|--------|-------|")
-            sections.append(f"| Files Changed | {stats['files_changed']} |")
-            sections.append(f"| Insertions | +{stats['insertions']} |")
-            sections.append(f"| Deletions | -{stats['deletions']} |")
-            sections.append("")
-        
-        # File changes by category
-        if categories:
-            sections.append("### 📁 Changed Files by Category\n")
-            for category, files in categories.items():
-                emoji = self._get_category_emoji(category)
-                sections.append(f"#### {emoji} {category.replace('_', ' ').title()}")
-                sections.append("")
-                for file in sorted(files)[:20]:  # Limit to 20 files per category
-                    status = self._get_file_status(file, changed_files)
-                    sections.append(f"- {status} `{file}`")
-                if len(files) > 20:
-                    sections.append(f"- ... and {len(files) - 20} more files")
-                sections.append("")

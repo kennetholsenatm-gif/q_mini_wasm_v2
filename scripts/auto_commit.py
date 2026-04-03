@@ -252,7 +252,9 @@ def auto_commit(repo_path: str = ".", auto_push: bool = False,
         "staged_files": [],
         "stats": {},
         "error": None,
-        "dry_run": dry_run
+        "dry_run": dry_run,
+        "pr_created": False,
+        "pr_url": None
     }
     
     # Check if we're in a git repository
@@ -308,10 +310,65 @@ def auto_commit(repo_path: str = ".", auto_push: bool = False,
     
     # Push if requested
     if auto_push:
-        success, output = run_git(["push"], repo_path)
+        success, output = run_git(["push", "-u", "origin", branch_name], repo_path)
         if not success:
             result["error"] = f"Failed to push: {output}"
             return result
+    
+    # Create PR if requested
+    if create_pr and auto_push:
+        try:
+            # Try to use GitHub CLI to create PR
+            import subprocess
+            from datetime import datetime
+            
+            # Generate PR title from commit message
+            pr_title = commit_message
+            
+            # Generate PR body
+            pr_body = f"""## Auto-Generated PR
+
+This PR was automatically created by the Kanban Auto-Commit workflow.
+
+**Commit Message:** {commit_message}
+
+### Changes
+- Auto-committed staged changes
+- Generated commit message following project conventions
+
+---
+*Generated on {datetime.now().isoformat()}*
+"""
+            
+            # Try to create PR using GitHub CLI
+            gh_result = subprocess.run(
+                ["gh", "pr", "create",
+                 "--title", pr_title,
+                 "--body", pr_body,
+                 "--base", "develop",
+                 "--head", branch_name],
+                capture_output=True,
+                text=True
+            )
+            
+            if gh_result.returncode == 0:
+                # Extract PR URL from output
+                pr_url = gh_result.stdout.strip()
+                result["pr_created"] = True
+                result["pr_url"] = pr_url
+                print(f"PR created successfully: {pr_url}")
+            else:
+                # Fall back to manual PR creation message
+                print(f"Could not create PR automatically: {gh_result.stderr}")
+                print("Please create PR manually with the following details:")
+                print(f"Title: {pr_title}")
+                print(f"Base: develop")
+                print(f"Head: {branch_name}")
+                print(f"Body: {pr_body[:200]}...")
+                
+        except Exception as e:
+            print(f"Error creating PR: {e}")
+            print("Please create PR manually")
     
     result["success"] = True
     return result
