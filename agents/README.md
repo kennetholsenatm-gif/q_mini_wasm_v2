@@ -4,7 +4,7 @@ This module provides an auto-improvement cycle for agents using Gemini API with 
 
 ## Architecture
 
-`
+```
 agents/
 +-- __init__.py              # Package initialization
 +-- base_agent.py            # Base agent class
@@ -18,12 +18,12 @@ agents/
 +-- config.json              # Configuration file
 +-- requirements.txt         # Python dependencies
 +-- llm/
-¦   +-- __init__.py          # LLM module init
-¦   +-- gemini_service.py    # Gemini API integration
+    +-- __init__.py          # LLM module init
+    +-- gemini_service.py    # Gemini API integration
 +-- improvement/             # Improvement algorithms
 +-- tools/                   # Tool integrations
 +-- memory/                  # Persistent storage
-`
+```
 
 ## Key Features
 
@@ -38,48 +38,48 @@ agents/
 
 ### 1. Install Dependencies
 
-`ash
+```bash
 cd agents
 pip install -r requirements.txt
-`
+```
 
 ### 2. Set API Key
 
-`ash
+```bash
 export GEMINI_API_KEY="your-api-key-here"
-`
+```
 
 ### 3. Generate Configuration
 
-`ash
+```bash
 python -m agents.cli generate-config
-`
+```
 
 ## Usage
 
 ### Run Single Cycle
 
-`ash
+```bash
 python -m agents.cli run-cycle
-`
+```
 
 ### Run Continuous Improvement
 
-`ash
+```bash
 python -m agents.cli continuous
-`
+```
 
 ### Check Status
 
-`ash
+```bash
 python -m agents.cli status
-`
+```
 
 ### Test LLM Integration
 
-`ash
+```bash
 python -m agents.cli test-llm -p "What are the key principles of quantum computing?"
-`
+```
 
 ## Improvement Cycle Phases
 
@@ -116,7 +116,7 @@ Each agent maintains:
 - **Pattern storage**: Identified patterns with confidence scores
 - **Improvement storage**: Applied improvements with impact metrics
 
-
+ 
 
 ### Documentation Agent
 
@@ -147,16 +147,16 @@ The system integrates with existing MCP servers:
 
 ### Running Tests
 
-`ash
+```bash
 python agents/test_basic.py
-`
+```
 
 ### Adding New Agents
 
 1. Create agent class inheriting from BaseAgent
 2. Implement required methods:
    - execute_task()
-   - nalyze_performance()
+   - analyze_performance()
    - suggest_improvements()
 3. Register in config.json
 
@@ -173,3 +173,4 @@ python agents/test_basic.py
 - [Gemini API Documentation](https://ai.google.dev/gemini-api/docs)
 - [LlamaIndex Documentation](https://docs.llamaindex.ai/)
 - [q_mini_wasm_v2 Project](../README.md)
+

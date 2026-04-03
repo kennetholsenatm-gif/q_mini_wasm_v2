@@ -1,4 +1,4 @@
-﻿# Gemini Agent Improver
+# Gemini Agent Improver
 
 Auto-improves MCP agents using Google's Gemini API (free tier) with LangGraph.
 
@@ -18,15 +18,15 @@ This module implements a ReAct agent that analyzes existing MCP servers and sugg
 2. Create a new API key (free tier)
 3. Set the environment variable:
 
-`powershell
- = "your-api-key-here"
-`
+```powershell
+$env:GEMINI_API_KEY = "your-api-key-here"
+```
 
 ### 2. Install Dependencies
 
-`powershell
+```powershell
 pip install -r requirements.txt
-`
+```
 
 ## Usage
 
@@ -34,20 +34,20 @@ pip install -r requirements.txt
 
 Analyze an MCP server for improvements:
 
-`powershell
+```powershell
 python agent.py qminiwasm-self-learning all
-`
+```
 
 ### Analysis Types
 
 - performance: Focus on performance improvements
 - usability: Focus on user experience improvements
 - coverage: Focus on feature coverage
-- ll: Comprehensive analysis (default)
+- all: Comprehensive analysis (default)
 
 ### Example Commands
 
-`powershell
+```powershell
 # Analyze self-learning MCP server
 python agent.py qminiwasm-self-learning all
 
@@ -56,22 +56,22 @@ python agent.py qminiwasm-doc-intelligence usability
 
 # Run complete improvement cycle
 python agent.py qminiwasm-self-learning all --cycle
-`
+```
 
 ## Agent Tools
 
-### 1. nalyze_mcp_server
+### 1. analyze_mcp_server
 Analyzes an MCP server configuration and suggests improvements.
 
 **Parameters:**
 - server_name: Name of the MCP server
-- nalysis_type: Type of analysis (performance/usability/coverage/all)
+- analysis_type: Type of analysis (performance/usability/coverage/all)
 
 ### 2. suggest_tool_improvement
 Suggests improvements for a specific tool.
 
 **Parameters:**
-- 	ool_name: Name of the tool to improve
+- tool_name: Name of the tool to improve
 - improvement_type: Type of improvement (efficiency/reliability/usability/all)
 
 ### 3. evolve_schema
@@ -91,13 +91,13 @@ Evolves a schema based on usage patterns.
 
 This agent integrates with the existing self-learning MCP server pattern:
 
-1. **Pattern Analysis**: Uses the existing nalyze_patterns tool
+1. **Pattern Analysis**: Uses the existing analyze_patterns tool
 2. **Tool Suggestion**: Enhances the suggest_tool tool with Gemini intelligence
 3. **Schema Evolution**: Improves the evolve_schema tool with better suggestions
 
 ## Example Output
 
-`
+```
 Running analysis for qminiwasm-self-learning (all)...
 
 === Analysis Results ===
@@ -112,11 +112,11 @@ Tool calls: 2
 
 Step 3:
 Message: Here are my recommendations for improving the MCP server...
-`
+```
 
 ## Architecture
 
-`
+```
 Gemini API (Free Tier)
         ↓
     LangGraph Agent
@@ -133,7 +133,7 @@ Gemini API (Free Tier)
     MCP Server Configs
         ↓
     Improvement Suggestions
-`
+```
 
 ## Future Enhancements
 

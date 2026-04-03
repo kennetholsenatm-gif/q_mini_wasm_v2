@@ -2,20 +2,12 @@
 
 ## Overview
 
-This directory contains the C-compatible API for the q_mini_wasm_v2 quantum-classical hybrid framework. The DLL API provides a stable interface for integration with other languages including Go, Python, Rust, and more.
+This directory contains the C-compatible API for the q_mini_wasm_v2 quantum-classical hybrid framework.
 
 ## Key Improvements
 
 ### 1. Enhanced Error Handling
-- **Error Code Enum**: Added q_mini_wasm_v2_error_t enum with specific error codes:
-  - Q_MINI_WASM_V2_OK (0): Success
-  - Q_MINI_WASM_V2_ERROR_INVALID_HANDLE (-1): Invalid or null handle
-  - Q_MINI_WASM_V2_ERROR_INVALID_ARGUMENT (-2): Invalid argument value
-  - Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE (-3): Index or value out of range
-  - Q_MINI_WASM_V2_ERROR_ALLOCATION_FAILED (-4): Memory allocation failed
-  - Q_MINI_WASM_V2_ERROR_INTERNAL (-5): Internal error
-  - Q_MINI_WASM_V2_ERROR_NOT_SUPPORTED (-6): Operation not supported
-
+- **Error Code Enum**: Added q_mini_wasm_v2_error_t enum with specific error codes
 - **Error Message Function**: q_mini_wasm_v2_error_string(int error_code) returns human-readable error messages
 
 ### 2. Handle Validation
@@ -24,9 +16,8 @@ This directory contains the C-compatible API for the q_mini_wasm_v2 quantum-clas
 
 ### 3. Parameter Validation
 - All create functions now validate input parameters:
-  - Zero values for required parameters return 
-ullptr
-  - Invalid parameter combinations are rejected (e.g., ctive_experts > total_experts)
+  - Zero values for required parameters return nullptr
+  - Invalid parameter combinations are rejected (e.g., active_experts > total_experts)
   - Non-positive learning rates are rejected
 
 ### 4. Null Parameter Handling
@@ -35,32 +26,17 @@ ullptr
   - Query functions return appropriate default values for null handles
   - No crashes on null pointer access
 
-### 5. Version Information
-- **Version Macros**: Q_MINI_WASM_V2_VERSION_MAJOR, Q_MINI_WASM_V2_VERSION_MINOR, Q_MINI_WASM_V2_VERSION_PATCH
-- **Version String**: Q_MINI_WASM_V2_VERSION_STRING
-
-### 6. Thread Safety
-- All functions are thread-safe unless otherwise noted
-- Handle management uses mutex protection
-- Documented thread safety guarantees in header
-
-### 7. Documentation
-- Comprehensive Doxygen-style documentation
-- Parameter constraints documented
-- Return value semantics documented
-- Thread safety notes
-
 ## Building the DLL
 
 ### CMake Configuration
 
 The DLL is built automatically when BUILD_DLL=ON (default):
 
-`ash
+```bash
 mkdir build && cd build
 cmake -DBUILD_DLL=ON ..
 cmake --build .
-`
+```
 
 ### Output Files
 
@@ -72,58 +48,58 @@ cmake --build .
 
 ### C/C++ Example
 
-`c
+```c
 #include <q_mini_wasm_v2/dll/q_mini_wasm_v2_api.h>
 #include <stdio.h>
 
 int main() {
     // Get version information
-    printf(\"Version: %s\n\", q_mini_wasm_v2_version());
+    printf("Version: %s\n", q_mini_wasm_v2_version());
     
     // Create a tableau
     void* tableau = tableau_create(4);
     if (tableau == NULL) {
-        printf(\"Failed to create tableau\n\");
+        printf("Failed to create tableau\n");
         return 1;
     }
     
     // Apply gates
     int result = tableau_apply_hadamard(tableau, 0);
     if (result != Q_MINI_WASM_V2_OK) {
-        printf(\"Error: %s\n\", q_mini_wasm_v2_error_string(result));
+        printf("Error: %s\n", q_mini_wasm_v2_error_string(result));
     }
     
     // Validate handle
     if (q_mini_wasm_v2_is_valid_handle(tableau)) {
-        printf(\"Tableau is valid\n\");
+        printf("Tableau is valid\n");
     }
     
     // Clean up
     tableau_destroy(tableau);
     return 0;
 }
-`
+```
 
 ### Go Example
 
-`go
+```go
 package main
 
-// #cgo CXXFLAGS: -std=c++17 -I\/..
-// #cgo LDFLAGS: -L\/../build -lq_mini_wasm_v2 -lstdc++
-// #include \"../dll/q_mini_wasm_v2_api.hpp\"
-import \"C\"
-import \"fmt\"
+// #cgo CXXFLAGS: -std=c++17 -I/../
+// #cgo LDFLAGS: -L/../build -lq_mini_wasm_v2 -lstdc++
+// #include "../dll/q_mini_wasm_v2_api.hpp"
+import "C"
+import "fmt"
 
 func main() {
     // Get version
     version := C.GoString(C.q_mini_wasm_v2_version())
-    fmt.Printf(\"Version: %s\n\", version)
+    fmt.Printf("Version: %s\n", version)
     
     // Create tableau
     tableau := C.tableau_create(4)
     if tableau == nil {
-        fmt.Println(\"Failed to create tableau\")
+        fmt.Println("Failed to create tableau")
         return
     }
     defer C.tableau_destroy(tableau)
@@ -132,28 +108,28 @@ func main() {
     result := C.tableau_apply_hadamard(tableau, 0)
     if result != C.Q_MINI_WASM_V2_OK {
         errorMsg := C.GoString(C.q_mini_wasm_v2_error_string(result))
-        fmt.Printf(\"Error: %s\n\", errorMsg)
+        fmt.Printf("Error: %s\n", errorMsg)
     }
 }
-`
+```
 
 ## Testing
 
 ### Unit Tests
 
-`ash
+```bash
 # Build and run DLL API tests
 cmake -DBUILD_TESTS=ON ..
 cmake --build .
 ctest -R dll_api_test
-`
+```
 
 ### Integration Tests
 
-`ash
+```bash
 # Run integration tests
 ctest -R dll_test
-`
+```
 
 ## API Reference
 
@@ -166,21 +142,21 @@ ctest -R dll_test
 
 ### Trit Operations
 
-- 	rit_add(int8_t a, int8_t b): Add two trits over GF(3)
-- 	rit_multiply(int8_t a, int8_t b): Multiply two trits over GF(3)
-- 	rit_pack_5(const int8_t trits[5]): Pack 5 trits into byte
-- 	rit_unpack_5(uint8_t byte, int8_t trits[5]): Unpack byte to 5 trits
+- trit_add(int8_t a, int8_t b): Add two trits over GF(3)
+- trit_multiply(int8_t a, int8_t b): Multiply two trits over GF(3)
+- trit_pack_5(const int8_t trits[5]): Pack 5 trits into byte
+- trit_unpack_5(uint8_t byte, int8_t trits[5]): Unpack byte to 5 trits
 
 ### Stabilizer Tableau
 
-- 	ableau_create(size_t num_qutrits): Create tableau
-- 	ableau_destroy(void* handle): Destroy tableau
-- 	ableau_apply_hadamard(void* handle, size_t qutrit): Apply Hadamard gate
-- 	ableau_apply_phase(void* handle, size_t qutrit): Apply Phase gate
-- 	ableau_apply_csum(void* handle, size_t control, size_t target): Apply CSUM gate
-- 	ableau_measure_all(void* handle, int8_t* outcomes, size_t max_outcomes): Measure all qutrits
-- 	ableau_is_valid(void* handle): Check validity
-- 	ableau_num_qutrits(void* handle): Get qutrit count
+- tableau_create(size_t num_qutrits): Create tableau
+- tableau_destroy(void* handle): Destroy tableau
+- tableau_apply_hadamard(void* handle, size_t qutrit): Apply Hadamard gate
+- tableau_apply_phase(void* handle, size_t qutrit): Apply Phase gate
+- tableau_apply_csum(void* handle, size_t control, size_t target): Apply CSUM gate
+- tableau_measure_all(void* handle, int8_t* outcomes, size_t max_outcomes): Measure all qutrits
+- tableau_is_valid(void* handle): Check validity
+- tableau_num_qutrits(void* handle): Get qutrit count
 
 ### MoE Router
 
@@ -191,10 +167,10 @@ ctest -R dll_test
 
 ### Forward-Forward Learner
 
-- f_learner_create(size_t num_layers, size_t neurons_per_layer, double learning_rate): Create learner
-- f_learner_destroy(void* handle): Destroy learner
-- f_learner_forward(...): Forward pass
-- f_learner_goodness(...): Compute goodness metric
+- ff_learner_create(size_t num_layers, size_t neurons_per_layer, double learning_rate): Create learner
+- ff_learner_destroy(void* handle): Destroy learner
+- ff_learner_forward(...): Forward pass
+- ff_learner_goodness(...): Compute goodness metric
 
 ### Runtime Orchestrator
 
@@ -213,16 +189,8 @@ ctest -R dll_test
 
 1. **Always check return values**: All functions return error codes
 2. **Validate handles**: Use q_mini_wasm_v2_is_valid_handle() for debugging
-3. **Check for null**: All create functions can return 
-ullptr on failure
+3. **Check for null**: All create functions can return nullptr on failure
 4. **Use error strings**: Get human-readable messages with q_mini_wasm_v2_error_string()
-
-## Performance Considerations
-
-- Handle management has minimal overhead (mutex lock/unlock)
-- All operations are designed for low latency
-- Memory management uses shared pointers for automatic cleanup
-- No dynamic allocation in hot paths
 
 ## Future Enhancements
 
@@ -231,3 +199,4 @@ ullptr on failure
 - [ ] Logging/debugging support
 - [ ] Memory pool for handle allocation
 - [ ] Handle enumeration for debugging
+
