@@ -1,0 +1,48 @@
+name: Agent Recompilation Trigger
+
+on:
+  workflow_run:
+    workflows: ["CI", "Continuous Improvement Pipeline", "Agent Automation", "Production Build"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      project_root:
+        description: 'Root directory of the project'
+        required: false
+        default: 'q_mini_wasm_v2'
+        type: string
+
+jobs:
+  recompile-agents:
+    name: Recompile AI Agents
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Run agent recompilation
+        run: |
+          echo "Starting agent recompilation..."
+          
+          # Run the simple recompilation script
+          python scripts/recompile_agents_simple.py \
+            --project-root "${{ inputs.project_root || 'q_mini_wasm_v2' }}" \
+            --verbose
+          
+          echo "Agent recompilation completed"
+        shell: bash
+      
+      - name: Upload recompilation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-recompilation-results-${{ github.run_id }}
+          path: ${{ inputs.project_root || 'q_mini_wasm_v2' }}/agents/output/recompilation_results_*.json
+          retention-days: 30

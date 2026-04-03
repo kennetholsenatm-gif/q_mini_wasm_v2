@@ -1,0 +1,136 @@
+name: Agent Recompilation
+
+on:
+  workflow_call:
+    inputs:
+      project_root:
+        description: 'Root directory of the project'
+        required: false
+        default: 'q_mini_wasm_v2'
+        type: string
+      verbose:
+        description: 'Enable verbose logging'
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      recompilation_status:
+        description: 'Status of the recompilation (success/failed)'
+        value: ${{ jobs.recompile-agents.outputs.status }}
+      agents_recompiled:
+        description: 'Number of agents recompiled'
+        value: ${{ jobs.recompile-agents.outputs.count }}
+  workflow_dispatch:
+    inputs:
+      project_root:
+        description: 'Root directory of the project'
+        required: false
+        default: 'q_mini_wasm_v2'
+        type: string
+      verbose:
+        description: 'Enable verbose logging'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  recompile-agents:
+    name: Recompile All AI Agents
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.recompile.outputs.status }}
+      count: ${{ steps.recompile.outputs.count }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+        shell: bash
+      
+      - name: Run agent recompilation
+        id: recompile
+        run: |
+          echo "Starting agent recompilation..."
+          
+          # Run the simple recompilation script
+          python scripts/recompile_agents_simple.py \
+            --project-root "${{ inputs.project_root || 'q_mini_wasm_v2' }}" \
+            ${{ inputs.verbose && '--verbose' || '' }}
+          
+          # Capture exit code
+          EXIT_CODE=$?
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "Agent recompilation completed successfully"
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "Agent recompilation failed with exit code $EXIT_CODE"
+          fi
+          
+          # Count agents from config
+          if [ -f "${{ inputs.project_root || 'q_mini_wasm_v2' }}/agents/config.json" ]; then
+            COUNT=$(python -c "
+          import json
+          with open('${{ inputs.project_root || 'q_mini_wasm_v2' }}/agents/config.json', 'r') as f:
+              config = json.load(f)
+              print(len(config.get('agents', {})))
+          ")
+            echo "count=$COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "count=0" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+      
+      - name: Upload recompilation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-recompilation-results-${{ github.run_id }}
+          path: ${{ inputs.project_root || 'q_mini_wasm_v2' }}/agents/output/recompilation_results_*.json
+          retention-days: 30
+      
+      - name: Generate recompilation report
+        if: always()
+        run: |
+          echo "## Agent Recompilation Report" > recompilation-report.md
+          echo "" >> recompilation-report.md
+          echo "**Status:** ${{ steps.recompile.outputs.status }}" >> recompilation-report.md
+          echo "**Agents Recompiled:** ${{ steps.recompile.outputs.count }}" >> recompilation-report.md
+          echo "**Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> recompilation-report.md
+          echo "" >> recompilation-report.md
+          
+          # Add details from the latest recompilation results
+          if [ -f "${{ inputs.project_root || 'q_mini_wasm_v2' }}/agents/output/recompilation_results_"*.json ]; then
+            echo "### Details" >> recompilation-report.md
+            echo '```json' >> recompilation-report.md
+            cat ${{ inputs.project_root || 'q_mini_wasm_v2' }}/agents/output/recompilation_results_*.json | tail -1 >> recompilation-report.md
+            echo '```' >> recompilation-report.md
+          fi
+          
+          cat recompilation-report.md
+        shell: bash
+      
+      - name: Add PR comment with recompilation status
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('recompilation-report.md', 'utf8');
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🤖 Agent Recompilation Results\n\n${report}`
+            });

@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""
+Manual Git Operations Script
+
+This script provides manual instructions for committing changes and cherry-picking
+into the q_mini_wasm_v2 branch.
+"""
+
+import os
+import sys
+
+def print_instructions():
+    """Print manual instructions for git operations."""
+    print("=" * 80)
+    print("MANUAL GIT OPERATIONS INSTRUCTIONS")
+    print("=" * 80)
+    
+    print("\nSTEP 1: STAGE AND COMMIT CHANGES IN CURRENT WORKTREE")
+    print("-" * 80)
+    print("Run these commands in the current worktree directory:")
+    print()
+    print("# Navigate to worktree directory")
+    print("cd C:\\Users\\kenne\\.cline\\worktrees\\1b0f3\\q_mini_wasm_v2")
+    print()
+    print("# Check current status")
+    print("git status")
+    print()
+    print("# Stage all changes")
+    print("git add -A")
+    print()
+    print("# Create commit with the following message:")
+    print('git commit -m "feat: Add automatic AI agent recompilation at CI/CD pipeline completion" \\')
+    print('  -m "- Created recompile_agents_simple.py script for agent recompilation" \\')
+    print('  -m "- Created agent-recompilation.yml reusable workflow" \\')
+    print('  -m "- Created agent-recompilation-trigger.yml workflow for automatic triggering" \\')
+    print('  -m "- Agents are recompiled after CI, Continuous Improvement, Agent Automation, and Production Build workflows" \\')
+    print('  -m "" \\')
+    print('  -m "Files added:" \\')
+    print('  -m "- scripts/recompile_agents_simple.py" \\')
+    print('  -m "- .github/workflows/agent-recompilation.yml" \\')
+    print('  -m "- .github/workflows/agent-recompilation-trigger.yml"')
+    print()
+    print("# Get the commit hash")
+    print("git rev-parse HEAD")
+    print()
+    
+    print("\nSTEP 2: FIND WHERE q_mini_wasm_v2 IS CHECKED OUT")
+    print("-" * 80)
+    print("Run this command to list all worktrees:")
+    print()
+    print("git worktree list --porcelain")
+    print()
+    print("Look for the worktree where q_mini_wasm_v2 branch is checked out.")
+    print("If it's not checked out anywhere, you'll need to check it out in the current worktree.")
+    print()
+    
+    print("\nSTEP 3: CHERRY-PICK INTO q_mini_wasm_v2 BRANCH")
+    print("-" * 80)
+    print("If q_mini_wasm_v2 is checked out in a different directory (e.g., P):")
+    print()
+    print("# Navigate to the q_mini_wasm_v2 directory")
+    print("cd P")
+    print()
+    print("# Verify current branch is q_mini_wasm_v2")
+    print("git branch --show-current")
+    print()
+    print("# If there are uncommitted changes, stash them")
+    print("git stash push -u -m \"kanban-pre-cherry-pick\"")
+    print()
+    print("# Cherry-pick the commit (replace COMMIT_HASH with actual hash)")
+    print("git cherry-pick COMMIT_HASH")
+    print()
+    print("# If there are conflicts, resolve them and continue")
+    print("# git cherry-pick --continue")
+    print()
+    print("# If stash was created, restore it")
+    print("git stash pop")
+    print()
+    print("# If stash pop has conflicts, resolve them")
+    print()
+    
+    print("\nSTEP 4: VERIFICATION")
+    print("-" * 80)
+    print("After completing the operations:")
+    print()
+    print("# Verify the commit is in q_mini_wasm_v2 branch")
+    print("git log --oneline -5")
+    print()
+    print("# Verify all files are present")
+    print("ls -la scripts/recompile_agents_simple.py")
+    print("ls -la .github/workflows/agent-recompilation.yml")
+    print("ls -la .github/workflows/agent-recompilation-trigger.yml")
+    print()
+    
+    print("\n" + "=" * 80)
+    print("FILES CREATED IN THIS SESSION:")
+    print("=" * 80)
+    print("1. scripts/recompile_agents_simple.py")
+    print("2. .github/workflows/agent-recompilation.yml")
+    print("3. .github/workflows/agent-recompilation-trigger.yml")
+    print()
+    print("These files implement automatic AI agent recompilation at the end of")
+    print("every CI/CD pipeline completion.")
+    print("=" * 80)
+
+if __name__ == "__main__":
+    print_instructions()
