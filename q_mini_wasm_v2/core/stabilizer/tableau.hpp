@@ -83,6 +83,19 @@ public:
     void apply_csum(size_t control, size_t target);
     
     /**
+     * @brief Apply Controlled-Z gate between control and target
+     * Phase-based entangling gate for alternative circuit decompositions
+     * 
+     * CZ = (I⊗H) × CSUM × (I⊗H) up to global phase
+     * 
+     * Update rules over GF(3):
+     * - X[control] = (X[control] + X[target]) mod 3
+     * - X[target] = (X[target] + X[control_orig]) mod 3  
+     * - Phase correction for quadratic terms
+     */
+    void apply_cz(size_t control, size_t target);
+    
+    /**
      * @brief Apply Pauli X gate (shift) to qutrit j
      */
     void apply_pauli_x(size_t j);

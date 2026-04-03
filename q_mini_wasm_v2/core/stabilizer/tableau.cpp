@@ -124,6 +124,41 @@ void StabilizerTableau::apply_csum(size_t control, size_t target) {
     }
 }
 
+void StabilizerTableau::apply_cz(size_t control, size_t target) {
+    if (control >= n_ || target >= n_) {
+        throw std::out_of_range("Qutrit index out of range");
+    }
+    
+    // Controlled-Z gate: |c,t⟩ -> ω^(c*t) |c,t⟩ over GF(3)
+    // CZ applies phase ω^(c*t) where c,t ∈ {0,1,2}
+    //
+    // Update rules over GF(3):
+    // The CZ gate in the qutrit case is symmetric and adds quadratic phase
+    // X[control] picks up Z[target], X[target] picks up Z[control]
+    //
+    // This is the decomposition: CZ = (I⊗S†) × CSUM × (I⊗S†) × CSUM² × (I⊗S†)
+    // Or more directly using the symplectic representation:
+    // - X[control] -> X[control] * Z[target]
+    // - X[target] -> X[target] * Z[control]
+    
+    for (size_t i = 0; i < 2 * n_; ++i) {
+        int8_t xc = tableau_[i][control + n_];  // X[control]
+        int8_t xt = tableau_[i][target + n_];   // X[target]
+        int8_t zc = tableau_[i][control];        // Z[control]
+        int8_t zt = tableau_[i][target];         // Z[target]
+        
+        // Update X components with Z couplings
+        // X_c -> X_c * Z_t means: new X_c = X_c, but with Z_c += X_c * Z_t_factor
+        // In tableau terms: Z_c += X_c (since Z_t is already in Pauli terms)
+        tableau_[i][control] = (zc + xc) % 3;
+        tableau_[i][target] = (zt + xt) % 3;
+        
+        // Phase correction: quadratic term from cross-coupling
+        // The CZ gate introduces phase X_c * X_t
+        phase_[i] = (phase_[i] + xc * xt) % 3;
+    }
+}
+
 void StabilizerTableau::apply_pauli_x(size_t j) {
     if (j >= n_) {
         throw std::out_of_range("Qutrit index out of range");
@@ -180,14 +215,84 @@ int8_t StabilizerTableau::measure(size_t j) {
     
     if (pivot == 2 * n_) {
         // Deterministic measurement
-        // Measurement outcome is determined by current state
+        // The outcome is determined by the phase of the Z_j stabilizer
+        // We need to find the product of destabilizers that equals Z_j in the current state
+        //
+        // Algorithm: Gaussian elimination over GF(3) to express Z_j in terms of stabilizers
+        // Since measurement is deterministic, Z_j commutes with all stabilizers
+        // and can be expressed as a product of existing stabilizers.
+        //
+        // For the deterministic case, the outcome is given by:
+        // outcome = phase accumulation from the stabilizer decomposition
+        
+        // Copy tableau for row reduction (Gaussian elimination on stabilizer block)
+        std::vector<std::vector<int8_t>> temp_tableau = tableau_;
+        std::vector<int8_t> temp_phase = phase_;
+        
+        // Create a vector representing Z_j measurement operator
+        std::vector<int8_t> z_op(2 * n_, 0);
+        z_op[j] = 1;  // Z component at position j
+        
+        // Perform Gaussian elimination to express Z_j as product of stabilizers
+        // Track the outcome through phase reconstruction
         int8_t outcome = 0;
-        // Create an accumulator for the outcome
-        std::vector<int8_t> accum(2 * n_, 0);
-        // Find destabilizer combination that gives the outcome
-        // This requires deeper row reduction in GF(3)
-        // Simplified fallback:
-        return 0; // Proper deterministic calculation would reconstruct phase
+        std::vector<int8_t> row_coeffs(2 * n_, 0);  // Coefficients for stabilizer combination
+        
+        // Work through each qutrit position to build the decomposition
+        for (size_t col = 0; col < n_; ++col) {
+            if (col == j) continue;  // Skip the measurement column
+            
+            // Find pivot in stabilizer block
+            size_t pivot_row = 2 * n_;
+            for (size_t i = n_; i < 2 * n_; ++i) {
+                if (temp_tableau[i][col + n_] != 0) {  // X part of stabilizer
+                    pivot_row = i;
+                    break;
+                }
+            }
+            
+            if (pivot_row < 2 * n_) {
+                // Eliminate X[col] from other stabilizers
+                for (size_t i = n_; i < 2 * n_; ++i) {
+                    if (i != pivot_row && temp_tableau[i][col + n_] != 0) {
+                        int8_t target = temp_tableau[i][col + n_];
+                        int8_t pivot = temp_tableau[pivot_row][col + n_];
+                        // In GF(3), 1/1 = 1, 1/2 = 2 (since 2*2 = 4 = 1 mod 3)
+                        int8_t scalar = target * pivot;
+                        if (scalar == 2) scalar = 1;  // 2*2 = 1 mod 3
+                        else if (scalar == 1) scalar = 2;
+                        
+                        for (size_t k = 0; k < 2 * n_; ++k) {
+                            temp_tableau[i][k] = (temp_tableau[i][k] + (3 - scalar) * temp_tableau[pivot_row][k]) % 3;
+                        }
+                        temp_phase[i] = (temp_phase[i] + (3 - scalar) * temp_phase[pivot_row]) % 3;
+                    }
+                }
+            }
+        }
+        
+        // After elimination, find which stabilizers contribute to Z_j
+        // and compute the outcome from their phases
+        outcome = 0;
+        for (size_t i = n_; i < 2 * n_; ++i) {
+            // Check if this stabilizer now represents Z_j
+            if (temp_tableau[i][j] == 1) {
+                bool is_zj = true;
+                for (size_t k = 0; k < 2 * n_; ++k) {
+                    if (k == j) {
+                        if (temp_tableau[i][k] != 1) { is_zj = false; break; }
+                    } else {
+                        if (temp_tableau[i][k] != 0) { is_zj = false; break; }
+                    }
+                }
+                if (is_zj) {
+                    outcome = temp_phase[i];
+                    break;
+                }
+            }
+        }
+        
+        return outcome;
     } else {
         // Random measurement
         static std::mt19937 rng(std::random_device{}());
