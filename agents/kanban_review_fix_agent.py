@@ -236,15 +236,24 @@ class KanbanReviewFixAgent(BaseAgent):
                 rejected = json.loads(rejected_path.read_text(encoding="utf-8"))
                 for imp in rejected.get("rejected_improvements", []):
                     if imp.get("status") == "pending_review":
+                        # Determine review status based on errors/issues
+                        review_status = ReviewStatus.PENDING_APPROVAL
+                        if imp.get("errors") and len(imp["errors"]) > 0:
+                            review_status = ReviewStatus.ERROR_FOUND
+                        elif imp.get("issues") and len(imp["issues"]) > 0:
+                            review_status = ReviewStatus.ISSUE_FOUND
+                        
                         card = ReviewCard(
                             id=imp["id"],
                             title=imp["name"],
                             description=imp["description"],
                             created_at=datetime.fromisoformat(imp["rejected_at"]),
                             updated_at=datetime.now(),
-                            status=ReviewStatus.PENDING_APPROVAL,
+                            status=review_status,
+                            errors=imp.get("errors", []),
+                            issues=imp.get("issues", []),
                             module=imp.get("module", ""),
-                            priority="high" if "high_complexity" in imp.get("rejection_reasons", []) else "medium"
+                            priority=imp.get("priority", "high" if "high_complexity" in imp.get("rejection_reasons", []) else "medium")
                         )
                         cards.append(card)
             except Exception as e:

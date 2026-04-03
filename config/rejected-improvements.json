@@ -64,6 +64,127 @@
       "status": "rejected",
       "review_date": null,
       "reconsideration_criteria": []
+    },
+    {
+      "id": "review_001",
+      "name": "Optimize Tableau Updates",
+      "module": "quantum_core",
+      "description": "Optimize qutrit stabilizer tableau update operations for better performance",
+      "rejected_at": "2026-03-30T17:24:01.979221",
+      "rejection_reasons": [],
+      "feasibility_assessment": {
+        "technical_complexity": "moderate",
+        "resource_requirements": "moderate",
+        "alignment_score": "high",
+        "potential_value": "high"
+      },
+      "notes": "Ready for review but stuck due to missing performance benchmarks",
+      "status": "pending_review",
+      "review_date": null,
+      "reconsideration_criteria": [],
+      "errors": [
+        "Missing performance benchmarks",
+        "Need energy efficiency validation"
+      ],
+      "issues": [
+        "Documentation needs update",
+        "Test coverage only 65%"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "review_002",
+      "name": "Add MCP Tool Validation",
+      "module": "go_runtime",
+      "description": "Add validation for MCP tool inputs and outputs",
+      "rejected_at": "2026-03-29T17:24:01.979276",
+      "rejection_reasons": [],
+      "feasibility_assessment": {
+        "technical_complexity": "low",
+        "resource_requirements": "minimal",
+        "alignment_score": "high",
+        "potential_value": "medium"
+      },
+      "notes": "Waiting for approval from team lead",
+      "status": "pending_review",
+      "review_date": null,
+      "reconsideration_criteria": [],
+      "errors": [],
+      "issues": [
+        "Minor style violations",
+        "Unused imports"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "review_003",
+      "name": "Implement RAG Caching",
+      "module": "rag_service",
+      "description": "Add caching layer for RAG service queries",
+      "rejected_at": "2026-03-28T17:24:01.979284",
+      "rejection_reasons": [],
+      "feasibility_assessment": {
+        "technical_complexity": "high",
+        "resource_requirements": "significant",
+        "alignment_score": "medium",
+        "potential_value": "high"
+      },
+      "notes": "Blocked by dependency on quantum_core optimization",
+      "status": "pending_review",
+      "review_date": null,
+      "reconsideration_criteria": [],
+      "errors": [
+        "Critical: Memory leak detected in cache invalidation"
+      ],
+      "issues": [
+        "Performance regression in edge cases"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "review_004",
+      "name": "Update API Documentation",
+      "module": "documentation_intelligence",
+      "description": "Update API documentation to reflect recent changes",
+      "rejected_at": "2026-03-27T11:24:01.979290",
+      "rejection_reasons": [],
+      "feasibility_assessment": {
+        "technical_complexity": "low",
+        "resource_requirements": "minimal",
+        "alignment_score": "high",
+        "potential_value": "medium"
+      },
+      "notes": "Simple update but waiting for review",
+      "status": "pending_review",
+      "review_date": null,
+      "reconsideration_criteria": [],
+      "errors": [],
+      "issues": [
+        "Formatting issues",
+        "Missing examples"
+      ],
+      "priority": "low"
+    },
+    {
+      "id": "rejected_008",
+      "name": "Implement RAG Caching",
+      "module": "rag_service",
+      "description": "Add caching layer for RAG service queries",
+      "rejected_at": "2026-04-02T17:25:06.632821",
+      "rejection_reasons": [
+        "stuck_in_review",
+        "blocking_errors"
+      ],
+      "feasibility_assessment": {
+        "technical_complexity": "high",
+        "resource_requirements": "significant",
+        "alignment_score": "low",
+        "potential_value": "low"
+      },
+      "notes": "Auto-rejected by KanbanReviewFixAgent. Errors: Critical: Memory leak detected in cache invalidation",
+      "status": "rejected",
+      "review_date": null,
+      "reconsideration_criteria": []
     }
   ],
   "rejection_reasons": {

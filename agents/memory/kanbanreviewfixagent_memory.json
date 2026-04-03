@@ -25,7 +25,128 @@
       "error_cards": 0,
       "issue_cards": 0,
       "timestamp": "2026-04-02T17:04:19.248486"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 0,
+      "stuck_cards": 0,
+      "error_cards": 0,
+      "issue_cards": 0,
+      "timestamp": "2026-04-02T17:23:16.197541"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 0,
+      "issue_cards": 0,
+      "timestamp": "2026-04-02T17:24:07.662715"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 0,
+      "issue_cards": 0,
+      "timestamp": "2026-04-02T17:24:14.377660"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 0,
+      "issue_cards": 0,
+      "timestamp": "2026-04-02T17:24:22.375498"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 2,
+      "issue_cards": 2,
+      "timestamp": "2026-04-02T17:24:59.996100"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 2,
+      "issue_cards": 2,
+      "timestamp": "2026-04-02T17:25:06.631085"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 2,
+      "issue_cards": 2,
+      "timestamp": "2026-04-02T17:25:15.161930"
     }
   ],
-  "improvements": []
+  "improvements": [
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_001",
+      "action": "wait",
+      "success": true,
+      "message": "Card review_001 is still within acceptable review time (72.0 hours)",
+      "timestamp": "2026-04-02T17:24:14.377787"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_002",
+      "action": "escalate",
+      "success": true,
+      "message": "Card review_002 escalated after 96.0 hours in review",
+      "timestamp": "2026-04-02T17:24:14.377901"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_003",
+      "action": "escalate",
+      "success": true,
+      "message": "Card review_003 escalated after 120.0 hours in review",
+      "timestamp": "2026-04-02T17:24:14.377990"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_004",
+      "action": "escalate",
+      "success": true,
+      "message": "Card review_004 escalated after 150.0 hours in review",
+      "timestamp": "2026-04-02T17:24:14.378062"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_001",
+      "action": "create_fix_card",
+      "success": true,
+      "message": "Created fix card fix_review_001 for issues in review_001",
+      "timestamp": "2026-04-02T17:25:06.631556"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_002",
+      "action": "auto_fix",
+      "success": true,
+      "message": "Auto-fixed 2 issues in review_002",
+      "timestamp": "2026-04-02T17:25:06.631869"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_003",
+      "action": "move_to_rejected",
+      "success": true,
+      "message": "Card review_003 moved to rejected due to blocking errors",
+      "timestamp": "2026-04-02T17:25:06.634493"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_004",
+      "action": "auto_fix",
+      "success": false,
+      "message": "No auto-fixable issues found in review_004",
+      "timestamp": "2026-04-02T17:25:06.634716"
+    }
+  ]
 }

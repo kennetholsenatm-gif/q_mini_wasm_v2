@@ -1,15 +1,74 @@
 {
-  "generated_at": "2026-04-02T17:04:19.248549",
+  "generated_at": "2026-04-02T17:25:15.161979",
   "summary": {
-    "total_review_cards": 0,
-    "stuck_cards": 0,
-    "cards_with_errors": 0,
-    "cards_with_issues": 0,
-    "avg_stuck_hours": 0
+    "total_review_cards": 4,
+    "stuck_cards": 4,
+    "cards_with_errors": 2,
+    "cards_with_issues": 2,
+    "avg_stuck_hours": 109.52032853444445
   },
-  "stuck_cards": [],
+  "stuck_cards": [
+    {
+      "id": "review_001",
+      "title": "Optimize Tableau Updates",
+      "age_hours": 72.02032854888888,
+      "reason": "Errors found: Missing performance benchmarks, Need energy efficiency validation",
+      "errors": [
+        "Missing performance benchmarks",
+        "Need energy efficiency validation"
+      ],
+      "issues": [
+        "Documentation needs update",
+        "Test coverage only 65%"
+      ],
+      "module": "quantum_core",
+      "priority": "high"
+    },
+    {
+      "id": "review_002",
+      "title": "Add MCP Tool Validation",
+      "age_hours": 96.02032853583333,
+      "reason": "Issues found: Minor style violations, Unused imports",
+      "errors": [],
+      "issues": [
+        "Minor style violations",
+        "Unused imports"
+      ],
+      "module": "go_runtime",
+      "priority": "medium"
+    },
+    {
+      "id": "review_003",
+      "title": "Implement RAG Caching",
+      "age_hours": 120.02032853444445,
+      "reason": "Errors found: Critical: Memory leak detected in cache invalidation",
+      "errors": [
+        "Critical: Memory leak detected in cache invalidation"
+      ],
+      "issues": [
+        "Performance regression in edge cases"
+      ],
+      "module": "rag_service",
+      "priority": "high"
+    },
+    {
+      "id": "review_004",
+      "title": "Update API Documentation",
+      "age_hours": 150.02032853361112,
+      "reason": "Issues found: Formatting issues, Missing examples",
+      "errors": [],
+      "issues": [
+        "Formatting issues",
+        "Missing examples"
+      ],
+      "module": "documentation_intelligence",
+      "priority": "low"
+    }
+  ],
   "actions_taken": [],
   "recommendations": [
-    "No stuck cards found. Review process is healthy."
+    "2 cards have blocking errors. Consider implementing stricter pre-review checks.",
+    "2 cards have non-blocking issues. Consider implementing auto-fix for common issues.",
+    "3 cards have been pending approval for over 96 hours. Consider implementing approval reminders or escalation."
   ]
 }
