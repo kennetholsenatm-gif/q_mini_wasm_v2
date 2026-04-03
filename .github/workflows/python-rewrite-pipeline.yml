@@ -45,7 +45,7 @@ jobs:
       - name: Detect Python files
         id: detect
         run: |
-          PYTHON_FILES=$(find . -name '*.py' -type f | grep -v '__pycache__' | grep -v '.git' | jq -R -s -c 'split("\n") | map(select(. != `))')
+          PYTHON_FILES=$(find . -name '*.py' -type f | grep -v '__pycache__' | grep -v '.git' | jq -R -s -c 'split("\n") | map(select(. != ""))')
           if [ '$PYTHON_FILES' = '[]' ]; then
             echo 'has_python=false' >> $GITHUB_OUTPUT
             echo 'python_files=[]' >> $GITHUB_OUTPUT
