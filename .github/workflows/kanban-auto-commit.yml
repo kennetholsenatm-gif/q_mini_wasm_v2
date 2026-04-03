@@ -1,0 +1,128 @@
+name: Kanban Auto-Commit
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_push:
+        description: 'Push after committing'
+        required: false
+        default: true
+        type: boolean
+      create_pr:
+        description: 'Create PR after pushing'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Only generate message, don\'t commit'
+        required: false
+        default: false
+        type: boolean
+      repo_path:
+        description: 'Path to repository (default: current)'
+        required: false
+        default: '.'
+        type: string
+
+jobs:
+  auto-commit:
+    name: Auto-Commit Staged Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Check for staged changes
+        id: check-staged
+        run: |
+          if git diff --cached --quiet; then
+            echo "has_staged=false" >> $GITHUB_OUTPUT
+            echo "No staged changes found"
+          else
+            echo "has_staged=true" >> $GITHUB_OUTPUT
+            echo "Found staged changes"
+          fi
+      
+      - name: Run auto-commit script
+        if: steps.check-staged.outputs.has_staged == 'true'
+        id: auto-commit
+        run: |
+          python scripts/auto_commit.py \
+            --repo-path "${{ github.event.inputs.repo_path }}" \
+            ${{ github.event.inputs.auto_push == 'true' && '--auto-push' || '' }} \
+            ${{ github.event.inputs.create_pr == 'true' && '--create-pr' || '' }} \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }} \
+            --json > commit-result.json
+          
+          # Extract commit message for output
+          COMMIT_MSG=$(jq -r '.commit_message' commit-result.json)
+          echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          
+          # Show result
+          cat commit-result.json
+      
+      - name: Create PR if requested
+        if: steps.check-staged.outputs.has_staged == 'true' && github.event.inputs.create_pr == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "${{ steps.auto-commit.outputs.commit_message }}"
+          title: "${{ steps.auto-commit.outputs.commit_message }}"
+          body: |
+            ## Auto-Generated PR
+            
+            This PR was automatically created by the Kanban Auto-Commit workflow.
+            
+            **Commit Message:** ${{ steps.auto-commit.outputs.commit_message }}
+            
+            ### Changes
+            - Auto-committed staged changes
+            - Generated commit message following project conventions
+            
+            ---
+            *Generated on ${{ github.event.repository.updated_at }}*
+          branch: "auto-commit/${{ github.run_id }}"
+          base: "${{ github.ref_name }}"
+          labels: |
+            automated
+            auto-commit
+          delete-branch: true
+          draft: false
+      
+      - name: Upload commit result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-commit-result-${{ github.run_id }}
+          path: commit-result.json
+          retention-days: 30
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 📋 Auto-Commit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.check-staged.outputs.has_staged }}" == "true" ]; then
+            echo "**Status:** ✅ Changes committed" >> $GITHUB_STEP_SUMMARY
+            echo "**Commit Message:** ${{ steps.auto-commit.outputs.commit_message }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Auto-Push:** ${{ github.event.inputs.auto_push }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Create PR:** ${{ github.event.inputs.create_pr }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Dry Run:** ${{ github.event.inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status:** ⚠️ No staged changes found" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No changes were staged for commit. Please stage your changes first." >> $GITHUB_STEP_SUMMARY
+          fi
