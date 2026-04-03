@@ -1,0 +1,142 @@
+{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "Research alignment configuration for research-to-production pipeline",
+  "core_framework_areas": {
+    "quantum_core": {
+      "priority": "critical",
+      "description": "Qutrit stabilizer formalism and GF(3) operations",
+      "research_topics": [
+        "Gottesman-Knill theorem application",
+        "Stabilizer tableau operations",
+        "Clifford gate implementations",
+        "Qutrit entanglement"
+      ],
+      "coverage_threshold": 0.95
+    },
+    "ternary_computing": {
+      "priority": "critical",
+      "description": "1.58-bit ternary state space and GF(3) arithmetic",
+      "research_topics": [
+        "Trit operations {+1, 0, -1}",
+        "Galois Field arithmetic",
+        "Memory packing efficiency",
+        "Binary Coded Ternary encoding"
+      ],
+      "coverage_threshold": 0.90
+    },
+    "moe_routing": {
+      "priority": "high",
+      "description": "Tropical geometry Mixture-of-Experts routing",
+      "research_topics": [
+        "Max-plus semiring operations",
+        "Hypersimplex capacity",
+        "Combinatorial depth",
+        "Sparse routing optimization"
+      ],
+      "coverage_threshold": 0.85
+    },
+    "flash_cim": {
+      "priority": "high",
+      "description": "Flash compute-in-memory integration",
+      "research_topics": [
+        "In-situ NAND processing",
+        "Multi-wordline sensing",
+        "Threshold voltage logic",
+        "Energy efficiency optimization"
+      ],
+      "coverage_threshold": 0.80
+    },
+    "sycl_acceleration": {
+      "priority": "medium",
+      "description": "SYCL multi-core GPU/CPU acceleration",
+      "research_topics": [
+        "Parallel tableau updates",
+        "Vectorized modulo-3",
+        "Hardware abstraction",
+        "Sub-group parallelism"
+      ],
+      "coverage_threshold": 0.75
+    },
+    "forward_forward": {
+      "priority": "high",
+      "description": "Forward-Forward learning without backpropagation",
+      "research_topics": [
+        "Teacherless self-supervised learning",
+        "Tropical inner product goodness",
+        "Hebbian weight updates",
+        "Local layer-wise learning"
+      ],
+      "coverage_threshold": 0.85
+    },
+    "cognitive_ergonomics": {
+      "priority": "medium",
+      "description": "WUI design principles for complex systems",
+      "research_topics": [
+        "Visual hierarchy (Gestalt)",
+        "Progressive disclosure",
+        "Hick's Law compliance",
+        "Miller's Law chunking"
+      ],
+      "coverage_threshold": 0.70
+    }
+  },
+  "research_depth_levels": {
+    "quick": {
+      "description": "Quick scan for obvious gaps",
+      "min_sources": 2,
+      "analysis_depth": "surface"
+    },
+    "standard": {
+      "description": "Standard analysis with moderate depth",
+      "min_sources": 5,
+      "analysis_depth": "moderate"
+    },
+    "comprehensive": {
+      "description": "Comprehensive analysis covering all aspects",
+      "min_sources": 10,
+      "analysis_depth": "deep"
+    },
+    "exhaustive": {
+      "description": "Exhaustive analysis with full literature review",
+      "min_sources": 20,
+      "analysis_depth": "exhaustive"
+    }
+  },
+  "prompt_generation": {
+    "format": "markdown",
+    "sections": [
+      "context",
+      "research_question",
+      "scope",
+      "methodology",
+      "expected_outcomes",
+      "alignment_check"
+    ],
+    "excluded_topics": [
+      "AI ethics",
+      "AI safety",
+      "alignment concerns",
+      "existential risk",
+      "value alignment"
+    ]
+  },
+  "human_in_the_loop": {
+    "review_required": true,
+    "approval_workflow": "issue-based",
+    "auto_merge": false,
+    "notification_channels": ["github-issues", "email"],
+    "review_criteria": [
+      "alignment_with_core_concepts",
+      "research_gap_coverage",
+      "prompt_specificity",
+      "actionability"
+    ]
+  },
+  "pipeline_scheduling": {
+    "weekly_analysis": "0 9 * * 1",
+    "daily_monitoring": "0 6 * * *",
+    "on_push_triggers": true,
+    "manual_dispatch": true
+  }
+}
