@@ -1,8 +1,16 @@
 """
-Base Agent Class for Auto-Improvement System
+DEPRECATED: This Python agent is being migrated to Go.
 
-This module provides the foundational agent class that all specialized agents inherit from.
-It handles common functionality like LLM interaction, memory management, and tool integration.
+Per the project's language policy, all agents must be implemented in:
+- C++, DLLs, GO, Rust, or R
+
+Python is no longer permitted for agent implementations.
+
+Migration Status:
+- This file will be replaced by base_agent.go
+- See agents/LANGUAGE_POLICY.md for details
+
+Original: Base Agent Class for Auto-Improvement System
 """
 
 import asyncio

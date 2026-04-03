@@ -1,9 +1,16 @@
 """
-Documentation Agent for q_mini_wasm_v2
+DEPRECATED: This Python agent is being migrated to C++.
 
-This agent automatically generates and maintains documentation
-using cognitive ergonomics principles and Mermaid diagrams.
-It runs with every CI/CD rotation to keep docs up to date.
+Per the project's language policy, all agents must be implemented in:
+- C++, DLLs, GO, Rust, or R
+
+Python is no longer permitted for agent implementations.
+
+Migration Status:
+- This file will be replaced by documentation_agent.cpp
+- See agents/LANGUAGE_POLICY.md for details
+
+Original: Documentation Agent for q_mini_wasm_v2
 """
 
 import asyncio

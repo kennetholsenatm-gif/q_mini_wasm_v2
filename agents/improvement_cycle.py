@@ -1,8 +1,16 @@
 """
-Improvement Cycle Orchestrator
+DEPRECATED: This Python agent is being migrated to Go.
 
-This module coordinates the auto-improvement cycle across all agents.
-It manages the phases: analysis, planning, implementation, validation, and deployment.
+Per the project's language policy, all agents must be implemented in:
+- C++, DLLs, GO, Rust, or R
+
+Python is no longer permitted for agent implementations.
+
+Migration Status:
+- This file will be replaced by improvement_cycle.go
+- See agents/LANGUAGE_POLICY.md for details
+
+Original: Improvement Cycle Orchestrator
 """
 
 import asyncio
