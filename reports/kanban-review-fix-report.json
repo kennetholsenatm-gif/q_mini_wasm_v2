@@ -1,17 +1,17 @@
 {
-  "generated_at": "2026-04-02T17:25:15.161979",
+  "generated_at": "2026-04-02T18:56:32.056417",
   "summary": {
     "total_review_cards": 4,
     "stuck_cards": 4,
     "cards_with_errors": 2,
     "cards_with_issues": 2,
-    "avg_stuck_hours": 109.52032853444445
+    "avg_stuck_hours": 111.04168810416667
   },
   "stuck_cards": [
     {
       "id": "review_001",
       "title": "Optimize Tableau Updates",
-      "age_hours": 72.02032854888888,
+      "age_hours": 73.54168812,
       "reason": "Errors found: Missing performance benchmarks, Need energy efficiency validation",
       "errors": [
         "Missing performance benchmarks",
@@ -27,7 +27,7 @@
     {
       "id": "review_002",
       "title": "Add MCP Tool Validation",
-      "age_hours": 96.02032853583333,
+      "age_hours": 97.54168810833333,
       "reason": "Issues found: Minor style violations, Unused imports",
       "errors": [],
       "issues": [
@@ -40,7 +40,7 @@
     {
       "id": "review_003",
       "title": "Implement RAG Caching",
-      "age_hours": 120.02032853444445,
+      "age_hours": 121.54168810777779,
       "reason": "Errors found: Critical: Memory leak detected in cache invalidation",
       "errors": [
         "Critical: Memory leak detected in cache invalidation"
@@ -54,7 +54,7 @@
     {
       "id": "review_004",
       "title": "Update API Documentation",
-      "age_hours": 150.02032853361112,
+      "age_hours": 151.54168810777776,
       "reason": "Issues found: Formatting issues, Missing examples",
       "errors": [],
       "issues": [

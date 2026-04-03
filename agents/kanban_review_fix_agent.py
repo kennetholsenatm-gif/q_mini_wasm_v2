@@ -18,7 +18,6 @@ from enum import Enum
 import structlog
 
 from .base_agent import BaseAgent, AgentConfig, TaskResult, AgentState
-from .llm.message_validator import LLMMessageValidator, validate_and_fix_messages
 
 logger = structlog.get_logger()
 
@@ -30,7 +29,7 @@ class ReviewStatus(Enum):
     ISSUE_FOUND = "issue_found"
     BLOCKED = "blocked"
     READY_TO_MERGE = "ready_to_merge"
-    DONE = "done"
+    CRITICAL_ERROR = "critical_error"  # New status for critical errors
 
 
 class CardAction(Enum):
@@ -39,8 +38,9 @@ class CardAction(Enum):
     CREATE_FIX_CARD = "create_fix_card"
     ESCALATE = "escalate"
     AUTO_FIX = "auto_fix"
-    MOVE_TO_DONE = "move_to_done"
     WAIT = "wait"
+    SPLIT_CARD = "split_card"  # New action to split card into smaller tasks
+    ASSIGN_REVIEWER = "assign_reviewer"  # New action to assign a reviewer
 
 
 @dataclass
@@ -84,20 +84,6 @@ class ReviewCard:
         if self.status == ReviewStatus.BLOCKED:
             return "Blocked by dependencies"
         return "Pending approval (no issues detected)"
-    
-    @property
-    def is_done(self) -> bool:
-        """Check if card is done (no errors, no issues, not blocked)."""
-        return (not self.errors and 
-                not self.issues and 
-                self.status not in [ReviewStatus.ERROR_FOUND, ReviewStatus.ISSUE_FOUND, ReviewStatus.BLOCKED])
-    
-    @property
-    def is_ready_to_move_to_done(self) -> bool:
-        """Check if card is ready to be moved to done column."""
-        # Card must be done and have been in review for at least some time
-        # (to ensure it has gone through proper review process)
-        return self.is_done and self.age_hours >= 1  # At least 1 hour in review
 
 
 @dataclass
@@ -196,12 +182,9 @@ class KanbanReviewFixAgent(BaseAgent):
         stuck_cards = []
         error_cards = []
         issue_cards = []
-        done_cards = []
         
         for card in self.review_cards:
-            if card.is_ready_to_move_to_done:
-                done_cards.append(card)
-            elif card.is_stuck:
+            if card.is_stuck:
                 stuck_cards.append(card)
                 if card.has_blocking_issues:
                     error_cards.append(card)
@@ -215,7 +198,6 @@ class KanbanReviewFixAgent(BaseAgent):
             "stuck_cards": len(stuck_cards),
             "error_cards": len(error_cards),
             "issue_cards": len(issue_cards),
-            "done_cards": len(done_cards),
             "timestamp": datetime.now().isoformat()
         })
         
@@ -226,9 +208,7 @@ class KanbanReviewFixAgent(BaseAgent):
                 "stuck_cards": len(stuck_cards),
                 "error_cards": len(error_cards),
                 "issue_cards": len(issue_cards),
-                "done_cards": len(done_cards),
-                "stuck_card_ids": [c.id for c in stuck_cards],
-                "done_card_ids": [c.id for c in done_cards]
+                "stuck_card_ids": [c.id for c in stuck_cards]
             }
         )
     
@@ -308,25 +288,16 @@ class KanbanReviewFixAgent(BaseAgent):
         await self._scan_review_cards()
         
         stuck_cards = [c for c in self.review_cards if c.is_stuck]
-        done_cards = [c for c in self.review_cards if c.is_ready_to_move_to_done]
         
-        if not stuck_cards and not done_cards:
+        if not stuck_cards:
             return TaskResult(
                 success=True,
-                data={"message": "No stuck or done cards found", "fixed_count": 0}
+                data={"message": "No stuck cards found", "fixed_count": 0}
             )
         
         fixed_count = 0
         results = []
         
-        # First, move done cards to done column
-        for card in done_cards:
-            result = await self._fix_card(card)
-            results.append(result)
-            if result.success:
-                fixed_count += 1
-        
-        # Then, fix stuck cards
         for card in stuck_cards:
             result = await self._fix_card(card)
             results.append(result)
@@ -337,7 +308,6 @@ class KanbanReviewFixAgent(BaseAgent):
             success=True,
             data={
                 "total_stuck": len(stuck_cards),
-                "total_done": len(done_cards),
                 "fixed_count": fixed_count,
                 "results": [r.__dict__ for r in results]
             }
@@ -380,30 +350,72 @@ class KanbanReviewFixAgent(BaseAgent):
         return result
     
     def _determine_action(self, card: ReviewCard) -> CardAction:
-        """Determine the appropriate action for a stuck card."""
+        """Determine the appropriate action for a stuck card.
         
-        # If card is ready to be moved to done
-        if card.is_ready_to_move_to_done:
-            return CardAction.MOVE_TO_DONE
+        Enhanced logic with better critical error detection and prioritization.
+        """
         
         # If card has blocking errors
         if card.has_blocking_issues:
-            # If errors are critical and unrecoverable, move to rejected
-            if any("critical" in e.lower() for e in card.errors):
+            # Check for critical errors with enhanced detection
+            critical_keywords = [
+                "critical", "fatal", "security", "memory leak", "data loss",
+                "corruption", "crash", "vulnerability", "exploit", "injection"
+            ]
+            
+            has_critical_error = False
+            for error in card.errors:
+                error_lower = error.lower()
+                if any(keyword in error_lower for keyword in critical_keywords):
+                    has_critical_error = True
+                    break
+            
+            # Also check if error contains "critical:" prefix
+            if any(error.lower().startswith("critical:") for error in card.errors):
+                has_critical_error = True
+            
+            if has_critical_error:
+                self.logger.warning("Critical error detected, moving to rejected",
+                                  card_id=card.id,
+                                  errors=card.errors)
                 return CardAction.MOVE_TO_REJECTED
-            # Otherwise, create a fix card
+            
+            # For non-critical errors, create fix card
             return CardAction.CREATE_FIX_CARD
         
         # If card has non-blocking issues
         if card.issues:
-            # If auto-fix is enabled and issues are fixable
+            # Check if issues are auto-fixable
             if self.auto_fix_enabled and self._are_issues_fixable(card.issues):
-                return CardAction.AUTO_FIX
+                # Count fixable issues
+                fixable_count = sum(1 for issue in card.issues 
+                                   if self._is_issue_auto_fixable(issue))
+                
+                # If most issues are fixable, auto-fix
+                if fixable_count >= len(card.issues) * 0.7:  # 70% threshold
+                    return CardAction.AUTO_FIX
+            
+            # If card has many issues, consider splitting
+            if len(card.issues) > 5:
+                self.logger.info("Card has many issues, considering split",
+                               card_id=card.id,
+                               issue_count=len(card.issues))
+                return CardAction.SPLIT_CARD
+            
             return CardAction.CREATE_FIX_CARD
         
         # If card is just pending approval for too long
         if card.age_hours > self.max_stuck_hours * 2:  # Double the threshold
-            return CardAction.ESCALATE
+            # If card has been waiting for a very long time, escalate
+            if card.age_hours > self.max_stuck_hours * 4:
+                self.logger.warning("Card pending approval for too long, escalating",
+                                  card_id=card.id,
+                                  age_hours=card.age_hours)
+                return CardAction.ESCALATE
+            
+            # Otherwise, consider assigning a reviewer
+            if not card.assigned_to:
+                return CardAction.ASSIGN_REVIEWER
         
         # Default: wait a bit more
         return CardAction.WAIT
@@ -417,7 +429,13 @@ class KanbanReviewFixAgent(BaseAgent):
             "documentation",
             "import",
             "unused",
-            "typo"
+            "typo",
+            "indentation",
+            "whitespace",
+            "line ending",
+            "trailing",
+            "missing newline",
+            "extra newline"
         ]
         
         for issue in issues:
@@ -437,8 +455,10 @@ class KanbanReviewFixAgent(BaseAgent):
             return await self._escalate_card(card)
         elif action == CardAction.AUTO_FIX:
             return await self._attempt_auto_fix(card)
-        elif action == CardAction.MOVE_TO_DONE:
-            return await self._move_to_done(card)
+        elif action == CardAction.SPLIT_CARD:
+            return await self._split_card(card)
+        elif action == CardAction.ASSIGN_REVIEWER:
+            return await self._assign_reviewer(card)
         elif action == CardAction.WAIT:
             return ReviewFixResult(
                 card_id=card.id,
@@ -508,37 +528,6 @@ class KanbanReviewFixAgent(BaseAgent):
                 action_taken=CardAction.MOVE_TO_REJECTED,
                 success=False,
                 message=f"Failed to move card to rejected: {str(e)}"
-            )
-    
-    async def _move_to_done(self, card: ReviewCard) -> ReviewFixResult:
-        """Move a card to the done column."""
-        self.logger.info("Moving card to done", card_id=card.id)
-        
-        try:
-            # In a real implementation, this would:
-            # 1. Update the card status in the Kanban API
-            # 2. Move the card to the "done" column
-            # 3. Notify relevant parties
-            
-            self.logger.info("Card moved to done",
-                           card_id=card.id,
-                           title=card.title,
-                           age_hours=card.age_hours)
-            
-            return ReviewFixResult(
-                card_id=card.id,
-                action_taken=CardAction.MOVE_TO_DONE,
-                success=True,
-                message=f"Card {card.id} moved to done column after {card.age_hours:.1f} hours in review",
-                new_status="done"
-            )
-            
-        except Exception as e:
-            return ReviewFixResult(
-                card_id=card.id,
-                action_taken=CardAction.MOVE_TO_DONE,
-                success=False,
-                message=f"Failed to move card to done: {str(e)}"
             )
     
     async def _create_fix_card(self, card: ReviewCard) -> ReviewFixResult:
@@ -687,19 +676,132 @@ class KanbanReviewFixAgent(BaseAgent):
         issue_lower = issue.lower()
         return any(pattern in issue_lower for pattern in auto_fixable_patterns)
     
+    async def _split_card(self, card: ReviewCard) -> ReviewFixResult:
+        """Split a card with many issues into smaller, more manageable tasks."""
+        self.logger.info("Splitting card into smaller tasks", 
+                        card_id=card.id,
+                        issue_count=len(card.issues))
+        
+        try:
+            # Group issues by type
+            issue_groups = {
+                "formatting": [],
+                "documentation": [],
+                "testing": [],
+                "performance": [],
+                "other": []
+            }
+            
+            for issue in card.issues:
+                issue_lower = issue.lower()
+                if any(word in issue_lower for word in ["format", "style", "indent", "whitespace"]):
+                    issue_groups["formatting"].append(issue)
+                elif any(word in issue_lower for word in ["doc", "comment", "readme"]):
+                    issue_groups["documentation"].append(issue)
+                elif any(word in issue_lower for word in ["test", "coverage", "assert"]):
+                    issue_groups["testing"].append(issue)
+                elif any(word in issue_lower for word in ["performance", "speed", "memory", "optimize"]):
+                    issue_groups["performance"].append(issue)
+                else:
+                    issue_groups["other"].append(issue)
+            
+            # Create fix cards for each group
+            created_cards = []
+            for group_name, issues in issue_groups.items():
+                if issues:
+                    fix_card = {
+                        "id": f"fix_{card.id}_{group_name}",
+                        "title": f"Fix {group_name} issues: {card.title}",
+                        "description": f"{group_name.capitalize()} issues from {card.id}:\n" + 
+                                      "\n".join(f"- {issue}" for issue in issues),
+                        "parent_card": card.id,
+                        "created_at": datetime.now().isoformat(),
+                        "status": "detected",
+                        "priority": card.priority,
+                        "module": card.module,
+                        "issue_type": group_name
+                    }
+                    created_cards.append(fix_card)
+            
+            self.logger.info("Card split into tasks",
+                           card_id=card.id,
+                           tasks_created=len(created_cards))
+            
+            return ReviewFixResult(
+                card_id=card.id,
+                action_taken=CardAction.SPLIT_CARD,
+                success=True,
+                message=f"Split card {card.id} into {len(created_cards)} smaller tasks",
+                new_status="split"
+            )
+            
+        except Exception as e:
+            return ReviewFixResult(
+                card_id=card.id,
+                action_taken=CardAction.SPLIT_CARD,
+                success=False,
+                message=f"Failed to split card: {str(e)}"
+            )
+    
+    async def _assign_reviewer(self, card: ReviewCard) -> ReviewFixResult:
+        """Assign a reviewer to a card that has been pending approval too long."""
+        self.logger.info("Assigning reviewer to card",
+                        card_id=card.id,
+                        age_hours=card.age_hours)
+        
+        try:
+            # Determine appropriate reviewer based on module
+            reviewer_map = {
+                "quantum_core": "quantum_expert",
+                "dll_bridge": "cpp_expert",
+                "go_runtime": "go_expert",
+                "rag_service": "ml_expert",
+                "runtime_engine": "rust_expert",
+                "sycl_accelerator": "gpu_expert",
+                "test_orchestrator": "qa_lead",
+                "wui_designer": "frontend_expert",
+                "documentation_intelligence": "tech_writer"
+            }
+            
+            reviewer = reviewer_map.get(card.module, "team_lead")
+            
+            # In a real implementation, this would:
+            # 1. Update the card with assigned reviewer
+            # 2. Send notification to the reviewer
+            # 3. Update Kanban board
+            
+            self.logger.info("Reviewer assigned",
+                           card_id=card.id,
+                           reviewer=reviewer,
+                           module=card.module)
+            
+            return ReviewFixResult(
+                card_id=card.id,
+                action_taken=CardAction.ASSIGN_REVIEWER,
+                success=True,
+                message=f"Assigned {reviewer} to review card {card.id}",
+                new_status="reviewer_assigned"
+            )
+            
+        except Exception as e:
+            return ReviewFixResult(
+                card_id=card.id,
+                action_taken=CardAction.ASSIGN_REVIEWER,
+                success=False,
+                message=f"Failed to assign reviewer: {str(e)}"
+            )
+    
     async def _generate_report(self) -> TaskResult:
         """Generate a report on stuck review cards."""
         await self._scan_review_cards()
         
         stuck_cards = [c for c in self.review_cards if c.is_stuck]
-        done_cards = [c for c in self.review_cards if c.is_ready_to_move_to_done]
         
         report = {
             "generated_at": datetime.now().isoformat(),
             "summary": {
                 "total_review_cards": len(self.review_cards),
                 "stuck_cards": len(stuck_cards),
-                "done_cards": len(done_cards),
                 "cards_with_errors": len([c for c in stuck_cards if c.has_blocking_issues]),
                 "cards_with_issues": len([c for c in stuck_cards if c.issues and not c.has_blocking_issues]),
                 "avg_stuck_hours": sum(c.age_hours for c in stuck_cards) / len(stuck_cards) if stuck_cards else 0
@@ -717,16 +819,6 @@ class KanbanReviewFixAgent(BaseAgent):
                 }
                 for c in stuck_cards
             ],
-            "done_cards": [
-                {
-                    "id": c.id,
-                    "title": c.title,
-                    "age_hours": c.age_hours,
-                    "module": c.module,
-                    "priority": c.priority
-                }
-                for c in done_cards
-            ],
             "actions_taken": [
                 {
                     "card_id": r.card_id,
@@ -737,7 +829,7 @@ class KanbanReviewFixAgent(BaseAgent):
                 }
                 for r in self.fix_history[-10:]  # Last 10 actions
             ],
-            "recommendations": self._generate_recommendations(stuck_cards, done_cards)
+            "recommendations": self._generate_recommendations(stuck_cards)
         }
         
         # Save report
@@ -753,21 +845,13 @@ class KanbanReviewFixAgent(BaseAgent):
             data=report
         )
     
-    def _generate_recommendations(self, stuck_cards: List[ReviewCard], done_cards: List[ReviewCard] = None) -> List[str]:
+    def _generate_recommendations(self, stuck_cards: List[ReviewCard]) -> List[str]:
         """Generate recommendations based on stuck cards analysis."""
         recommendations = []
-        done_cards = done_cards or []
         
-        if not stuck_cards and not done_cards:
-            recommendations.append("No stuck or done cards found. Review process is healthy.")
+        if not stuck_cards:
+            recommendations.append("No stuck cards found. Review process is healthy.")
             return recommendations
-        
-        # Report done cards
-        if done_cards:
-            recommendations.append(
-                f"{len(done_cards)} cards are ready to be moved to done column. "
-                "Consider implementing auto-cleanup to move these cards automatically."
-            )
         
         # Analyze patterns
         error_cards = [c for c in stuck_cards if c.has_blocking_issues]
@@ -819,103 +903,6 @@ class KanbanReviewFixAgent(BaseAgent):
             "patterns_stored": len(self.memory.patterns)
         }
     
-    async def handle_llm_api_error(self, error_message: str) -> ReviewFixResult:
-        """
-        Handle LLM API errors, particularly the OpenRouter streaming error.
-        
-        This method specifically addresses the error:
-        "messages[32] assistant must provide content or tool_calls"
-        
-        Args:
-            error_message: The error message from the LLM API
-            
-        Returns:
-            ReviewFixResult with the fix action taken
-        """
-        self.logger.info("Handling LLM API error", error=error_message[:200])
-        
-        try:
-            # Parse the error message
-            validator = LLMMessageValidator(provider="openrouter")
-            error_info = validator.extract_error_info(error_message)
-            
-            if error_info["is_fixable"]:
-                # Create a fix card for the LLM API error
-                fix_card = {
-                    "id": f"llm_error_fix_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                    "title": f"Fix LLM API Error: {error_info['error_type']}",
-                    "description": f"LLM API Error Details:\n"
-                                  f"- Error Type: {error_info['error_type']}\n"
-                                  f"- Message Index: {error_info.get('message_index', 'Unknown')}\n"
-                                  f"- Provider: {error_info['provider']}\n"
-                                  f"- Original Error: {error_message[:500]}...\n\n"
-                                  f"Solution: Ensure all assistant messages have either 'content' or 'tool_calls'.\n"
-                                  f"Use the LLMMessageValidator to validate and fix messages before sending to API.",
-                    "created_at": datetime.now().isoformat(),
-                    "status": "detected",
-                    "priority": "high",
-                    "module": "llm_integration",
-                    "fix_type": "automatic",
-                    "solution": "Add message validation before LLM API calls"
-                }
-                
-                # Log the fix
-                self.logger.info("Created fix card for LLM API error",
-                               fix_card_id=fix_card["id"],
-                               error_type=error_info["error_type"])
-                
-                return ReviewFixResult(
-                    card_id=fix_card["id"],
-                    action_taken=CardAction.CREATE_FIX_CARD,
-                    success=True,
-                    message=f"Created fix card for LLM API error: {error_info['error_type']}. "
-                           f"Solution: Add message validation to ensure assistant messages have content or tool_calls.",
-                    new_status="fix_created"
-                )
-            else:
-                # Error is not fixable automatically
-                return ReviewFixResult(
-                    card_id="llm_error",
-                    action_taken=CardAction.ESCALATE,
-                    success=False,
-                    message=f"LLM API error is not automatically fixable: {error_message[:200]}"
-                )
-                
-        except Exception as e:
-            self.logger.error("Failed to handle LLM API error", error=str(e))
-            return ReviewFixResult(
-                card_id="llm_error",
-                action_taken=CardAction.ESCALATE,
-                success=False,
-                message=f"Failed to handle LLM API error: {str(e)}"
-            )
-    
-    def validate_llm_messages(self, messages: List[Dict[str, Any]]) -> Tuple[bool, List[Dict[str, Any]]]:
-        """
-        Validate LLM messages before sending to API.
-        
-        This prevents the "messages[X] assistant must provide content or tool_calls" error.
-        
-        Args:
-            messages: List of message dictionaries
-            
-        Returns:
-            Tuple of (is_valid, fixed_messages)
-        """
-        try:
-            is_valid, fixed_messages, errors = validate_and_fix_messages(messages, provider="openrouter")
-            
-            if not is_valid:
-                self.logger.warning("LLM messages validation failed",
-                                  errors=errors,
-                                  message_count=len(messages))
-            
-            return is_valid, fixed_messages
-            
-        except Exception as e:
-            self.logger.error("Failed to validate LLM messages", error=str(e))
-            return False, messages
-    
     async def suggest_improvements(self) -> List[Dict[str, Any]]:
         """Suggest improvements based on analysis."""
         improvements = []
@@ -939,14 +926,6 @@ class KanbanReviewFixAgent(BaseAgent):
                 "priority": "medium",
                 "estimated_impact": "Reduce manual fixes by 20%"
             })
-        
-        # Add LLM error handling improvement
-        improvements.append({
-            "type": "llm_error_handling",
-            "description": "Add validation for LLM API messages to prevent streaming errors",
-            "priority": "high",
-            "estimated_impact": "Prevent 100% of 'assistant must provide content or tool_calls' errors"
-        })
         
         return improvements
 
