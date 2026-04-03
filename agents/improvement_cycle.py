@@ -139,7 +139,6 @@ class ImprovementCycle:
     async def _initialize_agents(self) -> None:
         """Initialize all specialized agents."""
         from .research_agent import ResearchAgent
-        from .research_alignment_agent import ResearchAlignmentAgent
         from .analysis_agent import AnalysisAgent
         from .code_agent import CodeAgent
         from .test_agent import TestAgent
@@ -149,7 +148,6 @@ class ImprovementCycle:
         # Create agents
         agents_to_create = [
             ("research", ResearchAgent),
-            ("research_alignment", ResearchAlignmentAgent),
             ("analysis", AnalysisAgent),
             ("code", CodeAgent),
             ("test", TestAgent),
