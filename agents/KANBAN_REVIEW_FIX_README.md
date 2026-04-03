@@ -166,6 +166,42 @@ Based on stuck card analysis, the agent provides recommendations:
 3. **For cards pending approval too long**: Implement approval reminders or escalation
 4. **For modules with many stuck cards**: Review the module's review process
 
+5. **For cards ready to be done**: Implement auto-cleanup to move completed cards to Done column
+
+## Auto-Cleanup Feature
+
+The agent now includes an auto-cleanup feature for cards that are ready to be moved to the Done column:
+
+### How it works
+1. **Detection**: Cards are considered "ready to be done" when:
+   - No errors
+   - No issues
+   - Not blocked
+   - Have been in review for at least 1 hour (to ensure proper review process)
+
+2. **Action**: When a card is ready to be done, the agent automatically moves it to the "Done" column
+
+3. **Benefits**:
+   - Keeps the Kanban board clean
+   - Prevents completed tasks from accumulating in the review column
+   - Reduces manual effort for moving completed cards
+   - Ensures completed work is properly tracked
+
+### Configuration
+The auto-cleanup feature can be configured by:
+- Adjusting the minimum review time (currently 1 hour)
+- Enabling/disabling auto-fix functionality
+- Configuring the kanban-config.json file
+
+### Example
+When a card is in review with:
+- No errors
+- No issues
+- Not blocked
+- Has been in review for more than 1 hour
+
+The agent will automatically move it to the "Done" column during the next scan.
+
 ## Integration with Existing Kanban System
 
 The agent integrates with the existing Kanban system by:
