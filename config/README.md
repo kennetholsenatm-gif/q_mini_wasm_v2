@@ -4,7 +4,7 @@ This directory contains configuration files for the q_mini_wasm_v2 quantum-class
 
 ## Configuration Files
 
-### ?? rules.json
+### rules.json
 Coding standards and architectural rules for the project:
 - **C++ Standards**: C++17 with specific compiler requirements
 - **Quantum-Specific Rules**: GF(3) arithmetic, trit operations, stabilizer formalism
@@ -13,7 +13,7 @@ Coding standards and architectural rules for the project:
 - **Testing Rules**: Coverage requirements and quantum correctness tests
 - **Security Rules**: Memory safety and quantum state isolation
 
-### ?? workflows.json
+### workflows.json
 Development and CI/CD workflow definitions:
 - **Feature Development**: Branch naming, pre-commit checks, PR requirements
 - **Bug Fix Workflow**: Regression testing and quantum validation
@@ -22,7 +22,7 @@ Development and CI/CD workflow definitions:
 - **CI/CD Pipelines**: GitHub Actions integration with build matrices
 - **Quantum-Specific Workflows**: Tableau validation and energy efficiency analysis
 
-### ?? hooks.json
+### hooks.json
 Git hooks for automated validation:
 - **Pre-commit**: Code formatting, trit validation, floating-point checks
 - **Commit Message**: Enforced format with quantum-specific prefixes
@@ -31,7 +31,7 @@ Git hooks for automated validation:
 - **Post-merge**: Index rebuilding and changelog generation
 - **Quantum-Specific Hooks**: Stabilizer correctness and Clifford gate validation
 
-### ?? skills.json
+### skills.json
 Available skills mapped to MCP servers:
 - **quantum_core**: Qutrit stabilizer formalism and GF(3) operations
 - **dll_bridge**: Language bindings (Go, Rust, Python, WASM)

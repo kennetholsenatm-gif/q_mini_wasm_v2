@@ -1,4 +1,4 @@
-﻿# Research Foundation Documents
+# Research Foundation Documents
 
 This directory contains the foundational research papers that underpin the q_mini_wasm_v2 framework.
 
@@ -22,7 +22,7 @@ The q_mini_wasm_v2 framework is built on three interconnected research pillars:
 - Cognitive Load Theory (CLT) and its application to complex interfaces
 - Visual hierarchy and pre-attentive processing
 - Gestalt principles in system visualization
-- Decision fatigue mitigation (Hick-Hyman Law, Fitts\\' Law)
+- Decision fatigue mitigation (Hick-Hyman Law, Fitts' Law)
 - Documentation ergonomics and split-attention elimination
 - Expert vs. novice scanning asymmetry
 
