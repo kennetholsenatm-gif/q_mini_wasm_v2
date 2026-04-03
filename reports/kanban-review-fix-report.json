@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-02T17:04:19.248549",
+  "summary": {
+    "total_review_cards": 0,
+    "stuck_cards": 0,
+    "cards_with_errors": 0,
+    "cards_with_issues": 0,
+    "avg_stuck_hours": 0
+  },
+  "stuck_cards": [],
+  "actions_taken": [],
+  "recommendations": [
+    "No stuck cards found. Review process is healthy."
+  ]
+}
