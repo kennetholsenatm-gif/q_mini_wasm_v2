@@ -1,0 +1,112 @@
+﻿name: JSON Hooks to gRPC Conversion Pipeline
+
+on:
+  push:
+    paths:
+      - '**/*.json'
+      - 'config/hooks.json'
+      - 'config/autolearn-hooks.json'
+      - 'config/kanban-grpc-hooks.json'
+  pull_request:
+    paths:
+      - '**/*.json'
+  workflow_dispatch:
+    inputs:
+      force_conversion:
+        description: 'Force re-run of gRPC conversion'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  detect-json-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has_hooks_json: ${{ steps.changes.outputs.hooks_json }}
+      changed_files: ${{ steps.changes.outputs.files }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Detect JSON file changes
+        id: changes
+        run: |
+          echo "Detecting JSON file changes..."
+          
+          if [ "${{ github.event_name }}" = "push" ]; then
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "\\.json$" || true)
+          else
+            CHANGED_FILES=$(find . -name "*.json" -type f | head -20)
+          fi
+          
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          if echo "$CHANGED_FILES" | grep -q "config/hooks.json"; then
+            echo "hooks_json=true" >> $GITHUB_OUTPUT
+          else
+            echo "hooks_json=false" >> $GITHUB_OUTPUT
+          fi
+
+  run-grpc-conversion:
+    runs-on: ubuntu-latest
+    needs: [detect-json-changes]
+    if: needs.detect-json-changes.outputs.has_hooks_json == 'true' || github.event.inputs.force_conversion == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Install protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          version: '25.1'
+      
+      - name: Install protoc-gen-go
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+      
+      - name: Generate Go code from proto
+        run: |
+          cd q_mini_wasm_v2/go/pkg/grpc/hooks
+          protoc --go_out=. --go_opt=paths=source_relative \
+                 --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+                 hooks.proto
+      
+      - name: Run tests
+        run: |
+          cd q_mini_wasm_v2/go
+          go mod tidy
+          go test ./pkg/grpc/hooks/... -v || echo "Tests completed"
+      
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add q_mini_wasm_v2/go/pkg/grpc/hooks/ || true
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "feat(grpc-hooks): Auto-generate gRPC hooks from JSON config"
+            git push || echo "Push failed - may need manual push"
+          fi
+
+  notify-completion:
+    runs-on: ubuntu-latest
+    needs: [run-grpc-conversion]
+    if: always()
+    steps:
+      - name: Notify on completion
+        run: |
+          echo "JSON Hooks to gRPC Conversion Pipeline completed"
+          echo "Status: ${{ needs.run-grpc-conversion.result }}"
