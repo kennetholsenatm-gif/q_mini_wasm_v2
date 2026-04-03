@@ -91,6 +91,25 @@
         "component_interaction": true,
         "build_pipeline": true
       }
+    },
+    "cleanup_agent": {
+      "name": "CleanupAgent",
+      "description": "Monitors for task completion patterns and performs cleanup",
+      "system_prompt": "You are a cleanup agent that monitors for completion patterns and performs cleanup operations.",
+      "tools": [
+        "scan_completions",
+        "cleanup_temp_files",
+        "archive_logs",
+        "check_pattern"
+      ],
+      "max_iterations": 3,
+      "improvement_cycle_frequency": "per_task",
+      "completion_patterns": [
+        "Final Execution Complete",
+        "Task completed successfully",
+        "All tests passed",
+        "Cycle completed"
+      ]
     }
   },
   "improvement_cycle": {

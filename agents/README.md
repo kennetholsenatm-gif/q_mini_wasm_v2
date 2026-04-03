@@ -134,6 +134,26 @@ The Documentation Agent automatically generates and maintains documentation:
 4. Component Interaction
 5. Build Pipeline
 
+
+
+### Cleanup Agent
+
+The Cleanup Agent monitors for task completion patterns and performs cleanup:
+
+- Completion Patterns: Monitors for Final Execution Complete and other patterns
+- Temp File Cleanup: Removes temporary files and artifacts
+- Log Archival: Archives old log files
+- Memory Cleanup: Manages agent memory files
+
+#### Completion Patterns Monitored
+
+1. Final Execution Complete
+2. Task completed successfully
+3. All tests passed
+4. Cycle completed
+5. Deployment successful
+6. Build successful
+
 ## Integration with MCP Servers
 
 The system integrates with existing MCP servers:
