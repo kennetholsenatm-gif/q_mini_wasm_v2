@@ -119,6 +119,7 @@ class BaseAgent(ABC):
         self.logger = logger.bind(agent=config.name)
         self._start_time: Optional[datetime] = None
         self._task_count: int = 0
+        self._rag_client = None  # Lazy initialized
         
         # Rate limiting state
         self._request_timestamps: List[datetime] = []
@@ -318,3 +319,88 @@ class BaseAgent(ABC):
             List of improvement suggestions
         """
         pass
+    
+    # ============================================================================
+    # RAG Integration
+    # ============================================================================
+    
+    async def _get_rag_client(self):
+        """Get or create RAG client (lazy initialization)."""
+        if self._rag_client is None:
+            from agents.rag_client import RAGClient
+            self._rag_client = RAGClient()
+        return self._rag_client
+    
+    async def retrieve_context(
+        self,
+        query: str,
+        max_tokens: int = 2048,
+        context_type: str = "all"
+    ) -> str:
+        """
+        Retrieve relevant context from the RAG service.
+        
+        Args:
+            query: Query to search for
+            max_tokens: Maximum tokens to return
+            context_type: Type of context - "code", "documentation", "research", "api", "all"
+            
+        Returns:
+            Formatted context string
+        """
+        try:
+            rag_client = await self._get_rag_client()
+            result = await rag_client.retrieve_context(query, max_tokens, context_type)
+            
+            if result.chunks:
+                self.logger.info("RAG context retrieved",
+                               query=query[:50],
+                               chunks=len(result.chunks),
+                               tokens=result.total_tokens)
+                return result.context_text
+            else:
+                self.logger.debug("No RAG context found", query=query[:50])
+                return ""
+        except Exception as e:
+            self.logger.warning("RAG retrieval failed", error=str(e))
+            return ""
+    
+    async def enhance_prompt_with_context(
+        self,
+        prompt: str,
+        context_queries: Optional[List[str]] = None,
+        max_context_tokens: int = 2048
+    ) -> str:
+        """
+        Enhance a prompt with RAG-retrieved context.
+        
+        Args:
+            prompt: Original prompt
+            context_queries: Queries for context retrieval (defaults to prompt)
+            max_context_tokens: Maximum context tokens
+            
+        Returns:
+            Enhanced prompt with context
+        """
+        if context_queries is None:
+            context_queries = [prompt]
+        
+        all_context = []
+        for query in context_queries:
+            context = await self.retrieve_context(query, max_context_tokens // len(context_queries))
+            if context:
+                all_context.append(context)
+        
+        if not all_context:
+            return prompt
+        
+        context_section = "\n\n## Relevant Code Context\n\n" + "\n\n".join(all_context)
+        return f"{context_section}\n\n## Task\n\n{prompt}"
+    
+    async def check_rag_health(self) -> bool:
+        """Check if RAG service is available."""
+        try:
+            rag_client = await self._get_rag_client()
+            return await rag_client.health_check()
+        except Exception:
+            return False

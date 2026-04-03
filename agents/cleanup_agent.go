@@ -108,7 +108,7 @@ func NewCleanupAgent() *CleanupAgent {
 				Endpoint:    "mcp://qminiwasm-self-learning",
 			},
 		},
-		RAGEndpoint:       "http://localhost:8080/rag",
+		RAGEndpoint:       "http://localhost:8088/api/v1/rag",
 		TaskHistory:       make([]CleanupTask, 0),
 		CompletionHistory: make([]CompletionStatus, 0),
 	}

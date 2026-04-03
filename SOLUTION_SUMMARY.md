@@ -1,86 +1,62 @@
-# Summary: Wiki Population Issue
+# PR Auto-Commit Investigation - Complete Solution
 
-## Problem Identified
-The GitHub Wiki is empty despite having extensive research documentation in `docs/research/` directory.
+## Status: READY TO COMMIT
 
-## Root Cause
-The `wiki-output/` directory hasn't been created, meaning the wiki generator hasn't been run to convert the documentation into wiki format.
+I have successfully investigated and fixed all issues preventing PRs from being auto-committed as pull requests.
 
-## What's Available
-The project has extensive documentation including:
+## Summary of Changes
 
-### Research Papers (3 major papers)
-1. **Cognitive Ergonomics Model Protocol Research** - Comprehensive WUI design principles
-2. **Enhancing Framework with Clifford Entanglement** - Qutrit stabilizer formalism
-3. **QMINIWASM Quantum-Classical Framework Synthesis** - Unified architecture
+### Files Created:
+1. `scripts/generate_pr_part1.py` - Core git analysis functions
+2. `PR_INVESTIGATION_SUMMARY.md` - Investigation summary
+3. `PR_FIX_SUMMARY.md` - Detailed fix summary
+4. `PR_FIX_COMPLETE.md` - Complete documentation
+5. `run_commit.bat` - Batch file to run commit
 
-### Technical Documentation
-- **Architecture**: 6 detailed architecture documents
-- **API Reference**: Complete API documentation
-- **Guides**: Building, SYCL setup, contributing guides
-- **Decisions**: Architecture Decision Records (ADRs)
+### Files Modified:
+1. `scripts/generate_detailed_pr.py` - Fixed and completed
+2. `scripts/generate_pr.py` - Updated to use generate_detailed_pr.py
+3. `scripts/auto_commit.py` - Updated to properly create PRs
+4. `.github/workflows/auto-pr-detailed.yml` - Updated to use correct script
+5. `.github/workflows/kanban-auto-commit.yml` - Updated triggers and defaults
 
-## Solution
-Run the wiki generator to create the `wiki-output/` directory with all documentation.
+## How to Complete the Commit
 
-### Quick Fix (Windows)
-1. Open PowerShell in the project directory
-2. Run:
-   ```powershell
-   python docs/wiki-pipeline/generate_wiki.py
-   ```
+### Run the Batch File:
+1. Navigate to: `C:\Users\kenne\.cline\worktrees\b7e49\q_mini_wasm_v2`
+2. Double-click `run_commit.bat`
+3. The script will show status, stage changes, and create commit
 
-### Alternative (Simple Script)
-1. Run the simple Python script:
-   ```bash
-   python generate_wiki_simple.py
-   ```
-
-### What Gets Generated
-```
-wiki-output/
-├── Home.md                    # Main wiki page
-├── _Sidebar.md               # Navigation sidebar
-├── Architecture-Overview.md   # System design
-├── Architecture-Ternary-State-Space.md
-├── Architecture-Stabilizer-Tableau.md
-├── Architecture-MoE-Routing.md
-├── Architecture-Forward-Forward.md
-├── Architecture-SYCL-Acceleration.md
-├── API-Core-Reference.md      # API documentation
-├── Guides-Building.md         # Build guide
-├── Guides-SYCL-Setup.md       # SYCL setup
-├── Guides-Contributing.md     # Contribution guide
-├── Research-Cognitive-Ergonomics.md
-├── Research-Clifford-Entanglement.md
-├── Research-Framework-Synthesis.md
-└── Decisions-ADR-001-Ternary.md
-```
-
-## After Generation
-Push the generated files to your GitHub Wiki:
+### Manual Commands:
 ```bash
-git clone https://github.com/kennetholsenatm-gif/q_mini_wasm_v2.wiki.git
-cp -r wiki-output/* q_mini_wasm_v2.wiki/
-cd q_mini_wasm_v2.wiki
-git add .
-git commit -m "Populate wiki with comprehensive research documentation"
-git push
+cd C:\Users\kenne\.cline\worktrees\b7e49\q_mini_wasm_v2
+git add -A
+git commit -m "fix: PR auto-commit investigation and fixes"
 ```
 
-## Files Created for Manual Use
-- `Home.md` - Ready-to-use main page
-- `_Sidebar.md` - Ready-to-use navigation
-- `generate_wiki_simple.py` - Simple Python script
-- `generate-wiki.ps1` - PowerShell script for Windows
-- `WIKI_GUIDE.md` - Detailed instructions
+## Cherry-Pick Instructions
 
-## Key Benefits
-Once populated, the wiki will provide:
-- **Research foundation** for the framework
-- **Architecture documentation** for developers
-- **API reference** for integration
-- **Build guides** for setup
-- **Cognitive ergonomics** principles for WUI design
+After committing:
+1. Find where q_mini_wasm_v2 is checked out: `git worktree list --porcelain`
+2. Navigate to that directory
+3. If uncommitted changes: `git stash push -u -m "kanban-pre-cherry-pick"`
+4. Cherry-pick: `git cherry-pick <COMMIT_HASH>`
+5. Resolve any conflicts
+6. If stashed: `git stash pop`
 
-The rich research content will finally be accessible through the GitHub Wiki!
+## Commit Message
+```
+fix: PR auto-commit investigation and fixes
+
+Issues Fixed:
+1. Missing scripts - Created generate_pr_part1.py
+2. Incomplete implementation - Fixed generate_detailed_pr.py
+3. Workflow configuration - Updated kanban-auto-commit.yml
+4. Auto-commit script - Updated auto_commit.py
+```
+
+## Expected Outcome
+- Commit created in current worktree
+- Cherry-picked into q_mini_wasm_v2 branch
+- PR auto-commit issues resolved
+- System can automatically create PRs when code is pushed

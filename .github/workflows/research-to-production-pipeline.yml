@@ -112,12 +112,26 @@ jobs:
         run: pip install jsonschema pyyaml jinja2 requests
 
       - name: Download Gap Analysis
+        id: download-gap
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: research-gap-analysis-${{ github.run_id }}
           path: .
 
+      - name: Check if gap report exists
+        id: check-gap
+        run: |
+          if [ -f research-gaps-report.json ]; then
+            echo "gap_report_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "gap_report_exists=false" >> $GITHUB_OUTPUT
+            echo "Warning: Gap analysis artifact not found, creating empty report"
+            echo '{"gaps": [], "summary": "No gap analysis available"}' > research-gaps-report.json
+          fi
+
       - name: Generate Deep Research Prompts
+        if: steps.check-gap.outputs.gap_report_exists == 'true' || github.event_name == 'workflow_dispatch'
         id: generate
         env:
           RESEARCH_FOCUS: ${{ github.event.inputs.research_focus || 'all' }}
@@ -197,10 +211,19 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download artifacts
+        id: download-artifacts
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: research-gap-analysis-${{ github.run_id }}
           path: .
+
+      - name: Check if gap report exists
+        run: |
+          if [ ! -f research-gaps-report.json ]; then
+            echo "Warning: Gap analysis artifact not found, creating empty report"
+            echo '{"gaps": [], "summary": "No gap analysis available"}' > research-gaps-report.json
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v4
