@@ -1,0 +1,222 @@
+name: Documentation Agent
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of documentation update'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - diagrams
+          - validate
+          - wiki
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ===========================================================================
+  # DOCUMENTATION AGENT
+  # ===========================================================================
+  documentation-agent:
+    name: Documentation Agent
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install structlog pydantic
+          pip install -r agents/requirements.txt
+      
+      - name: Run Documentation Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          echo "Running Documentation Agent..."
+          python -c "
+          import asyncio
+          from agents.documentation_agent import DocumentationAgent
+          from agents.base_agent import AgentConfig
+          
+          async def main():
+              config = AgentConfig(
+                  name='DocumentationAgent',
+                  description='Auto documentation generator',
+                  system_prompt='Generate and validate documentation'
+              )
+              agent = DocumentationAgent(config)
+              await agent.initialize()
+              
+              update_type = '${{ github.event.inputs.update_type || \"full\" }}'
+              task = {'type': update_type, 'parameters': {'repo_root': '.'}}
+              
+              result = await agent.execute_task(task)
+              print(f'Result: {result}')
+              
+              await agent.shutdown()
+          
+          asyncio.run(main())
+          "
+      
+      - name: Generate Mermaid Diagrams
+        run: |
+          echo "Generating Mermaid diagrams..."
+          mkdir -p docs/diagrams
+          python -c "
+          import asyncio
+          from agents.documentation_agent import DocumentationAgent
+          from agents.base_agent import AgentConfig
+          
+          async def generate_diagrams():
+              config = AgentConfig(
+                  name='DocumentationAgent',
+                  description='Diagram generator',
+                  system_prompt='Generate diagrams'
+              )
+              agent = DocumentationAgent(config)
+              await agent.initialize()
+              
+              result = await agent.execute_task({
+                  'type': 'generate_diagrams',
+                  'parameters': {'repo_root': '.', 'output_dir': 'docs/diagrams'}
+              })
+              print(f'Diagrams: {result}')
+              
+              await agent.shutdown()
+          
+          asyncio.run(generate_diagrams())
+          "
+      
+      - name: Validate Documentation
+        run: |
+          echo "Validating documentation..."
+          python docs/wiki-pipeline/cognitive_linter.py docs/ || echo "::warning::Violations found"
+      
+      - name: Generate Wiki
+        run: |
+          echo "Generating wiki pages..."
+          python docs/wiki-pipeline/generate_wiki.py
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-output
+          path: |
+            docs/diagrams/
+            wiki-output/
+          retention-days: 30
+
+  # ===========================================================================
+  # WIKI SYNC
+  # ===========================================================================
+  wiki-sync:
+    name: Sync Wiki
+    needs: documentation-agent
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-output
+          path: output
+      
+      - name: Push to wiki
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: wiki
+      
+      - name: Update wiki
+        run: |
+          cp -r output/wiki-output/* wiki/ 2>/dev/null || true
+          cd wiki
+          git config user.name "doc-agent[bot]"
+          git config user.email "doc-agent[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "docs: auto-update from ${{ github.sha }}"
+          git push
+        continue-on-error: true
+
+  # ===========================================================================
+  # GITHUB PAGES
+  # ===========================================================================
+  pages:
+    name: Deploy Pages
+    needs: documentation-agent
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-output
+          path: output
+      
+      - name: Build docs site
+        run: |
+          mkdir -p site
+          cp -r docs/* site/ 2>/dev/null || true
+          cp -r output/docs/diagrams site/diagrams 2>/dev/null || true
+          cp README.md site/index.md
+          cat > site/index.html << 'HTML'
+          <!DOCTYPE html>
+          <html><head>
+          <title>q_mini_wasm_v2 Documentation</title>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 1rem; }
+            a { color: #0969da; }
+          </style>
+          </head><body>
+          <h1>q_mini_wasm_v2 Documentation</h1>
+          <p><a href="https://github.com/kennetholsenatm-gif/q_mini_wasm_v2/wiki">GitHub Wiki</a></p>
+          <h2>Diagrams</h2>
+          <ul>
+            <li><a href="diagrams/architecture.md">Architecture</a></li>
+            <li><a href="diagrams/data_flow.md">Data Flow</a></li>
+            <li><a href="diagrams/user_journey.md">User Journey</a></li>
+          </ul>
+          </body></html>
+          HTML
+      
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

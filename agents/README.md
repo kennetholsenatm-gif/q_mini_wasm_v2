@@ -12,6 +12,7 @@ agents/
 +-- analysis_agent.py        # Performance evaluation agent
 +-- code_agent.py            # Code generation agent
 +-- test_agent.py            # Testing agent
++-- documentation_agent.py   # Documentation agent
 +-- improvement_cycle.py     # Cycle orchestrator
 +-- cli.py                   # Command-line interface
 +-- config.json              # Configuration file
@@ -114,6 +115,25 @@ Each agent maintains:
 - **Long-term memory**: Persistent patterns and improvements
 - **Pattern storage**: Identified patterns with confidence scores
 - **Improvement storage**: Applied improvements with impact metrics
+
+
+
+### Documentation Agent
+
+The Documentation Agent automatically generates and maintains documentation:
+
+- **Mermaid Diagrams**: Architecture, data flow, user journey diagrams
+- **Cognitive Ergonomics**: Validates against project standards
+- **Wiki Sync**: Automatically syncs to GitHub Wiki
+- **CI/CD Integration**: Runs with every CI/CD rotation
+
+#### Generated Diagrams
+
+1. System Architecture
+2. Data Flow
+3. User Journey
+4. Component Interaction
+5. Build Pipeline
 
 ## Integration with MCP Servers
 
