@@ -1,7 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <cstring>
-#include \"../dll/q_mini_wasm_v2_api.hpp\"
+#include "../dll/q_mini_wasm_v2_api.hpp"
 
 using namespace std;
 
@@ -10,32 +10,32 @@ using namespace std;
 // ============================================================================
 
 void test_error_handling() {
-    cout << \"Testing Error Handling...\" << endl;
+    cout << "Testing Error Handling..." << endl;
     
     // Test error string function
     const char* error_str = q_mini_wasm_v2_error_string(Q_MINI_WASM_V2_OK);
-    assert(strcmp(error_str, \"Success\") == 0);
+    assert(strcmp(error_str, "Success") == 0);
     
     error_str = q_mini_wasm_v2_error_string(Q_MINI_WASM_V2_ERROR_INVALID_HANDLE);
-    assert(strcmp(error_str, \"Invalid or null handle\") == 0);
+    assert(strcmp(error_str, "Invalid or null handle") == 0);
     
     error_str = q_mini_wasm_v2_error_string(Q_MINI_WASM_V2_ERROR_INVALID_ARGUMENT);
-    assert(strcmp(error_str, \"Invalid argument value\") == 0);
+    assert(strcmp(error_str, "Invalid argument value") == 0);
     
     // Test unknown error code
     error_str = q_mini_wasm_v2_error_string(-100);
-    assert(strcmp(error_str, \"Unknown error\") == 0);
+    assert(strcmp(error_str, "Unknown error") == 0);
     
-    cout << \"  Error handling: PASSED\" << endl;
+    cout << "  Error handling: PASSED" << endl;
 }
 
 void test_version_info() {
-    cout << \"Testing Version Information...\" << endl;
+    cout << "Testing Version Information..." << endl;
     
     // Test version string
     const char* version = q_mini_wasm_v2_version();
     assert(version != nullptr);
-    assert(strcmp(version, \"1.0.0\") == 0);
+    assert(strcmp(version, "1.0.0") == 0);
     
     // Test build info
     const char* build_info = q_mini_wasm_v2_build_info();
@@ -45,13 +45,13 @@ void test_version_info() {
     assert(Q_MINI_WASM_V2_VERSION_MAJOR == 1);
     assert(Q_MINI_WASM_V2_VERSION_MINOR == 0);
     assert(Q_MINI_WASM_V2_VERSION_PATCH == 0);
-    assert(strcmp(Q_MINI_WASM_V2_VERSION_STRING, \"1.0.0\") == 0);
+    assert(strcmp(Q_MINI_WASM_V2_VERSION_STRING, "1.0.0") == 0);
     
-    cout << \"  Version info: PASSED\" << endl;
+    cout << "  Version info: PASSED" << endl;
 }
 
 void test_handle_validation() {
-    cout << \"Testing Handle Validation...\" << endl;
+    cout << "Testing Handle Validation..." << endl;
     
     // Test null handle
     assert(q_mini_wasm_v2_is_valid_handle(nullptr) == 0);
@@ -70,11 +70,11 @@ void test_handle_validation() {
     // Note: This test depends on implementation details
     // The handle pointer might still exist but be removed from internal map
     
-    cout << \"  Handle validation: PASSED\" << endl;
+    cout << "  Handle validation: PASSED" << endl;
 }
 
 void test_error_codes() {
-    cout << \"Testing Error Codes...\" << endl;
+    cout << "Testing Error Codes..." << endl;
     
     // Test with invalid handle
     int result = tableau_apply_hadamard(nullptr, 0);
@@ -94,11 +94,11 @@ void test_error_codes() {
     
     tableau_destroy(tableau);
     
-    cout << \"  Error codes: PASSED\" << endl;
+    cout << "  Error codes: PASSED" << endl;
 }
 
 void test_parameter_validation() {
-    cout << \"Testing Parameter Validation...\" << endl;
+    cout << "Testing Parameter Validation..." << endl;
     
     // Test creating tableau with zero qutrits
     void* tableau = tableau_create(0);
@@ -131,11 +131,11 @@ void test_parameter_validation() {
     learner = ff_learner_create(2, 8, -0.1);
     assert(learner == nullptr);
     
-    cout << \"  Parameter validation: PASSED\" << endl;
+    cout << "  Parameter validation: PASSED" << endl;
 }
 
 void test_null_parameter_handling() {
-    cout << \"Testing Null Parameter Handling...\" << endl;
+    cout << "Testing Null Parameter Handling..." << endl;
     
     // Test tableau functions with null handle
     assert(tableau_is_valid(nullptr) == 0);
@@ -160,7 +160,7 @@ void test_null_parameter_handling() {
     orchestrator_wait_all(nullptr);  // Should not crash
     assert(orchestrator_has_pending(nullptr) == 0);
     
-    cout << \"  Null parameter handling: PASSED\" << endl;
+    cout << "  Null parameter handling: PASSED" << endl;
 }
 
 // ============================================================================
@@ -168,7 +168,7 @@ void test_null_parameter_handling() {
 // ============================================================================
 
 int main() {
-    cout << \"=== q_mini_wasm_v2 DLL API Tests ===\" << endl;
+    cout << "=== q_mini_wasm_v2 DLL API Tests ===" << endl;
     cout << endl;
     
     try {
@@ -180,10 +180,10 @@ int main() {
         test_null_parameter_handling();
         
         cout << endl;
-        cout << \"=== ALL DLL API TESTS PASSED ===\" << endl;
+        cout << "=== ALL DLL API TESTS PASSED ===" << endl;
         return 0;
     } catch (const exception& e) {
-        cerr << \"DLL API test failed with exception: \" << e.what() << endl;
+        cerr << "DLL API test failed with exception: " << e.what() << endl;
         return 1;
     }
 }
