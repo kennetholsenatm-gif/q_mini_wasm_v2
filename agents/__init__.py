@@ -48,3 +48,13 @@ __all__ = [
     "GeminiService",
     "GeminiConfig",
 ]
+
+# Import Kanban Review Fix Agent
+from .kanban_review_fix_agent import KanbanReviewFixAgent, ReviewCard, ReviewStatus, CardAction
+
+__all__.extend([
+    "KanbanReviewFixAgent",
+    "ReviewCard",
+    "ReviewStatus",
+    "CardAction",
+])

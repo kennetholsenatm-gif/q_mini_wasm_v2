@@ -215,6 +215,98 @@ def test_llm(prompt: str, config: Optional[str]):
 
 
 @cli.command()
+@click.option('--action', '-a', default='scan', 
+              type=click.Choice(['scan', 'fix', 'report']),
+              help='Action to perform')
+@click.option('--card-id', '-c', help='Specific card ID to fix')
+@click.option('--config', '-f', help='Path to Kanban configuration file')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+def kanban_review(action: str, card_id: Optional[str], config: Optional[str], verbose: bool):
+    """Fix Kanban boards stuck in Review"""
+    async def _run():
+        try:
+            from .kanban_review_fix_agent import KanbanReviewFixAgent, AgentConfig
+            
+            console.print(Panel.fit(
+                f"[bold blue]Kanban Review Fix Agent - {action.upper()}[/bold blue]",
+                border_style="blue"
+            ))
+            
+            # Create agent config
+            agent_config = AgentConfig(
+                name="KanbanReviewFixAgent",
+                description="Monitors and fixes Kanban boards stuck in Review",
+                system_prompt="You are an agent that monitors Kanban boards and fixes stuck review cards.",
+                tools=["scan_review", "fix_card", "generate_report"]
+            )
+            
+            # Create and initialize agent
+            agent = KanbanReviewFixAgent(
+                agent_config,
+                kanban_config_path=config or "config/kanban-config.json"
+            )
+            await agent.initialize()
+            
+            # Execute action
+            task = {"action": action}
+            if card_id:
+                task["card_id"] = card_id
+            
+            console.print(f"[yellow]Executing {action}...[/yellow]")
+            result = await agent.execute_task(task)
+            
+            # Display results
+            if result.success:
+                console.print(Panel.fit(
+                    "[bold green]Action Completed Successfully[/bold green]",
+                    border_style="green"
+                ))
+                
+                table = Table(title="Results")
+                table.add_column("Metric", style="cyan")
+                table.add_column("Value", style="green")
+                
+                if action == "scan":
+                    table.add_row("Total Review Cards", str(result.data.get("total_review_cards", 0)))
+                    table.add_row("Stuck Cards", str(result.data.get("stuck_cards", 0)))
+                    table.add_row("Cards with Errors", str(result.data.get("error_cards", 0)))
+                    table.add_row("Cards with Issues", str(result.data.get("issue_cards", 0)))
+                elif action == "fix":
+                    table.add_row("Total Stuck", str(result.data.get("total_stuck", 0)))
+                    table.add_row("Fixed", str(result.data.get("fixed_count", 0)))
+                elif action == "report":
+                    summary = result.data.get("summary", {})
+                    table.add_row("Total Cards", str(summary.get("total_review_cards", 0)))
+                    table.add_row("Stuck Cards", str(summary.get("stuck_cards", 0)))
+                    table.add_row("Avg Stuck Hours", f"{summary.get('avg_stuck_hours', 0):.1f}")
+                
+                console.print(table)
+                
+                if verbose and "recommendations" in result.data:
+                    console.print("\n[bold]Recommendations:[/bold]")
+                    for rec in result.data.get("recommendations", []):
+                        console.print(f"  • {rec}")
+            else:
+                console.print(Panel.fit(
+                    "[bold red]Action Failed[/bold red]",
+                    border_style="red"
+                ))
+                for error in result.errors:
+                    console.print(f"[red]  {error}[/red]")
+            
+            await agent.shutdown()
+            
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            if verbose:
+                import traceback
+                console.print(traceback.format_exc())
+            sys.exit(1)
+    
+    asyncio.run(_run())
+
+
+@cli.command()
 @click.option('--output', '-o', default='agents/config.json', help='Output file path')
 def generate_config(output: str):
     """Generate default configuration file"""
