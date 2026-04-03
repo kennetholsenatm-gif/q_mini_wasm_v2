@@ -18,6 +18,9 @@ import diskcache
 import structlog
 from pydantic import BaseModel, Field
 
+# Import environment loader
+from agents.config import env_config, get_env, require_env
+
 logger = structlog.get_logger()
 
 
@@ -89,11 +92,11 @@ class GeminiService:
             from llama_index.llms.google_genai import GoogleGenAI
             from google.genai import types
             
-            # Get API key
-            api_key = os.getenv(self.config.api_key_env)
+            # Get API key using environment loader
+            api_key = env_config.get(self.config.api_key_env)
             if not api_key:
                 raise ValueError(
-                    f"API key not found. Set {self.config.api_key_env} environment variable."
+                    f"API key not found. Set {self.config.api_key_env} environment variable or add it to .env file."
                 )
             
             # Initialize LLM

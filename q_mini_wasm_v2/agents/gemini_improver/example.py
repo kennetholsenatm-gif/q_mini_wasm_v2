@@ -9,6 +9,12 @@ import os
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Import environment loader
+from agents.config import env_config, get_env
+
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -19,10 +25,10 @@ def example_basic_analysis():
     
     from agent import run_analysis
     
-    # Check for API key
-    if not os.getenv("GEMINI_API_KEY"):
+    # Check for API key using environment loader
+    if not env_config.get("GEMINI_API_KEY"):
         print("⚠️  GEMINI_API_KEY not set. Using simulated analysis.")
-        print("Set GEMINI_API_KEY environment variable for real analysis.")
+        print("Set GEMINI_API_KEY environment variable or add it to .env file for real analysis.")
         return
     
     # Analyze the self-learning MCP server

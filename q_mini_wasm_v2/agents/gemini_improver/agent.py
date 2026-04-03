@@ -17,6 +17,9 @@ from typing import Annotated, Sequence, TypedDict
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Import environment loader
+from agents.config import env_config, get_env, require_env
+
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -206,9 +209,10 @@ tools = [analyze_mcp_server, suggest_tool_improvement, evolve_schema]
 
 def init_model():
     """Initialize the Gemini model with tools."""
-    api_key = os.getenv("GEMINI_API_KEY")
+    # Get API key using environment loader
+    api_key = env_config.get("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable not set")
+        raise ValueError("GEMINI_API_KEY environment variable not set or not found in .env file")
     
     # Create LLM - using Gemini Flash for free tier
     llm = ChatGoogleGenerativeAI(
