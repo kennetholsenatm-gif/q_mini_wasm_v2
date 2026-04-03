@@ -1,0 +1,257 @@
+name: Research-to-Production Pipeline with Deep Research Prompt Generation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/research/**'
+      - 'config/research-alignment.json'
+      - 'scripts/generate_deep_research_prompt.py'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'docs/research/**'
+      - 'config/research-alignment.json'
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly on Monday at 9 AM UTC
+  workflow_dispatch:
+    inputs:
+      research_focus:
+        description: 'Specific research focus area (optional)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - quantum_core
+          - ternary_computing
+          - moe_routing
+          - flash_cim
+          - sycl_acceleration
+          - cognitive_ergonomics
+          - forward_forward
+      target_depth:
+        description: 'Research depth level'
+        required: false
+        default: 'comprehensive'
+        type: choice
+        options:
+          - quick
+          - standard
+          - comprehensive
+          - exhaustive
+
+env:
+  PROJECT_ROOT: q_mini_wasm_v2
+  RESEARCH_CONFIG: config/research-alignment.json
+  CORE_CONCEPTS: config/core-concepts.json
+
+jobs:
+  analyze-research-gaps:
+    name: Analyze Research Gaps
+    runs-on: ubuntu-latest
+    outputs:
+      gaps_detected: ${{ steps.analyze.outputs.gaps_detected }}
+      gap_report: ${{ steps.analyze.outputs.gap_report }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install jsonschema pyyaml jinja2
+
+      - name: Analyze Research Coverage
+        id: analyze
+        run: |
+          echo "Analyzing research coverage..."
+          python scripts/analyze_research_coverage.py \
+            --research-dir docs/research \
+            --config ${{ env.RESEARCH_CONFIG }} \
+            --core-concepts ${{ env.CORE_CONCEPTS }} \
+            --output research-gaps-report.json
+          if [ -f research-gaps-report.json ]; then
+            GAPS_COUNT=$(python -c "import json; data=json.load(open('research-gaps-report.json')); print(len(data.get('gaps', [])))")
+            echo "gaps_detected=$GAPS_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "gaps_detected=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Gap Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-gap-analysis-${{ github.run_id }}
+          path: research-gaps-report.json
+          retention-days: 30
+
+  generate-deep-research-prompts:
+    name: Generate Deep Research Prompts
+    runs-on: ubuntu-latest
+    needs: analyze-research-gaps
+    if: needs.analyze-research-gaps.outputs.gaps_detected != '0' || github.event_name == 'workflow_dispatch'
+    outputs:
+      prompts_generated: ${{ steps.generate.outputs.prompts_generated }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install jsonschema pyyaml jinja2 requests
+
+      - name: Download Gap Analysis
+        uses: actions/download-artifact@v4
+        with:
+          name: research-gap-analysis-${{ github.run_id }}
+          path: .
+
+      - name: Generate Deep Research Prompts
+        id: generate
+        env:
+          RESEARCH_FOCUS: ${{ github.event.inputs.research_focus || 'all' }}
+          TARGET_DEPTH: ${{ github.event.inputs.target_depth || 'comprehensive' }}
+        run: |
+          echo "Generating deep research prompts..."
+          python scripts/generate_deep_research_prompt.py \
+            --gap-report research-gaps-report.json \
+            --config ${{ env.RESEARCH_CONFIG }} \
+            --core-concepts ${{ env.CORE_CONCEPTS }} \
+            --focus ${{ env.RESEARCH_FOCUS }} \
+            --depth ${{ env.TARGET_DEPTH }} \
+            --output-dir generated-prompts
+          PROMPT_FILES=$(find generated-prompts -name "*.md" -type f | wc -l)
+          echo "prompts_generated=$PROMPT_FILES" >> $GITHUB_OUTPUT
+
+      - name: Upload Generated Prompts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-research-prompts-${{ github.run_id }}
+          path: generated-prompts/
+          retention-days: 90
+
+  create-human-review-ticket:
+    name: Create Human Review Ticket
+    runs-on: ubuntu-latest
+    needs: generate-deep-research-prompts
+    if: needs.generate-deep-research-prompts.outputs.prompts_generated != '0'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Generated Prompts
+        uses: actions/download-artifact@v4
+        with:
+          name: deep-research-prompts-${{ github.run_id }}
+          path: generated-prompts/
+
+      - name: Create Review Issue
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const promptDir = 'generated-prompts';
+            const promptFiles = fs.readdirSync(promptDir).filter(f => f.endsWith('.md'));
+            let issueBody = `## Deep Research Prompts for Human Review\n\n`;
+            issueBody += `**Generated:** ${new Date().toISOString()}\n`;
+            issueBody += `**Focus:** ${{ github.event.inputs.research_focus || 'all' }}\n\n`;
+            issueBody += `### Human Review Instructions\n\n`;
+            issueBody += `1. Review each generated research prompt\n`;
+            issueBody += `2. Evaluate alignment with core framework concepts\n`;
+            issueBody += `3. Decide which prompts to pass to the deep research AI agent\n\n`;
+            issueBody += `### Decision Checklist\n\n`;
+            issueBody += `- [ ] All core concepts are addressed\n`;
+            issueBody += `- [ ] Research gaps are properly identified\n`;
+            issueBody += `- [ ] No AI ethics concerns included\n`;
+            issueBody += `- [ ] Ready for AI agent consumption\n`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Deep Research Prompts Review - ${new Date().toISOString().split('T')[0]}`,
+              body: issueBody,
+              labels: ['research-review', 'human-in-the-loop', 'automated'],
+              assignees: []
+            });
+
+  update-research-alignment:
+    name: Update Research Alignment
+    runs-on: ubuntu-latest
+    needs: [analyze-research-gaps, generate-deep-research-prompts]
+    if: always() && needs.analyze-research-gaps.outputs.gaps_detected != '0'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: research-gap-analysis-${{ github.run_id }}
+          path: .
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Update Research Alignment
+        run: |
+          python scripts/update_research_alignment.py \
+            --gap-report research-gaps-report.json \
+            --config ${{ env.RESEARCH_CONFIG }} \
+            --output updated-research-alignment.json
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update research alignment based on gap analysis'
+          title: 'Research Alignment Update - Automated'
+          body: |
+            ## Automated Research Alignment Update
+            This PR updates the research alignment configuration based on the latest gap analysis.
+            ### Changes:
+            - Updated research priority matrix
+            - Added newly identified research gaps
+            - Updated core concept coverage metrics
+            ### Human Review Required:
+            Please review the generated research prompts in the linked issue.
+          branch: research/alignment-update-${{ github.run_id }}
+          labels: research,automated
+
+  monitor-and-report:
+    name: Monitor and Report
+    runs-on: ubuntu-latest
+    needs: [analyze-research-gaps, generate-deep-research-prompts, create-human-review-ticket]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate Pipeline Report
+        run: |
+          python scripts/generate_research_pipeline_report.py \
+            --gap-analysis research-gaps-report.json \
+            --prompts-dir generated-prompts \
+            --config ${{ env.RESEARCH_CONFIG }} \
+            --output research-pipeline-report.md
+
+      - name: Upload Pipeline Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-pipeline-report-${{ github.run_id }}
+          path: research-pipeline-report.md
+          retention-days: 90
