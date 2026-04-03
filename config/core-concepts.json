@@ -1,0 +1,142 @@
+{
+  "project": "q_mini_wasm_v2",
+  "version": "1.0.0",
+  "description": "Core concepts definition for the quantum-classical hybrid AI framework",
+  "core_concepts": {
+    "ternary_state_space": {
+      "name": "Ternary State Space",
+      "description": "1.58-bit ternary state space with trit operations {+1, 0, -1}",
+      "key_properties": [
+        "GF(3) arithmetic operations",
+        "99.06% entropy efficiency (5-trit-to-8-bit packing)",
+        "Zero floating-point arithmetic",
+        "Binary Coded Ternary (BCT) encoding"
+      ],
+      "references": [
+        "docs/research/QMINIWASM_ Quantum-Classical Framework Synthesis.md"
+      ]
+    },
+    "gottesman_knill": {
+      "name": "Gottesman-Knill Theorem Application",
+      "description": "Classical simulation of quantum-inspired operations with O(n²) complexity",
+      "key_properties": [
+        "Stabilizer tableau tracking n qutrits",
+        "Clifford gates: H (Hadamard), S (Phase), CSUM (Controlled-SUM)",
+        "No exponential overhead",
+        "Qutrit stabilizer formalism"
+      ],
+      "references": [
+        "docs/research/Enhancing Framework with Clifford Entanglement.md"
+      ]
+    },
+    "tropical_geometry_moe": {
+      "name": "Tropical Geometry MoE Routing",
+      "description": "Max-plus semiring for combinatorial depth in Mixture-of-Experts",
+      "key_properties": [
+        "Tropical addition (max) and multiplication (add)",
+        "Hypersimplex capacity = C(n,k) regions",
+        "Sparsity is expressivity",
+        "Top-K routing with load balancing"
+      ],
+      "references": [
+        "README.md"
+      ]
+    },
+    "forward_forward_learning": {
+      "name": "Forward-Forward Learning",
+      "description": "Teacherless self-supervised learning without backpropagation",
+      "key_properties": [
+        "Local layer-wise learning",
+        "Tropical inner product goodness metric",
+        "Hebbian weight updates",
+        "Gradient-free optimization"
+      ],
+      "references": [
+        "README.md"
+      ]
+    },
+    "flash_cim_integration": {
+      "name": "Flash-CIM Integration",
+      "description": "Compute-in-memory within NAND flash for extreme edge deployment",
+      "key_properties": [
+        "In-situ processing",
+        "Multi-Wordline Sensing",
+        "Analog logic via threshold voltages",
+        "BCT encoding for hardware execution"
+      ],
+      "references": [
+        "README.md"
+      ]
+    },
+    "sycl_acceleration": {
+      "name": "SYCL Multi-Core Acceleration",
+      "description": "Hardware-agnostic GPU/CPU acceleration via SYCL",
+      "key_properties": [
+        "Parallel tableau updates",
+        "Vectorized modulo-3 operations",
+        "Sub-group parallelism",
+        "Distributed 2n×2n matrix operations"
+      ],
+      "references": [
+        "README.md"
+      ]
+    },
+    "cognitive_ergonomics": {
+      "name": "Cognitive Ergonomics WUI Principles",
+      "description": "Research-based WUI design for complex systems",
+      "key_properties": [
+        "Visual Hierarchy (Gestalt principles)",
+        "Progressive Disclosure",
+        "Hick's Law (5-9 visible options)",
+        "Fitts's Law (large interactive targets)",
+        "Miller's Law (7±2 items chunking)",
+        "Flow State preservation"
+      ],
+      "references": [
+        "docs/research/Cognitive Ergonomics Model Protocol Research.md"
+      ]
+    }
+  },
+  "framework_architecture": {
+    "core_modules": [
+      "core/ternary/",
+      "core/stabilizer/",
+      "core/moe/",
+      "core/learning/",
+      "core/ingestion/"
+    ],
+    "acceleration_modules": [
+      "sycl/",
+      "runtime/"
+    ],
+    "integration_modules": [
+      "go/",
+      "dll/",
+      "wui/"
+    ]
+  },
+  "performance_targets": {
+    "stabilizer_tableau_update": {
+      "complexity": "O(n²)",
+      "energy": "<1 pJ/op"
+    },
+    "moe_routing": {
+      "complexity": "O(n·k)",
+      "energy": "<0.5 pJ/op"
+    },
+    "forward_forward_layer": {
+      "complexity": "O(n·m)",
+      "energy": "<0.3 pJ/op"
+    },
+    "trit_pack_unpack": {
+      "complexity": "O(1)",
+      "energy": "<0.1 pJ/op"
+    }
+  },
+  "research_coverage_metrics": {
+    "documentation_completeness": "percentage",
+    "implementation_coverage": "percentage",
+    "test_coverage": "percentage",
+    "performance_validation": "boolean"
+  }
+}
