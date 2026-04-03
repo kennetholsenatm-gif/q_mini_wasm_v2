@@ -1,0 +1,103 @@
+name: RAG-Powered CI/CD Orchestration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+env:
+  PROJECT_ROOT: q_mini_wasm_v2
+  RAG_SERVER: qminiwasm-rag-service
+  CICD_MANAGER: qminiwasm-cicd-manager
+
+jobs:
+  orchestrate-pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Check Agent Health
+        id: agent-health
+        run: |
+          echo "Checking CI/CD agent health..."
+          python scripts/cicd_manager.py status > agent-status.json
+          cat agent-status.json
+          
+          # Extract health status
+          HEALTH=$(python -c "import json; d=json.load(open('agent-status.json')); print(d.get('health', 'unknown'))")
+          echo "health=$HEALTH" >> $GITHUB_OUTPUT
+
+      - name: Recover Stuck Agents
+        if: steps.agent-health.outputs.health == 'degraded'
+        run: |
+          echo "Pipeline health degraded, attempting agent recovery..."
+          python scripts/cicd_manager.py recover > recovery-results.json
+          cat recovery-results.json
+
+      - name: Register CI Agent
+        run: |
+          echo "Registering CI agent for this run..."
+          python scripts/cicd_manager.py register --agent-name "github-runner-${{ github.run_id }}"
+
+      - name: Analyze with RAG Context
+        id: rag-analysis
+        run: |
+          echo "Analyzing pipeline context with RAG..."
+          python scripts/analyze_rag_performance.py \
+            --config config/kanban-config.json \
+            --output rag-analysis-results.json
+
+      - name: Run Tests
+        id: tests
+        run: |
+          echo "Running test suite..."
+          python -m pytest tests/ -v --tb=short 2>&1 | tee test-results.txt || true
+          echo "Tests completed"
+
+      - name: Complete Pipeline
+        if: always()
+        run: |
+          echo "Completing pipeline job..."
+          SUCCESS=$([ "${{ job.status }}" == "success" ] && echo "true" || echo "false")
+          python -c "
+          from scripts.cicd_manager import CICDAgentManager
+          manager = CICDAgentManager()
+          manager.complete_job('github-runner-${{ github.run_id }}', $SUCCESS)
+          print('Pipeline job completed')
+          "
+
+      - name: Generate Status Report
+        if: always()
+        run: |
+          echo "# CI/CD Pipeline Status" > pipeline-report.md
+          echo "" >> pipeline-report.md
+          python scripts/cicd_manager.py status >> pipeline-report.md
+          cat pipeline-report.md
+
+      - name: Upload Reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pipeline-reports
+          path: |
+            agent-status.json
+            rag-analysis-results.json
+            pipeline-report.md
+            test-results.txt

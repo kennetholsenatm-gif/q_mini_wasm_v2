@@ -1,0 +1,77 @@
+{
+  "name": "qminiwasm-cicd-manager",
+  "description": "CI/CD Agent Manager - Orchestrates and monitors CI/CD pipeline agents",
+  "command": "python",
+  "args": ["scripts/cicd_manager.py"],
+  "tools": [
+    {
+      "name": "cicd_agent_status",
+      "description": "Get CI/CD agent status and pipeline health",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_jobs": {
+            "type": "boolean",
+            "description": "Include job details",
+            "default": true
+          }
+        }
+      }
+    },
+    {
+      "name": "cicd_register_agent",
+      "description": "Register a new CI/CD agent",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Name of the agent"
+          }
+        },
+        "required": ["agent_name"]
+      }
+    },
+    {
+      "name": "cicd_recover_agents",
+      "description": "Detect and recover stuck agents",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "timeout_minutes": {
+            "type": "integer",
+            "default": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "cicd_assign_job",
+      "description": "Assign a job to an available agent",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "job_id": {"type": "string"},
+          "workflow_name": {"type": "string"},
+          "stage": {
+            "type": "string",
+            "enum": ["checkout", "build", "test", "analysis", "deploy"]
+          }
+        },
+        "required": ["job_id", "workflow_name", "stage"]
+      }
+    },
+    {
+      "name": "cicd_complete_job",
+      "description": "Mark a job as complete",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "job_id": {"type": "string"},
+          "success": {"type": "boolean"}
+        },
+        "required": ["job_id", "success"]
+      }
+    }
+  ]
+}
