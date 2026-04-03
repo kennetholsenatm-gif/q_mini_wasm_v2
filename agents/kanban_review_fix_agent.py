@@ -268,7 +268,9 @@ class KanbanReviewFixAgent(BaseAgent):
         hooks_path = Path("config/autolearn-hooks.json")
         if hooks_path.exists():
             try:
-                hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+                # Handle BOM (Byte Order Mark) in JSON files
+                hooks_content = hooks_path.read_text(encoding="utf-8-sig")
+                hooks = json.loads(hooks_content)
                 # In a real implementation, we'd query the Kanban API
                 # For now, create sample cards based on config
                 pass
@@ -517,6 +519,18 @@ class KanbanReviewFixAgent(BaseAgent):
                 encoding="utf-8"
             )
             
+            # Update the original card's status in the rejected-improvements.json
+            for imp in rejected.get("rejected_improvements", []):
+                if imp.get("id") == card.id:
+                    imp["status"] = "rejected"
+                    break
+            
+            # Save again with updated status
+            rejected_path.write_text(
+                json.dumps(rejected, indent=2, ensure_ascii=False),
+                encoding="utf-8"
+            )
+            
             return ReviewFixResult(
                 card_id=card.id,
                 action_taken=CardAction.MOVE_TO_REJECTED,
@@ -587,6 +601,22 @@ class KanbanReviewFixAgent(BaseAgent):
             self.logger.info("Fix card created",
                            fix_card_id=fix_card["id"],
                            parent_card=card.id)
+            
+            # Update the original card's status to indicate fix card was created
+            rejected_path = Path("config/rejected-improvements.json")
+            if rejected_path.exists():
+                try:
+                    rejected = json.loads(rejected_path.read_text(encoding="utf-8"))
+                    for imp in rejected.get("rejected_improvements", []):
+                        if imp.get("id") == card.id:
+                            imp["status"] = "fix_card_created"
+                            break
+                    rejected_path.write_text(
+                        json.dumps(rejected, indent=2, ensure_ascii=False),
+                        encoding="utf-8"
+                    )
+                except Exception as e:
+                    self.logger.error("Failed to update card status", error=str(e))
             
             return ReviewFixResult(
                 card_id=card.id,

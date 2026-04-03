@@ -105,6 +105,30 @@
       "error_cards": 2,
       "issue_cards": 2,
       "timestamp": "2026-04-02T18:56:32.056332"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 2,
+      "issue_cards": 2,
+      "timestamp": "2026-04-02T19:03:29.308499"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 4,
+      "stuck_cards": 4,
+      "error_cards": 2,
+      "issue_cards": 2,
+      "timestamp": "2026-04-02T19:03:36.623846"
+    },
+    {
+      "type": "kanban_review_scan",
+      "total_cards": 1,
+      "stuck_cards": 1,
+      "error_cards": 0,
+      "issue_cards": 1,
+      "timestamp": "2026-04-02T19:03:51.862118"
     }
   ],
   "improvements": [
@@ -203,6 +227,38 @@
       "success": true,
       "message": "Created fix card fix_review_004 for issues in review_004",
       "timestamp": "2026-04-02T18:56:22.919283"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_001",
+      "action": "create_fix_card",
+      "success": true,
+      "message": "Created fix card fix_review_001 for issues in review_001",
+      "timestamp": "2026-04-02T19:03:36.624780"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_002",
+      "action": "auto_fix",
+      "success": true,
+      "message": "Auto-fixed 2 issues in review_002",
+      "timestamp": "2026-04-02T19:03:36.624891"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_003",
+      "action": "move_to_rejected",
+      "success": true,
+      "message": "Card review_003 moved to rejected due to blocking errors",
+      "timestamp": "2026-04-02T19:03:36.649786"
+    },
+    {
+      "type": "kanban_review_fix",
+      "card_id": "review_004",
+      "action": "create_fix_card",
+      "success": true,
+      "message": "Created fix card fix_review_004 for issues in review_004",
+      "timestamp": "2026-04-02T19:03:36.670112"
     }
   ]
 }

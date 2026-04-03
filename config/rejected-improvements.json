@@ -79,7 +79,7 @@
         "potential_value": "high"
       },
       "notes": "Ready for review but stuck due to missing performance benchmarks",
-      "status": "pending_review",
+      "status": "fix_card_created",
       "review_date": null,
       "reconsideration_criteria": [],
       "errors": [
@@ -130,7 +130,7 @@
         "potential_value": "high"
       },
       "notes": "Blocked by dependency on quantum_core optimization",
-      "status": "pending_review",
+      "status": "rejected",
       "review_date": null,
       "reconsideration_criteria": [],
       "errors": [
@@ -155,7 +155,7 @@
         "potential_value": "medium"
       },
       "notes": "Simple update but waiting for review",
-      "status": "pending_review",
+      "status": "fix_card_created",
       "review_date": null,
       "reconsideration_criteria": [],
       "errors": [],
@@ -192,6 +192,27 @@
       "module": "rag_service",
       "description": "Add caching layer for RAG service queries",
       "rejected_at": "2026-04-02T18:56:22.916726",
+      "rejection_reasons": [
+        "stuck_in_review",
+        "blocking_errors"
+      ],
+      "feasibility_assessment": {
+        "technical_complexity": "high",
+        "resource_requirements": "significant",
+        "alignment_score": "low",
+        "potential_value": "low"
+      },
+      "notes": "Auto-rejected by KanbanReviewFixAgent. Errors: Critical: Memory leak detected in cache invalidation",
+      "status": "rejected",
+      "review_date": null,
+      "reconsideration_criteria": []
+    },
+    {
+      "id": "rejected_010",
+      "name": "Implement RAG Caching",
+      "module": "rag_service",
+      "description": "Add caching layer for RAG service queries",
+      "rejected_at": "2026-04-02T19:03:36.646624",
       "rejection_reasons": [
         "stuck_in_review",
         "blocking_errors"
