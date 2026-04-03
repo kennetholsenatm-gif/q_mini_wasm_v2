@@ -334,3 +334,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+# Agent memory (runtime state)
+agents/memory/
