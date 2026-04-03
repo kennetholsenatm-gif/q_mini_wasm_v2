@@ -61,6 +61,9 @@ set(DLL_SOURCES
 # ============================================================================
 
 add_library(q_mini_wasm_v2_core
+    ${CORE_SOURCES}
+    ${RUNTIME_SOURCES}
+)
     \
     \
 )
