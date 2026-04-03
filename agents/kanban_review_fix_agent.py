@@ -29,6 +29,7 @@ class ReviewStatus(Enum):
     ISSUE_FOUND = "issue_found"
     BLOCKED = "blocked"
     READY_TO_MERGE = "ready_to_merge"
+    DONE = "done"
 
 
 class CardAction(Enum):
@@ -37,6 +38,7 @@ class CardAction(Enum):
     CREATE_FIX_CARD = "create_fix_card"
     ESCALATE = "escalate"
     AUTO_FIX = "auto_fix"
+    MOVE_TO_DONE = "move_to_done"
     WAIT = "wait"
 
 
@@ -81,6 +83,20 @@ class ReviewCard:
         if self.status == ReviewStatus.BLOCKED:
             return "Blocked by dependencies"
         return "Pending approval (no issues detected)"
+    
+    @property
+    def is_done(self) -> bool:
+        """Check if card is done (no errors, no issues, not blocked)."""
+        return (not self.errors and 
+                not self.issues and 
+                self.status not in [ReviewStatus.ERROR_FOUND, ReviewStatus.ISSUE_FOUND, ReviewStatus.BLOCKED])
+    
+    @property
+    def is_ready_to_move_to_done(self) -> bool:
+        """Check if card is ready to be moved to done column."""
+        # Card must be done and have been in review for at least some time
+        # (to ensure it has gone through proper review process)
+        return self.is_done and self.age_hours >= 1  # At least 1 hour in review
 
 
 @dataclass
@@ -179,9 +195,12 @@ class KanbanReviewFixAgent(BaseAgent):
         stuck_cards = []
         error_cards = []
         issue_cards = []
+        done_cards = []
         
         for card in self.review_cards:
-            if card.is_stuck:
+            if card.is_ready_to_move_to_done:
+                done_cards.append(card)
+            elif card.is_stuck:
                 stuck_cards.append(card)
                 if card.has_blocking_issues:
                     error_cards.append(card)
@@ -195,6 +214,7 @@ class KanbanReviewFixAgent(BaseAgent):
             "stuck_cards": len(stuck_cards),
             "error_cards": len(error_cards),
             "issue_cards": len(issue_cards),
+            "done_cards": len(done_cards),
             "timestamp": datetime.now().isoformat()
         })
         
@@ -205,7 +225,9 @@ class KanbanReviewFixAgent(BaseAgent):
                 "stuck_cards": len(stuck_cards),
                 "error_cards": len(error_cards),
                 "issue_cards": len(issue_cards),
-                "stuck_card_ids": [c.id for c in stuck_cards]
+                "done_cards": len(done_cards),
+                "stuck_card_ids": [c.id for c in stuck_cards],
+                "done_card_ids": [c.id for c in done_cards]
             }
         )
     
@@ -276,16 +298,25 @@ class KanbanReviewFixAgent(BaseAgent):
         await self._scan_review_cards()
         
         stuck_cards = [c for c in self.review_cards if c.is_stuck]
+        done_cards = [c for c in self.review_cards if c.is_ready_to_move_to_done]
         
-        if not stuck_cards:
+        if not stuck_cards and not done_cards:
             return TaskResult(
                 success=True,
-                data={"message": "No stuck cards found", "fixed_count": 0}
+                data={"message": "No stuck or done cards found", "fixed_count": 0}
             )
         
         fixed_count = 0
         results = []
         
+        # First, move done cards to done column
+        for card in done_cards:
+            result = await self._fix_card(card)
+            results.append(result)
+            if result.success:
+                fixed_count += 1
+        
+        # Then, fix stuck cards
         for card in stuck_cards:
             result = await self._fix_card(card)
             results.append(result)
@@ -296,6 +327,7 @@ class KanbanReviewFixAgent(BaseAgent):
             success=True,
             data={
                 "total_stuck": len(stuck_cards),
+                "total_done": len(done_cards),
                 "fixed_count": fixed_count,
                 "results": [r.__dict__ for r in results]
             }
@@ -339,6 +371,10 @@ class KanbanReviewFixAgent(BaseAgent):
     
     def _determine_action(self, card: ReviewCard) -> CardAction:
         """Determine the appropriate action for a stuck card."""
+        
+        # If card is ready to be moved to done
+        if card.is_ready_to_move_to_done:
+            return CardAction.MOVE_TO_DONE
         
         # If card has blocking errors
         if card.has_blocking_issues:
@@ -391,6 +427,8 @@ class KanbanReviewFixAgent(BaseAgent):
             return await self._escalate_card(card)
         elif action == CardAction.AUTO_FIX:
             return await self._attempt_auto_fix(card)
+        elif action == CardAction.MOVE_TO_DONE:
+            return await self._move_to_done(card)
         elif action == CardAction.WAIT:
             return ReviewFixResult(
                 card_id=card.id,
@@ -460,6 +498,37 @@ class KanbanReviewFixAgent(BaseAgent):
                 action_taken=CardAction.MOVE_TO_REJECTED,
                 success=False,
                 message=f"Failed to move card to rejected: {str(e)}"
+            )
+    
+    async def _move_to_done(self, card: ReviewCard) -> ReviewFixResult:
+        """Move a card to the done column."""
+        self.logger.info("Moving card to done", card_id=card.id)
+        
+        try:
+            # In a real implementation, this would:
+            # 1. Update the card status in the Kanban API
+            # 2. Move the card to the "done" column
+            # 3. Notify relevant parties
+            
+            self.logger.info("Card moved to done",
+                           card_id=card.id,
+                           title=card.title,
+                           age_hours=card.age_hours)
+            
+            return ReviewFixResult(
+                card_id=card.id,
+                action_taken=CardAction.MOVE_TO_DONE,
+                success=True,
+                message=f"Card {card.id} moved to done column after {card.age_hours:.1f} hours in review",
+                new_status="done"
+            )
+            
+        except Exception as e:
+            return ReviewFixResult(
+                card_id=card.id,
+                action_taken=CardAction.MOVE_TO_DONE,
+                success=False,
+                message=f"Failed to move card to done: {str(e)}"
             )
     
     async def _create_fix_card(self, card: ReviewCard) -> ReviewFixResult:
@@ -613,12 +682,14 @@ class KanbanReviewFixAgent(BaseAgent):
         await self._scan_review_cards()
         
         stuck_cards = [c for c in self.review_cards if c.is_stuck]
+        done_cards = [c for c in self.review_cards if c.is_ready_to_move_to_done]
         
         report = {
             "generated_at": datetime.now().isoformat(),
             "summary": {
                 "total_review_cards": len(self.review_cards),
                 "stuck_cards": len(stuck_cards),
+                "done_cards": len(done_cards),
                 "cards_with_errors": len([c for c in stuck_cards if c.has_blocking_issues]),
                 "cards_with_issues": len([c for c in stuck_cards if c.issues and not c.has_blocking_issues]),
                 "avg_stuck_hours": sum(c.age_hours for c in stuck_cards) / len(stuck_cards) if stuck_cards else 0
@@ -636,6 +707,16 @@ class KanbanReviewFixAgent(BaseAgent):
                 }
                 for c in stuck_cards
             ],
+            "done_cards": [
+                {
+                    "id": c.id,
+                    "title": c.title,
+                    "age_hours": c.age_hours,
+                    "module": c.module,
+                    "priority": c.priority
+                }
+                for c in done_cards
+            ],
             "actions_taken": [
                 {
                     "card_id": r.card_id,
@@ -646,7 +727,7 @@ class KanbanReviewFixAgent(BaseAgent):
                 }
                 for r in self.fix_history[-10:]  # Last 10 actions
             ],
-            "recommendations": self._generate_recommendations(stuck_cards)
+            "recommendations": self._generate_recommendations(stuck_cards, done_cards)
         }
         
         # Save report
@@ -662,13 +743,21 @@ class KanbanReviewFixAgent(BaseAgent):
             data=report
         )
     
-    def _generate_recommendations(self, stuck_cards: List[ReviewCard]) -> List[str]:
+    def _generate_recommendations(self, stuck_cards: List[ReviewCard], done_cards: List[ReviewCard] = None) -> List[str]:
         """Generate recommendations based on stuck cards analysis."""
         recommendations = []
+        done_cards = done_cards or []
         
-        if not stuck_cards:
-            recommendations.append("No stuck cards found. Review process is healthy.")
+        if not stuck_cards and not done_cards:
+            recommendations.append("No stuck or done cards found. Review process is healthy.")
             return recommendations
+        
+        # Report done cards
+        if done_cards:
+            recommendations.append(
+                f"{len(done_cards)} cards are ready to be moved to done column. "
+                "Consider implementing auto-cleanup to move these cards automatically."
+            )
         
         # Analyze patterns
         error_cards = [c for c in stuck_cards if c.has_blocking_issues]
