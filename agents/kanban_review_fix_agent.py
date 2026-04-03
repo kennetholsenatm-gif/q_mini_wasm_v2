@@ -18,6 +18,7 @@ from enum import Enum
 import structlog
 
 from .base_agent import BaseAgent, AgentConfig, TaskResult, AgentState
+from .llm.message_validator import LLMMessageValidator, validate_and_fix_messages
 
 logger = structlog.get_logger()
 
@@ -818,6 +819,103 @@ class KanbanReviewFixAgent(BaseAgent):
             "patterns_stored": len(self.memory.patterns)
         }
     
+    async def handle_llm_api_error(self, error_message: str) -> ReviewFixResult:
+        """
+        Handle LLM API errors, particularly the OpenRouter streaming error.
+        
+        This method specifically addresses the error:
+        "messages[32] assistant must provide content or tool_calls"
+        
+        Args:
+            error_message: The error message from the LLM API
+            
+        Returns:
+            ReviewFixResult with the fix action taken
+        """
+        self.logger.info("Handling LLM API error", error=error_message[:200])
+        
+        try:
+            # Parse the error message
+            validator = LLMMessageValidator(provider="openrouter")
+            error_info = validator.extract_error_info(error_message)
+            
+            if error_info["is_fixable"]:
+                # Create a fix card for the LLM API error
+                fix_card = {
+                    "id": f"llm_error_fix_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    "title": f"Fix LLM API Error: {error_info['error_type']}",
+                    "description": f"LLM API Error Details:\n"
+                                  f"- Error Type: {error_info['error_type']}\n"
+                                  f"- Message Index: {error_info.get('message_index', 'Unknown')}\n"
+                                  f"- Provider: {error_info['provider']}\n"
+                                  f"- Original Error: {error_message[:500]}...\n\n"
+                                  f"Solution: Ensure all assistant messages have either 'content' or 'tool_calls'.\n"
+                                  f"Use the LLMMessageValidator to validate and fix messages before sending to API.",
+                    "created_at": datetime.now().isoformat(),
+                    "status": "detected",
+                    "priority": "high",
+                    "module": "llm_integration",
+                    "fix_type": "automatic",
+                    "solution": "Add message validation before LLM API calls"
+                }
+                
+                # Log the fix
+                self.logger.info("Created fix card for LLM API error",
+                               fix_card_id=fix_card["id"],
+                               error_type=error_info["error_type"])
+                
+                return ReviewFixResult(
+                    card_id=fix_card["id"],
+                    action_taken=CardAction.CREATE_FIX_CARD,
+                    success=True,
+                    message=f"Created fix card for LLM API error: {error_info['error_type']}. "
+                           f"Solution: Add message validation to ensure assistant messages have content or tool_calls.",
+                    new_status="fix_created"
+                )
+            else:
+                # Error is not fixable automatically
+                return ReviewFixResult(
+                    card_id="llm_error",
+                    action_taken=CardAction.ESCALATE,
+                    success=False,
+                    message=f"LLM API error is not automatically fixable: {error_message[:200]}"
+                )
+                
+        except Exception as e:
+            self.logger.error("Failed to handle LLM API error", error=str(e))
+            return ReviewFixResult(
+                card_id="llm_error",
+                action_taken=CardAction.ESCALATE,
+                success=False,
+                message=f"Failed to handle LLM API error: {str(e)}"
+            )
+    
+    def validate_llm_messages(self, messages: List[Dict[str, Any]]) -> Tuple[bool, List[Dict[str, Any]]]:
+        """
+        Validate LLM messages before sending to API.
+        
+        This prevents the "messages[X] assistant must provide content or tool_calls" error.
+        
+        Args:
+            messages: List of message dictionaries
+            
+        Returns:
+            Tuple of (is_valid, fixed_messages)
+        """
+        try:
+            is_valid, fixed_messages, errors = validate_and_fix_messages(messages, provider="openrouter")
+            
+            if not is_valid:
+                self.logger.warning("LLM messages validation failed",
+                                  errors=errors,
+                                  message_count=len(messages))
+            
+            return is_valid, fixed_messages
+            
+        except Exception as e:
+            self.logger.error("Failed to validate LLM messages", error=str(e))
+            return False, messages
+    
     async def suggest_improvements(self) -> List[Dict[str, Any]]:
         """Suggest improvements based on analysis."""
         improvements = []
@@ -841,6 +939,14 @@ class KanbanReviewFixAgent(BaseAgent):
                 "priority": "medium",
                 "estimated_impact": "Reduce manual fixes by 20%"
             })
+        
+        # Add LLM error handling improvement
+        improvements.append({
+            "type": "llm_error_handling",
+            "description": "Add validation for LLM API messages to prevent streaming errors",
+            "priority": "high",
+            "estimated_impact": "Prevent 100% of 'assistant must provide content or tool_calls' errors"
+        })
         
         return improvements
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 q_mini_wasm_v2 Auto-Improvement Agent System
 
 This module provides an auto-improvement cycle for agents using Gemini API
@@ -36,7 +36,11 @@ from .research_agent import ResearchAgent
 from .improvement_cycle import ImprovementCycle
 
 # Import LLM module
-from .llm import GeminiService, GeminiConfig
+from .llm import (
+    GeminiService, GeminiConfig, 
+    LLMMessageValidator, ValidationResult,
+    validate_and_fix_messages, create_safe_assistant_message
+)
 
 __all__ = [
     "BaseAgent",
@@ -47,6 +51,10 @@ __all__ = [
     "ImprovementCycle",
     "GeminiService",
     "GeminiConfig",
+    "LLMMessageValidator",
+    "ValidationResult",
+    "validate_and_fix_messages",
+    "create_safe_assistant_message",
 ]
 
 # Import Kanban Review Fix Agent
