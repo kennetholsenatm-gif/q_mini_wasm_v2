@@ -1,0 +1,223 @@
+# Cline Configuration for q_mini_wasm_v2
+# Data format priority: gRPC > TOML > JSON
+
+[project]
+name = "q_mini_wasm_v2"
+version = "1.0.0"
+description = "AI Coding Assistant Configuration for Cline"
+
+[cline_behavior_rules.tool_usage]
+one_tool_per_message = true
+wait_for_confirmation = true
+use_replace_in_file_for_edits = "prefer_over_write_to_file"
+use_write_to_file_for_new_files = true
+never_assume_tool_success = true
+
+[cline_behavior_rules.communication]
+be_direct_and_technical = true
+use_task_progress_parameter = true
+end_with_attempt_completion = true
+never_end_with_questions = true
+no_conversational_openers = ["Great", "Certainly", "Okay", "Sure"]
+
+[cline_behavior_rules.file_editing]
+prefer_replace_in_file = true
+use_write_to_file_for_large_changes = true
+include_complete_lines_in_search_blocks = true
+list_search_replace_blocks_in_order = true
+wait_for_auto_formatting = true
+
+[cline_behavior_rules.error_handling]
+verify_before_proceeding = true
+check_exit_status = true
+run_follow_up_checks = true
+never_assume_success_without_confirmation = true
+
+[cline_behavior_rules.language_selection]
+never_default_to_python = true
+consider_project_context = true
+available_languages = ["cpp", "go", "python", "javascript", "wasm"]
+
+[cline_behavior_rules.language_selection.selection_criteria]
+performance_critical = "cpp"
+concurrent_services = "go"
+web_assembly = "wasm"
+web_ui = "javascript"
+scripting_automation = "python"
+
+[coding_standards.cpp]
+standard = "C++17"
+
+[coding_standards.cpp.compiler_requirements]
+gcc = ">=7"
+clang = ">=5"
+msvc = ">=2017"
+
+[coding_standards.cpp.style]
+naming_convention = "snake_case"
+header_guard = "pragma_once"
+indentation = "4_spaces"
+line_length = 120
+brace_style = "allman"
+
+[coding_standards.cpp.quantum_specific.trit_operations]
+allowed_values = [-1, 0, 1]
+arithmetic_field = "GF(3)"
+modulo_operations = "mandatory_for_all_trit_arithmetic"
+no_floating_point = true
+
+[coding_standards.cpp.quantum_specific.tableau_operations]
+complexity_bound = "O(n^2)"
+must_track_inverse_stability = true
+gottesman_knill_compliance = true
+
+[coding_standards.cpp.quantum_specific.stabilizer_rules]
+validate_clifford_gates = ["CSUM", "Hadamard", "Phase", "Pauli"]
+preserve_stabilizer_formalism = true
+check_entanglement_entropy = true
+
+[coding_standards.go]
+version = ">=1.26"
+error_handling = "explicit_error_returns"
+concurrency = "goroutines_and_channels"
+
+[coding_standards.go.modules]
+naming = "github.com/q_mini_wasm_v2/*"
+cgo_bindings = "required_for_qutrit_engine"
+
+[coding_standards.python]
+version = ">=3.10"
+
+[coding_standards.python.style]
+naming_convention = "snake_case"
+indentation = "4_spaces"
+line_length = 100
+type_hints = "required_for_public_functions"
+
+[coding_standards.python.packaging]
+format = "pyproject.toml"
+virtual_env = "required"
+
+[coding_standards.wasm]
+target = "emscripten"
+memory_management = "dynamic_growth"
+max_memory = "4GB"
+threading = "pthreads"
+
+[coding_standards.javascript]
+version = "ES2022+"
+
+[coding_standards.javascript.style]
+naming_convention = "camelCase"
+indentation = "2_spaces"
+semicolons = "required"
+quotes = "single"
+
+[documentation_rules]
+cognitive_ergonomics_compliance = true
+api_documentation = "auto_generated_from_headers"
+research_references = "required_for_quantum_algorithms"
+visual_hierarchy = "gestalt_principles"
+
+[documentation_rules.cline_documentation]
+explain_changes = "required"
+include_context = true
+reference_file_paths = true
+
+[architecture_rules.module_separation]
+core = "pure_cpp_quantum_operations"
+runtime = "async_orchestration"
+sycl = "gpu_acceleration_optional"
+dll = "api_exports_and_bindings"
+go = "gateway_and_services"
+wui = "visualization_interface"
+
+[architecture_rules.dependency_rules]
+core_must_be_self_contained = true
+no_circular_dependencies = true
+quantum_logic_isolation = "strict"
+
+[testing_rules.coverage_requirements]
+unit_tests = ">=80%"
+integration_tests = "required"
+quantum_correctness_tests = "mandatory"
+
+testing_test_categories = [
+  "trit_operations",
+  "gf3_arithmetic",
+  "stabilizer_correctness",
+  "clifford_gate_verification",
+  "moe_routing_validation",
+  "forward_forward_learning",
+  "sycl_kernels"
+]
+
+[testing_rules.cline_testing]
+run_existing_tests_before_completion = true
+prefer_existing_test_suite = true
+update_test_assertions_only_when_explicitly_requested = true
+
+[security_rules]
+memory_safety = "bounds_checking_required"
+input_validation = "strict_for_all_external_inputs"
+quantum_state_isolation = "prevent_classical_contamination"
+
+[security_rules.cline_security]
+never_include_harmful_instructions = true
+validate_command_arguments = true
+escape_untrusted_input = true
+
+[mcp_integration_rules.server_management]
+check_server_availability = true
+handle_connection_errors_gracefully = true
+use_appropriate_server_for_task = true
+
+[mcp_integration_rules.tool_selection]
+prefer_domain_specific_servers = true
+fall_back_to_general_tools = true
+combine_multiple_servers_when_needed = true
+
+[data_format_rules]
+default_protocol = "grpc"
+format_priority = ["grpc", "toml", "json"]
+
+[data_format_rules.grpc_rules]
+prefer_grpc = true
+never_use_grpc_for = ["configuration_files", "static_data", "human_readable_formats"]
+
+data_format_grpc_use_for = [
+  "inter_service_communication",
+  "real_time_data_streams",
+  "high_performance_apis",
+  "binary_data_transfer",
+  "streaming_responses",
+  "service_mesh_integration"
+]
+
+[data_format_rules.toml_rules]
+prefer_toml = true
+never_use_toml_for = ["real_time_data_streams", "high_performance_apis"]
+
+data_format_toml_use_for = [
+  "configuration_files",
+  "static_data",
+  "human_readable_formats",
+  "key_value_pairs",
+  "nested_structures"
+]
+
+[data_format_rules.json_rules]
+avoid_json = true
+
+data_format_json_only_use_when = [
+  "external_api_compatibility",
+  "browser_requirements",
+  "legacy_system_integration",
+  "third_party_requirements"
+]
+
+data_format_json_never_use_for = [
+  "internal_configuration",
+  "inter_service_communication",
+  "new_features"
+]

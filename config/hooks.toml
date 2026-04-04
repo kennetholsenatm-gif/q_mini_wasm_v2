@@ -1,0 +1,309 @@
+# Cline Hooks Configuration
+# Data format priority: gRPC > TOML > JSON
+
+[project]
+name = "q_mini_wasm_v2"
+
+# ============================================================================
+# CLINE HOOKS
+# ============================================================================
+
+[cline_hooks.pre_tool_use]
+description = "Validation before Cline uses any tool"
+enabled = true
+
+[[cline_hooks.pre_tool_use.checks]]
+name = "validate_tool_parameters"
+description = "Ensure all required parameters are present or can be inferred"
+required = true
+
+[[cline_hooks.pre_tool_use.checks]]
+name = "check_file_existence"
+description = "Verify file exists before read_file or replace_in_file operations"
+required = true
+
+[[cline_hooks.pre_tool_use.checks]]
+name = "validate_command_safety"
+description = "Ensure execute_command does not contain harmful instructions"
+required = true
+
+[[cline_hooks.pre_tool_use.checks]]
+name = "check_working_directory"
+description = "Verify operations stay within working directory"
+required = true
+
+[cline_hooks.post_tool_use]
+description = "Validation after Cline uses a tool"
+enabled = true
+
+[[cline_hooks.post_tool_use.checks]]
+name = "verify_success"
+description = "Confirm tool execution succeeded before proceeding"
+required = true
+
+[[cline_hooks.post_tool_use.checks]]
+name = "check_linter_errors"
+description = "Scan for linter errors introduced by changes"
+required = true
+
+[[cline_hooks.post_tool_use.checks]]
+name = "update_task_progress"
+description = "Update task progress checklist after each step"
+required = false
+
+[cline_hooks.pre_edit]
+description = "Validation before file editing operations"
+enabled = true
+
+[[cline_hooks.pre_edit.checks]]
+name = "read_file_first"
+description = "Ensure file has been read before attempting edits"
+required = true
+
+[[cline_hooks.pre_edit.checks]]
+name = "validate_search_block"
+description = "Verify SEARCH block matches existing file content exactly"
+required = true
+
+[[cline_hooks.pre_edit.checks]]
+name = "use_replace_for_small_changes"
+description = "Recommend replace_in_file for targeted edits"
+required = false
+
+[cline_hooks.post_edit]
+description = "Actions after file editing operations"
+enabled = true
+
+[[cline_hooks.post_edit.actions]]
+name = "wait_for_auto_format"
+description = "Wait for editor auto-formatting to complete"
+required = true
+
+[[cline_hooks.post_edit.actions]]
+name = "update_references"
+description = "Check if other files need updating due to changes"
+required = false
+
+[[cline_hooks.post_edit.actions]]
+name = "run_relevant_tests"
+description = "Execute tests related to changed code"
+required = false
+
+[cline_hooks.pre_completion]
+description = "Checks before Cline declares task complete"
+enabled = true
+
+[[cline_hooks.pre_completion.checks]]
+name = "verify_required_files_exist"
+description = "Confirm all required output files were created"
+required = true
+
+[[cline_hooks.pre_completion.checks]]
+name = "run_test_suite"
+description = "Execute existing test suite to verify changes"
+required = true
+
+[[cline_hooks.pre_completion.checks]]
+name = "check_task_requirements"
+description = "Verify all task requirements have been met"
+required = true
+
+# ============================================================================
+# GIT HOOKS
+# ============================================================================
+
+[git_hooks.pre_commit]
+description = "Pre-commit validation for code quality"
+enabled = true
+
+[[git_hooks.pre_commit.checks]]
+name = "clang_format"
+description = "Check C++ code formatting"
+required = true
+
+[git_hooks.pre_commit.checks.commands]
+unix = "find q_mini_wasm_v2 -name \"*.hpp\" -o -name \"*.cpp\" | xargs clang-format --dry-run --Werror"
+powershell = "Get-ChildItem -Path q_mini_wasm_v2 -Recurse -Include *.hpp,*.cpp | ForEach-Object { clang-format --dry-run --Werror $_.FullName }"
+
+[[git_hooks.pre_commit.checks]]
+name = "trit_operation_validation"
+command = "python scripts/validate_trit_ops.py"
+description = "Validate all trit operations use GF(3) arithmetic"
+required = true
+
+[[git_hooks.pre_commit.checks]]
+name = "quantum_imports_check"
+description = "Ensure no floating-point math in quantum core"
+required = true
+
+[git_hooks.pre_commit.checks.commands]
+unix = "grep -r \"#include.*<cmath>\" q_mini_wasm_v2/core && exit 1 || exit 0"
+powershell = "if (Select-String -Path q_mini_wasm_v2/core -Pattern '#include.*<cmath>' -Recurse) { exit 1 } else { exit 0 }"
+
+[[git_hooks.pre_commit.checks]]
+name = "go_fmt"
+description = "Check Go code formatting"
+required = true
+
+[git_hooks.pre_commit.checks.commands]
+unix = "cd q_mini_wasm_v2/go && gofmt -l . | grep . && exit 1 || exit 0"
+powershell = "Set-Location q_mini_wasm_v2/go; if (gofmt -l . | Select-String '.') { exit 1 } else { exit 0 }"
+
+[[git_hooks.pre_commit.checks]]
+name = "python_lint"
+command = "ruff check q_miniwasm/"
+description = "Check Python code with ruff"
+required = false
+
+[git_hooks.commit_msg]
+description = "Enforce commit message conventions"
+enabled = true
+format = "^(feat|fix|docs|style|refactor|test|chore|quantum)\\(\\w+\\): .{1,72}"
+examples = [
+  "feat(core): add CSUM gate implementation for qutrit stabilizer",
+  "fix(moe): correct tropical routing weight calculation",
+  "quantum(stabilizer): optimize tableau update to O(n^2)",
+  "docs(api): update ternary arithmetic reference",
+  "refactor(cline): improve tool selection logic"
+]
+
+[git_hooks.commit_msg.quantum_prefixes]
+quantum = "Changes to quantum algorithms or stabilizer formalism"
+trit = "Changes to ternary state operations"
+tableau = "Changes to stabilizer tableau implementation"
+clifford = "Changes to Clifford gate operations"
+
+[git_hooks.pre_push]
+description = "Pre-push validation"
+enabled = true
+
+[[git_hooks.pre_push.checks]]
+name = "cpp_tests"
+description = "Run C++ test suite"
+required = true
+
+[git_hooks.pre_push.checks.commands]
+unix = "cd q_mini_wasm_v2/build && ctest --build-config Release --output-on-failure"
+powershell = "Set-Location q_mini_wasm_v2/build; ctest --build-config Release --output-on-failure"
+
+[[git_hooks.pre_push.checks]]
+name = "go_tests"
+description = "Run Go tests with race detection"
+required = true
+
+[git_hooks.pre_push.checks.commands]
+unix = "cd q_mini_wasm_v2/go && go test -race ./..."
+powershell = "Set-Location q_mini_wasm_v2/go; go test -race ./..."
+
+[[git_hooks.pre_push.checks]]
+name = "python_tests"
+command = "pytest tests/ -v"
+description = "Run Python test suite"
+required = true
+
+[[git_hooks.pre_push.checks]]
+name = "integration_tests"
+description = "Run integration tests"
+required = true
+
+[git_hooks.pre_push.checks.commands]
+unix = "cd q_mini_wasm_v2/build && ./q_mini_wasm_v2_tests"
+powershell = "Set-Location q_mini_wasm_v2/build; .\\q_mini_wasm_v2_tests.exe"
+
+[git_hooks.post_commit]
+description = "Post-commit automation"
+enabled = true
+
+[[git_hooks.post_commit.actions]]
+name = "update_knowledge_graph"
+command = "python scripts/update_knowledge_graph.py"
+description = "Update project knowledge graph with new changes"
+required = false
+
+[[git_hooks.post_commit.actions]]
+name = "index_to_rag"
+description = "Index changes to RAG service"
+required = false
+
+[git_hooks.post_commit.actions.commands]
+unix = "curl -X POST http://localhost:8080/index -d '{\"commit\": \"$(git rev-parse HEAD)\"}'"
+powershell = "Invoke-RestMethod -Uri http://localhost:8080/index -Method Post -Body @{commit = (git rev-parse HEAD) | Out-String}"
+
+[git_hooks.post_merge]
+description = "Post-merge automation"
+enabled = true
+
+[[git_hooks.post_merge.actions]]
+name = "rebuild_index"
+command = "python scripts/rebuild_index.py"
+description = "Rebuild project indices after merge"
+required = false
+
+[[git_hooks.post_merge.actions]]
+name = "generate_changelog"
+command = "python scripts/generate_changelog.py"
+description = "Generate changelog from merged commits"
+required = false
+
+# ============================================================================
+# CONTEXT MONITORING HOOKS
+# ============================================================================
+
+[context_monitoring_hooks.window_usage_tracking]
+description = "Monitor context window token usage"
+enabled = true
+
+[context_monitoring_hooks.window_usage_tracking.thresholds]
+warning = 0.75
+critical = 0.90
+
+[context_monitoring_hooks.window_usage_tracking.actions]
+on_warning = "suggest_conversation_summary"
+on_critical = "prioritize_essential_context"
+
+[context_monitoring_hooks.tool_selection_optimization]
+description = "Optimize tool selection based on task context"
+enabled = true
+rules = [
+  "prefer_list_files_over_ls",
+  "prefer_search_files_over_grep",
+  "prefer_replace_in_file_over_sed",
+  "prefer_read_file_over_cat"
+]
+
+# ============================================================================
+# MCP HEALTH HOOKS
+# ============================================================================
+
+[mcp_health_hooks.server_availability]
+description = "Monitor MCP server health"
+enabled = true
+check_interval = "per_tool_call"
+
+[mcp_health_hooks.server_availability.actions]
+on_unavailable = "fall_back_to_local_tools"
+on_slow_response = "log_warning"
+
+[mcp_health_hooks.tool_error_handling]
+description = "Handle MCP tool errors gracefully"
+enabled = true
+rules = ["retry_on_transient_error", "log_persistent_failures", "suggest_alternative_tools"]
+
+# ============================================================================
+# QUANTUM SPECIFIC HOOKS
+# ============================================================================
+
+[quantum_specific_hooks.stabilizer_correctness]
+description = "Validate stabilizer tableau after quantum operations"
+trigger = "changes_to_core_stabilizer"
+checks = ["verify_gottesman_knill_compliance", "check_tableau_dimensions", "validate_modulo3_operations"]
+
+[quantum_specific_hooks.clifford_gate_validation]
+description = "Verify Clifford gate implementations"
+trigger = "changes_to_clifford_synthesis"
+checks = ["verify_hadamard_properties", "verify_phase_properties", "verify_csum_properties"]
+
+[quantum_specific_hooks.energy_efficiency]
+description = "Monitor energy efficiency of quantum operations"
+trigger = "pre_release"
+checks = ["compare_to_baseline", "validate_pj_per_op_target"]

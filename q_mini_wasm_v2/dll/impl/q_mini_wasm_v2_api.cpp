@@ -1,5 +1,6 @@
 #include "../q_mini_wasm_v2_api.hpp"
 #include "../../core/ternary/trit.hpp"
+#include "../../core/qutrit_stabilizer.h"
 #include "../../core/stabilizer/tableau.hpp"
 #include "../../core/moe/router.hpp"
 #include "../../core/learning/forward_forward.hpp"
@@ -9,6 +10,9 @@
 #include <unordered_map>
 #include <mutex>
 #include <iostream>
+#include <fstream>
+#include <chrono>
+#include <cstdarg>
 
 using namespace q_mini_wasm_v2;
 
@@ -34,6 +38,44 @@ static const size_t ERROR_MESSAGES_COUNT = sizeof(ERROR_MESSAGES) / sizeof(ERROR
 
 static std::mutex g_handles_mutex;
 static std::unordered_map<void*, std::shared_ptr<void>> g_handles;
+
+// ============================================================================
+// Logging Support
+// ============================================================================
+
+static std::mutex g_logging_mutex;
+static std::ofstream g_log_file;
+static bool g_logging_enabled = false;
+static int g_log_level = 0;  // 0=error, 1=warning, 2=info, 3=debug
+
+static void init_logging() {
+    if (!g_logging_enabled) {
+        g_log_file.open("q_mini_wasm_v2.log", std::ios::app);
+        g_logging_enabled = g_log_file.is_open();
+    }
+}
+
+static void log_message(int level, const char* format, ...) {
+    if (!g_logging_enabled || level > g_log_level) return;
+    
+    std::lock_guard<std::mutex> lock(g_logging_mutex);
+    
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    
+    const char* level_str = level == 0 ? "ERROR" : level == 1 ? "WARN" : level == 2 ? "INFO" : "DEBUG";
+    
+    if (g_log_file.is_open()) {
+        g_log_file << "[" << level_str << "] " << std::ctime(&time);
+        va_list args;
+        va_start(args, format);
+        g_log_file << " - ";
+        g_log_file.vprintf(format, args);
+        va_end(args);
+        g_log_file << std::endl;
+        g_log_file.flush();
+    }
+}
 
 template<typename T>
 void* make_handle(std::shared_ptr<T> ptr) {
@@ -88,6 +130,57 @@ Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_version() {
 
 Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_build_info() {
     return BUILD_INFO;
+}
+
+// ============================================================================
+// Logging Functions
+// ============================================================================
+
+Q_MINI_WASM_V2_API void q_mini_wasm_v2_enable_logging(int log_level) {
+    g_log_level = log_level;
+    init_logging();
+    log_message(2, "Logging enabled at level %d", log_level);
+}
+
+Q_MINI_WASM_V2_API void q_mini_wasm_v2_disable_logging() {
+    log_message(2, "Logging disabled");
+    std::lock_guard<std::mutex> lock(g_logging_mutex);
+    if (g_log_file.is_open()) {
+        g_log_file.close();
+    }
+    g_logging_enabled = false;
+}
+
+Q_MINI_WASM_V2_API void q_mini_wasm_v2_log(int log_level, const char* message) {
+    log_message(log_level, "%s", message);
+}
+
+// ============================================================================
+// Handle Enumeration
+// ============================================================================
+
+Q_MINI_WASM_V2_API size_t q_mini_wasm_v2_get_handle_count() {
+    std::lock_guard<std::mutex> lock(g_handles_mutex);
+    return g_handles.size();
+}
+
+Q_MINI_WASM_V2_API size_t q_mini_wasm_v2_enumerate_handles(void** handles, size_t max_handles) {
+    std::lock_guard<std::mutex> lock(g_handles_mutex);
+    size_t count = 0;
+    for (const auto& pair : g_handles) {
+        if (count >= max_handles) break;
+        handles[count++] = pair.first;
+    }
+    return count;
+}
+
+Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_get_handle_type(void* handle) {
+    if (handle == nullptr) return "null";
+    std::lock_guard<std::mutex> lock(g_handles_mutex);
+    auto it = g_handles.find(handle);
+    if (it == g_handles.end()) return "invalid";
+    // Type information is not stored, return "unknown"
+    return "unknown";
 }
 
 // ============================================================================
@@ -211,6 +304,123 @@ Q_MINI_WASM_V2_API size_t tableau_num_qutrits(void* handle) {
     auto tableau = get_handle<core::stabilizer::StabilizerTableau>(handle);
     if (!tableau) return 0;
     return tableau->num_qutrits();
+}
+
+// ============================================================================
+// Qutrit Stabilizer Tableau Operations
+// ============================================================================
+
+Q_MINI_WASM_V2_API void* qutrit_stabilizer_create(size_t num_qutrits) {
+    if (num_qutrits == 0) {
+        return nullptr;
+    }
+    try {
+        StabilizerTableau* t = stabilizer_init(static_cast<uint32_t>(num_qutrits));
+        return make_handle(std::shared_ptr<StabilizerTableau>(t, stabilizer_free));
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+Q_MINI_WASM_V2_API void qutrit_stabilizer_destroy(void* handle) {
+    if (handle != nullptr) {
+        release_handle(handle);
+    }
+}
+
+Q_MINI_WASM_V2_API int qutrit_stabilizer_apply_hadamard(void* handle, size_t target) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    if (target >= tableau->n) return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
+    
+    try {
+        stabilizer_apply_hadamard(tableau.get(), static_cast<uint32_t>(target));
+        return Q_MINI_WASM_V2_OK;
+    } catch (...) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+}
+
+Q_MINI_WASM_V2_API int qutrit_stabilizer_apply_phase(void* handle, size_t target) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    if (target >= tableau->n) return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
+    
+    try {
+        stabilizer_apply_phase(tableau.get(), static_cast<uint32_t>(target));
+        return Q_MINI_WASM_V2_OK;
+    } catch (...) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+}
+
+Q_MINI_WASM_V2_API int qutrit_stabilizer_apply_csum(void* handle, size_t control, size_t target) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    if (control >= tableau->n || target >= tableau->n) return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
+    
+    try {
+        stabilizer_apply_csum(tableau.get(), static_cast<uint32_t>(control), static_cast<uint32_t>(target));
+        return Q_MINI_WASM_V2_OK;
+    } catch (...) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+}
+
+Q_MINI_WASM_V2_API int qutrit_stabilizer_phase_penalty(void* handle, size_t target, uint8_t utilization) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    if (target >= tableau->n) return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
+    
+    try {
+        stabilizer_phase_penalty(tableau.get(), static_cast<uint32_t>(target), utilization);
+        return Q_MINI_WASM_V2_OK;
+    } catch (...) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+}
+
+Q_MINI_WASM_V2_API int qutrit_stabilizer_superposition(void* handle, size_t target) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    if (target >= tableau->n) return Q_MINI_WASM_V2_ERROR_OUT_OF_RANGE;
+    
+    try {
+        stabilizer_superposition(tableau.get(), static_cast<uint32_t>(target));
+        return Q_MINI_WASM_V2_OK;
+    } catch (...) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+}
+
+Q_MINI_WASM_V2_API uint8_t qutrit_stabilizer_measure(void* handle, size_t target) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau || target >= tableau->n) return 0;
+    
+    try {
+        return stabilizer_measure(tableau.get(), static_cast<uint32_t>(target));
+    } catch (...) {
+        return 0;
+    }
+}
+
+Q_MINI_WASM_V2_API int qutrit_stabilizer_entangle_graph(void* handle, const uint32_t* edges, size_t edge_count) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    if (edges == nullptr) return Q_MINI_WASM_V2_ERROR_INVALID_ARGUMENT;
+    
+    try {
+        stabilizer_entangle_graph(tableau.get(), const_cast<uint32_t*>(edges), static_cast<uint32_t>(edge_count));
+        return Q_MINI_WASM_V2_OK;
+    } catch (...) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+}
+
+Q_MINI_WASM_V2_API size_t qutrit_stabilizer_num_qutrits(void* handle) {
+    auto tableau = get_handle<StabilizerTableau>(handle);
+    if (!tableau) return 0;
+    return tableau->n;
 }
 
 // ============================================================================
@@ -379,4 +589,101 @@ Q_MINI_WASM_V2_API int orchestrator_has_pending(void* handle) {
     auto orchestrator = get_handle<runtime::RuntimeOrchestrator>(handle);
     if (!orchestrator) return 0;
     return orchestrator->has_pending_tasks() ? 1 : 0;
+}
+
+// ============================================================================
+// Batch Operations
+// ============================================================================
+
+Q_MINI_WASM_V2_API size_t tableau_batch_apply_hadamard(
+    void** handles,
+    size_t num_handles,
+    size_t qutrit
+) {
+    if (handles == nullptr || num_handles == 0) return 0;
+    
+    size_t success_count = 0;
+    for (size_t i = 0; i < num_handles; ++i) {
+        int result = tableau_apply_hadamard(handles[i], qutrit);
+        if (result == Q_MINI_WASM_V2_OK) {
+            success_count++;
+        }
+    }
+    return success_count;
+}
+
+Q_MINI_WASM_V2_API size_t tableau_batch_apply_phase(
+    void** handles,
+    size_t num_handles,
+    size_t qutrit
+) {
+    if (handles == nullptr || num_handles == 0) return 0;
+    
+    size_t success_count = 0;
+    for (size_t i = 0; i < num_handles; ++i) {
+        int result = tableau_apply_phase(handles[i], qutrit);
+        if (result == Q_MINI_WASM_V2_OK) {
+            success_count++;
+        }
+    }
+    return success_count;
+}
+
+Q_MINI_WASM_V2_API size_t tableau_batch_measure_all(
+    void** handles,
+    size_t num_handles,
+    int8_t** outcomes,
+    size_t* outcome_sizes,
+    size_t max_outcomes_per_tableau
+) {
+    if (handles == nullptr || outcomes == nullptr || outcome_sizes == nullptr || num_handles == 0) return 0;
+    
+    size_t total_measured = 0;
+    for (size_t i = 0; i < num_handles; ++i) {
+        outcome_sizes[i] = tableau_measure_all(handles[i], outcomes[i], max_outcomes_per_tableau);
+        total_measured += outcome_sizes[i];
+    }
+    return total_measured;
+}
+
+Q_MINI_WASM_V2_API size_t moe_router_batch_route_topk(
+    void** handles,
+    size_t num_handles,
+    const int8_t* input,
+    size_t input_size,
+    size_t** selected,
+    size_t* selected_counts,
+    size_t max_selected_per_router
+) {
+    if (handles == nullptr || selected == nullptr || selected_counts == nullptr || num_handles == 0) return 0;
+    
+    size_t total_routed = 0;
+    for (size_t i = 0; i < num_handles; ++i) {
+        selected_counts[i] = moe_router_route_topk(
+            handles[i], input, input_size, selected[i], max_selected_per_router
+        );
+        total_routed += selected_counts[i];
+    }
+    return total_routed;
+}
+
+Q_MINI_WASM_V2_API size_t ff_learner_batch_forward(
+    void** handles,
+    size_t num_handles,
+    const int8_t* input,
+    size_t input_size,
+    int8_t** output,
+    size_t* output_sizes,
+    size_t max_output_per_learner
+) {
+    if (handles == nullptr || output == nullptr || output_sizes == nullptr || num_handles == 0) return 0;
+    
+    size_t total_processed = 0;
+    for (size_t i = 0; i < num_handles; ++i) {
+        output_sizes[i] = ff_learner_forward(
+            handles[i], input, input_size, output[i], max_output_per_learner
+        );
+        total_processed += output_sizes[i];
+    }
+    return total_processed;
 }

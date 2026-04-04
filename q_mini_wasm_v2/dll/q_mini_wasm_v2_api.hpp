@@ -89,6 +89,53 @@ Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_version();
 Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_build_info();
 
 // ============================================================================
+// Logging Functions
+// ============================================================================
+
+/**
+ * @brief Enable logging to file
+ * @param log_level Log level (0=error, 1=warning, 2=info, 3=debug)
+ */
+Q_MINI_WASM_V2_API void q_mini_wasm_v2_enable_logging(int log_level);
+
+/**
+ * @brief Disable logging
+ */
+Q_MINI_WASM_V2_API void q_mini_wasm_v2_disable_logging();
+
+/**
+ * @brief Write a log message
+ * @param log_level Log level (0=error, 1=warning, 2=info, 3=debug)
+ * @param message Message to log
+ */
+Q_MINI_WASM_V2_API void q_mini_wasm_v2_log(int log_level, const char* message);
+
+// ============================================================================
+// Handle Enumeration
+// ============================================================================
+
+/**
+ * @brief Get total number of active handles
+ * @return Number of active handles
+ */
+Q_MINI_WASM_V2_API size_t q_mini_wasm_v2_get_handle_count();
+
+/**
+ * @brief Enumerate all active handles
+ * @param handles Output array for handle pointers
+ * @param max_handles Maximum number of handles to enumerate
+ * @return Number of handles enumerated
+ */
+Q_MINI_WASM_V2_API size_t q_mini_wasm_v2_enumerate_handles(void** handles, size_t max_handles);
+
+/**
+ * @brief Get type name for a handle (for debugging)
+ * @param handle Handle to query
+ * @return Type name string ("null", "invalid", or "unknown")
+ */
+Q_MINI_WASM_V2_API const char* q_mini_wasm_v2_get_handle_type(void* handle);
+
+// ============================================================================
 // Trit Operations
 // ============================================================================
 
@@ -123,37 +170,37 @@ Q_MINI_WASM_V2_API uint8_t trit_pack_5(const int8_t trits[5]);
 Q_MINI_WASM_V2_API void trit_unpack_5(uint8_t byte, int8_t trits[5]);
 
 // ============================================================================
-// Stabilizer Tableau Operations
+// Qutrit Stabilizer Tableau Operations (Quantum-Enhanced Implementation)
 // ============================================================================
 
 /**
- * @brief Create a new stabilizer tableau
+ * @brief Create a new qutrit stabilizer tableau
  * @param num_qutrits Number of qutrits (must be > 0)
  * @return Opaque handle to tableau, or NULL on failure
  */
-Q_MINI_WASM_V2_API void* tableau_create(size_t num_qutrits);
+Q_MINI_WASM_V2_API void* qutrit_stabilizer_create(size_t num_qutrits);
 
 /**
- * @brief Destroy a stabilizer tableau
+ * @brief Destroy a qutrit stabilizer tableau
  * @param handle Tableau handle (can be NULL)
  */
-Q_MINI_WASM_V2_API void tableau_destroy(void* handle);
+Q_MINI_WASM_V2_API void qutrit_stabilizer_destroy(void* handle);
 
 /**
  * @brief Apply Hadamard gate to qutrit
  * @param handle Tableau handle
- * @param qutrit Target qutrit index (0-based)
+ * @param target Target qutrit index (0-based)
  * @return Q_MINI_WASM_V2_OK on success, error code otherwise
  */
-Q_MINI_WASM_V2_API int tableau_apply_hadamard(void* handle, size_t qutrit);
+Q_MINI_WASM_V2_API int qutrit_stabilizer_apply_hadamard(void* handle, size_t target);
 
 /**
  * @brief Apply Phase gate to qutrit
  * @param handle Tableau handle
- * @param qutrit Target qutrit index (0-based)
+ * @param target Target qutrit index (0-based)
  * @return Q_MINI_WASM_V2_OK on success, error code otherwise
  */
-Q_MINI_WASM_V2_API int tableau_apply_phase(void* handle, size_t qutrit);
+Q_MINI_WASM_V2_API int qutrit_stabilizer_apply_phase(void* handle, size_t target);
 
 /**
  * @brief Apply Controlled-SUM gate between two qutrits
@@ -162,10 +209,93 @@ Q_MINI_WASM_V2_API int tableau_apply_phase(void* handle, size_t qutrit);
  * @param target Target qutrit index (0-based)
  * @return Q_MINI_WASM_V2_OK on success, error code otherwise
  */
+Q_MINI_WASM_V2_API int qutrit_stabilizer_apply_csum(void* handle, size_t control, size_t target);
+
+/**
+ * @brief Apply utilization penalty phase for MoE load balancing
+ * @param handle Tableau handle
+ * @param target Target qutrit index (0-based)
+ * @param utilization Utilization level (0-2)
+ * @return Q_MINI_WASM_V2_OK on success, error code otherwise
+ */
+Q_MINI_WASM_V2_API int qutrit_stabilizer_phase_penalty(void* handle, size_t target, uint8_t utilization);
+
+/**
+ * @brief Place qutrit into equal superposition
+ * @param handle Tableau handle
+ * @param target Target qutrit index (0-based)
+ * @return Q_MINI_WASM_V2_OK on success, error code otherwise
+ */
+Q_MINI_WASM_V2_API int qutrit_stabilizer_superposition(void* handle, size_t target);
+
+/**
+ * @brief Measure single qutrit
+ * @param handle Tableau handle
+ * @param target Target qutrit index (0-based)
+ * @return Measurement result 0, 1, or 2
+ */
+Q_MINI_WASM_V2_API uint8_t qutrit_stabilizer_measure(void* handle, size_t target);
+
+/**
+ * @brief Entangle graph of qutrits with CSUM gates
+ * @param handle Tableau handle
+ * @param edges Array of edge pairs (control, target)
+ * @param edge_count Number of edges
+ * @return Q_MINI_WASM_V2_OK on success, error code otherwise
+ */
+Q_MINI_WASM_V2_API int qutrit_stabilizer_entangle_graph(void* handle, const uint32_t* edges, size_t edge_count);
+
+/**
+ * @brief Get number of qutrits in tableau
+ * @param handle Tableau handle
+ * @return Number of qutrits, or 0 if handle is NULL
+ */
+Q_MINI_WASM_V2_API size_t qutrit_stabilizer_num_qutrits(void* handle);
+
+// ============================================================================
+// Legacy Stabilizer Tableau Operations (deprecated)
+// ============================================================================
+
+/**
+ * @brief Create a new stabilizer tableau (deprecated - use qutrit_stabilizer_create)
+ * @param num_qutrits Number of qutrits (must be > 0)
+ * @return Opaque handle to tableau, or NULL on failure
+ */
+Q_MINI_WASM_V2_API void* tableau_create(size_t num_qutrits);
+
+/**
+ * @brief Destroy a stabilizer tableau (deprecated - use qutrit_stabilizer_destroy)
+ * @param handle Tableau handle (can be NULL)
+ */
+Q_MINI_WASM_V2_API void tableau_destroy(void* handle);
+
+/**
+ * @brief Apply Hadamard gate to qutrit (deprecated - use qutrit_stabilizer_apply_hadamard)
+ * @param handle Tableau handle
+ * @param qutrit Target qutrit index (0-based)
+ * @return Q_MINI_WASM_V2_OK on success, error code otherwise
+ */
+Q_MINI_WASM_V2_API int tableau_apply_hadamard(void* handle, size_t qutrit);
+
+/**
+ * @brief Apply Phase gate to qutrit (deprecated - use qutrit_stabilizer_apply_phase)
+ * @param handle Tableau handle
+ * @param qutrit Target qutrit index (0-based)
+ * @return Q_MINI_WASM_V2_OK on success, error code otherwise
+ */
+Q_MINI_WASM_V2_API int tableau_apply_phase(void* handle, size_t qutrit);
+
+/**
+ * @brief Apply Controlled-SUM gate between two qutrits (deprecated - use qutrit_stabilizer_apply_csum)
+ * @param handle Tableau handle
+ * @param control Control qutrit index (0-based)
+ * @param target Target qutrit index (0-based)
+ * @return Q_MINI_WASM_V2_OK on success, error code otherwise
+ */
 Q_MINI_WASM_V2_API int tableau_apply_csum(void* handle, size_t control, size_t target);
 
 /**
- * @brief Measure all qutrits in tableau
+ * @brief Measure all qutrits in tableau (deprecated)
  * @param handle Tableau handle
  * @param outcomes Output array for measurement outcomes (-1, 0, or 1)
  * @param max_outcomes Maximum number of outcomes to store
@@ -174,14 +304,14 @@ Q_MINI_WASM_V2_API int tableau_apply_csum(void* handle, size_t control, size_t t
 Q_MINI_WASM_V2_API size_t tableau_measure_all(void* handle, int8_t* outcomes, size_t max_outcomes);
 
 /**
- * @brief Check if tableau represents valid stabilizer state
+ * @brief Check if tableau represents valid stabilizer state (deprecated)
  * @param handle Tableau handle
  * @return 1 if valid, 0 if invalid or handle is NULL
  */
 Q_MINI_WASM_V2_API int tableau_is_valid(void* handle);
 
 /**
- * @brief Get number of qutrits in tableau
+ * @brief Get number of qutrits in tableau (deprecated - use qutrit_stabilizer_num_qutrits)
  * @param handle Tableau handle
  * @return Number of qutrits, or 0 if handle is NULL
  */
@@ -308,6 +438,95 @@ Q_MINI_WASM_V2_API void orchestrator_wait_all(void* handle);
  * @return 1 if tasks pending, 0 otherwise or if handle is NULL
  */
 Q_MINI_WASM_V2_API int orchestrator_has_pending(void* handle);
+
+// ============================================================================
+// Batch Operations
+// ============================================================================
+
+/**
+ * @brief Apply Hadamard gate to multiple tableaus
+ * @param handles Array of tableau handles
+ * @param num_handles Number of handles in array
+ * @param qutrit Target qutrit index (0-based)
+ * @return Number of successful operations
+ */
+Q_MINI_WASM_V2_API size_t tableau_batch_apply_hadamard(
+    void** handles,
+    size_t num_handles,
+    size_t qutrit
+);
+
+/**
+ * @brief Apply Phase gate to multiple tableaus
+ * @param handles Array of tableau handles
+ * @param num_handles Number of handles in array
+ * @param qutrit Target qutrit index (0-based)
+ * @return Number of successful operations
+ */
+Q_MINI_WASM_V2_API size_t tableau_batch_apply_phase(
+    void** handles,
+    size_t num_handles,
+    size_t qutrit
+);
+
+/**
+ * @brief Measure multiple tableaus
+ * @param handles Array of tableau handles
+ * @param num_handles Number of handles in array
+ * @param outcomes Array of output buffers for measurement outcomes
+ * @param outcome_sizes Output array for actual outcome counts per tableau
+ * @param max_outcomes_per_tableau Maximum outcomes per tableau
+ * @return Total number of outcomes measured
+ */
+Q_MINI_WASM_V2_API size_t tableau_batch_measure_all(
+    void** handles,
+    size_t num_handles,
+    int8_t** outcomes,
+    size_t* outcome_sizes,
+    size_t max_outcomes_per_tableau
+);
+
+/**
+ * @brief Route through multiple routers
+ * @param handles Array of router handles
+ * @param num_handles Number of handles in array
+ * @param input Input features (shared across all routers)
+ * @param input_size Size of input array
+ * @param selected Array of output buffers for selected expert indices
+ * @param selected_counts Output array for actual selection counts per router
+ * @param max_selected_per_router Maximum selections per router
+ * @return Total number of experts selected across all routers
+ */
+Q_MINI_WASM_V2_API size_t moe_router_batch_route_topk(
+    void** handles,
+    size_t num_handles,
+    const int8_t* input,
+    size_t input_size,
+    size_t** selected,
+    size_t* selected_counts,
+    size_t max_selected_per_router
+);
+
+/**
+ * @brief Forward pass through multiple learners
+ * @param handles Array of learner handles
+ * @param num_handles Number of handles in array
+ * @param input Input features (shared across all learners)
+ * @param input_size Size of input array
+ * @param output Array of output buffers for activations
+ * @param output_sizes Output array for actual output counts per learner
+ * @param max_output_per_learner Maximum outputs per learner
+ * @return Total number of outputs processed across all learners
+ */
+Q_MINI_WASM_V2_API size_t ff_learner_batch_forward(
+    void** handles,
+    size_t num_handles,
+    const int8_t* input,
+    size_t input_size,
+    int8_t** output,
+    size_t* output_sizes,
+    size_t max_output_per_learner
+);
 
 #ifdef __cplusplus
 }

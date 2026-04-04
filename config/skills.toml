@@ -1,0 +1,249 @@
+# Cline Skills Configuration
+# Data format priority: gRPC > TOML > JSON
+
+[project]
+name = "q_mini_wasm_v2"
+
+# ============================================================================
+# CLINE CORE SKILLS
+# ============================================================================
+
+[cline_skills.file_operations]
+name = "File Operations"
+description = "Core file reading, writing, and editing capabilities"
+tools = ["read_file", "write_to_file", "replace_in_file", "list_files", "search_files"]
+expertise_level = "expert"
+
+[cline_skills.file_operations.rules]
+prefer_replace_in_file_for_edits = true
+use_write_to_file_for_new_files = true
+always_read_before_editing = true
+wait_for_confirmation_between_operations = true
+
+[cline_skills.code_analysis]
+name = "Code Analysis"
+description = "Understanding code structure, patterns, and definitions"
+tools = ["list_code_definition_names", "search_files", "read_file"]
+expertise_level = "expert"
+capabilities = ["pattern_recognition", "dependency_analysis", "architecture_understanding", "bug_detection"]
+
+[cline_skills.command_execution]
+name = "Command Execution"
+description = "Running CLI commands and system operations"
+tools = ["execute_command"]
+expertise_level = "advanced"
+
+[cline_skills.command_execution.rules]
+never_include_harmful_instructions = true
+tailor_commands_to_os = true
+prefer_non_interactive = true
+provide_clear_explanations = true
+
+[cline_skills.task_management]
+name = "Task Management"
+description = "Tracking progress and managing complex multi-step tasks"
+tools = ["task_progress"]
+expertise_level = "expert"
+capabilities = ["checklist_management", "progress_tracking", "scope_adaptation", "milestone_identification"]
+
+# ============================================================================
+# MCP SKILLS
+# ============================================================================
+
+[skills.python_programming]
+name = "Python Programming"
+description = "Python development, testing, and package management"
+mcp_server = "qminiwasm-python-programming"
+tools = ["python_run", "python_test", "python_analyze", "python_refactor", "python_document", "python_profile"]
+expertise_level = "expert"
+prerequisites = ["python_3_10", "virtual_env", "pytest"]
+capabilities = ["script_development", "test_automation", "code_analysis", "refactoring", "documentation_generation", "performance_profiling"]
+
+[skills.python_programming.autolearn]
+enabled = true
+metrics = ["test_pass_rate", "code_quality_score", "documentation_coverage", "performance_improvement"]
+improvement_triggers = ["test_failure", "code_smell_detected", "documentation_gap", "performance_regression"]
+skill_crystallization = true
+memory_enabled = true
+
+[skills.cpp_programming]
+name = "C++ Programming"
+description = "C++ development, compilation, and optimization"
+mcp_server = "qminiwasm-cpp-programming"
+tools = ["cpp_compile", "cpp_build", "cpp_test", "cpp_analyze", "cpp_refactor", "cpp_document"]
+expertise_level = "expert"
+prerequisites = ["cpp_17", "cmake", "clang"]
+capabilities = ["cmake_project_management", "cross_compilation", "static_analysis", "memory_debugging", "performance_optimization"]
+
+[skills.cpp_programming.autolearn]
+enabled = true
+metrics = ["build_success_rate", "test_coverage", "static_analysis_score", "compilation_time"]
+improvement_triggers = ["build_failure", "test_failure", "memory_leak_detected", "compilation_regression"]
+skill_crystallization = true
+memory_enabled = true
+
+[skills.wasm_compilation]
+name = "WebAssembly Compilation"
+description = "Compiling and optimizing WebAssembly modules"
+mcp_server = "qminiwasm-wasm"
+tools = ["wasm_compile", "wasm_optimize", "wasm_validate", "wasm_link", "wasm_deploy", "wasm_debug"]
+expertise_level = "advanced"
+prerequisites = ["emscripten", "wasm32_target", "wasm_opt"]
+capabilities = ["wasm_module_compilation", "optimization_pipeline", "module_validation", "multi_module_linking", "browser_deployment"]
+
+[skills.wasm_compilation.autolearn]
+enabled = true
+metrics = ["compilation_success", "module_size_reduction", "execution_speedup", "memory_efficiency"]
+improvement_triggers = ["compilation_failure", "size_regression", "performance_degradation", "compatibility_issue"]
+skill_crystallization = true
+memory_enabled = true
+
+[skills.security_operations]
+name = "Security Operations"
+description = "Security scanning, auditing, and vulnerability management"
+mcp_server = "qminiwasm-security"
+tools = ["security_scan", "security_audit", "security_configure", "security_monitor", "security_response", "security_report"]
+expertise_level = "advanced"
+prerequisites = ["static_analysis", "dependency_scanning", "vulnerability_databases"]
+capabilities = ["vulnerability_detection", "dependency_auditing", "security_configuration", "incident_response", "compliance_reporting"]
+
+[skills.security_operations.autolearn]
+enabled = true
+metrics = ["vulnerability_detection_rate", "false_positive_rate", "remediation_success", "compliance_score"]
+improvement_triggers = ["vulnerability_missed", "false_positive_spike", "remediation_failure", "compliance_violation"]
+skill_crystallization = true
+memory_enabled = true
+
+[skills.ai_ml_operations]
+name = "AI/ML Operations"
+description = "Machine learning model training, inference, and optimization"
+mcp_server = "qminiwasm-ai-ml"
+tools = ["ai_train", "ai_infer", "ai_optimize", "ai_evaluate", "ai_visualize", "ai_export"]
+expertise_level = "advanced"
+prerequisites = ["pytorch", "numpy", "scikit_learn"]
+capabilities = ["model_training", "inference_optimization", "model_evaluation", "result_visualization", "model_export"]
+
+[skills.ai_ml_operations.autolearn]
+enabled = true
+metrics = ["training_accuracy", "inference_speed", "model_size", "generalization_score"]
+improvement_triggers = ["accuracy_drop", "inference_slowdown", "overfitting_detected", "export_failure"]
+skill_crystallization = true
+memory_enabled = true
+
+[skills.git_operations]
+name = "Git Operations"
+description = "Git version control, branching, and collaboration"
+mcp_server = "qminiwasm-git-documentation"
+tools = ["git_status", "git_log", "git_diff", "git_branch", "git_commit", "git_push", "git_pull"]
+expertise_level = "expert"
+prerequisites = ["git", "github_cli"]
+capabilities = ["change_tracking", "branch_management", "commit_workflow", "remote_synchronization", "conflict_resolution"]
+
+[skills.cognitive_ergonomics]
+name = "Cognitive Ergonomics"
+description = "Applying cognitive science principles to documentation and UI design"
+mcp_server = "qminiwasm-cognitive-ergonomics"
+tools = ["lint_toml_ergonomics", "lint_doc_ergonomics"]
+expertise_level = "advanced"
+prerequisites = ["miller_law", "gestalt_principles", "chunking"]
+capabilities = ["documentation_optimization", "schema_design_review", "cognitive_load_assessment", "visual_hierarchy_analysis"]
+
+[skills.edge_computing]
+name = "Edge Computing"
+description = "Deploying and managing applications on edge devices"
+mcp_server = "qminiwasm-edge-computing"
+tools = ["edge_deploy", "edge_monitor", "edge_configure", "edge_update", "edge_security", "edge_logs"]
+expertise_level = "advanced"
+prerequisites = ["docker", "kubernetes", "iot_protocols"]
+capabilities = ["edge_deployment", "performance_monitoring", "configuration_management", "firmware_updates", "security_management"]
+
+[skills.quantum_computing]
+name = "Quantum Computing"
+description = "Quantum circuit simulation, optimization, and analysis"
+mcp_server = "qminiwasm-quantum-computing"
+tools = ["quantum_simulate", "quantum_optimize", "quantum_analyze", "quantum_compile", "quantum_run", "quantum_visualize"]
+expertise_level = "expert"
+prerequisites = ["quantum_mechanics", "linear_algebra", "qiskit"]
+capabilities = ["circuit_simulation", "gate_optimization", "noise_analysis", "hardware_deployment", "visualization"]
+
+[skills.quantum_computing.autolearn]
+enabled = true
+metrics = ["simulation_accuracy", "optimization_ratio", "fidelity_score", "gate_count_reduction"]
+improvement_triggers = ["simulation_error", "optimization_failure", "fidelity_drop", "compilation_error"]
+skill_crystallization = true
+memory_enabled = true
+
+[skills.native_compilation]
+name = "Native Compilation"
+description = "Compiling and optimizing native binaries"
+mcp_server = "qminiwasm-native"
+tools = ["native_compile", "native_optimize", "native_profile", "native_debug", "native_deploy", "native_monitor"]
+expertise_level = "expert"
+prerequisites = ["gcc", "clang", "profiling_tools"]
+capabilities = ["cross_platform_compilation", "binary_optimization", "performance_profiling", "debugging", "deployment_automation"]
+
+[skills.tpem_operations]
+name = "TPEM Operations"
+description = "Tiny Prediction and Estimation Module artifact management"
+mcp_server = "qminiwasm-tpem"
+tools = ["tpem_generate", "tpem_validate", "tpem_process", "tpem_deploy", "tpem_monitor", "tpem_report"]
+expertise_level = "advanced"
+prerequisites = ["wasm", "ml_models", "edge_deployment"]
+capabilities = ["artifact_generation", "schema_validation", "optimization", "edge_deployment", "performance_monitoring"]
+
+[skills.graph_optimization]
+name = "OmniGraph Optimization"
+description = "Refactoring procedural code into declarative graph structures"
+mcp_server = "omnigraph-structure-optimizer"
+tools = ["lint_procedural_code", "optimize_graph_dependencies"]
+expertise_level = "advanced"
+prerequisites = ["dag_concepts", "pipeline_architecture", "dependency_analysis"]
+capabilities = ["procedural_pattern_detection", "graph_refactoring_suggestions", "dependency_optimization", "cyclic_dependency_detection"]
+
+# ============================================================================
+# SKILL COMPOSITIONS
+# ============================================================================
+
+[skill_compositions.full_stack_development]
+description = "Complete development pipeline across all languages"
+skills = ["python_programming", "cpp_programming", "wasm_compilation", "git_operations"]
+workflow = "develop -> compile -> test -> deploy"
+
+[skill_compositions.security_pipeline]
+description = "Security-focused development and deployment"
+skills = ["security_operations", "cpp_programming", "python_programming", "edge_computing"]
+workflow = "scan -> fix -> validate -> deploy"
+
+[skill_compositions.quantum_pipeline]
+description = "Quantum algorithm development and deployment"
+skills = ["quantum_computing", "cpp_programming", "wasm_compilation", "edge_computing"]
+workflow = "simulate -> optimize -> compile -> deploy"
+
+[skill_compositions.documentation_pipeline]
+description = "Documentation generation and optimization"
+skills = ["cognitive_ergonomics", "python_programming", "git_operations"]
+workflow = "analyze -> generate -> optimize -> publish"
+
+[skill_compositions.edge_ai_pipeline]
+description = "AI model deployment to edge devices"
+skills = ["ai_ml_operations", "tpem_operations", "edge_computing", "native_compilation"]
+workflow = "train -> optimize -> package -> deploy"
+
+# ============================================================================
+# KANBAN INTEGRATION
+# ============================================================================
+
+[kanban_integration.status_tracking]
+python_programming = "kanban_python_status"
+cpp_programming = "kanban_cpp_status"
+wasm_compilation = "kanban_wasm_status"
+security_operations = "kanban_security_status"
+ai_ml_operations = "kanban_ai_status"
+quantum_computing = "kanban_quantum_status"
+edge_computing = "kanban_edge_status"
+
+[kanban_integration.pipeline_gates]
+code_review = "required"
+test_coverage = ">=80%"
+security_scan = "required"
+documentation = "required_for_public_apis"
