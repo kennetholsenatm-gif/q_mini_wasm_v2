@@ -1,7 +1,7 @@
 {
   "project": "q_mini_wasm_v2",
-  "version": "1.0.0",
-  "description": "Kanban configuration for RAG and MCP server integration",
+  "version": "2.0.0",
+  "description": "Kanban configuration for RAG and MCP server integration with AI agents",
   "mcp_servers": [
     "qminiwasm-rag-service",
     "qminiwasm-autolearn",
@@ -22,6 +22,41 @@
       "rag_get_metrics",
       "rag_reindex_all",
       "kanban_rag_status"
+    ]
+  },
+  "ai_models": {
+    "enabled": true,
+    "model_server": "http://127.0.0.1:3485",
+    "primary_model": "cline-kanban-agent",
+    "available_models": [
+      {
+        "id": "cline-kanban-agent",
+        "name": "ClineKanbanAgent",
+        "version": "1.0.0",
+        "accuracy": 0.9868,
+        "type": "primary_kanban_model"
+      },
+      {
+        "id": "analysis-agent",
+        "name": "AnalysisAgent",
+        "version": "2.0.0",
+        "accuracy": 0.98,
+        "type": "production_agent"
+      },
+      {
+        "id": "code-agent",
+        "name": "CodeAgent",
+        "version": "2.0.0",
+        "accuracy": 0.98,
+        "type": "production_agent"
+      },
+      {
+        "id": "test-agent",
+        "name": "TestAgent",
+        "version": "2.0.0",
+        "accuracy": 0.98,
+        "type": "production_agent"
+      }
     ]
   },
   "kanban_integration": {

@@ -192,11 +192,27 @@ ctest -R dll_test
 3. **Check for null**: All create functions can return nullptr on failure
 4. **Use error strings**: Get human-readable messages with q_mini_wasm_v2_error_string()
 
-## Future Enhancements
+## New Features Added
 
-- [ ] Batch operations for improved performance
+### Logging Support
+- `q_mini_wasm_v2_enable_logging(int log_level)`: Enable logging to file (0=error, 1=warn, 2=info, 3=debug)
+- `q_mini_wasm_v2_disable_logging()`: Disable logging
+- `q_mini_wasm_v2_log(int log_level, const char* message)`: Write a log message
+
+### Handle Enumeration
+- `q_mini_wasm_v2_get_handle_count()`: Get total number of active handles
+- `q_mini_wasm_v2_enumerate_handles(void** handles, size_t max_handles)`: Enumerate all handles
+- `q_mini_wasm_v2_get_handle_type(void* handle)`: Get type name for debugging
+
+### Batch Operations
+- `tableau_batch_apply_hadamard(void** handles, size_t num_handles, size_t qutrit)`: Batch Hadamard
+- `tableau_batch_apply_phase(void** handles, size_t num_handles, size_t qutrit)`: Batch Phase
+- `tableau_batch_measure_all(...)`: Batch measurement of multiple tableaus
+- `moe_router_batch_route_topk(...)`: Batch routing through multiple routers
+- `ff_learner_batch_forward(...)`: Batch forward pass through multiple learners
+
+## Remaining Future Enhancements
+
 - [ ] Callback support for async operations
-- [ ] Logging/debugging support
 - [ ] Memory pool for handle allocation
-- [ ] Handle enumeration for debugging
 

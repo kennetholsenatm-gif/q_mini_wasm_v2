@@ -8,6 +8,9 @@
 #include <deque>
 #include "../stabilizer/tableau.hpp"
 #include "../ternary/trit.hpp"
+#include "forward_forward.hpp"
+#include <map>
+#include <string>
 
 namespace q_mini_wasm_v2::core::learning {
 
@@ -68,6 +71,7 @@ public:
     void save_model(const std::string& path) const;
     void load_model(const std::string& path);
     void reset();
+    void set_learning_rate(double lr) { config_.learning_rate = lr; }
     const PPOConfig& config() const { return config_; }
     const PPOStats& get_stats() const { return stats_; }
     

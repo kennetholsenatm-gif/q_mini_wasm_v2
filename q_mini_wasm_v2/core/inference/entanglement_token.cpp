@@ -13,6 +13,46 @@ EntanglementTokenManager::EntanglementTokenManager(const TokenConfig& config)
 
 EntanglementTokenManager::~EntanglementTokenManager() = default;
 
+EntanglementTokenManager::EntangledSequence EntanglementTokenManager::tokenize(const std::vector<size_t>& input_ids) {
+    EntangledSequence seq;
+    seq.sequence_length = input_ids.size();
+    seq.tableau = shared_tableau_;
+    for (size_t id : input_ids) {
+        EntanglementToken token;
+        token.token_id = id;
+        token.coherence = 1.0;
+        token.stabilizer_state = trits_to_stabilizer(get_embedding(id));
+        token.phase_vector.resize(token.stabilizer_state.size(), 0);
+        seq.tokens.push_back(token);
+    }
+    return seq;
+}
+
+std::pair<EntanglementTokenManager::EntanglementToken, EntanglementTokenManager::EntanglementToken> 
+EntanglementTokenManager::entangle_tokens(
+    const EntanglementToken& control,
+    const EntanglementToken& target
+) {
+    return {control, target}; // Stub
+}
+
+EntanglementTokenManager::EntangledSequence EntanglementTokenManager::create_sequence_entanglement(
+    const std::vector<EntanglementToken>& tokens
+) {
+    EntangledSequence seq;
+    seq.tokens = tokens;
+    seq.sequence_length = tokens.size();
+    seq.tableau = shared_tableau_;
+    return seq;
+}
+
+EntanglementTokenManager::EntangledSequence EntanglementTokenManager::internalize_context(
+    const EntangledSequence& sequence,
+    const EntangledSequence& context_tokens
+) {
+    return sequence; // Stub
+}
+
 void EntanglementTokenManager::initialize_embeddings() {
     std::mt19937 gen(42);
     std::uniform_int_distribution<int> dist(0, 2);

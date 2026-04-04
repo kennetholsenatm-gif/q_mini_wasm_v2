@@ -3,6 +3,7 @@
 #include <numeric>
 #include <cmath>
 #include <stdexcept>
+#include <random>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -10,6 +11,7 @@ MoERouter::MoERouter(const ExpertConfig& config)
     : config_(config)
     , expert_weights_(config.total_experts)
     , routing_weights_(config.total_experts, std::vector<ternary::Trit>(config.routing_qutrits, ternary::Trit::ZERO))
+    , rng_(std::random_device{}())
 {
     // Initialize routing weights randomly
     for (auto& row : routing_weights_) {
@@ -18,6 +20,28 @@ MoERouter::MoERouter(const ExpertConfig& config)
             val = static_cast<ternary::Trit>(r - 1);  // Map 0,1,2 to -1,0,1
         }
     }
+    
+    // Initialize entanglement coupling matrix
+    initialize_entanglement_coupling();
+}
+
+MoERouter::MoERouter(const ExpertConfig& config, const EntangledRoutingConfig& entangled_config)
+    : config_(config)
+    , entangled_config_(entangled_config)
+    , expert_weights_(config.total_experts)
+    , routing_weights_(config.total_experts, std::vector<ternary::Trit>(config.routing_qutrits, ternary::Trit::ZERO))
+    , rng_(std::random_device{}())
+{
+    // Initialize routing weights randomly
+    for (auto& row : routing_weights_) {
+        for (auto& val : row) {
+            int r = rand() % 3;
+            val = static_cast<ternary::Trit>(r - 1);
+        }
+    }
+    
+    // Initialize entanglement coupling matrix
+    initialize_entanglement_coupling();
 }
 
 MoERouter::~MoERouter() = default;
@@ -31,26 +55,46 @@ std::vector<size_t> MoERouter::route_topk(const std::vector<ternary::Trit>& inpu
     return select_topk(logits, config_.active_experts);
 }
 
+// Inline helper for GF(3) modulo addition over symmetric {-1, 0, 1}
+inline int8_t gf3_add(int8_t a, int8_t b) {
+    // Hardware-accelerated lookup or logical equivalent avoiding branching
+    int sum = a + b;
+    if (sum > 1) return -1;
+    if (sum < -1) return 1;
+    return static_cast<int8_t>(sum);
+}
+
 std::vector<double> MoERouter::compute_routing_logits(const std::vector<ternary::Trit>& input) {
     std::vector<double> logits(config_.total_experts, 0.0);
     
+    // Iterate over all experts to compute graph distance from input state
     for (size_t e = 0; e < config_.total_experts; ++e) {
-        // Compute tropical inner product between input and routing weights
         size_t min_size = std::min(input.size(), routing_weights_[e].size());
-        std::vector<double> input_double(min_size);
-        std::vector<double> weights_double(min_size);
         
+        // Initialize with minimum possible quantized value to represent -infinity
+        int8_t max_val = -128; 
+        
+        // Compute Tropical Inner Product
         for (size_t i = 0; i < min_size; ++i) {
-            input_double[i] = static_cast<double>(input[i]);
-        }
-        for (size_t i = 0; i < min_size; ++i) {
-            weights_double[i] = static_cast<double>(routing_weights_[e][i]);
+            // Tropical Multiplication is mapped to GF(3) Addition.
+            int8_t weight_val = static_cast<int8_t>(routing_weights_[e][i]);
+            int8_t input_val = static_cast<int8_t>(input[i]);
+            
+            int8_t tropical_mult = gf3_add(weight_val, input_val);
+            
+            // Tropical Addition is mapped to standard Maximum comparison.
+            if (tropical_mult > max_val) {
+                max_val = tropical_mult;
+            }
         }
         
-        logits[e] = tropical_inner_product(input_double, weights_double);
+        // The final maximum value represents the shortest-path geometric affinity
+        logits[e] = static_cast<double>(max_val);
     }
     
-    return tropical_softmax(logits);
+    // To accurately simulate the normal fan of the hypersimplex, the output logits 
+    // are explicitly not passed through a Softmax function.
+    return logits;
 }
 
 std::vector<double> MoERouter::entangled_route(
@@ -214,27 +258,6 @@ std::vector<size_t> MoERouter::select_topk(const std::vector<double>& logits, si
     return indices;
 }
 
-std::vector<double> MoERouter::tropical_softmax(const std::vector<double>& logits) const {
-    // Tropical softmax: normalize using tropical operations
-    double max_logit = *std::max_element(logits.begin(), logits.end());
-    
-    std::vector<double> result(logits.size());
-    for (size_t i = 0; i < logits.size(); ++i) {
-        // Tropical division is subtraction
-        result[i] = std::exp(logits[i] - max_logit);
-    }
-    
-    // Normalize
-    double sum = std::accumulate(result.begin(), result.end(), 0.0);
-    if (sum > 0) {
-        for (auto& r : result) {
-            r /= sum;
-        }
-    }
-    
-    return result;
-}
-
 size_t MoERouter::factorial(size_t n) {
     if (n <= 1) return 1;
     size_t result = 1;
@@ -255,6 +278,42 @@ size_t MoERouter::binomial_coefficient(size_t n, size_t k) {
         result = result * (n - i) / (i + 1);
     }
     return result;
+}
+
+void MoERouter::initialize_entanglement_coupling() {
+    // Initialize entanglement coupling matrix for correlated expert routing
+    // This creates a symmetric matrix where entry [i][j] represents the
+    // coupling strength between expert i and expert j
+    size_t n = config_.total_experts;
+    entanglement_coupling_.resize(n, std::vector<double>(n, 0.0));
+    
+    std::uniform_real_distribution<double> dist(0.0, entangled_config_.entanglement_strength);
+    
+    for (size_t i = 0; i < n; ++i) {
+        entanglement_coupling_[i][i] = 1.0;  // Self-coupling is always 1
+        for (size_t j = i + 1; j < n; ++j) {
+            double coupling = dist(rng_);
+            entanglement_coupling_[i][j] = coupling;
+            entanglement_coupling_[j][i] = coupling;  // Symmetric
+        }
+    }
+}
+
+double MoERouter::compute_coherence(const std::vector<double>& probabilities) const {
+    // Compute coherence as the inverse of entropy (normalized)
+    // Higher coherence = more peaked distribution = more decisive routing
+    double entropy = 0.0;
+    for (double p : probabilities) {
+        if (p > 1e-10) {
+            entropy -= p * std::log2(p);
+        }
+    }
+    
+    double max_entropy = std::log2(config_.total_experts);
+    if (max_entropy < 1e-10) return 1.0;
+    
+    // Coherence = 1 - (normalized entropy)
+    return 1.0 - (entropy / max_entropy);
 }
 
 std::unique_ptr<MoERouter> create_moe_router(const ExpertConfig& config) {

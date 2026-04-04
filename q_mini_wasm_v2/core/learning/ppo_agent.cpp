@@ -5,6 +5,7 @@
 #include <random>
 #include <fstream>
 #include <iostream>
+#include <string>
 
 namespace q_mini_wasm_v2::core::learning {
 
@@ -58,7 +59,7 @@ void PPOAgent::store_experience(const PPOExperience& experience) {
     }
 }
 
-PPOAgent::PPOStats PPOAgent::update_policy() {
+PPOStats PPOAgent::update_policy() {
     if (replay_buffer_.size() < config_.batch_size) {
         return stats_;
     }
