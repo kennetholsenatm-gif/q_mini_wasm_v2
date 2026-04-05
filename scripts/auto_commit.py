@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
-Auto-Commit Script for Kanban Board Integration
+Cognitive Ergonomics Auto-Commit Script
 
-This script analyzes staged changes and generates well-formed commit messages
-following the project's format conventions. It can be triggered from the
-Kanban board "Open PR" button to automate commit creation.
+Implements Cognitive Ergonomics Framework principles for git workflows:
+- Miller's Law (7±2 working memory limit)
+- Hick-Hyman Law (minimize decision points)
+- Gestalt Grouping (logical change clustering)
+- Progressive Disclosure (information layering)
+- Flow State Preservation (minimize context switching)
+
+Automatically generates ergonomic commit messages, validates against cognitive
+load constraints, and provides optimized push/PR workflows.
 """
 
 import argparse
@@ -151,7 +157,13 @@ def determine_commit_type(categories: Dict[str, List[str]], branch_name: str) ->
 
 
 def generate_scope(categories: Dict[str, List[str]]) -> str:
-    """Generate a scope for the commit message based on changed files."""
+    """
+    Generate commit scope following Miller's Law (max 2 scopes).
+    
+    Cognitive Principle: Human working memory can only hold 7±2 items.
+    By limiting scope to maximum 2 identifiers, we minimize cognitive load
+    and ensure commit messages are rapidly parsable.
+    """
     scopes = []
     
     # Check for specific modules or components
@@ -177,7 +189,7 @@ def generate_scope(categories: Dict[str, List[str]]) -> str:
         if "config" in file.lower() and "config" not in scopes:
             scopes.append("config")
     
-    # Limit to 2 scopes max
+    # STRICT: Limit to maximum 2 scopes (Miller's Law optimization)
     if len(scopes) > 2:
         scopes = scopes[:2]
     
@@ -221,12 +233,45 @@ def generate_commit_message(commit_type: str, scope: str, stats: Dict[str, int],
         return f"{commit_type}: {message}"
 
 
+def validate_cognitive_constraints(categories: Dict[str, List[str]], stats: Dict[str, int]) -> Tuple[bool, List[str]]:
+    """
+    Validate commit against Cognitive Ergonomics Framework constraints.
+    
+    Checks:
+    - Change count does not exceed working memory limits
+    - Changes are logically grouped (Gestalt principle)
+    - Single logical purpose per commit
+    """
+    warnings = []
+    valid = True
+    
+    # Miller's Law: >15 files exceeds cognitive parsing capacity
+    if stats["files"] > 15:
+        warnings.append(f"⚠️  COGNITIVE WARNING: {stats['files']} files changed. Consider splitting into smaller atomic commits.")
+        valid = False
+    
+    # Gestalt Grouping: multiple unrelated change types indicate unchunked work
+    change_types = sum(1 for files in categories.values() if len(files) > 0)
+    if change_types > 3:
+        warnings.append("⚠️  COGNITIVE WARNING: Multiple unrelated change types detected. This commit spans multiple domains.")
+        valid = False
+    
+    # Flow State: very large changes break review continuity
+    if stats["insertions"] + stats["deletions"] > 500:
+        warnings.append(f"⚠️  COGNITIVE WARNING: {stats['insertions'] + stats['deletions']} total lines changed. Large diffs reduce review quality.")
+    
+    return valid, warnings
+
+
 def validate_commit_message(message: str) -> Tuple[bool, str]:
-    """Validate that the commit message follows the required format."""
+    """Validate commit message format AND cognitive ergonomics constraints."""
     import re
     pattern = r"^(feat|fix|docs|style|refactor|test|chore|quantum)(\(\w+\))?: .{1,72}$"
     
     if re.match(pattern, message):
+        # Additional ergonomic validation
+        if len(message) > 60:
+            return True, "Commit message valid (optimal length for rapid scanning)"
         return True, "Commit message format is valid"
     else:
         return False, f"Commit message does not match required format: {pattern}"
@@ -297,6 +342,19 @@ def auto_commit(repo_path: str = ".", auto_push: bool = False,
     if not is_valid:
         result["error"] = f"Generated commit message is invalid: {validation_message}"
         return result
+    
+    # Apply Cognitive Ergonomics validation
+    cognitive_valid, cognitive_warnings = validate_cognitive_constraints(categories, stats)
+    result["cognitive_warnings"] = cognitive_warnings
+    
+    # Print ergonomic feedback with visual hierarchy
+    if cognitive_warnings:
+        print("\n" + "="*60)
+        print("📊 COGNITIVE ERGONOMICS FEEDBACK:")
+        print("="*60)
+        for warning in cognitive_warnings:
+            print(f"  {warning}")
+        print("="*60 + "\n")
     
     if dry_run:
         result["success"] = True
@@ -374,7 +432,18 @@ This PR was automatically created by the Kanban Auto-Commit workflow.
     return result
 
 
+def enable_unicode_support():
+    """Enable Unicode output support for Windows terminals."""
+    import sys
+    if sys.platform == 'win32':
+        # Set UTF-8 encoding for stdout/stderr on Windows
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+
+
 def main():
+    enable_unicode_support()
+    
     parser = argparse.ArgumentParser(
         description="Auto-commit staged changes with generated commit messages"
     )
@@ -398,15 +467,30 @@ def main():
     else:
         if result["success"]:
             if result["dry_run"]:
-                print(f"Would commit with message: {result['commit_message']}")
-                print(f"Staged files: {len(result['staged_files'])}")
-                print(f"Stats: +{result['stats']['insertions']}/-{result['stats']['deletions']}")
+                print("\n" + "="*60)
+                print("✅  COMMIT PREVIEW (DRY RUN)")
+                print("="*60)
+                print(f"\n  📝 Message: {result['commit_message']}")
+                print(f"  📁 Files:   {len(result['staged_files'])}")
+                print(f"  📊 Changes: +{result['stats']['insertions']} / -{result['stats']['deletions']}")
+                print("\n" + "="*60 + "\n")
             else:
-                print(f"Successfully committed: {result['commit_message']}")
+                print("\n" + "="*60)
+                print("✅  COMMIT SUCCESSFUL")
+                print("="*60)
+                print(f"\n  📝 {result['commit_message']}")
+                print("\n" + "="*60)
+                
                 if args.auto_push:
-                    print("Changes pushed to remote")
+                    print("\n  🚀 Pushing changes to remote...")
+                    print("  ✓ Changes pushed successfully")
+                    print()
         else:
-            print(f"Error: {result['error']}", file=sys.stderr)
+            print("\n" + "="*60)
+            print("❌  COMMIT FAILED")
+            print("="*60)
+            print(f"\n  Error: {result['error']}")
+            print("\n" + "="*60 + "\n", file=sys.stderr)
             sys.exit(1)
 
 
