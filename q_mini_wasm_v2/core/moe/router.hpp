@@ -91,7 +91,7 @@ public:
      * @param input Input features
      * @return Routing logits for each expert
      */
-    std::vector<double> compute_routing_logits(const std::vector<ternary::Trit>& input);
+    std::vector<int8_t> compute_routing_logits(const std::vector<ternary::Trit>& input);
     
     /**
      * @brief Apply entanglement-based routing via stabilizer tableau
@@ -170,6 +170,24 @@ public:
         size_t k
     ) const;
 
+    /**
+     * @brief Expert Choice Routing
+     * 
+     * Implements the GF(3) symplectic Expert Choice algorithm from
+     * Quantum Architecture Review §3.4. Experts select tokens rather than
+     * tokens selecting experts, eliminating load imbalance.
+     * 
+     * @param symplectic_scores GF(3) alignment scores for each token
+     * @param expert_loads Current expert load counters
+     * @param tokens_per_expert Maximum tokens per expert
+     * @return Token assignment matrix [expert][token_idx]
+     */
+    std::vector<std::vector<size_t>> expert_choice_route(
+        const std::vector<int8_t>& symplectic_scores,
+        const std::vector<size_t>& expert_loads,
+        size_t tokens_per_expert
+    ) const;
+
     // ========================================================================
     // Configuration
     // ========================================================================
@@ -209,7 +227,7 @@ private:
     /**
      * @brief Select Top-K indices from logits
      */
-    std::vector<size_t> select_topk(const std::vector<double>& logits, size_t k) const;
+    std::vector<size_t> select_topk(const std::vector<int8_t>& scores, size_t k) const;
     
     /**
      * @brief Compute factorial for combinations
