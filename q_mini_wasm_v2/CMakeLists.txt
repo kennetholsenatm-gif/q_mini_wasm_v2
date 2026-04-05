@@ -66,9 +66,7 @@ set(CORE_SOURCES
     core/moe/router.cpp
     core/learning/forward_forward.hpp
     core/learning/forward_forward.cpp
-    core/learning/ppo_agent.hpp
-    core/learning/ppo_agent.cpp
-    core/network.hpp
+        core/network.hpp
     core/network.cpp
     core/inference/geometric_context.hpp
     core/inference/geometric_context.cpp
@@ -177,9 +175,6 @@ if(BUILD_TESTS)
     add_executable(q_mini_wasm_v2_network_test tests/test_network.cpp)
     target_link_libraries(q_mini_wasm_v2_network_test PRIVATE q_mini_wasm_v2_core)
     
-    add_executable(q_mini_wasm_v2_ppo_test tests/test_ppo.cpp)
-    target_link_libraries(q_mini_wasm_v2_ppo_test PRIVATE q_mini_wasm_v2_core)
-    
     # DLL integration test
     if(BUILD_DLL)
         add_executable(q_mini_wasm_v2_dll_test tests/integration_test.cpp)
@@ -201,7 +196,6 @@ if(BUILD_TESTS)
     enable_testing()
     add_test(NAME q_mini_wasm_v2_tests COMMAND q_mini_wasm_v2_tests)
     add_test(NAME q_mini_wasm_v2_network_test COMMAND q_mini_wasm_v2_network_test)
-    add_test(NAME q_mini_wasm_v2_ppo_test COMMAND q_mini_wasm_v2_ppo_test)
 endif()
 
 # ============================================================================

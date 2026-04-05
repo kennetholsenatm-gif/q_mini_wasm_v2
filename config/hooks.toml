@@ -150,6 +150,24 @@ unix = "cd q_mini_wasm_v2/go && gofmt -l . | grep . && exit 1 || exit 0"
 powershell = "Set-Location q_mini_wasm_v2/go; if (gofmt -l . | Select-String '.') { exit 1 } else { exit 0 }"
 
 [[git_hooks.pre_commit.checks]]
+name = "cognitive_ergonomics_lint"
+description = "Validate configuration files against Cognitive Ergonomics principles"
+required = true
+
+[git_hooks.pre_commit.checks.commands]
+unix = "cd agents && go run cmd/lint_cognitive_ergonomics.go ../config/"
+powershell = "Set-Location agents; go run cmd/lint_cognitive_ergonomics.go ../config/"
+
+[[git_hooks.pre_commit.checks]]
+name = "research_alignment_verification"
+description = "Verify code changes align with documented research principles"
+required = true
+
+[git_hooks.pre_commit.checks.commands]
+unix = "python scripts/update_research_alignment.py --verify"
+powershell = "python scripts/update_research_alignment.py --verify"
+
+[[git_hooks.pre_commit.checks]]
 name = "python_lint"
 command = "ruff check q_miniwasm/"
 description = "Check Python code with ruff"
@@ -228,6 +246,15 @@ required = false
 [git_hooks.post_commit.actions.commands]
 unix = "curl -X POST http://localhost:8080/index -d '{\"commit\": \"$(git rev-parse HEAD)\"}'"
 powershell = "Invoke-RestMethod -Uri http://localhost:8080/index -Method Post -Body @{commit = (git rev-parse HEAD) | Out-String}"
+
+[[git_hooks.post_commit.actions]]
+name = "update_research_alignment"
+description = "Update research alignment tracking database"
+required = true
+
+[git_hooks.post_commit.actions.commands]
+unix = "python scripts/update_research_alignment.py --update"
+powershell = "python scripts/update_research_alignment.py --update"
 
 [git_hooks.post_merge]
 description = "Post-merge automation"

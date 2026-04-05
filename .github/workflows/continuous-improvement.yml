@@ -36,7 +36,21 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.22'
+
+      - name: Build Go Agent Binaries
+        run: |
+          echo 'Building Go agent binaries...'
+          cd agents
+          go build -o agentd.exe cmd/agentd/main.go
+
+      - name: Cognitive Ergonomics Lint
+        id: cognitive-lint
+        run: |
+          echo 'Running Cognitive Ergonomics validation...'
+          agents/agentd.exe lint --toml config/rules.toml
+          agents/agentd.exe lint --toml config/skills.toml
+          agents/agentd.exe lint --toml config/workflows.toml
 
       - name: Analyze RAG Service Performance
         id: rag-analysis

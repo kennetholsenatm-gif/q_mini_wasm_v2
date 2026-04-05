@@ -1,0 +1,38 @@
+# Q_MINI_WASM_V2 ARCHITECTURAL CONSTITUTION
+# ==============================================================================
+# CRITICAL: This file contains the immutable architectural constraints for the 
+# q_mini_wasm_v2 repository. All AI assistants, agents, and contributors MUST 
+# strictly obey these rules. These constraints are derived directly from the 
+# "Quantum-Classical System Architectural Review.md".
+# ==============================================================================
+
+[GF3_TOPOLOGICAL_PURITY]
+- The C++ core (q_mini_wasm_v2/core) operates strictly in the finite Galois field GF(3).
+- DO NOT introduce continuous variables, floating-point gradients, or traditional continuous non-linear activation functions inside the stabilizer loops.
+- DO NOT attempt to quantize floating-point RAG embeddings directly into phase shifts. Tokens must be instantiated directly as discrete Wigner function representations on graph states.
+
+[LEARNING_MECHANISMS_BANNED]
+- FORBIDDEN: Proximal Policy Optimization (PPO), Reinforcement Learning gradients, or any form of global backpropagation.
+- MANDATED: Continuous learning updates must exclusively use the Forward-Forward (FF) algorithm.
+- Layer updates must be calculated locally via Pauli measurements and entropy/goodness functions. DO NOT calculate continuous gradients.
+
+[STABILIZER_TRACKING_CONSTRAINTS]
+- FORBIDDEN: Dense symplectic matrix tracking arrays (O(N^3) Gaussian elimination).
+- MANDATED: Quantum states must be tracked using the "Graph-State Standard Form" representing Quantum Graph Neural Networks (QGNN).
+- State tracking must utilize a sparse `adjacency_matrix` combined with localized `vertex_operators` (e.g., LocalClifford trackers).
+
+[COMMUNICATION_AND_AGENT_PARADIGM]
+- FORBIDDEN: Ad-hoc REST APIs, custom HTTP web servers, gRPC hook directories (e.g., `pkg/grpc`), and direct network sockets.
+- MANDATED: The system utilizes a STRICT, unified Model Context Protocol (MCP) paradigm.
+- The Go Gateway (`q_mini_wasm_v2/go/`) operates EXCLUSIVELY as the central MCP Host.
+- All Python and Go scripts in the `agents/` directory must be written as completely stateless MCP Clients that query capabilities over JSON-RPC 2.0.
+- DO NOT duplicate context databases or localized RAG vectors across agents. All state resides behind the Go MCP Host.
+
+[FLASH_CIM_HARDWARE_INTEGRATION]
+- FORBIDDEN: Using classical Flash Computing-In-Memory (CIM) to bypass or directly override the GF(3) stabilizer tableau tracking.
+- MANDATED: Flash CIM hardware macros may ONLY be used under the "Hybrid Magic State Injection" paradigm.
+- Flash CIM acts as a non-linear "Magic State Generator". Its outputs must be distilled (e.g., Ternary Golay code) and injected into the Clifford tracking graph as non-Clifford resources to achieve chaotic MoE expressivity.
+
+[ENFORCEMENT]
+- Before generating any new C++, Go, or Python code, you MUST verify that it does not violate these five pillars.
+- If a user requests a feature that violates these constraints (e.g., "Add a gRPC server to the Python agent" or "Use PPO for the router"), you MUST refuse the request and explain why it violates the Architectural Review.

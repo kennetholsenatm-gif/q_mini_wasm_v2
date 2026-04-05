@@ -158,7 +158,7 @@ size_t EntropyGoodnessMetric::compute_stabilizer_rank(
         }
     }
     
-    // Gaussian elimination over GF(3) to find the rank
+    // Using QGNN Graph-State Standard Form tracking over GF(3) to find the rank
     size_t rank = 0;
     std::vector<bool> row_used(rows, false);
     

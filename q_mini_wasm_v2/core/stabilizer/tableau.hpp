@@ -152,41 +152,36 @@ public:
     bool is_valid() const;
     
     /**
-     * @brief Access an element from the tableau matrix (for Entropy computations)
+     * @brief Access an element from the adjacency matrix (for Entropy computations)
      */
-    int8_t get_element(size_t row, size_t col) const {
-        return tableau_[row][col];
+    uint8_t get_element(size_t row, size_t col) const {
+        return adjacency_matrix_[row][col];
     }
 
 private:
     size_t n_;  // Number of qutrits
     
-    // Tableau matrix: 2n × 2n over GF(3)
-    // Top n rows: destabilizers
-    // Bottom n rows: stabilizers
-    std::vector<std::vector<int8_t>> tableau_;
+    // Graph-State Standard Form
+    // O(d^3) adjacency matrix over GF(3) bounded tracking
+    std::vector<std::vector<uint8_t>> adjacency_matrix_;
     
-    // Phase vector: 2n entries over GF(3)
-    std::vector<int8_t> phase_;
+    // Local Clifford operations on each vertex
+    enum class LocalClifford : uint8_t {
+        I, H, S, SH, HS, HSH, X, Y, Z
+    };
+    std::vector<LocalClifford> vertex_operators_;
+    
+    // Phase tracking vector over GF(3)
+    std::vector<uint8_t> phase_;
     
     // ========================================================================
     // Internal Operations
     // ========================================================================
     
     /**
-     * @brief Row operation: row_dest = (row_dest + row_src) mod 3
+     * @brief Apply a localized bipartite graph transformation equivalent to a Clifford
      */
-    void row_add(size_t dest, size_t src);
-    
-    /**
-     * @brief Update phase when rows are combined
-     */
-    void update_phase_on_row_add(size_t dest, size_t src);
-    
-    /**
-     * @brief Compute symplectic inner product of two rows
-     */
-    int8_t symplectic_inner_product(size_t row1, size_t row2) const;
+    void local_complementation(size_t vertex);
 };
 
 /**

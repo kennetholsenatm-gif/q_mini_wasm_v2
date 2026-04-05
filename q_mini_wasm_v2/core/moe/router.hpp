@@ -161,6 +161,15 @@ public:
         const std::vector<size_t>& expert_counts
     ) const;
 
+    /**
+     * @brief Least-Loaded Expert Parallelism (LLEP) Routing
+     */
+    std::vector<size_t> llep_route(
+        const std::vector<double>& logits,
+        const std::vector<size_t>& expert_loads,
+        size_t k
+    ) const;
+
     // ========================================================================
     // Configuration
     // ========================================================================

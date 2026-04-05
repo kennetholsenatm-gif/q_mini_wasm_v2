@@ -745,7 +745,7 @@
   },
   {
     "file": ".\\scripts\\auto_commit.py",
-    "lines": 3,
+    "lines": 18,
     "classes": [],
     "functions": [
       "run_git",
@@ -756,8 +756,10 @@
       "determine_commit_type",
       "generate_scope",
       "generate_commit_message",
+      "validate_cognitive_constraints",
       "validate_commit_message",
       "auto_commit",
+      "enable_unicode_support",
       "main"
     ],
     "imports": [
@@ -768,6 +770,7 @@
       "pathlib",
       "typing",
       "re",
+      "sys",
       "subprocess",
       "datetime"
     ],

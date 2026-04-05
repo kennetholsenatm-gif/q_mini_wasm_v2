@@ -1,6 +1,11 @@
-#include "../q_mini_wasm_v2_api.hpp"#include "q_mini_wasm_v2_api.hpp"
+#include "../q_mini_wasm_v2_api.hpp"
 #include "../core/moe/router.hpp"
+#define _USE_MATH_DEFINES
 #include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 using namespace q_mini_wasm_v2::core::moe;
 
@@ -193,13 +198,21 @@ static void log_message(int level, const char* format, ...) {
     const char* level_str = level == 0 ? "ERROR" : level == 1 ? "WARN" : level == 2 ? "INFO" : "DEBUG";
     
     if (g_log_file.is_open()) {
-        g_log_file << "[" << level_str << "] " << std::ctime(&time);
+        char time_buf[26];
+        ctime_s(time_buf, sizeof(time_buf), &time);
+        // Remove newline from ctime_s
+        char* newline = strchr(time_buf, '\n');
+        if (newline) *newline = '\0';
+        
+        g_log_file << "[" << level_str << "] " << time_buf << " - ";
+        
         va_list args;
         va_start(args, format);
-        g_log_file << " - ";
-        g_log_file.vprintf(format, args);
+        char buffer[1024];
+        vsnprintf(buffer, sizeof(buffer), format, args);
         va_end(args);
-        g_log_file << std::endl;
+        
+        g_log_file << buffer << std::endl;
         g_log_file.flush();
     }
 }
@@ -351,7 +364,7 @@ Q_MINI_WASM_V2_API void* tableau_create(size_t num_qutrits) {
     }
     try {
         auto tableau = core::stabilizer::create_tableau(num_qutrits);
-        return make_handle(std::move(tableau));
+        return make_handle(std::shared_ptr<core::stabilizer::StabilizerTableau>(tableau.release()));
     } catch (...) {
         return nullptr;
     }
@@ -564,7 +577,7 @@ Q_MINI_WASM_V2_API void* moe_router_create(size_t total_experts, size_t active_e
     try {
         core::moe::ExpertConfig config{total_experts, active_experts, routing_qutrits};
         auto router = core::moe::create_moe_router(config);
-        return make_handle(std::move(router));
+        return make_handle(std::shared_ptr<core::moe::MoERouter>(router.release()));
     } catch (...) {
         return nullptr;
     }
@@ -626,7 +639,7 @@ Q_MINI_WASM_V2_API void* ff_learner_create(size_t num_layers, size_t neurons_per
             -1.0   // negative_threshold
         };
         auto learner = core::learning::create_ff_learner(config);
-        return make_handle(std::move(learner));
+        return make_handle(std::shared_ptr<core::learning::ForwardForwardLearner>(learner.release()));
     } catch (...) {
         return nullptr;
     }
@@ -693,7 +706,7 @@ Q_MINI_WASM_V2_API void* orchestrator_create(size_t num_threads) {
     try {
         runtime::RuntimeConfig config{num_threads, 100, true, false};
         auto orchestrator = runtime::create_orchestrator(config);
-        return make_handle(std::move(orchestrator));
+        return make_handle(std::shared_ptr<runtime::RuntimeOrchestrator>(orchestrator.release()));
     } catch (...) {
         return nullptr;
     }

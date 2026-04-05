@@ -133,7 +133,28 @@ public:
      * @return Future for task result
      */
     template<typename T>
-    std::future<T> submit_async(std::function<T()> task);
+    std::future<T> submit_async(std::function<T()> task) {
+        auto promise = std::make_shared<std::promise<T>>();
+        auto future = promise->get_future();
+        
+        auto wrapped_task = [task, promise]() {
+            try {
+                auto result = task();
+                promise->set_value(result);
+            } catch (...) {
+                promise->set_exception(std::current_exception());
+            }
+        };
+        
+        {
+            std::lock_guard<std::mutex> lock(queue_mutex_);
+            task_queue_.push(wrapped_task);
+            ++active_tasks_;
+        }
+        queue_cv_.notify_one();
+        
+        return future;
+    }
 
     // ========================================================================
     // Synchronization

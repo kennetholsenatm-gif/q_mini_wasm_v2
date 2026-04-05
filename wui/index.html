@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>q_mini_wasm_v2 Cognitive WUI</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <script src="js/main.js" defer></script>
+</head>
+<body>
+    <header class="wui-header">
+        <div class="wui-container">
+            <h1 class="wui-logo">q_mini_wasm_v2</h1>
+            <nav class="wui-nav">
+                <button class="wui-nav-toggle" aria-label="Toggle navigation">
+                    <span class="wui-nav-icon"></span>
+                </button>
+                <ul class="wui-nav-menu">
+                    <li><a href="#dashboard" class="wui-nav-link">Dashboard</a></li>
+                    <li><a href="#quantum-core" class="wui-nav-link">Quantum Core</a></li>
+                    <li><a href="#ternary-computing" class="wui-nav-link">Ternary Computing</a></li>
+                    <li><a href="#moe-routing" class="wui-nav-link">MoE Routing</a></li>
+                    <li><a href="#flash-cim" class="wui-nav-link">Flash-CIM</a></li>
+                    <li><a href="#sycl-acceleration" class="wui-nav-link">SYCL Acceleration</a></li>
+                    <li><a href="#forward-forward" class="wui-nav-link">Forward-Forward</a></li>
+                    <li><a href="#advanced" class="wui-nav-link wui-nav-advanced">Advanced</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wui-main">
+        <div class="wui-container">
+            <section id="dashboard" class="wui-section">
+                <h2 class="wui-section-title">System Dashboard</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Performance</h3>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Stabilizer Updates/sec</span>
+                            <span class="wui-metric-value" id="stabilizer-rate">0</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Energy Efficiency</span>
+                            <span class="wui-metric-value" id="energy-efficiency">0 pJ/op</span>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>System Status</h3>
+                        <div class="wui-status">
+                            <span class="wui-status-label">Quantum Core</span>
+                            <span class="wui-status-indicator" id="quantum-status">Initializing</span>
+                        </div>
+                        <div class="wui-status">
+                            <span class="wui-status-label">Ternary Engine</span>
+                            <span class="wui-status-indicator" id="ternary-status">Ready</span>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Recent Activity</h3>
+                        <ul class="wui-activity-log" id="activity-log">
+                            <li>System started</li>
+                            <li>Quantum core initialized</li>
+                            <li>Ternary engine ready</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="quantum-core" class="wui-section">
+                <h2 class="wui-section-title">Quantum Core</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Qutrit Stabilizer</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Number of Qutrits</label>
+                            <input type="number" class="wui-input" id="qutrit-count" min="1" max="1024" value="8">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Entanglement Graph</label>
+                            <select class="wui-select" id="entanglement-graph">
+                                <option value="linear">Linear</option>
+                                <option value="ring">Ring</option>
+                                <option value="star">Star</option>
+                                <option value="random">Random</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Operations</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Apply Hadamard</label>
+                            <button class="wui-button" onclick="applyHadamard()">Apply</button>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Apply Phase</label>
+                            <button class="wui-button" onclick="applyPhase()">Apply</button>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Measure</label>
+                            <button class="wui-button" onclick="measureQutrit()">Measure</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="ternary-computing" class="wui-section">
+                <h2 class="wui-section-title">Ternary Computing</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Trit Operations</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Trit 1</label>
+                            <select class="wui-select" id="trit1">
+                                <option value="-1">Negative</option>
+                                <option value="0">Zero</option>
+                                <option value="1">Positive</option>
+                            </select>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Trit 2</label>
+                            <select class="wui-select" id="trit2">
+                                <option value="-1">Negative</option>
+                                <option value="0">Zero</option>
+                                <option value="1">Positive</option>
+                            </select>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Operation</label>
+                            <select class="wui-select" id="ternary-op">
+                                <option value="add">Add</option>
+                                <option value="mul">Multiply</option>
+                                <option value="neg">Negate</option>
+                            </select>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Result</label>
+                            <span class="wui-result" id="ternary-result">0</span>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>GF(3) Arithmetic</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Input Value</label>
+                            <input type="number" class="wui-input" id="gf3-input" min="-1" max="1" value="0">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Modulus</label>
+                            <span class="wui-result" id="gf3-modulus">3</span>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Result</label>
+                            <span class="wui-result" id="gf3-result">0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="moe-routing" class="wui-section">
+                <h2 class="wui-section-title">MoE Routing</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Expert Configuration</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Number of Experts</label>
+                            <input type="number" class="wui-input" id="expert-count" min="1" max="1024" value="8">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Top-K Selection</label>
+                            <input type="number" class="wui-input" id="top-k" min="1" max="8" value="2">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Load Balancing</label>
+                            <select class="wui-select" id="load-balancing">
+                                <option value="none">None</option>
+                                <option value="round-robin">Round Robin</option>
+                                <option value="hash">Hash-based</option>
+                                <option value="priority">Priority-based</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Routing Metrics</h3>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Current Load</span>
+                            <span class="wui-metric-value" id="current-load">0%</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Expert Utilization</span>
+                            <span class="wui-metric-value" id="expert-utilization">0%</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Routing Efficiency</span>
+                            <span class="wui-metric-value" id="routing-efficiency">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="flash-cim" class="wui-section">
+                <h2 class="wui-section-title">Flash-CIM</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Memory Configuration</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Memory Size</label>
+                            <input type="number" class="wui-input" id="memory-size" min="1" max="1024" value="256">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Wordline Count</label>
+                            <input type="number" class="wui-input" id="wordline-count" min="1" max="64" value="32">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Sensing Mode</label>
+                            <select class="wui-select" id="sensing-mode">
+                                <option value="single">Single</option>
+                                <option value="multi">Multi</option>
+                                <option value="adaptive">Adaptive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Performance Metrics</h3>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Read Latency</span>
+                            <span class="wui-metric-value" id="read-latency">0 ns</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Write Energy</span>
+                            <span class="wui-metric-value" id="write-energy">0 pJ</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Endurance</span>
+                            <span class="wui-metric-value" id="endurance">0 cycles</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="sycl-acceleration" class="wui-section">
+                <h2 class="wui-section-title">SYCL Acceleration</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Device Configuration</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Target Device</label>
+                            <select class="wui-select" id="target-device">
+                                <option value="cpu">CPU</option>
+                                <option value="gpu">GPU</option>
+                                <option value="fpga">FPGA</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Workgroup Size</label>
+                            <input type="number" class="wui-input" id="workgroup-size" min="1" max="1024" value="256">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Vector Width</label>
+                            <input type="number" class="wui-input" id="vector-width" min="1" max="16" value="4">
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Acceleration Metrics</h3>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Speedup</span>
+                            <span class="wui-metric-value" id="speedup">0x</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Memory Bandwidth</span>
+                            <span class="wui-metric-value" id="memory-bandwidth">0 GB/s</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Compute Efficiency</span>
+                            <span class="wui-metric-value" id="compute-efficiency">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="forward-forward" class="wui-section">
+                <h2 class="wui-section-title">Forward-Forward Learning</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Network Configuration</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Layers</label>
+                            <input type="number" class="wui-input" id="layer-count" min="1" max="10" value="3">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Neurons per Layer</label>
+                            <input type="number" class="wui-input" id="neurons-per-layer" min="1" max="1024" value="64">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Learning Rate</label>
+                            <input type="number" class="wui-input" id="learning-rate" min="0.001" max="1.0" step="0.001" value="0.1">
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Training Metrics</h3>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Loss</span>
+                            <span class="wui-metric-value" id="training-loss">0.0</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Accuracy</span>
+                            <span class="wui-metric-value" id="training-accuracy">0%</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Epochs</span>
+                            <span class="wui-metric-value" id="training-epochs">0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="advanced" class="wui-section wui-section-advanced">
+                <h2 class="wui-section-title">Advanced Settings</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Experimental Features</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">
+                                <input type="checkbox" class="wui-checkbox" id="experimental-mode">
+                                Enable Experimental Mode
+                            </label>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">
+                                <input type="checkbox" class="wui-checkbox" id="debug-mode">
+                                Enable Debug Mode
+                            </label>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">
+                                <input type="checkbox" class="wui-checkbox" id="verbose-logging">
+                                Enable Verbose Logging
+                            </label>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>System Configuration</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">API Key</label>
+                            <input type="password" class="wui-input" id="api-key" placeholder="Enter API key">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Timeout (ms)</label>
+                            <input type="number" class="wui-input" id="timeout" min="100" max="10000" value="1000">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Max Retries</label>
+                            <input type="number" class="wui-input" id="max-retries" min="0" max="10" value="3">
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="wui-footer">
+        <div class="wui-container">
+            <p>&copy; 2026 q_mini_wasm_v2 - Cognitive-Enhanced Web User Interface</p>
+        </div>
+    </footer>
+</body>
+</html>
