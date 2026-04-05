@@ -130,8 +130,9 @@ public:
     /**
      * @brief Compute stabilizer state overlap for routing decisions
      * Used in Forward-Forward learning goodness metric
+     * Returns value in GF(3) range [0, 2] representing entropy goodness
      */
-    double compute_overlap() const;
+    uint8_t compute_overlap() const;
 
     // ========================================================================
     // State Management

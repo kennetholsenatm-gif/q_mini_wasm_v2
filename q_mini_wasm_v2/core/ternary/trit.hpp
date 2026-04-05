@@ -86,16 +86,16 @@ struct TritBlock5 {
     }
     
     /**
-     * @brief Unpack byte into 5 trits using LUT or modulo division
+     * @brief Precomputed lookup table for unpacking bytes into 5 trits
+     * Eliminates modulo division operations for maximum WASM performance
      */
-    static TritBlock5 unpack(uint8_t byte) noexcept {
-        TritBlock5 block;
-        int val = byte;
-        for (int i = 0; i < 5; ++i) {
-            block.trits[i] = from_gf3(val % 3);
-            val /= 3;
-        }
-        return block;
+    static const TritBlock5 UNPACK_LUT[256];
+
+    /**
+     * @brief Unpack byte into 5 trits using precomputed LUT
+     */
+    static constexpr TritBlock5 unpack(uint8_t byte) noexcept {
+        return UNPACK_LUT[byte];
     }
 };
 
