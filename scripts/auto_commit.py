@@ -23,7 +23,11 @@ from typing import Dict, List, Optional, Tuple
 
 # Commit message format from config/hooks.json
 # Format: ^(feat|fix|docs|style|refactor|test|chore|quantum)\(\w+\): .{1,72}
-COMMIT_TYPES = ["feat", "fix", "docs", "style", "refactor", "test", "chore", "quantum"]
+# Hierarchical commit type grouping (Hick-Hyman Law optimization)
+# Grouped into 3 primary + 5 secondary to minimize decision load
+PRIMARY_COMMIT_TYPES = ["feat", "fix", "chore"]
+SECONDARY_COMMIT_TYPES = ["docs", "style", "refactor", "test", "quantum"]
+COMMIT_TYPES = PRIMARY_COMMIT_TYPES + SECONDARY_COMMIT_TYPES
 
 
 def run_git(args: List[str], repo_path: str = ".") -> Tuple[bool, str]:
@@ -347,14 +351,14 @@ def auto_commit(repo_path: str = ".", auto_push: bool = False,
     cognitive_valid, cognitive_warnings = validate_cognitive_constraints(categories, stats)
     result["cognitive_warnings"] = cognitive_warnings
     
-    # Print ergonomic feedback with visual hierarchy
+    # Progressive Disclosure: Only show detailed stats when requested or warnings exist
     if cognitive_warnings:
-        print("\n" + "="*60)
-        print("📊 COGNITIVE ERGONOMICS FEEDBACK:")
-        print("="*60)
+        print("\n" + "═"*60)
+        print("  📊 COGNITIVE ERGONOMICS FEEDBACK")
+        print("═"*60)
         for warning in cognitive_warnings:
             print(f"  {warning}")
-        print("="*60 + "\n")
+        print("═"*60 + "\n")
     
     if dry_run:
         result["success"] = True
@@ -467,30 +471,31 @@ def main():
     else:
         if result["success"]:
             if result["dry_run"]:
-                print("\n" + "="*60)
-                print("✅  COMMIT PREVIEW (DRY RUN)")
-                print("="*60)
-                print(f"\n  📝 Message: {result['commit_message']}")
-                print(f"  📁 Files:   {len(result['staged_files'])}")
-                print(f"  📊 Changes: +{result['stats']['insertions']} / -{result['stats']['deletions']}")
-                print("\n" + "="*60 + "\n")
+                # Fitts's Law optimized layout: critical information first, grouped vertically
+                print("\n" + "═"*60)
+                print("  ✅  COMMIT PREVIEW (DRY RUN)")
+                print("═"*60)
+                print(f"\n      📝  {result['commit_message']}")
+                print(f"\n      📁  {len(result['staged_files'])} files changed")
+                print(f"      📊  +{result['stats']['insertions']} insertions / -{result['stats']['deletions']} deletions")
+                print("\n" + "═"*60 + "\n")
             else:
-                print("\n" + "="*60)
-                print("✅  COMMIT SUCCESSFUL")
-                print("="*60)
-                print(f"\n  📝 {result['commit_message']}")
-                print("\n" + "="*60)
+                print("\n" + "═"*60)
+                print("  ✅  COMMIT SUCCESSFUL")
+                print("═"*60)
+                print(f"\n      📝  {result['commit_message']}")
+                print("\n" + "═"*60)
                 
                 if args.auto_push:
-                    print("\n  🚀 Pushing changes to remote...")
-                    print("  ✓ Changes pushed successfully")
+                    print("\n      🚀  Pushing changes to remote...")
+                    print("      ✓  Changes pushed successfully")
                     print()
         else:
-            print("\n" + "="*60)
-            print("❌  COMMIT FAILED")
-            print("="*60)
-            print(f"\n  Error: {result['error']}")
-            print("\n" + "="*60 + "\n", file=sys.stderr)
+            print("\n" + "═"*60)
+            print("  ❌  COMMIT FAILED")
+            print("═"*60)
+            print(f"\n      {result['error']}")
+            print("\n" + "═"*60 + "\n", file=sys.stderr)
             sys.exit(1)
 
 

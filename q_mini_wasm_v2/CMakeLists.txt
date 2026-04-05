@@ -14,6 +14,24 @@ target_link_libraries(q_mini_wasm_v2_trainer PRIVATE q_mini_wasm_v2_core)
 add_executable(q_mini_wasm_v2_infer core/inference/infer_main.cpp)
 target_link_libraries(q_mini_wasm_v2_infer PRIVATE q_mini_wasm_v2_core)
 
+# C++ Agent Implementations
+add_library(q_mini_wasm_v2_agents SHARED
+    agents/documentation_agent.cpp
+)
+
+target_link_libraries(q_mini_wasm_v2_agents PRIVATE
+    q_mini_wasm_v2_core
+)
+
+target_include_directories(q_mini_wasm_v2_agents PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+set_target_properties(q_mini_wasm_v2_agents PROPERTIES
+    OUTPUT_NAME "q_mini_wasm_v2_agents"
+    PREFIX ""
+)
+
 # ============================================================================
 # Runtime Orchestrator Operations
 # ============================================================================

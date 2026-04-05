@@ -1,4 +1,131 @@
-#include "../q_mini_wasm_v2_api.hpp"
+#include "../q_mini_wasm_v2_api.hpp"#include "q_mini_wasm_v2_api.hpp"
+#include "../core/moe/router.hpp"
+#include <cmath>
+
+using namespace q_mini_wasm_v2::core::moe;
+
+extern "C" {
+
+Q_MINI_WASM_V2_API size_t moe_router_llep_route(
+    void* handle,
+    const double* logits,
+    const size_t* expert_loads,
+    size_t num_experts,
+    size_t k,
+    size_t* selected,
+    size_t max_selected
+) {
+    if (!handle || !logits || !expert_loads || !selected || k == 0 || max_selected == 0) {
+        return 0;
+    }
+    
+    MoERouter* router = static_cast<MoERouter*>(handle);
+    
+    std::vector<double> logit_vec(logits, logits + num_experts);
+    std::vector<size_t> load_vec(expert_loads, expert_loads + num_experts);
+    
+    std::vector<size_t> result = router->llep_route(logit_vec, load_vec, std::min(k, max_selected));
+    
+    for (size_t i = 0; i < result.size() && i < max_selected; ++i) {
+        selected[i] = result[i];
+    }
+    
+    return result.size();
+}
+
+Q_MINI_WASM_V2_API double quantum_entanglement_score(uint64_t content_hash, double base_score) {
+    // Quantum Entanglement Entropy Scoring over GF(3) qutrit space
+    uint64_t signature_hash = content_hash % 2187; // 3^7 = 2187 states
+    
+    // Map to ternary stabilizer phase space
+    int t0 = signature_hash / 729;
+    uint64_t remainder = signature_hash % 729;
+    int t1 = remainder / 243;
+    remainder %= 243;
+    int t2 = remainder / 81;
+    remainder %= 81;
+    int t3 = remainder / 27;
+    remainder %= 27;
+    int t4 = remainder / 9;
+    remainder %= 9;
+    int t5 = remainder / 3;
+    int t6 = remainder % 3;
+    
+    // Symplectic inner product calculation
+    int symplectic_product = (t0 * t3 + t1 * t4 + t2 * t5) % 3;
+    
+    double entropy;
+    if (symplectic_product == 0) {
+        // Self-orthogonal state (maximally entangled)
+        entropy = 1.0;
+    } else {
+        // Calculate purity
+        double purity = pow(cos((symplectic_product * M_PI) / 3.0), 2);
+        entropy = -purity * log2(purity) - (1-purity) * log2(1-purity);
+        if (purity <= 0 || purity >= 1) entropy = 0.0;
+    }
+    
+    // 60% quantum / 40% classical weighted scoring
+    return (base_score * 0.4) + (entropy * 0.6);
+}
+
+// ============================================================================
+// 1.58-bit Ternary Weight Packing / Unpacking
+// ============================================================================
+
+Q_MINI_WASM_V2_API uint8_t ternary_pack_5(const int8_t trits[5]) {
+    // Pack 5 ternary values (-1, 0, 1) into single 8-bit byte
+    // 3^5 = 243 possible states < 256 byte capacity
+    uint8_t result = 0;
+    int multiplier = 1;
+    
+    for (int i = 0; i < 5; ++i) {
+        // Normalize to 0..2 range
+        int normalized = trits[i] + 1;
+        result += normalized * multiplier;
+        multiplier *= 3;
+    }
+    
+    return result;
+}
+
+Q_MINI_WASM_V2_API void ternary_unpack_5(uint8_t packed, int8_t trits[5]) {
+    // Unpack single byte back into 5 ternary values
+    int remainder = packed;
+    
+    for (int i = 0; i < 5; ++i) {
+        int normalized = remainder % 3;
+        trits[i] = static_cast<int8_t>(normalized - 1);
+        remainder /= 3;
+    }
+}
+
+Q_MINI_WASM_V2_API void ternary_gemm_execute(
+    const int8_t* activations,
+    const uint8_t* packed_weights,
+    int32_t* output,
+    size_t dimension
+) {
+    // 1.58-bit ternary matrix multiplication: replaces floating point MAC
+    // with pure integer addition/subtraction operations only
+    int8_t weight_trits[5];
+    
+    for (size_t i = 0; i < dimension; ++i) {
+        ternary_unpack_5(packed_weights[i / 5], weight_trits);
+        int8_t w = weight_trits[i % 5];
+        
+        if (w == 0) {
+            // Zero weight: no contribution
+            continue;
+        } else if (w == 1) {
+            output[i] += activations[i];
+        } else { // w == -1
+            output[i] -= activations[i];
+        }
+    }
+}
+
+}
 #include "../../core/ternary/trit.hpp"
 #include "../../core/qutrit_stabilizer.h"
 #include "../../core/stabilizer/tableau.hpp"

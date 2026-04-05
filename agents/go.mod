@@ -1,5 +1,3 @@
-module research-alignment-agent
+module github.com/kennetholsenatm-gif/q_mini_wasm_v2/agents
 
-go 1.21.0
-
-require github.com/pelletier/go-toml/v2 v2.3.0 // indirect
+go 1.22

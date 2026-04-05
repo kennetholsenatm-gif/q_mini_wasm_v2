@@ -1,0 +1,1354 @@
+[
+  {
+    "file": ".\\agents\\base_agent.py",
+    "lines": 11,
+    "classes": [
+      "AgentState",
+      "TaskResult",
+      "AgentMemory",
+      "AgentConfig",
+      "BaseAgent"
+    ],
+    "functions": [
+      "store_pattern",
+      "store_improvement",
+      "get_recent_patterns",
+      "get_recent_improvements",
+      "__init__",
+      "name",
+      "description",
+      "uptime",
+      "check_rate_limit",
+      "record_request",
+      "get_performance_summary"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "logging",
+      "abc",
+      "dataclasses",
+      "datetime",
+      "pathlib",
+      "typing",
+      "enum",
+      "structlog",
+      "pydantic",
+      "agents.rag_client"
+    ],
+    "async_functions": [
+      "initialize",
+      "shutdown",
+      "_load_memory",
+      "_save_memory",
+      "execute_with_retry",
+      "execute_task",
+      "analyze_performance",
+      "suggest_improvements",
+      "_get_rag_client",
+      "retrieve_context",
+      "enhance_prompt_with_context",
+      "check_rag_health"
+    ],
+    "has_regex": false,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "rust",
+    "reason": "Concurrent/async systems programming"
+  },
+  {
+    "file": ".\\agents\\cleanup_agent.py",
+    "lines": 1,
+    "classes": [
+      "CleanupAgent"
+    ],
+    "functions": [
+      "__init__",
+      "_find_pattern_in_files"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "re",
+      "datetime",
+      "pathlib",
+      "typing",
+      "structlog",
+      "base_agent"
+    ],
+    "async_functions": [
+      "execute_task",
+      "_scan_for_completions",
+      "_cleanup_temp_files",
+      "_archive_completed_logs",
+      "_full_cleanup",
+      "_check_completion_pattern",
+      "analyze_performance",
+      "suggest_improvements"
+    ],
+    "has_regex": true,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\agents\\cli.py",
+    "lines": 6,
+    "classes": [],
+    "functions": [
+      "cli",
+      "status",
+      "run_cycle",
+      "continuous",
+      "test_llm",
+      "kanban_review",
+      "generate_config"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "sys",
+      "pathlib",
+      "typing",
+      "click",
+      "rich.console",
+      "rich.table",
+      "rich.panel",
+      "improvement_cycle",
+      "llm.gemini_service",
+      "kanban_review_fix_agent",
+      "traceback"
+    ],
+    "async_functions": [
+      "_run",
+      "_run_continuous",
+      "_test",
+      "_run"
+    ],
+    "has_regex": true,
+    "has_async": true,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\agents\\documentation_agent.py",
+    "lines": 2,
+    "classes": [
+      "DocumentationAgent"
+    ],
+    "functions": [
+      "__init__",
+      "_generate_architecture_diagram",
+      "_generate_data_flow_diagram",
+      "_generate_user_journey_diagram",
+      "_generate_component_interaction_diagram",
+      "_generate_build_pipeline_diagram",
+      "_generate_architecture_overview",
+      "_generate_api_reference",
+      "_validate_markdown_file"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "re",
+      "datetime",
+      "pathlib",
+      "typing",
+      "structlog",
+      "base_agent",
+      "subprocess"
+    ],
+    "async_functions": [
+      "execute_task",
+      "_scan_codebase_changes",
+      "_generate_mermaid_diagrams",
+      "_update_documentation",
+      "_update_architecture_docs",
+      "_update_api_docs",
+      "_validate_documentation",
+      "_sync_with_wiki",
+      "_full_documentation_update",
+      "analyze_performance",
+      "suggest_improvements"
+    ],
+    "has_regex": true,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\agents\\improvement_cycle.py",
+    "lines": 1,
+    "classes": [
+      "CyclePhase",
+      "ImprovementStatus",
+      "ImprovementPlan",
+      "ImprovementCycle"
+    ],
+    "functions": [
+      "__init__",
+      "_load_config",
+      "get_status"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "datetime",
+      "pathlib",
+      "typing",
+      "enum",
+      "structlog",
+      "pydantic",
+      "base_agent",
+      "llm.gemini_service",
+      "research_agent",
+      "analysis_agent",
+      "code_agent",
+      "test_agent"
+    ],
+    "async_functions": [
+      "initialize",
+      "_initialize_agents",
+      "run_cycle",
+      "_run_analysis_phase",
+      "_run_planning_phase",
+      "_run_implementation_phase",
+      "_run_validation_phase",
+      "_run_deployment_phase",
+      "_collect_performance_data",
+      "_identify_patterns",
+      "_generate_improvement_plan",
+      "_implement_improvements",
+      "_validate_improvements",
+      "_deploy_improvements",
+      "_save_cycle_history",
+      "shutdown"
+    ],
+    "has_regex": true,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\agents\\kanban_review_fix_agent.py",
+    "lines": 10,
+    "classes": [
+      "ReviewStatus",
+      "CardAction",
+      "ReviewCard",
+      "ReviewFixResult",
+      "KanbanReviewFixAgent"
+    ],
+    "functions": [
+      "age_hours",
+      "is_stuck",
+      "has_blocking_issues",
+      "reason_for_stuck",
+      "is_done",
+      "no_further_action_needed",
+      "is_ready_to_move_to_done",
+      "__init__",
+      "_load_kanban_config",
+      "_determine_action",
+      "_are_issues_fixable",
+      "_is_issue_auto_fixable",
+      "_generate_recommendations",
+      "validate_llm_messages"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "logging",
+      "dataclasses",
+      "datetime",
+      "pathlib",
+      "typing",
+      "enum",
+      "structlog",
+      "base_agent",
+      "llm.message_validator"
+    ],
+    "async_functions": [
+      "main",
+      "initialize",
+      "execute_task",
+      "_scan_review_cards",
+      "_load_review_cards",
+      "_fix_specific_card",
+      "_fix_all_stuck_cards",
+      "_fix_card",
+      "_execute_action",
+      "_move_to_rejected",
+      "_move_to_done",
+      "_create_fix_card",
+      "_escalate_card",
+      "_attempt_auto_fix",
+      "_generate_report",
+      "analyze_performance",
+      "handle_llm_api_error",
+      "suggest_improvements"
+    ],
+    "has_regex": false,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "rust",
+    "reason": "Concurrent/async systems programming"
+  },
+  {
+    "file": ".\\agents\\rag_client.py",
+    "lines": 2,
+    "classes": [
+      "RAGChunk",
+      "RAGResult",
+      "RAGClient"
+    ],
+    "functions": [
+      "context_text",
+      "source_files",
+      "__init__",
+      "_get_cache_key",
+      "_is_cache_valid",
+      "_apply_quantum_entanglement_scoring",
+      "_apply_llep_load_balancing",
+      "_apply_cognitive_ergonomics_chunking",
+      "get_hypersimplex_geometry"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "logging",
+      "math",
+      "dataclasses",
+      "typing",
+      "pathlib",
+      "httpx",
+      "structlog",
+      "time",
+      "time",
+      "ctypes",
+      "ctypes"
+    ],
+    "async_functions": [
+      "_get_client",
+      "close",
+      "retrieve_context",
+      "get_metrics",
+      "index_document",
+      "health_check"
+    ],
+    "has_regex": false,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "rust",
+    "reason": "Concurrent/async systems programming"
+  },
+  {
+    "file": ".\\agents\\research_agent.py",
+    "lines": 1,
+    "classes": [
+      "ResearchAgent"
+    ],
+    "functions": [
+      "__init__"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "datetime",
+      "pathlib",
+      "typing",
+      "structlog",
+      "base_agent",
+      "llm.gemini_service"
+    ],
+    "async_functions": [
+      "execute_task",
+      "_analyze_patterns",
+      "_analyze_git_history",
+      "_analyze_performance",
+      "_research_external",
+      "analyze_performance",
+      "suggest_improvements"
+    ],
+    "has_regex": false,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "rust",
+    "reason": "Concurrent/async systems programming"
+  },
+  {
+    "file": ".\\agents\\test_basic.py",
+    "lines": 5,
+    "classes": [],
+    "functions": [],
+    "imports": [
+      "asyncio",
+      "json",
+      "sys",
+      "pathlib",
+      "agents.base_agent",
+      "agents.llm.gemini_service"
+    ],
+    "async_functions": [
+      "test_agent_memory",
+      "test_gemini_config",
+      "test_agent_config",
+      "test_task_result",
+      "test_config_loading",
+      "run_all_tests"
+    ],
+    "has_regex": false,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "rust",
+    "reason": "Concurrent/async systems programming"
+  },
+  {
+    "file": ".\\agents\\test_llm_message_validator.py",
+    "lines": 7,
+    "classes": [],
+    "functions": [
+      "test_openrouter_error_fix",
+      "test_convenience_function",
+      "test_safe_assistant_message",
+      "test_error_parsing"
+    ],
+    "imports": [
+      "sys",
+      "pathlib",
+      "agents.llm.message_validator",
+      "traceback"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": "Data analysis/auto-improvement infrastructure"
+  },
+  {
+    "file": ".\\agents\\config\\env_loader.py",
+    "lines": 1,
+    "classes": [
+      "EnvConfig"
+    ],
+    "functions": [
+      "get_env",
+      "require_env",
+      "load_env_from_path",
+      "find_all_env_files",
+      "scan_for_env_variables",
+      "__init__",
+      "load",
+      "_find_env_file",
+      "get",
+      "get_bool",
+      "get_int",
+      "get_float",
+      "get_json",
+      "require",
+      "list_variables",
+      "is_loaded",
+      "get_env_file_path"
+    ],
+    "imports": [
+      "os",
+      "json",
+      "pathlib",
+      "typing",
+      "structlog",
+      "dotenv",
+      "re"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\agents\\config\\__init__.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [],
+    "imports": [
+      "env_loader"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": "Data analysis/auto-improvement infrastructure"
+  },
+  {
+    "file": ".\\agents\\llm\\gemini_service.py",
+    "lines": 2,
+    "classes": [
+      "RateLimitState",
+      "GeminiConfig",
+      "GeminiService"
+    ],
+    "functions": [
+      "reset_daily",
+      "cleanup_old_timestamps",
+      "__init__",
+      "_check_rate_limit",
+      "_record_request",
+      "_get_cache_key",
+      "get_rate_limit_status",
+      "clear_cache"
+    ],
+    "imports": [
+      "asyncio",
+      "json",
+      "os",
+      "time",
+      "datetime",
+      "pathlib",
+      "typing",
+      "dataclasses",
+      "diskcache",
+      "structlog",
+      "pydantic",
+      "agents.config",
+      "llama_index.llms.google_genai",
+      "google.genai"
+    ],
+    "async_functions": [
+      "initialize",
+      "complete",
+      "chat",
+      "analyze_with_context",
+      "shutdown"
+    ],
+    "has_regex": false,
+    "has_async": true,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "rust",
+    "reason": "Concurrent/async systems programming"
+  },
+  {
+    "file": ".\\agents\\llm\\message_validator.py",
+    "lines": 1,
+    "classes": [
+      "ValidationResult",
+      "LLMMessageValidator"
+    ],
+    "functions": [
+      "validate_and_fix_messages",
+      "create_safe_assistant_message",
+      "__init__",
+      "validate_messages",
+      "fix_messages",
+      "extract_error_info"
+    ],
+    "imports": [
+      "re",
+      "typing",
+      "dataclasses",
+      "structlog"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\agents\\llm\\__init__.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [],
+    "imports": [
+      "gemini_service",
+      "message_validator"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": "Data analysis/auto-improvement infrastructure"
+  },
+  {
+    "file": ".\\docs\\wiki-pipeline\\cognitive_linter.py",
+    "lines": 4,
+    "classes": [
+      "Violation"
+    ],
+    "functions": [
+      "check_line_length",
+      "check_paragraph_chunking",
+      "check_header_frequency",
+      "check_code_block_length",
+      "check_nav_depth",
+      "lint_file",
+      "main",
+      "__init__",
+      "__str__"
+    ],
+    "imports": [
+      "sys",
+      "re",
+      "pathlib"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\docs\\wiki-pipeline\\generate_wiki.py",
+    "lines": 4,
+    "classes": [],
+    "functions": [
+      "get_sidebar_categories",
+      "generate_sidebar",
+      "generate_home",
+      "convert_doc_to_wiki",
+      "copy_research_files",
+      "main"
+    ],
+    "imports": [
+      "os",
+      "shutil",
+      "re",
+      "pathlib"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\q_mini_wasm_v2\\fix_cmake.py",
+    "lines": 34,
+    "classes": [],
+    "functions": [],
+    "imports": [
+      "re"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\q_mini_wasm_v2\\agents\\gemini_improver\\__init__.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [],
+    "imports": [],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": "Data analysis/auto-improvement infrastructure"
+  },
+  {
+    "file": ".\\scripts\\analyze_mcp_servers.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "analyze_mcp_servers"
+    ],
+    "imports": [
+      "json",
+      "argparse",
+      "pathlib"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\analyze_rag_performance.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "analyze_rag_performance"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\analyze_research_coverage.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "load_config",
+      "load_core_concepts",
+      "scan_research_docs"
+    ],
+    "imports": [
+      "argparse",
+      "json",
+      "os",
+      "re",
+      "sys",
+      "pathlib",
+      "typing"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\scripts\\auto_commit.py",
+    "lines": 3,
+    "classes": [],
+    "functions": [
+      "run_git",
+      "get_current_branch",
+      "get_staged_files",
+      "get_staged_changes",
+      "analyze_file_changes",
+      "determine_commit_type",
+      "generate_scope",
+      "generate_commit_message",
+      "validate_commit_message",
+      "auto_commit",
+      "main"
+    ],
+    "imports": [
+      "argparse",
+      "json",
+      "subprocess",
+      "sys",
+      "pathlib",
+      "typing",
+      "re",
+      "subprocess",
+      "datetime"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\scripts\\cicd_context_provider.py",
+    "lines": 2,
+    "classes": [
+      "CICDContextProvider"
+    ],
+    "functions": [
+      "main",
+      "__init__",
+      "get_pipeline_context",
+      "_get_workflow_info",
+      "_extract_triggers",
+      "_get_agent_state",
+      "_generate_recommendations"
+    ],
+    "imports": [
+      "json",
+      "pathlib",
+      "datetime"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": ""
+  },
+  {
+    "file": ".\\scripts\\cicd_manager.py",
+    "lines": 1,
+    "classes": [
+      "CICDAgentManager"
+    ],
+    "functions": [
+      "main",
+      "__init__",
+      "_load_state",
+      "_save_state",
+      "register_agent",
+      "detect_stuck_agents",
+      "get_available_agent",
+      "assign_job",
+      "complete_job",
+      "recover_stuck_agents",
+      "get_pipeline_status"
+    ],
+    "imports": [
+      "json",
+      "datetime",
+      "pathlib",
+      "dataclasses",
+      "cicd_models",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\cicd_models.py",
+    "lines": 1,
+    "classes": [
+      "AgentStatus",
+      "PipelineStage",
+      "AgentInfo",
+      "PipelineJob"
+    ],
+    "functions": [],
+    "imports": [
+      "json",
+      "datetime",
+      "pathlib",
+      "typing",
+      "dataclasses",
+      "enum"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": ""
+  },
+  {
+    "file": ".\\scripts\\detect_improvements.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "detect_improvements"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_deep_research_prompt.py",
+    "lines": 4,
+    "classes": [],
+    "functions": [
+      "load_gap_report",
+      "load_config",
+      "load_core_concepts",
+      "generate_prompt_for_gap",
+      "main"
+    ],
+    "imports": [
+      "argparse",
+      "json",
+      "os",
+      "pathlib",
+      "datetime",
+      "typing",
+      "sys"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_detailed_pr.py",
+    "lines": 10,
+    "classes": [
+      "GitAnalyzer"
+    ],
+    "functions": [
+      "main",
+      "__init__",
+      "run_git_command",
+      "get_current_branch",
+      "get_commits_between",
+      "get_changed_files",
+      "get_diff_stats",
+      "get_file_categories",
+      "generate_pr_body",
+      "generate_json"
+    ],
+    "imports": [
+      "argparse",
+      "json",
+      "os",
+      "subprocess",
+      "sys",
+      "datetime",
+      "pathlib",
+      "typing"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_improvements.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "generate_improvements"
+    ],
+    "imports": [
+      "json",
+      "argparse",
+      "os"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_improvement_report.py",
+    "lines": 3,
+    "classes": [],
+    "functions": [
+      "generate_report"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_new_mcps.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "generate_new_mcps"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_pr.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "main"
+    ],
+    "imports": [
+      "subprocess",
+      "sys",
+      "pathlib"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_pr_part1.py",
+    "lines": 3,
+    "classes": [],
+    "functions": [
+      "run_git",
+      "get_current_branch",
+      "get_commits_between",
+      "get_changed_files",
+      "get_diff_stats"
+    ],
+    "imports": [
+      "argparse",
+      "json",
+      "subprocess",
+      "datetime",
+      "pathlib",
+      "typing"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\generate_pr_part2.py",
+    "lines": 8,
+    "classes": [],
+    "functions": [
+      "generate_pr_body",
+      "generate_json_output"
+    ],
+    "imports": [
+      "json",
+      "datetime",
+      "typing"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "rust",
+    "reason": "Rate limiting/caching"
+  },
+  {
+    "file": ".\\scripts\\generate_research_pipeline_report.py",
+    "lines": 8,
+    "classes": [],
+    "functions": [
+      "load_gap_report",
+      "count_prompts",
+      "generate_report",
+      "main"
+    ],
+    "imports": [
+      "argparse",
+      "json",
+      "pathlib",
+      "datetime",
+      "sys"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\recompile_agents.py",
+    "lines": 1,
+    "classes": [
+      "AgentRecompiler"
+    ],
+    "functions": [
+      "__init__",
+      "install_dependencies",
+      "validate_config",
+      "recompile_agent"
+    ],
+    "imports": [
+      "os",
+      "sys",
+      "subprocess",
+      "json",
+      "logging",
+      "pathlib",
+      "typing",
+      "importlib",
+      "traceback",
+      "agents"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": "Data analysis/auto-improvement infrastructure"
+  },
+  {
+    "file": ".\\scripts\\recompile_agents_simple.py",
+    "lines": 2,
+    "classes": [],
+    "functions": [
+      "main"
+    ],
+    "imports": [
+      "sys",
+      "subprocess",
+      "json",
+      "logging",
+      "pathlib",
+      "argparse",
+      "time"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\scan_env_secrets.py",
+    "lines": 9,
+    "classes": [],
+    "functions": [
+      "scan_directory_for_env_files",
+      "generate_env_report",
+      "main"
+    ],
+    "imports": [
+      "os",
+      "sys",
+      "json",
+      "pathlib",
+      "typing",
+      "re",
+      "agents.config",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": true,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "cpp",
+    "reason": "Performance-critical regex/parsing"
+  },
+  {
+    "file": ".\\scripts\\test_auto_commit.py",
+    "lines": 5,
+    "classes": [],
+    "functions": [
+      "test_analyze_file_changes",
+      "test_determine_commit_type",
+      "test_generate_scope",
+      "test_generate_commit_message",
+      "test_validate_commit_message",
+      "main"
+    ],
+    "imports": [
+      "sys",
+      "os",
+      "auto_commit"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": ""
+  },
+  {
+    "file": ".\\scripts\\test_pr_generator.py",
+    "lines": 4,
+    "classes": [],
+    "functions": [
+      "test_pr_generation"
+    ],
+    "imports": [
+      "sys",
+      "os",
+      "generate_pr_part1",
+      "generate_pr_part2"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": false,
+    "has_data": false,
+    "target_language": "r",
+    "reason": ""
+  },
+  {
+    "file": ".\\scripts\\update_documentation.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "update_docs"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\update_kanban_status.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "update_kanban_status"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\update_mcp_servers.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "update_mcp_servers"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\update_rag_service.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "update_rag_service"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\update_research_alignment.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "load_gap_report",
+      "load_config",
+      "update_alignment",
+      "main"
+    ],
+    "imports": [
+      "argparse",
+      "json",
+      "pathlib",
+      "datetime",
+      "sys"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  },
+  {
+    "file": ".\\scripts\\validate_improvements.py",
+    "lines": 1,
+    "classes": [],
+    "functions": [
+      "validate_improvements"
+    ],
+    "imports": [
+      "json",
+      "argparse"
+    ],
+    "async_functions": [],
+    "has_regex": false,
+    "has_async": false,
+    "has_cli": true,
+    "has_data": false,
+    "target_language": "go",
+    "reason": "CLI/HTTP/network service"
+  }
+]

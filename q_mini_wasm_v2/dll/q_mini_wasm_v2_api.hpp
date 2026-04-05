@@ -360,6 +360,35 @@ Q_MINI_WASM_V2_API size_t moe_router_route_topk(
  */
 Q_MINI_WASM_V2_API size_t moe_router_capacity(void* handle);
 
+/**
+ * @brief LLEP Routing - Least-Loaded Expert Parallelism
+ * @param handle Router handle
+ * @param logits Expert logit scores array
+ * @param expert_loads Current expert load counts array
+ * @param num_experts Number of experts (must match router configuration)
+ * @param k Number of experts to select
+ * @param selected Output array for selected expert indices
+ * @param max_selected Maximum selections to store
+ * @return Number of experts selected, or 0 on error
+ */
+Q_MINI_WASM_V2_API size_t moe_router_llep_route(
+    void* handle,
+    const double* logits,
+    const size_t* expert_loads,
+    size_t num_experts,
+    size_t k,
+    size_t* selected,
+    size_t max_selected
+);
+
+/**
+ * @brief Calculate Quantum Entanglement Entropy Score
+ * @param content_hash Hash value of content chunk
+ * @param base_score Original cosine similarity score
+ * @return Quantum weighted score (0.0 - 1.0)
+ */
+Q_MINI_WASM_V2_API double quantum_entanglement_score(uint64_t content_hash, double base_score);
+
 // ============================================================================
 // Forward-Forward Learner Operations
 // ============================================================================

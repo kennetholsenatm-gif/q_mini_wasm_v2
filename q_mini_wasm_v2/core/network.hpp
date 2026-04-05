@@ -25,6 +25,8 @@ struct NetworkConfig {
     size_t routing_qutrits;
     double learning_rate;
     size_t worker_threads;
+    bool enable_steane;
+    bool enable_flash_cim;
 };
 
 /**

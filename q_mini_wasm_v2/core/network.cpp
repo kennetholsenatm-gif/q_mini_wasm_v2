@@ -40,7 +40,7 @@ TernaryNeuralNetwork::TernaryNeuralNetwork(const NetworkConfig& config)
         config.worker_threads,
         1024,   // max queue size
         true,   // enable async
-        false   // enable flash cim
+        config.enable_flash_cim   // enable flash cim
     };
     orchestrator_ = std::make_unique<runtime::RuntimeOrchestrator>(runtime_config);
 }
@@ -67,7 +67,8 @@ std::vector<ternary::Trit> TernaryNeuralNetwork::preprocess(const std::vector<do
 }
 
 void TernaryNeuralNetwork::train(const std::vector<std::vector<double>>& positive_data, size_t epochs) {
-    std::cout << "Starting Ternary Neural Network FF Training..." << std::endl;
+    std::cout << "{\"status\": \"progress\", \"step\": \"Starting Ternary Neural Network FF Training...\"}\n";
+    std::cout.flush();
 
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         // Prepare preprocessed discrete datasets
@@ -92,26 +93,32 @@ void TernaryNeuralNetwork::train(const std::vector<std::vector<double>>& positiv
 
                 // Wait for the layer training to finish and log
                 auto goodness = future_goodness.get();
-                std::cout << "Epoch " << epoch << " | Layer " << layer << " | Expert " << expert_idx
-                          << " | Pos Goodness: " << goodness.positive_goodness
-                          << " | Neg Goodness: " << goodness.negative_goodness
-                          << " | Delta: " << goodness.delta << std::endl;
+                
+                // Output JSON for the Go server to stream
+                // We map delta to loss, and positive_goodness to reward, negative_goodness to entropy
+                std::cout << "{\"status\": \"epoch\", \"epoch\": " << epoch + 1
+                          << ", \"loss\": " << goodness.delta 
+                          << ", \"reward\": " << goodness.positive_goodness 
+                          << ", \"entropy\": " << goodness.negative_goodness << "}\n";
+                std::cout.flush();
             }
         }
     }
     
     // Polling simulation for Steane Codes to ensure fault-tolerance integrity
-    // In real-time inference, this would be continually executing
-    std::cout << "Running Fault-Tolerance Parity Poll..." << std::endl;
-    std::vector<ternary::Trit> dummy_phys(7, ternary::Trit::ZERO);
-    auto steane_future = orchestrator_->submit_steane_polling(*steane_, dummy_phys);
-    int error_loc = steane_future.get();
-    if (error_loc != -1) {
-        std::cout << "Steane Code corrected error at physical qutrit " << error_loc << std::endl;
+    if (config_.enable_steane) {
+        std::cout << "{\"status\": \"progress\", \"step\": \"Running Steane [7,1,3] Fault-Tolerance Parity Poll...\"}\n";
+        std::cout.flush();
+        std::vector<ternary::Trit> dummy_phys(7, ternary::Trit::ZERO);
+        auto steane_future = orchestrator_->submit_steane_polling(*steane_, dummy_phys);
+        int error_loc = steane_future.get();
+        if (error_loc != -1) {
+            std::cout << "{\"status\": \"progress\", \"step\": \"Steane Code corrected error at physical qutrit " << error_loc << "\"}\n";
+            std::cout.flush();
+        }
     }
     
     orchestrator_->wait_all();
-    std::cout << "Training Complete." << std::endl;
 }
 
 std::vector<ternary::Trit> TernaryNeuralNetwork::infer(const std::vector<double>& input) {
