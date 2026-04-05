@@ -96,12 +96,17 @@ std::vector<std::vector<ternary::Trit>> ForwardForwardLearner::generate_negative
 
 double ForwardForwardLearner::compute_goodness(const std::vector<ternary::Trit>& activations) const {
     // Goodness = sum of squared activations (tropical inner product with itself)
-    double goodness = 0.0;
+    // Optimized for GF(3) ternary values {-1, 0, 1}: square is always 0 or 1
+    // This eliminates floating point multiplication entirely
+    uint64_t goodness = 0;
     for (const auto& act : activations) {
-        double val = static_cast<double>(act);
-        goodness += val * val;
+        // For ternary values: (-1)^2 = 1, 0^2 = 0, 1^2 = 1
+        // So we just count non-zero trits
+        if (act != ternary::Trit::ZERO) {
+            goodness++;
+        }
     }
-    return goodness;
+    return static_cast<double>(goodness);
 }
 
 double ForwardForwardLearner::compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const {
