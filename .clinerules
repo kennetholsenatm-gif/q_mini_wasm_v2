@@ -36,3 +36,9 @@
 [ENFORCEMENT]
 - Before generating any new C++, Go, or Python code, you MUST verify that it does not violate these five pillars.
 - If a user requests a feature that violates these constraints (e.g., "Add a gRPC server to the Python agent" or "Use PPO for the router"), you MUST refuse the request and explain why it violates the Architectural Review.
+
+[TRINITY_LARGE_PREVIEW_RATE_LIMITING]
+- When using trinity-large-preview:free model, enforce strict rate limiting of 1 prompt per 2 seconds.
+- Implement a 2-second cooldown period between consecutive prompts to avoid API rate limiting.
+- Track prompt timestamps and reject requests that violate the 2-second interval constraint.
+- Log rate limiting violations for monitoring and debugging purposes.

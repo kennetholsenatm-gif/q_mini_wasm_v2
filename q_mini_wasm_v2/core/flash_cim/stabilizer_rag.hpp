@@ -2,93 +2,92 @@
 
 #include <cstdint>
 #include <span>
-#include <vector>
-#include "../ternary/trit.hpp"
-#include "../stabilizer/tableau.hpp"
 #include "../memory/arena.hpp"
+#include "../stabilizer/tableau.hpp"
+#include "../ternary/trit.hpp"
+#include "../qgnn/message_passing.hpp"
+
+/**
+ * @brief Stabilizer State RAG Retrieval Engine
+ * 
+ * Phase 2 Consolidation §62-66: Retrieval-Augmented Generation via Stabilizer Tableaus
+ * 
+ * Replaces standard floating-point vector databases with discrete stabilizer state
+ * matching algorithm running natively on Flash Compute-in-Memory hardware.
+ * 
+ * All retrieval operations are performed using GF(3) symplectic inner products
+ * without floating point operations, cosine similarity, or external vector databases.
+ */
 
 namespace q_mini_wasm_v2::core::flash_cim {
 
-/**
- * @brief Stabilizer RAG Retrieval Engine
- * 
- * Implements Phase 2 Component Consolidation: Retrieval-Augmented Generation
- * as specified in Quantum Architecture Review §5.3.
- * 
- * Replaces floating-point vector databases with discrete stabilizer state matching.
- * All operations executed natively in GF(3) with native Flash CIM acceleration.
- */
-class StabilizerRAG {
+class StabilizerRag {
 public:
     /**
-     * @brief Match result structure
+     * @brief Construct RAG engine attached to shared memory arena
      */
-    struct MatchResult {
-        size_t document_id;
-        int8_t symplectic_score;
-        uint32_t offset;
-    };
+    explicit StabilizerRag(memory::MemoryArena& arena) noexcept;
 
     /**
-     * @brief Construct Stabilizer RAG engine
-     * @param arena Shared memory arena for index storage
+     * @brief Add document to knowledge base
+     * @param document_text Raw document text
+     * @return Index position of stored document
      */
-    explicit StabilizerRAG(memory::MemoryArena& arena);
+    size_t add_document(std::string_view document_text) noexcept;
 
     /**
-     * @brief Insert document into index as stabilizer tableau
-     * @param document_id Unique document identifier
-     * @param tokens Token stream to encode
-     * @return Index entry position
+     * @brief Add pre-encoded stabilizer tableau to knowledge base
+     * @param tableau Stabilizer state representation of document
+     * @return Index position of stored document
      */
-    size_t insert_document(size_t document_id, std::span<const inference::TernaryTokenizer::TokenView> tokens) noexcept;
+    size_t add_stabilizer_document(std::span<const stabilizer::StabilizerTableau> tableau) noexcept;
 
     /**
-     * @brief Execute symplectic inner product matching query
-     * @param query Query stabilizer tableau
-     * @param top_k Number of results to return
-     * @return Span of MatchResult structures in arena
+     * @brief Retrieve most semantically aligned documents
+     * @param query Query stabilizer state
+     * @param k Number of results to return
+     * @return Indices of top k matching documents
      */
-    std::span<const MatchResult> query(const stabilizer::StabilizerTableau& query, size_t top_k = 10) noexcept;
+    std::span<const size_t> retrieve(
+        std::span<const ternary::Trit> query_state,
+        size_t k = 4
+    ) noexcept;
 
     /**
-     * @brief Compute GF(3) symplectic inner product between two stabilizer states
-     * @param a First stabilizer row
-     * @param b Second stabilizer row
-     * @return Symplectic score {-1, 0, +1}
+     * @brief Symplectic alignment score between two stabilizer states
+     * @return Alignment score {-1, 0, +1} where +1 indicates perfect alignment
      */
-    static constexpr int8_t symplectic_inner_product(std::span<const ternary::Trit> a, std::span<const ternary::Trit> b) noexcept {
-        int8_t sum = 0;
-        size_t n = std::min(a.size(), b.size()) / 2;
-        
-        for (size_t i = 0; i < n; ++i) {
-            int8_t x1 = static_cast<int8_t>(a[2*i]);
-            int8_t z1 = static_cast<int8_t>(a[2*i + 1]);
-            int8_t x2 = static_cast<int8_t>(b[2*i]);
-            int8_t z2 = static_cast<int8_t>(b[2*i + 1]);
-            
-            int8_t pairing = (x1 * z2) - (z1 * x2);
-            
-            while (pairing > 1)  pairing -= 3;
-            while (pairing < -1) pairing += 3;
-            
-            sum += pairing;
-            if (sum > 1) sum = -1;
-            if (sum < -1) sum = 1;
-        }
-        
-        return sum;
+    static constexpr int8_t alignment_score(
+        std::span<const ternary::Trit> a,
+        std::span<const ternary::Trit> b
+    ) noexcept {
+        return qgnn::MessagePassingKernel::symplectic_attention(a, b);
     }
 
     /**
-     * @brief Get total documents in index
+     * @brief Batch retrieve for multiple queries
      */
-    size_t document_count() const noexcept { return index_.size(); }
+    void batch_retrieve(
+        std::span<const std::span<const ternary::Trit>> queries,
+        std::span<std::span<size_t>> results
+    ) noexcept;
+
+    /**
+     * @brief Get direct access to the stabilizer knowledge base
+     */
+    std::span<const stabilizer::StabilizerTableau> get_knowledge_base() const noexcept;
+
+    /**
+     * @brief Total number of documents stored
+     */
+    size_t document_count() const noexcept;
 
 private:
     memory::MemoryArena& arena_;
-    std::vector<stabilizer::StabilizerTableau> index_;
-    std::vector<size_t> document_ids_;
+    std::span<stabilizer::StabilizerTableau> knowledge_base_;
+    size_t next_index_ = 0;
+
+    void encode_document(std::string_view text, stabilizer::StabilizerTableau& out) noexcept;
 };
 
 } // namespace q_mini_wasm_v2::core::flash_cim

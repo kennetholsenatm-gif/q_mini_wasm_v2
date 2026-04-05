@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include "../ternary/trit.hpp"
 
 namespace q_mini_wasm_v2::core::stabilizer {
@@ -154,17 +155,27 @@ public:
     /**
      * @brief Access an element from the adjacency matrix (for Entropy computations)
      */
-    uint8_t get_element(size_t row, size_t col) const {
-        return adjacency_matrix_[row][col];
-    }
+    uint8_t get_element(size_t row, size_t col) const noexcept;
+
+    /**
+     * @brief Set an element in the adjacency matrix
+     */
+    void set_element(size_t row, size_t col, uint8_t value) noexcept;
+
+    /**
+     * @brief Get number of non-zero edges in the graph
+     */
+    size_t edge_count() const noexcept { return col_idx_.size(); }
 
 private:
     size_t n_;  // Number of qutrits
     
-    // Graph-State Standard Form
-    // O(d^3) adjacency matrix over GF(3) bounded tracking
-    std::vector<std::vector<uint8_t>> adjacency_matrix_;
-    
+    // Compressed Sparse Row (CSR) adjacency matrix over GF(3)
+    // O(E) storage complexity where E is number of active edges
+    std::vector<size_t> row_ptr_;       // Size n+1: start index for each row
+    std::vector<size_t> col_idx_;       // Size E: column indices of non-zero elements
+    std::vector<uint8_t> values_;       // Size E: GF(3) values {0,1,2}
+
     // Local Clifford operations on each vertex
     enum class LocalClifford : uint8_t {
         I, H, S, SH, HS, HSH, X, Y, Z

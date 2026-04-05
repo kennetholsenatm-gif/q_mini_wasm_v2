@@ -2,12 +2,13 @@
 #include <algorithm>
 #include <stdexcept>
 #include <random>
+#include <numeric>
 
 namespace q_mini_wasm_v2::core::stabilizer {
 
 StabilizerTableau::StabilizerTableau(size_t num_qutrits)
     : n_(num_qutrits)
-    , adjacency_matrix_(num_qutrits, std::vector<uint8_t>(num_qutrits, 0))
+    , row_ptr_(num_qutrits + 1, 0)
     , vertex_operators_(num_qutrits, LocalClifford::I)
     , phase_(num_qutrits, 0)
 {
@@ -18,7 +19,9 @@ StabilizerTableau::StabilizerTableau(size_t num_qutrits)
 
 StabilizerTableau::StabilizerTableau(const StabilizerTableau& other)
     : n_(other.n_)
-    , adjacency_matrix_(other.adjacency_matrix_)
+    , row_ptr_(other.row_ptr_)
+    , col_idx_(other.col_idx_)
+    , values_(other.values_)
     , vertex_operators_(other.vertex_operators_)
     , phase_(other.phase_)
 {
@@ -26,7 +29,9 @@ StabilizerTableau::StabilizerTableau(const StabilizerTableau& other)
 
 StabilizerTableau::StabilizerTableau(StabilizerTableau&& other) noexcept
     : n_(other.n_)
-    , adjacency_matrix_(std::move(other.adjacency_matrix_))
+    , row_ptr_(std::move(other.row_ptr_))
+    , col_idx_(std::move(other.col_idx_))
+    , values_(std::move(other.values_))
     , vertex_operators_(std::move(other.vertex_operators_))
     , phase_(std::move(other.phase_))
 {
@@ -35,7 +40,9 @@ StabilizerTableau::StabilizerTableau(StabilizerTableau&& other) noexcept
 StabilizerTableau& StabilizerTableau::operator=(const StabilizerTableau& other) {
     if (this != &other) {
         n_ = other.n_;
-        adjacency_matrix_ = other.adjacency_matrix_;
+        row_ptr_ = other.row_ptr_;
+        col_idx_ = other.col_idx_;
+        values_ = other.values_;
         vertex_operators_ = other.vertex_operators_;
         phase_ = other.phase_;
     }
@@ -43,6 +50,63 @@ StabilizerTableau& StabilizerTableau::operator=(const StabilizerTableau& other) 
 }
 
 StabilizerTableau::~StabilizerTableau() = default;
+
+uint8_t StabilizerTableau::get_element(size_t row, size_t col) const noexcept {
+    if (row >= n_ || col >= n_) return 0;
+    
+    const size_t start = row_ptr_[row];
+    const size_t end = row_ptr_[row + 1];
+    
+    for (size_t i = start; i < end; ++i) {
+        if (col_idx_[i] == col) {
+            return values_[i];
+        }
+    }
+    return 0;
+}
+
+void StabilizerTableau::set_element(size_t row, size_t col, uint8_t value) noexcept {
+    if (row >= n_ || col >= n_) return;
+    value %= 3;
+    
+    const size_t start = row_ptr_[row];
+    const size_t end = row_ptr_[row + 1];
+    
+    // Find existing entry
+    for (size_t i = start; i < end; ++i) {
+        if (col_idx_[i] == col) {
+            if (value == 0) {
+                // Remove entry
+                col_idx_.erase(col_idx_.begin() + i);
+                values_.erase(values_.begin() + i);
+                // Update row pointers for all rows after current
+                for (size_t r = row + 1; r <= n_; ++r) {
+                    row_ptr_[r]--;
+                }
+            } else {
+                values_[i] = value;
+            }
+            return;
+        }
+    }
+    
+    // No existing entry, add new one if value != 0
+    if (value != 0) {
+        // Insert in sorted order
+        size_t insert_pos = start;
+        while (insert_pos < end && col_idx_[insert_pos] < col) {
+            insert_pos++;
+        }
+        
+        col_idx_.insert(col_idx_.begin() + insert_pos, col);
+        values_.insert(values_.begin() + insert_pos, value);
+        
+        // Update row pointers for all rows after current
+        for (size_t r = row + 1; r <= n_; ++r) {
+            row_ptr_[r]++;
+        }
+    }
+}
 
 // ============================================================================
 // Qutrit Clifford Gate Operations
@@ -83,8 +147,11 @@ void StabilizerTableau::apply_csum(size_t control, size_t target) {
     
     // In graph-state tracking over GF(3), CSUM generates entanglement (edges)
     // For GF(3), applying controlled operations adds weights to the adjacency matrix
-    adjacency_matrix_[control][target] = (adjacency_matrix_[control][target] + 1) % 3;
-    adjacency_matrix_[target][control] = adjacency_matrix_[control][target]; // Undirected graph state
+    uint8_t current = get_element(control, target);
+    uint8_t new_val = (current + 1) % 3;
+    
+    set_element(control, target, new_val);
+    set_element(target, control, new_val); // Undirected graph state
 }
 
 void StabilizerTableau::apply_cz(size_t control, size_t target) {
@@ -94,8 +161,11 @@ void StabilizerTableau::apply_cz(size_t control, size_t target) {
     
     // Controlled-Z gate applies direct edge weight modifications
     // In GF(3) QGNN, CZ modifies the bipartite entanglement links
-    adjacency_matrix_[control][target] = (adjacency_matrix_[control][target] + 2) % 3;
-    adjacency_matrix_[target][control] = adjacency_matrix_[control][target];
+    uint8_t current = get_element(control, target);
+    uint8_t new_val = (current + 2) % 3;
+    
+    set_element(control, target, new_val);
+    set_element(target, control, new_val);
 }
 
 void StabilizerTableau::apply_pauli_x(size_t j) {
@@ -138,10 +208,20 @@ int8_t StabilizerTableau::measure(size_t j) {
     int8_t outcome = static_cast<int8_t>(dist(rng));
     
     // Isolate the vertex by clearing its edges
-    for (size_t k = 0; k < n_; ++k) {
-        adjacency_matrix_[j][k] = 0;
-        adjacency_matrix_[k][j] = 0;
+    const size_t start = row_ptr_[j];
+    const size_t end = row_ptr_[j + 1];
+    std::vector<size_t> neighbors;
+    
+    for (size_t i = start; i < end; ++i) {
+        neighbors.push_back(col_idx_[i]);
     }
+    
+    // Remove all edges from vertex j
+    for (size_t k : neighbors) {
+        set_element(j, k, 0);
+        set_element(k, j, 0);
+    }
+    
     vertex_operators_[j] = LocalClifford::I;
     phase_[j] = outcome;
     
@@ -160,14 +240,9 @@ double StabilizerTableau::compute_overlap() const {
     // In QGNN tracking, overlap is related to graph density and phase alignment
     // We compute a localized metric based on edge sparsity and phases.
     double overlap = 0.0;
-    int edge_count = 0;
+    const size_t edge_count = col_idx_.size();
     
     for (size_t i = 0; i < n_; ++i) {
-        for (size_t j = 0; j < n_; ++j) {
-            if (adjacency_matrix_[i][j] != 0) {
-                edge_count++;
-            }
-        }
         overlap += phase_[i];
     }
     
@@ -179,8 +254,11 @@ double StabilizerTableau::compute_overlap() const {
 // ============================================================================
 
 void StabilizerTableau::reset() {
+    row_ptr_.assign(n_ + 1, 0);
+    col_idx_.clear();
+    values_.clear();
+    
     for (size_t i = 0; i < n_; ++i) {
-        std::fill(adjacency_matrix_[i].begin(), adjacency_matrix_[i].end(), 0);
         vertex_operators_[i] = LocalClifford::I;
         phase_[i] = 0;
     }
@@ -188,9 +266,15 @@ void StabilizerTableau::reset() {
 
 bool StabilizerTableau::is_valid() const {
     // In graph-state standard form over GF(3), adjacency matrix must be symmetric
-    for (size_t i = 0; i < n_; ++i) {
-        for (size_t j = 0; j < n_; ++j) {
-            if (adjacency_matrix_[i][j] != adjacency_matrix_[j][i]) {
+    for (size_t row = 0; row < n_; ++row) {
+        const size_t start = row_ptr_[row];
+        const size_t end = row_ptr_[row + 1];
+        
+        for (size_t i = start; i < end; ++i) {
+            const size_t col = col_idx_[i];
+            const uint8_t val = values_[i];
+            
+            if (get_element(col, row) != val) {
                 return false;
             }
         }
@@ -203,24 +287,36 @@ bool StabilizerTableau::is_valid() const {
 // ============================================================================
 
 void StabilizerTableau::local_complementation(size_t vertex) {
-    // Scaffold for GF(3) Bipartite Graph Transformation.
-    // In O(d^3) complexity, this updates the neighborhood of the measured vertex.
+    // GF(3) Bipartite Graph Transformation.
+    // O(d²) complexity, updates neighborhood of the measured vertex.
     
     std::vector<size_t> neighborhood;
-    for (size_t i = 0; i < n_; ++i) {
-        if (adjacency_matrix_[vertex][i] != 0) {
-            neighborhood.push_back(i);
-        }
+    const size_t start = row_ptr_[vertex];
+    const size_t end = row_ptr_[vertex + 1];
+    
+    for (size_t i = start; i < end; ++i) {
+        neighborhood.push_back(col_idx_[i]);
     }
     
+    const size_t d = neighborhood.size();
+    const uint8_t* vertex_weights = &values_[start];
+    
     // Apply localized operations to the neighborhood
-    for (size_t i : neighborhood) {
-        for (size_t j : neighborhood) {
-            if (i != j) {
-                // Approximate localized update over GF(3)
-                adjacency_matrix_[i][j] = (adjacency_matrix_[i][j] + 
-                    adjacency_matrix_[vertex][i] * adjacency_matrix_[vertex][j]) % 3;
-            }
+    for (size_t idx_i = 0; idx_i < d; ++idx_i) {
+        const size_t i = neighborhood[idx_i];
+        const uint8_t wi = vertex_weights[idx_i];
+        
+        for (size_t idx_j = idx_i + 1; idx_j < d; ++idx_j) {
+            const size_t j = neighborhood[idx_j];
+            const uint8_t wj = vertex_weights[idx_j];
+            
+            // Localized update over GF(3)
+            uint8_t current = get_element(i, j);
+            uint8_t delta = (wi * wj) % 3;
+            uint8_t new_val = (current + delta) % 3;
+            
+            set_element(i, j, new_val);
+            set_element(j, i, new_val);
         }
     }
 }
