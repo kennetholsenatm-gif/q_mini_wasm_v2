@@ -1,5 +1,8 @@
 #include "../q_mini_wasm_v2_api.hpp"
 #include "../core/moe/router.hpp"
+#include <unordered_map>
+#include <mutex>
+#include <cstring>
 #define _USE_MATH_DEFINES
 #include <cmath>
 
@@ -826,4 +829,221 @@ Q_MINI_WASM_V2_API size_t ff_learner_batch_forward(
         total_processed += output_sizes[i];
     }
     return total_processed;
+}
+
+// ============================================================================
+// Autonomous Training Pipeline Operations
+// ============================================================================
+
+#include "../core/training/autonomous_training_pipeline.hpp"
+
+using namespace q_mini_wasm_v2::core::training;
+
+static std::unordered_map<void*, std::unique_ptr<AutonomousTrainingPipeline>> g_pipelines;
+static std::mutex g_pipeline_mutex;
+
+Q_MINI_WASM_V2_API void* training_pipeline_create(
+    size_t num_experts,
+    size_t graph_nodes,
+    int enable_betti_guidance
+) {
+    try {
+        auto pipeline = std::make_unique<AutonomousTrainingPipeline>();
+        
+        PipelineConfig config;
+        config.moe_num_experts = num_experts > 0 ? num_experts : 243;
+        config.graph_initial_nodes = graph_nodes > 0 ? graph_nodes : 64;
+        config.graph_initial_edges = config.graph_initial_nodes + config.graph_initial_nodes / 2;
+        config.enable_betti_guidance = enable_betti_guidance != 0;
+        
+        if (!pipeline->initialize(config)) {
+            return nullptr;
+        }
+        
+        void* handle = pipeline.get();
+        
+        std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+        g_pipelines[handle] = std::move(pipeline);
+        
+        return handle;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+Q_MINI_WASM_V2_API void training_pipeline_destroy(void* handle) {
+    if (handle == nullptr) return;
+    
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it != g_pipelines.end()) {
+        it->second->stop_training();
+        g_pipelines.erase(it);
+    }
+}
+
+Q_MINI_WASM_V2_API int training_pipeline_initialize(
+    void* handle,
+    size_t acquisition_threads,
+    size_t epochs,
+    size_t batch_size
+) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    
+    auto& pipeline = it->second;
+    auto config = pipeline->get_config();
+    config.acquisition_threads = acquisition_threads > 0 ? acquisition_threads : 4;
+    config.num_epochs = epochs > 0 ? epochs : 1000;
+    config.batch_size = batch_size > 0 ? batch_size : 32;
+    
+    if (!pipeline->update_config(config)) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+    
+    return Q_MINI_WASM_V2_OK;
+}
+
+Q_MINI_WASM_V2_API int training_pipeline_start(void* handle) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    
+    if (!it->second->start_training()) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+    
+    return Q_MINI_WASM_V2_OK;
+}
+
+Q_MINI_WASM_V2_API void training_pipeline_stop(void* handle) {
+    if (handle == nullptr) return;
+    
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it != g_pipelines.end()) {
+        it->second->stop_training();
+    }
+}
+
+Q_MINI_WASM_V2_API int training_pipeline_pause(void* handle) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    
+    it->second->pause_training();
+    return Q_MINI_WASM_V2_OK;
+}
+
+Q_MINI_WASM_V2_API int training_pipeline_resume(void* handle) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    
+    it->second->resume_training();
+    return Q_MINI_WASM_V2_OK;
+}
+
+Q_MINI_WASM_V2_API size_t training_pipeline_get_metrics(
+    void* handle,
+    char* metrics_json,
+    size_t max_size
+) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return 0;
+    
+    auto metrics = it->second->get_metrics();
+    
+    // Format as JSON
+    std::string json = "{";
+    json += "\"ff_positive_goodness\":" + std::to_string(metrics.ff_positive_goodness) + ",";
+    json += "\"ff_negative_goodness\":" + std::to_string(metrics.ff_negative_goodness) + ",";
+    json += "\"ff_goodness_delta\":" + std::to_string(metrics.ff_goodness_delta) + ",";
+    json += "\"moe_load_balance_score\":" + std::to_string(metrics.moe_load_balance_score) + ",";
+    json += "\"betti_beta_0\":" + std::to_string(metrics.betti_beta_0) + ",";
+    json += "\"betti_beta_1\":" + std::to_string(metrics.betti_beta_1) + ",";
+    json += "\"betti_beta_2\":" + std::to_string(metrics.betti_beta_2) + ",";
+    json += "\"graph_nodes\":" + std::to_string(metrics.graph_nodes) + ",";
+    json += "\"graph_edges\":" + std::to_string(metrics.graph_edges) + ",";
+    json += "\"ds_total_acquired\":" + std::to_string(metrics.ds_total_acquired) + ",";
+    json += "\"ds_total_perturbed\":" + std::to_string(metrics.ds_total_perturbed) + ",";
+    json += "\"current_epoch\":" + std::to_string(metrics.current_epoch) + ",";
+    json += "\"current_batch\":" + std::to_string(metrics.current_batch) + ",";
+    json += "\"training_progress\":" + std::to_string(metrics.training_progress) + ",";
+    json += "\"is_running\":" + std::string(metrics.is_running ? "true" : "false") + ",";
+    json += "\"status_message\":\"" + metrics.status_message + "\"";
+    json += "}";
+    
+    size_t len = json.length();
+    if (len >= max_size) len = max_size - 1;
+    
+    std::memcpy(metrics_json, json.c_str(), len);
+    metrics_json[len] = '\0';
+    
+    return len;
+}
+
+Q_MINI_WASM_V2_API int training_pipeline_apply_betti_guidance(
+    void* handle,
+    int force
+) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    
+    it->second->apply_betti_guidance();
+    return Q_MINI_WASM_V2_OK;
+}
+
+Q_MINI_WASM_V2_API int training_pipeline_export(
+    void* handle,
+    const char* path,
+    int include_topology
+) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    
+    if (!it->second->export_model(path)) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+    
+    return Q_MINI_WASM_V2_OK;
+}
+
+Q_MINI_WASM_V2_API int training_pipeline_import(
+    void* handle,
+    const char* path
+) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
+    
+    if (!it->second->import_model(path)) {
+        return Q_MINI_WASM_V2_ERROR_INTERNAL;
+    }
+    
+    return Q_MINI_WASM_V2_OK;
+}
+
+Q_MINI_WASM_V2_API const char* training_pipeline_get_state(void* handle) {
+    std::lock_guard<std::mutex> lock(g_pipeline_mutex);
+    auto it = g_pipelines.find(handle);
+    if (it == g_pipelines.end()) return "invalid";
+    
+    static thread_local std::string state_str;
+    
+    switch (it->second->get_state()) {
+        case PipelineState::IDLE: state_str = "idle"; break;
+        case PipelineState::READY: state_str = "ready"; break;
+        case PipelineState::TRAINING: state_str = "training"; break;
+        case PipelineState::PAUSED: state_str = "paused"; break;
+        case PipelineState::COMPLETE: state_str = "complete"; break;
+        case PipelineState::ERROR: state_str = "error"; break;
+        default: state_str = "unknown"; break;
+    }
+    
+    return state_str.c_str();
 }

@@ -557,6 +557,126 @@ Q_MINI_WASM_V2_API size_t ff_learner_batch_forward(
     size_t max_output_per_learner
 );
 
+// ============================================================================
+// Autonomous Training Pipeline Operations
+// ============================================================================
+
+/**
+ * @brief Create autonomous training pipeline
+ * @param num_experts Number of MoE experts (default 243)
+ * @param graph_nodes Initial graph node count
+ * @param enable_betti_guidance Enable Betti-guided topology optimization
+ * @return Opaque handle to pipeline, or NULL on failure
+ */
+Q_MINI_WASM_V2_API void* training_pipeline_create(
+    size_t num_experts,
+    size_t graph_nodes,
+    int enable_betti_guidance
+);
+
+/**
+ * @brief Destroy training pipeline
+ * @param handle Pipeline handle (can be NULL)
+ */
+Q_MINI_WASM_V2_API void training_pipeline_destroy(void* handle);
+
+/**
+ * @brief Initialize training pipeline with configuration
+ * @param handle Pipeline handle
+ * @param acquisition_threads DataSynthesizer acquisition threads
+ * @param epochs Training epochs
+ * @param batch_size Training batch size
+ * @return 0 on success, error code on failure
+ */
+Q_MINI_WASM_V2_API int training_pipeline_initialize(
+    void* handle,
+    size_t acquisition_threads,
+    size_t epochs,
+    size_t batch_size
+);
+
+/**
+ * @brief Start training loop
+ * @param handle Pipeline handle
+ * @return 0 on success, error code on failure
+ */
+Q_MINI_WASM_V2_API int training_pipeline_start(void* handle);
+
+/**
+ * @brief Stop training loop
+ * @param handle Pipeline handle
+ */
+Q_MINI_WASM_V2_API void training_pipeline_stop(void* handle);
+
+/**
+ * @brief Pause training (can be resumed)
+ * @param handle Pipeline handle
+ * @return 0 on success, error code on failure
+ */
+Q_MINI_WASM_V2_API int training_pipeline_pause(void* handle);
+
+/**
+ * @brief Resume paused training
+ * @param handle Pipeline handle
+ * @return 0 on success, error code on failure
+ */
+Q_MINI_WASM_V2_API int training_pipeline_resume(void* handle);
+
+/**
+ * @brief Get training metrics
+ * @param handle Pipeline handle
+ * @param metrics_json Output buffer for JSON metrics (must be freed by caller)
+ * @param max_size Maximum buffer size
+ * @return Number of bytes written, or 0 on error
+ */
+Q_MINI_WASM_V2_API size_t training_pipeline_get_metrics(
+    void* handle,
+    char* metrics_json,
+    size_t max_size
+);
+
+/**
+ * @brief Apply Betti-guided topology optimization
+ * @param handle Pipeline handle
+ * @param force Force optimization even if below threshold
+ * @return 0 on success, error code on failure
+ */
+Q_MINI_WASM_V2_API int training_pipeline_apply_betti_guidance(
+    void* handle,
+    int force
+);
+
+/**
+ * @brief Export trained model to file
+ * @param handle Pipeline handle
+ * @param path File path for export
+ * @param include_topology Include graph topology
+ * @return 0 on success, error code on failure
+ */
+Q_MINI_WASM_V2_API int training_pipeline_export(
+    void* handle,
+    const char* path,
+    int include_topology
+);
+
+/**
+ * @brief Import trained model from file
+ * @param handle Pipeline handle
+ * @param path File path for import
+ * @return 0 on success, error code on failure
+ */
+Q_MINI_WASM_V2_API int training_pipeline_import(
+    void* handle,
+    const char* path
+);
+
+/**
+ * @brief Get current pipeline state
+ * @param handle Pipeline handle
+ * @return State string (idle, ready, training, paused, complete, error)
+ */
+Q_MINI_WASM_V2_API const char* training_pipeline_get_state(void* handle);
+
 #ifdef __cplusplus
 }
 #endif
