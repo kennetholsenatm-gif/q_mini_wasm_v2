@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Achievements - q_mini_wasm_v2</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        .wui-achievements-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: var(--wui-spacing-lg);
+        }
+        
+        .wui-achievement-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: var(--wui-spacing-lg);
+            margin-bottom: var(--wui-spacing-xxl);
+        }
+        
+        .wui-achievement {
+            background: linear-gradient(135deg, var(--wui-white), var(--wui-light));
+            border-radius: var(--wui-border-radius-lg);
+            padding: var(--wui-spacing-lg);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: var(--wui-quantum-transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .wui-achievement.unlocked {
+            border: 2px solid var(--wui-qgnn-primary);
+        }
+        
+        .wui-achievement.locked {
+            opacity: 0.6;
+            filter: grayscale(100%);
+        }
+        
+        .wui-achievement:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+        
+        .wui-achievement-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: var(--wui-spacing-md);
+        }
+        
+        .wui-achievement-icon {
+            font-size: 2.5rem;
+            margin-right: var(--wui-spacing-md);
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--wui-qgnn-primary);
+            color: var(--wui-white);
+        }
+        
+        .wui-achievement.locked .wui-achievement-icon {
+            background: var(--wui-neutral);
+        }
+        
+        .wui-achievement-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--wui-primary-dark);
+        }
+        
+        .wui-achievement-description {
+            color: var(--wui-neutral);
+            margin-bottom: var(--wui-spacing-md);
+            line-height: 1.4;
+        }
+        
+        .wui-achievement-progress {
+            margin-top: var(--wui-spacing-md);
+        }
+        
+        .wui-progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--wui-light);
+            border-radius: var(--wui-border-radius);
+            overflow: hidden;
+            margin-bottom: var(--wui-spacing-xs);
+        }
+        
+        .wui-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--wui-qgnn-primary), var(--wui-qgnn-accent));
+            border-radius: var(--wui-border-radius);
+            transition: width 0.3s ease;
+        }
+        
+        .wui-progress-text {
+            font-size: 0.875rem;
+            color: var(--wui-neutral);
+            text-align: center;
+        }
+        
+        .wui-achievement-date {
+            font-size: 0.75rem;
+            color: var(--wui-neutral);
+            margin-top: var(--wui-spacing-sm);
+            text-align: right;
+        }
+        
+        .wui-achievement-badge {
+            position: absolute;
+            top: var(--wui-spacing-sm);
+            right: var(--wui-spacing-sm);
+            background: var(--wui-qgnn-accent);
+            color: var(--wui-white);
+            padding: var(--wui-spacing-xs) var(--wui-spacing-sm);
+            border-radius: var(--wui-border-radius);
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .wui-stats-container {
+            background: var(--wui-white);
+            border-radius: var(--wui-border-radius-lg);
+            padding: var(--wui-spacing-lg);
+            margin-bottom: var(--wui-spacing-xxl);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .wui-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--wui-spacing-lg);
+        }
+        
+        .wui-stat-item {
+            text-align: center;
+        }
+        
+        .wui-stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--wui-qgnn-primary);
+            margin-bottom: var(--wui-spacing-xs);
+        }
+        
+        .wui-stat-label {
+            color: var(--wui-neutral);
+            font-size: 0.875rem;
+        }
+        
+        .wui-achievement-categories {
+            display: flex;
+            gap: var(--wui-spacing-sm);
+            margin-bottom: var(--wui-spacing-lg);
+            flex-wrap: wrap;
+        }
+        
+        .wui-category-filter {
+            padding: var(--wui-spacing-sm) var(--wui-spacing-md);
+            border: 1px solid var(--wui-neutral);
+            border-radius: var(--wui-border-radius);
+            background: var(--wui-white);
+            cursor: pointer;
+            transition: var(--wui-transition);
+        }
+        
+        .wui-category-filter:hover,
+        .wui-category-filter.active {
+            background: var(--wui-qgnn-primary);
+            color: var(--wui-white);
+            border-color: var(--wui-qgnn-primary);
+        }
+        
+        @media (max-width: 768px) {
+            .wui-achievement-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .wui-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wui-achievements-container">
+        <h1 class="wui-section-title">Achievements</h1>
+        
+        <div class="wui-stats-container">
+            <h2>Progress Overview</h2>
+            <div class="wui-stats-grid">
+                <div class="wui-stat-item">
+                    <div class="wui-stat-value" id="total-achievements">0</div>
+                    <div class="wui-stat-label">Total Achievements</div>
+                </div>
+                <div class="wui-stat-item">
+                    <div class="wui-stat-value" id="unlocked-achievements">0</div>
+                    <div class="wui-stat-label">Unlocked</div>
+                </div>
+                <div class="wui-stat-item">
+                    <div class="wui-stat-value" id="completion-percentage">0%</div>
+                    <div class="wui-stat-label">Completion</div>
+                </div>
+                <div class="wui-stat-item">
+                    <div class="wui-stat-value" id="quantum-score">0</div>
+                    <div class="wui-stat-label">Quantum Score</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="wui-achievement-categories">
+            <button class="wui-category-filter active" data-category="all">All</button>
+            <button class="wui-category-filter" data-category="quantum">Quantum</button>
+            <button class="wui-category-filter" data-category="ternary">Ternary</button>
+            <button class="wui-category-filter" data-category="qgnn">QGNN</button>
+            <button class="wui-category-filter" data-category="energy">Energy</button>
+            <button class="wui-category-filter" data-category="mastery">Mastery</button>
+        </div>
+        
+        <div class="wui-achievement-grid" id="achievement-grid">
+            <div class="wui-achievement unlocked" data-category="quantum">
+                <div class="wui-achievement-badge">🎯</div>
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">⚛️</div>
+                    <div class="wui-achievement-title">Quantum Pioneer</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Complete your first quantum operation using Hadamard, Phase, or CSUM gates.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 100%"></div>
+                    </div>
+                    <div class="wui-progress-text">Completed</div>
+                </div>
+                <div class="wui-achievement-date">Unlocked: Today</div>
+            </div>
+            
+            <div class="wui-achievement unlocked" data-category="ternary">
+                <div class="wui-achievement-badge">🔢</div>
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">🧮</div>
+                    <div class="wui-achievement-title">Ternary Master</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Perform 50 successful GF(3) arithmetic operations with perfect accuracy.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 100%"></div>
+                    </div>
+                    <div class="wui-progress-text">50/50 operations</div>
+                </div>
+                <div class="wui-achievement-date">Unlocked: Today</div>
+            </div>
+            
+            <div class="wui-achievement unlocked" data-category="qgnn">
+                <div class="wui-achievement-badge">🌐</div>
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">📊</div>
+                    <div class="wui-achievement-title">Graph Master</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Successfully migrate to QGNN graph-native architecture with 100% completion.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 100%"></div>
+                    </div>
+                    <div class="wui-progress-text">Migration Complete</div>
+                </div>
+                <div class="wui-achievement-date">Unlocked: Today</div>
+            </div>
+            
+            <div class="wui-achievement unlocked" data-category="energy">
+                <div class="wui-achievement-badge">⚡</div>
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">🔋</div>
+                    <div class="wui-achievement-title">Energy Saver</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Maintain energy efficiency below 0.5 pJ/op for 100 consecutive operations.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 100%"></div>
+                    </div>
+                    <div class="wui-progress-text">100/100 operations</div>
+                </div>
+                <div class="wui-achievement-date">Unlocked: Today</div>
+            </div>
+            
+            <div class="wui-achievement locked" data-category="quantum">
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">🎭</div>
+                    <div class="wui-achievement-title">Quantum Entangler</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Create entanglement between 10 qutrits using complex quantum circuits.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 30%"></div>
+                    </div>
+                    <div class="wui-progress-text">3/10 qutrits entangled</div>
+                </div>
+            </div>
+            
+            <div class="wui-achievement locked" data-category="ternary">
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">🎯</div>
+                    <div class="wui-achievement-title">GF(3) Expert</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Solve 100 complex GF(3) equations with perfect accuracy in under 30 seconds.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 45%"></div>
+                    </div>
+                    <div class="wui-progress-text">45/100 equations solved</div>
+                </div>
+            </div>
+            
+            <div class="wui-achievement locked" data-category="qgnn">
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">🚀</div>
+                    <div class="wui-achievement-title">Speed Demon</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Achieve 3x speedup with QGNN graph-native routing compared to array-based system.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 67%"></div>
+                    </div>
+                    <div class="wui-progress-text">2.0x/3.0x speedup</div>
+                </div>
+            </div>
+            
+            <div class="wui-achievement locked" data-category="energy">
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">🌿</div>
+                    <div class="wui-achievement-title">Green Computing</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Reduce total energy consumption by 75% through optimization and graph-native routing.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 57%"></div>
+                    </div>
+                    <div class="wui-progress-text">43%/75% reduction</div>
+                </div>
+            </div>
+            
+            <div class="wui-achievement locked" data-category="mastery">
+                <div class="wui-achievement-header">
+                    <div class="wui-achievement-icon">👑</div>
+                    <div class="wui-achievement-title">Quantum Master</div>
+                </div>
+                <div class="wui-achievement-description">
+                    Complete all quantum, ternary, and QGNN achievements with 100% mastery.
+                </div>
+                <div class="wui-achievement-progress">
+                    <div class="wui-progress-bar">
+                        <div class="wui-progress-fill" style="width: 25%"></div>
+                    </div>
+                    <div class="wui-progress-text">4/16 achievements</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class AchievementSystem {
+            constructor() {
+                this.achievements = document.querySelectorAll('.wui-achievement');
+                this.categoryFilters = document.querySelectorAll('.wui-category-filter');
+                this.currentCategory = 'all';
+                
+                this.init();
+            }
+            
+            init() {
+                this.updateStats();
+                this.initCategoryFilters();
+                this.initAchievementInteractions();
+                this.simulateProgress();
+            }
+            
+            updateStats() {
+                const totalAchievements = this.achievements.length;
+                const unlockedAchievements = document.querySelectorAll('.wui-achievement.unlocked').length;
+                const completionPercentage = Math.round((unlockedAchievements / totalAchievements) * 100);
+                const quantumScore = unlockedAchievements * 100;
+                
+                this.updateElement('total-achievements', totalAchievements);
+                this.updateElement('unlocked-achievements', unlockedAchievements);
+                this.updateElement('completion-percentage', completionPercentage + '%');
+                this.updateElement('quantum-score', quantumScore);
+            }
+            
+            updateElement(id, value) {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.textContent = value;
+                }
+            }
+            
+            initCategoryFilters() {
+                this.categoryFilters.forEach(filter => {
+                    filter.addEventListener('click', () => {
+                        const category = filter.getAttribute('data-category');
+                        this.filterByCategory(category);
+                        
+                        // Update active state
+                        this.categoryFilters.forEach(f => f.classList.remove('active'));
+                        filter.classList.add('active');
+                    });
+                });
+            }
+            
+            filterByCategory(category) {
+                this.currentCategory = category;
+                
+                this.achievements.forEach(achievement => {
+                    if (category === 'all') {
+                        achievement.style.display = 'block';
+                    } else {
+                        const achievementCategories = achievement.getAttribute('data-category');
+                        if (achievementCategories && achievementCategories.includes(category)) {
+                            achievement.style.display = 'block';
+                        } else {
+                            achievement.style.display = 'none';
+                        }
+                    }
+                });
+            }
+            
+            initAchievementInteractions() {
+                this.achievements.forEach(achievement => {
+                    achievement.addEventListener('click', () => {
+                        if (!achievement.classList.contains('unlocked')) {
+                            this.showAchievementDetails(achievement);
+                        } else {
+                            this.showAchievementCelebration(achievement);
+                        }
+                    });
+                });
+            }
+            
+            showAchievementDetails(achievement) {
+                const title = achievement.querySelector('.wui-achievement-title').textContent;
+                const description = achievement.querySelector('.wui-achievement-description').textContent;
+                
+                this.showNotification(`${title}: ${description}`, 'info');
+            }
+            
+            showAchievementCelebration(achievement) {
+                const title = achievement.querySelector('.wui-achievement-title').textContent;
+                
+                // Add celebration animation
+                achievement.classList.add('wui-quantum-pulse');
+                setTimeout(() => {
+                    achievement.classList.remove('wui-quantum-pulse');
+                }, 2000);
+                
+                this.showNotification(`🎉 Achievement Unlocked: ${title}`, 'success');
+            }
+            
+            simulateProgress() {
+                // Simulate progress updates for locked achievements
+                setInterval(() => {
+                    const lockedAchievements = document.querySelectorAll('.wui-achievement.locked');
+                    if (lockedAchievements.length > 0) {
+                        const randomAchievement = lockedAchievements[Math.floor(Math.random() * lockedAchievements.length)];
+                        this.updateProgress(randomAchievement);
+                    }
+                }, 5000);
+            }
+            
+            updateProgress(achievement) {
+                const progressBar = achievement.querySelector('.wui-progress-fill');
+                const progressText = achievement.querySelector('.wui-progress-text');
+                
+                if (progressBar && progressText) {
+                    const currentWidth = parseFloat(progressBar.style.width) || 0;
+                    const newWidth = Math.min(currentWidth + Math.random() * 5, 100);
+                    
+                    progressBar.style.width = newWidth + '%';
+                    
+                    // Update progress text based on achievement type
+                    const title = achievement.querySelector('.wui-achievement-title').textContent;
+                    if (title.includes('Quantum Entangler')) {
+                        const current = Math.floor((newWidth / 100) * 10);
+                        progressText.textContent = `${current}/10 qutrits entangled`;
+                    } else if (title.includes('GF(3) Expert')) {
+                        const current = Math.floor((newWidth / 100) * 100);
+                        progressText.textContent = `${current}/100 equations solved`;
+                    } else if (title.includes('Speed Demon')) {
+                        const current = (newWidth / 100) * 3;
+                        progressText.textContent = `${current.toFixed(1)}x/3.0x speedup`;
+                    } else if (title.includes('Green Computing')) {
+                        const current = Math.floor((newWidth / 100) * 75);
+                        progressText.textContent = `${current}%/75% reduction`;
+                    } else if (title.includes('Quantum Master')) {
+                        const current = Math.floor((newWidth / 100) * 16);
+                        progressText.textContent = `${current}/16 achievements`;
+                    }
+                    
+                    // Check if achievement should be unlocked
+                    if (newWidth >= 100) {
+                        this.unlockAchievement(achievement);
+                    }
+                }
+            }
+            
+            unlockAchievement(achievement) {
+                achievement.classList.remove('locked');
+                achievement.classList.add('unlocked');
+                
+                // Add badge
+                const badge = document.createElement('div');
+                badge.className = 'wui-achievement-badge';
+                badge.textContent = '🎯';
+                achievement.appendChild(badge);
+                
+                // Add date
+                const dateDiv = document.createElement('div');
+                dateDiv.className = 'wui-achievement-date';
+                dateDiv.textContent = 'Unlocked: Just now';
+                achievement.appendChild(dateDiv);
+                
+                // Update stats
+                this.updateStats();
+                
+                // Show celebration
+                this.showAchievementCelebration(achievement);
+            }
+            
+            showNotification(message, type) {
+                const notification = document.createElement('div');
+                notification.className = 'wui-notification';
+                notification.textContent = message;
+                
+                const colors = {
+                    success: 'var(--wui-secondary)',
+                    error: 'var(--wui-danger)',
+                    info: 'var(--wui-primary)',
+                    warning: 'var(--wui-accent)'
+                };
+                
+                notification.style.backgroundColor = colors[type] || colors.info;
+                notification.style.color = 'var(--wui-white)';
+                notification.style.position = 'fixed';
+                notification.style.top = 'var(--wui-spacing-md)';
+                notification.style.right = 'var(--wui-spacing-md)';
+                notification.style.padding = 'var(--wui-spacing-sm) var(--wui-spacing-lg)';
+                notification.style.borderRadius = 'var(--wui-border-radius)';
+                notification.style.zIndex = '10000';
+                notification.style.maxWidth = '300px';
+                
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 4000);
+            }
+        }
+        
+        // Initialize achievement system
+        const achievementSystem = new AchievementSystem();
+    </script>
+</body>
+</html>

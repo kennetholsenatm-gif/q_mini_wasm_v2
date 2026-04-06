@@ -152,7 +152,7 @@ for (size_t step = 0; step < 20; ++step) {
     
     // Check for performance regression
     if (current_metrics.speedup_factor < 1.0) {
-        std::cout << "⚠️ Performance regression detected\n";
+        std::cout << "Performance regression detected\n";
         // Consider rollback or adjustment
     }
     
@@ -344,7 +344,7 @@ void safe_advance_migration(GraphMigrationAdapter& adapter) {
     
     // Check for regression
     if (post_metrics.speedup_factor < pre_metrics.speedup_factor * 0.9) {
-        std::cout << "⚠️ Performance regression detected, rolling back\n";
+        std::cout << "Performance regression detected, rolling back\n";
         // Implement rollback logic
         adapter->set_migration_ratio(previous_progress);
     }

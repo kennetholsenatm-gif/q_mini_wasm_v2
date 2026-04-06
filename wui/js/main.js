@@ -15,6 +15,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize accessibility features
     initAccessibility();
+    
+    // Initialize QGNN features
+    initQGNNFeatures();
+    
+    // Initialize quantum visualization
+    initQuantumVisualization();
+    
+    // Initialize energy flow visualization
+    initEnergyFlowVisualization();
 });
 
 // Navigation Toggle - Hick's Law Implementation
@@ -100,10 +109,7 @@ function updateMetrics() {
         energyEfficiency.textContent = (Math.random() * 0.5 + 0.1).toFixed(2) + ' pJ/op';
     }
     
-    // Update system status
-    updateSystemStatus();
-}
-
+    // Update quantum status
 function updateSystemStatus() {
     const quantumStatus = document.getElementById('quantum-status');
     const ternaryStatus = document.getElementById('ternary-status');

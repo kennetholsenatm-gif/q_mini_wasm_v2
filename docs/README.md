@@ -6,29 +6,29 @@ Welcome to the documentation for **q_mini_wasm_v2**, a next-generation extreme-e
 
 q_mini_wasm_v2 achieves unprecedented energy efficiency by operating entirely in a 1.58-bit ternary state space `{+1, 0, -1}`, eliminating floating-point arithmetic while maintaining high expressivity through combinatorial routing and **QGNN graph-native data structures**.
 
-## 🎯 Implementation Purity Achievement
+## Implementation Purity Achievement
 
-The repository has achieved **100% implementation purity** through a comprehensive three-phase roadmap:
+The repository has achieved 100% implementation purity through a comprehensive three-phase roadmap:
 
-### ✅ Phase 1: Binary Pollution Elimination
+### Phase 1: Binary Pollution Elimination
 - Complete elimination of `double`/`float` usage in critical components
 - Ternary `EnergyTrit`, `ProbTrit`, and `Trit` type system
 - Deterministic ternary random generation
 - GF(3) arithmetic throughout
 
-### ✅ Phase 2: GF(3) Validation Tooling
+### Phase 2: GF(3) Validation Tooling
 - Automated binary pollution detection
 - Energy efficiency regression testing
 - CI/CD quality gates with Gottesman-Knill validation
 - Pre-commit developer validation
 
-### ✅ Phase 3: QGNN Graph-Native Data Structures
+### Phase 3: QGNN Graph-Native Data Structures
 - O(N²) arrays replaced with O(E) sparse graphs
 - Quantum message passing architecture
 - Scalable expert selection with graph attention
 - Migration adapter for seamless transition
 
-## 🚀 New QGNN Capabilities
+## New QGNN Capabilities
 
 ### Graph-Native Expert Routing
 ```cpp
@@ -70,46 +70,46 @@ auto adapter = qgnn::create_migration_adapter(legacy_config, graph_config, migra
 
 This documentation is organized into the following sections:
 
-### 📚 [API Reference](api/core-reference.md)
+### API Reference
 Complete API documentation for all framework components:
 - Core ternary operations and GF(3) arithmetic
 - Stabilizer tableau operations
-- **QGNN graph-native data structures**
-- **Graph-based MoE routing**
-- **Migration adapter system**
+- QGNN graph-native data structures
+- Graph-based MoE routing
+- Migration adapter system
 - MoE routing with tropical geometry
 - Forward-Forward learning algorithms
 - Runtime orchestration
 
-### 🏗️ [Architecture](architecture/overview.md)
+### Architecture
 Detailed architecture documentation:
-- [Overview](architecture/overview.md) - System design and data flow
-- [Ternary State Space](architecture/ternary-state-space.md) - GF(3) arithmetic and trit encoding
-- [Stabilizer Tableau](architecture/stabilizer-tableau.md) - Qutrit Clifford gates
-- [MoE Routing](architecture/moe-routing.md) - Tropical geometry expert routing
-- **[QGNN Architecture](architecture/qgnn-architecture.md)** - Graph-native quantum neural networks
-- **[Graph Migration](architecture/graph-migration.md)** - Array-to-graph transition system
-- [Forward-Forward](architecture/forward-forward.md) - Teacherless learning algorithm
-- [SYCL Acceleration](architecture/sycl-acceleration.md) - GPU/CPU parallelism
+- Overview - System design and data flow
+- Ternary State Space - GF(3) arithmetic and trit encoding
+- Stabilizer Tableau - Qutrit Clifford gates
+- MoE Routing - Tropical geometry expert routing
+- QGNN Architecture - Graph-native quantum neural networks
+- Graph Migration - Array-to-graph transition system
+- Forward-Forward - Teacherless learning algorithm
+- SYCL Acceleration - GPU/CPU parallelism
 
-### 📖 [Guides](guides/building.md)
+### Guides
 Step-by-step guides for using the framework:
-- [Quick Start](guides/quick-start.md) - Get started in minutes
-- [Building](guides/building.md) - Build instructions for all platforms
-- [SYCL Setup](guides/sycl-setup.md) - GPU acceleration setup
+- Quick Start - Get started in minutes
+- Building - Build instructions for all platforms
+- SYCL Setup - GPU acceleration setup
 - [Contributing](guides/contributing.md) - Development workflow
 
-### 🎯 [Decisions](decisions/adr-001-ternary-over-binary.md)
+### Decisions
 Architecture Decision Records (ADRs):
-- [ADR-001: Ternary Over Binary](decisions/adr-001-ternary-over-binary.md) - Why ternary state space
+- ADR-001: Ternary Over Binary - Why ternary state space
 
-### 🔬 [Research](research/)
+### Research
 Foundational research documents:
 - Cognitive Ergonomics Model Protocol
 - Clifford Entanglement Framework
 - Quantum-Classical Framework Synthesis
 
-### 🛠️ [Wiki Pipeline](wiki-pipeline/)
+### Wiki Pipeline
 Tools for generating GitHub Wiki documentation:
 - `generate_wiki.py` - Converts docs to Wiki format
 - `cognitive_linter.py` - Validates cognitive ergonomics compliance
@@ -222,21 +222,21 @@ int main() {
 - Clifford gates: H (Hadamard), S (Phase), CSUM (Controlled-SUM)
 - No exponential overhead: Classical simulation of quantum-inspired operations
 
-### 3. QGNN Graph-Native Architecture 🚀
-- **O(E) Complexity**: Sparse graphs replace O(N²) arrays
-- **Quantum Message Passing**: Stabilizer-based information propagation
-- **Graph Attention**: Ternary attention over graph structure
-- **Scalable Expert Selection**: Linear scaling with graph size
+### 3. QGNN Graph-Native Architecture
+- O(E) Complexity: Sparse graphs replace O(N²) arrays
+- Quantum Message Passing: Stabilizer-based information propagation
+- Graph Attention: Ternary attention over graph structure
+- Scalable Expert Selection: Linear scaling with graph size
 
 ### 4. Migration Adapter System
-- **Unified Interface**: Seamless array-to-graph transition
-- **Performance Monitoring**: Real-time comparison and validation
-- **Gradual Migration**: Controlled progression with rollback capability
+- Unified Interface: Seamless array-to-graph transition
+- Performance Monitoring: Real-time comparison and validation
+- Gradual Migration: Controlled progression with rollback capability
 
 ### 5. Implementation Purity Validation
-- **GF(3) Compliance**: Automated binary pollution detection
-- **Energy Regression Testing**: Continuous efficiency monitoring
-- **CI/CD Quality Gates**: Pre-commit and continuous integration validation
+- GF(3) Compliance: Automated binary pollution detection
+- Energy Regression Testing: Continuous efficiency monitoring
+- CI/CD Quality Gates: Pre-commit and continuous integration validation
 
 ### 6. Tropical Geometry MoE Routing
 - Max-plus semiring: Tropical addition (max) and multiplication (add)
@@ -256,11 +256,11 @@ int main() {
 ## Documentation Standards
 
 This documentation follows Cognitive Ergonomics principles:
-- Line length ≤ 75 characters
-- Paragraphs ≤ 4 lines
-- Headers every ±200 words
-- Code blocks ≤ 15 lines
-- Navigation depth ≤ 3 levels
+- Line length less than or equal to 75 characters
+- Paragraphs less than or equal to 4 lines
+- Headers every 200 words
+- Code blocks less than or equal to 15 lines
+- Navigation depth less than or equal to 3 levels
 
 ## Contributing
 

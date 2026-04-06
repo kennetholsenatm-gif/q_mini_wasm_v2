@@ -16,13 +16,19 @@
                     <span class="wui-nav-icon"></span>
                 </button>
                 <ul class="wui-nav-menu">
+                    <li><a href="dev-platform.html" class="wui-nav-link" target="_blank">🔧 Dev Platform</a></li>
+                    <li><a href="api-docs.html" class="wui-nav-link" target="_blank">📚 API Docs</a></li>
+                    <li><a href="benchmarks.html" class="wui-nav-link" target="_blank">📊 Benchmarks</a></li>
                     <li><a href="#dashboard" class="wui-nav-link">Dashboard</a></li>
+                    <li><a href="ai-workbench.html" class="wui-nav-link" target="_blank">🧠 AI Workbench</a></li>
+                    <li><a href="data-pipeline.html" class="wui-nav-link" target="_blank">🔄 Data Pipeline</a></li>
+                    <li><a href="build-deploy.html" class="wui-nav-link" target="_blank">🔨 Build & Deploy</a></li>
+                    <li><a href="#qgnn-control" class="wui-nav-link wui-nav-qgnn">QGNN Graph</a></li>
                     <li><a href="#quantum-core" class="wui-nav-link">Quantum Core</a></li>
                     <li><a href="#ternary-computing" class="wui-nav-link">Ternary Computing</a></li>
-                    <li><a href="#moe-routing" class="wui-nav-link">MoE Routing</a></li>
-                    <li><a href="#flash-cim" class="wui-nav-link">Flash-CIM</a></li>
-                    <li><a href="#sycl-acceleration" class="wui-nav-link">SYCL Acceleration</a></li>
-                    <li><a href="#forward-forward" class="wui-nav-link">Forward-Forward</a></li>
+                    <li><a href="tutorial.html" class="wui-nav-link" target="_blank">📚 Tutorial</a></li>
+                    <li><a href="achievements.html" class="wui-nav-link" target="_blank">🏆 Achievements</a></li>
+                    <li><a href="command-palette.html" class="wui-nav-link" target="_blank">⌘ Commands</a></li>
                     <li><a href="#advanced" class="wui-nav-link wui-nav-advanced">Advanced</a></li>
                 </ul>
             </nav>
@@ -99,6 +105,111 @@
                         <div class="wui-control-group">
                             <label class="wui-label">Measure</label>
                             <button class="wui-button" onclick="measureQutrit()">Measure</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="qgnn-control" class="wui-section">
+                <h2 class="wui-section-title">QGNN Graph-Native Router 🚀</h2>
+                <div class="wui-grid">
+                    <div class="wui-card">
+                        <h3>Graph Configuration</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Graph Type</label>
+                            <select id="graph-type" class="wui-select">
+                                <option value="native">Graph-Native</option>
+                                <option value="array">Array-Based</option>
+                                <option value="hybrid">Hybrid</option>
+                            </select>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Max Experts</label>
+                            <input type="number" class="wui-input" id="max-experts" min="1" max="1024" value="100">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Active Experts</label>
+                            <input type="number" class="wui-input" id="active-experts" min="1" max="32" value="8">
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Specialization Dim</label>
+                            <input type="number" class="wui-input" id="specialization-dim" min="1" max="64" value="16">
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Migration Progress</h3>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Migration Ratio</label>
+                            <div class="wui-progress-bar">
+                                <div class="wui-progress-fill" id="migration-progress" style="width: 0%"></div>
+                            </div>
+                            <span class="wui-progress-label" id="migration-label">0% Migrated</span>
+                        </div>
+                        <div class="wui-control-group">
+                            <label class="wui-label">Migration Strategy</label>
+                            <select id="migration-strategy" class="wui-select">
+                                <option value="conservative">Conservative</option>
+                                <option value="gradual">Gradual</option>
+                                <option value="aggressive">Aggressive</option>
+                                <option value="immediate">Immediate</option>
+                            </select>
+                        </div>
+                        <div class="wui-control-group">
+                            <button class="wui-button wui-button-primary" onclick="advanceMigration()">Advance Migration</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="wui-grid" style="margin-top: var(--wui-spacing-lg);">
+                    <div class="wui-card">
+                        <h3>Graph Metrics</h3>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Nodes</span>
+                            <span class="wui-metric-value" id="graph-nodes">0</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Edges</span>
+                            <span class="wui-metric-value" id="graph-edges">0</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Complexity</span>
+                            <span class="wui-metric-value" id="graph-complexity">O(E)</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Avg Degree</span>
+                            <span class="wui-metric-value" id="graph-degree">0.0</span>
+                        </div>
+                    </div>
+                    <div class="wui-card">
+                        <h3>Performance Comparison</h3>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Array Latency</span>
+                            <span class="wui-metric-value" id="array-latency">0 μs</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Graph Latency</span>
+                            <span class="wui-metric-value" id="graph-latency">0 μs</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Speedup Factor</span>
+                            <span class="wui-metric-value" id="speedup-factor">1.0x</span>
+                        </div>
+                        <div class="wui-metric">
+                            <span class="wui-metric-label">Energy Reduction</span>
+                            <span class="wui-metric-value" id="energy-reduction">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wui-card" style="margin-top: var(--wui-spacing-lg);">
+                    <h3>Quantum Message Passing Visualization</h3>
+                    <div class="wui-quantum-visualizer">
+                        <canvas id="qutrit-sphere" width="400" height="400"></canvas>
+                        <div class="wui-quantum-controls">
+                            <button class="wui-quantum-btn" data-operation="hadamard">H</button>
+                            <button class="wui-quantum-btn" data-operation="phase">S</button>
+                            <button class="wui-quantum-btn" data-operation="csum">CSUM</button>
+                            <button class="wui-quantum-btn" onclick="startMessagePassing()">Start Message Passing</button>
                         </div>
                     </div>
                 </div>

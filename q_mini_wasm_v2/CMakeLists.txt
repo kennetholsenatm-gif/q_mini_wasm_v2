@@ -75,15 +75,15 @@ set(CORE_SOURCES
     core/inference/householder_synthesizer.hpp
     core/inference/householder_synthesizer.cpp
     core/inference/latency_profiler.hpp
-    core/inference/latency_profiler.cpp
     core/inference/inference_pipeline.hpp
     core/inference/inference_pipeline.cpp
-    core/flash_cim/flash_cim.hpp
     core/flash_cim/flash_cim.cpp
-    # QGNN Graph-Native Components
-    core/qgnn/graph_native.hpp
+    core/training/trainer_main.cpp
     core/qgnn/graph_native.cpp
-    core/qgnn/graph_moe_router.hpp
+    core/qgnn/graph_moe_router.cpp
+    core/qgnn/graph_migration_adapter.cpp
+    core/qgnn/zx_calculus.cpp
+    core/qgnn/error_correction.cpp
     core/qgnn/graph_moe_router.cpp
     core/qgnn/graph_migration_adapter.hpp
     core/qgnn/graph_migration_adapter.cpp

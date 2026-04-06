@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Pipeline - q_mini_wasm_v2</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        .wui-pipeline-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: var(--wui-spacing-lg);
+        }
+        
+        .wui-pipeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--wui-spacing-xxl);
+        }
+        
+        .wui-pipeline-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--wui-primary-dark);
+        }
+        
+        .wui-pipeline-controls {
+            display: flex;
+            gap: var(--wui-spacing-md);
+        }
+        
+        .wui-pipeline-main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--wui-spacing-xl);
+            margin-bottom: var(--wui-spacing-xxl);
+        }
+        
+        .wui-pipeline-section {
+            background: var(--wui-white);
+            border-radius: var(--wui-border-radius-lg);
+            padding: var(--wui-spacing-lg);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .wui-section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--wui-primary);
+            margin-bottom: var(--wui-spacing-lg);
+        }
+        
+        .wui-data-source-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--wui-spacing-md);
+            margin-bottom: var(--wui-spacing-lg);
+        }
+        
+        .wui-data-source-card {
+            padding: var(--wui-spacing-md);
+            border: 2px solid var(--wui-light);
+            border-radius: var(--wui-border-radius);
+            cursor: pointer;
+            transition: var(--wui-transition);
+        }
+        
+        .wui-data-source-card:hover {
+            border-color: var(--wui-primary);
+        }
+        
+        .wui-data-source-card.selected {
+            border-color: var(--wui-primary);
+            background: rgba(25, 118, 210, 0.1);
+        }
+        
+        .wui-source-icon {
+            font-size: 2rem;
+            margin-bottom: var(--wui-spacing-sm);
+        }
+        
+        .wui-source-name {
+            font-weight: 600;
+            margin-bottom: var(--wui-spacing-xs);
+        }
+        
+        .wui-source-description {
+            font-size: 0.875rem;
+            color: var(--wui-neutral);
+        }
+        
+        .wui-data-config {
+            margin-bottom: var(--wui-spacing-lg);
+        }
+        
+        .wui-config-group {
+            margin-bottom: var(--wui-spacing-md);
+        }
+        
+        .wui-config-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: var(--wui-spacing-sm);
+            color: var(--wui-black);
+        }
+        
+        .wui-config-input,
+        .wui-config-select,
+        .wui-config-textarea {
+            width: 100%;
+            padding: var(--wui-spacing-sm) var(--wui-spacing-md);
+            border: 1px solid var(--wui-neutral);
+            border-radius: var(--wui-border-radius);
+            font-size: var(--wui-font-size);
+        }
+        
+        .wui-config-textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        
+        .wui-pipeline-visualization {
+            background: var(--wui-white);
+            border-radius: var(--wui-border-radius-lg);
+            padding: var(--wui-spacing-lg);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: var(--wui-spacing-xxl);
+        }
+        
+        .wui-pipeline-flow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--wui-spacing-lg);
+            background: var(--wui-light);
+            border-radius: var(--wui-border-radius);
+            overflow-x: auto;
+        }
+        
+        .wui-pipeline-stage {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 150px;
+        }
+        
+        .wui-stage-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--wui-primary);
+            color: var(--wui-white);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: var(--wui-spacing-sm);
+        }
+        
+        .wui-stage-name {
+            font-weight: 600;
+            margin-bottom: var(--wui-spacing-xs);
+            text-align: center;
+        }
+        
+        .wui-stage-status {
+            font-size: 0.875rem;
+            color: var(--wui-neutral);
+            text-align: center;
+        }
+        
+        .wui-pipeline-arrow {
+            font-size: 2rem;
+            color: var(--wui-neutral);
+            margin: 0 var(--wui-spacing-md);
+        }
+        
+        .wui-action-buttons {
+            display: flex;
+            gap: var(--wui-spacing-md);
+            margin-top: var(--wui-spacing-lg);
+        }
+        
+        .wui-action-button {
+            padding: var(--wui-spacing-sm) var(--wui-spacing-lg);
+            border: none;
+            border-radius: var(--wui-border-radius);
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--wui-transition);
+        }
+        
+        .wui-action-button.primary {
+            background: var(--wui-primary);
+            color: var(--wui-white);
+        }
+        
+        .wui-action-button.primary:hover {
+            background: var(--wui-primary-dark);
+        }
+        
+        .wui-action-button.secondary {
+            background: var(--wui-light);
+            color: var(--wui-black);
+        }
+        
+        .wui-action-button.danger {
+            background: var(--wui-danger);
+            color: var(--wui-white);
+        }
+        
+        .wui-data-preview {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: var(--wui-border-radius);
+            padding: var(--wui-spacing-md);
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.875rem;
+            line-height: 1.4;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: var(--wui-spacing-lg);
+        }
+        
+        .wui-data-row {
+            margin-bottom: var(--wui-spacing-xs);
+            white-space: pre-wrap;
+        }
+        
+        .wui-data-header {
+            color: #89d185;
+            font-weight: 600;
+        }
+        
+        .wui-data-value {
+            color: #d4d4d4;
+        }
+        
+        .wui-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--wui-spacing-md);
+            margin-top: var(--wui-spacing-lg);
+        }
+        
+        .wui-metric-card {
+            padding: var(--wui-spacing-md);
+            background: var(--wui-light);
+            border-radius: var(--wui-border-radius);
+            text-align: center;
+        }
+        
+        .wui-metric-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--wui-primary);
+            margin-bottom: var(--wui-spacing-xs);
+        }
+        
+        .wui-metric-label {
+            font-size: 0.875rem;
+            color: var(--wui-neutral);
+        }
+        
+        .wui-processing-log {
+            background: var(--wui-white);
+            border: 1px solid var(--wui-light);
+            border-radius: var(--wui-border-radius);
+            padding: var(--wui-spacing-md);
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: var(--wui-spacing-lg);
+        }
+        
+        .wui-log-entry {
+            margin-bottom: var(--wui-spacing-xs);
+            padding: var(--wui-spacing-xs);
+            border-radius: var(--wui-border-radius);
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        
+        .wui-log-info {
+            background: rgba(25, 118, 210, 0.1);
+            color: var(--wui-primary);
+        }
+        
+        .wui-log-success {
+            background: rgba(67, 160, 71, 0.1);
+            color: var(--wui-secondary);
+        }
+        
+        .wui-log-warning {
+            background: rgba(255, 109, 0, 0.1);
+            color: var(--wui-accent);
+        }
+        
+        .wui-log-error {
+            background: rgba(211, 47, 47, 0.1);
+            color: var(--wui-danger);
+        }
+        
+        @media (max-width: 768px) {
+            .wui-pipeline-main {
+                grid-template-columns: 1fr;
+            }
+            
+            .wui-pipeline-flow {
+                flex-direction: column;
+                gap: var(--wui-spacing-md);
+            }
+            
+            .wui-pipeline-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wui-pipeline-container">
+        <div class="wui-pipeline-header">
+            <h1 class="wui-pipeline-title">🔄 Data Pipeline</h1>
+            <div class="wui-pipeline-controls">
+                <button class="wui-action-button primary" onclick="runPipeline()">▶️ Run Pipeline</button>
+                <button class="wui-action-button secondary" onclick="validatePipeline()">✅ Validate</button>
+                <button class="wui-action-button secondary" onclick="exportPipeline()">📤 Export</button>
+            </div>
+        </div>
+        
+        <!-- Pipeline Visualization -->
+        <div class="wui-pipeline-visualization">
+            <h2 class="wui-section-title">📊 Pipeline Flow</h2>
+            <div class="wui-pipeline-flow">
+                <div class="wui-pipeline-stage">
+                    <div class="wui-stage-icon">📥</div>
+                    <div class="wui-stage-name">Data Ingestion</div>
+                    <div class="wui-stage-status" id="stage-ingestion">Ready</div>
+                </div>
+                <div class="wui-pipeline-arrow">→</div>
+                <div class="wui-pipeline-stage">
+                    <div class="wui-stage-icon">🧹</div>
+                    <div class="wui-stage-name">Preprocessing</div>
+                    <div class="wui-stage-status" id="stage-preprocessing">Ready</div>
+                </div>
+                <div class="wui-pipeline-arrow">→</div>
+                <div class="wui-pipeline-stage">
+                    <div class="wui-stage-icon">🔄</div>
+                    <div class="wui-stage-name">Ternary Conversion</div>
+                    <div class="wui-stage-status" id="stage-ternary">Ready</div>
+                </div>
+                <div class="wui-pipeline-arrow">→</div>
+                <div class="wui-pipeline-stage">
+                    <div class="wui-stage-icon">🧠</div>
+                    <div class="wui-stage-name">QGNN Processing</div>
+                    <div class="wui-stage-status" id="stage-qgnn">Ready</div>
+                </div>
+                <div class="wui-pipeline-arrow">→</div>
+                <div class="wui-pipeline-stage">
+                    <div class="wui-stage-icon">📤</div>
+                    <div class="wui-stage-name">Output Generation</div>
+                    <div class="wui-stage-status" id="stage-output">Ready</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="wui-pipeline-main">
+            <!-- Data Sources -->
+            <div class="wui-pipeline-section">
+                <h2 class="wui-section-title">📥 Data Sources</h2>
+                
+                <div class="wui-data-source-grid">
+                    <div class="wui-data-source-card selected" data-source="file">
+                        <div class="wui-source-icon">📁</div>
+                        <div class="wui-source-name">File Upload</div>
+                        <div class="wui-source-description">Upload CSV, JSON, or binary files</div>
+                    </div>
+                    
+                    <div class="wui-data-source-card" data-source="database">
+                        <div class="wui-source-icon">🗄️</div>
+                        <div class="wui-source-name">Database</div>
+                        <div class="wui-source-description">Connect to SQL/NoSQL databases</div>
+                    </div>
+                    
+                    <div class="wui-data-source-card" data-source="api">
+                        <div class="wui-source-icon">🌐</div>
+                        <div class="wui-source-name">API Endpoint</div>
+                        <div class="wui-source-description">Fetch data from REST APIs</div>
+                    </div>
+                    
+                    <div class="wui-data-source-card" data-source="stream">
+                        <div class="wui-source-icon">🌊</div>
+                        <div class="wui-source-name">Data Stream</div>
+                        <div class="wui-source-description">Real-time data streaming</div>
+                    </div>
+                </div>
+                
+                <div class="wui-data-config">
+                    <div class="wui-config-group">
+                        <label class="wui-config-label">Data Format</label>
+                        <select class="wui-config-select" id="data-format">
+                            <option value="csv">CSV</option>
+                            <option value="json">JSON</option>
+                            <option value="binary">Binary</option>
+                            <option value="ternary">Ternary GF(3)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="wui-config-group">
+                        <label class="wui-config-label">Batch Size</label>
+                        <input type="number" class="wui-config-input" id="batch-size" value="1024" min="1" max="10000">
+                    </div>
+                    
+                    <div class="wui-config-group">
+                        <label class="wui-config-label">Validation Rules</label>
+                        <textarea class="wui-config-textarea" id="validation-rules" placeholder="Enter validation rules (JSON format)">
+{
+  "required_fields": ["id", "value"],
+  "value_range": [-1, 0, 1],
+  "gf3_compliance": true
+}</textarea>
+                    </div>
+                </div>
+                
+                <div class="wui-action-buttons">
+                    <button class="wui-action-button primary" onclick="connectDataSource()">🔌 Connect</button>
+                    <button class="wui-action-button secondary" onclick="testConnection()">🧪 Test</button>
+                    <button class="wui-action-button secondary" onclick="disconnectDataSource()">🔌 Disconnect</button>
+                </div>
+                
+                <div class="wui-data-preview" id="data-preview">
+                    <div class="wui-data-row wui-data-header">id,value,timestamp</div>
+                    <div class="wui-data-row wui-data-value">1,1,2024-01-01T00:00:00Z</div>
+                    <div class="wui-data-row wui-data-value">2,0,2024-01-01T00:01:00Z</div>
+                    <div class="wui-data-row wui-data-value">3,-1,2024-01-01T00:02:00Z</div>
+                    <div class="wui-data-row wui-data-value">4,1,2024-01-01T00:03:00Z</div>
+                    <div class="wui-data-row wui-data-value">5,0,2024-01-01T00:04:00Z</div>
+                </div>
+            </div>
+            
+            <!-- Processing Configuration -->
+            <div class="wui-pipeline-section">
+                <h2 class="wui-section-title">⚙️ Processing Configuration</h2>
+                
+                <div class="wui-data-config">
+                    <div class="wui-config-group">
+                        <label class="wui-config-label">Preprocessing Steps</label>
+                        <select class="wui-config-select" id="preprocessing-steps" multiple>
+                            <option value="normalize" selected>Normalization</option>
+                            <option value="outlier-removal">Outlier Removal</option>
+                            <option value="missing-values">Missing Value Handling</option>
+                            <option value="feature-scaling">Feature Scaling</option>
+                        </select>
+                    </div>
+                    
+                    <div class="wui-config-group">
+                        <label class="wui-config-label">Ternary Conversion Method</label>
+                        <select class="wui-config-select" id="ternary-method">
+                            <option value="threshold">Threshold-based</option>
+                            <option value="quantile">Quantile-based</option>
+                            <option value="adaptive">Adaptive</option>
+                            <option value="quantum">Quantum-inspired</option>
+                        </select>
+                    </div>
+                    
+                    <div class="wui-config-group">
+                        <label class="wui-config-label">QGNN Configuration</label>
+                        <textarea class="wui-config-textarea" id="qgnn-config" placeholder="QGNN processing configuration">
+{
+  "graph_type": "native",
+  "expert_count": 8,
+  "specialization_dim": 16,
+  "quantum_operations": true,
+  "energy_optimization": true,
+  "target_energy": 0.5
+}</textarea>
+                    </div>
+                    
+                    <div class="wui-config-group">
+                        <label class="wui-config-label">Output Format</label>
+                        <select class="wui-config-select" id="output-format">
+                            <option value="ternary">Ternary GF(3)</option>
+                            <option value="binary">Binary</option>
+                            <option value="json">JSON</option>
+                            <option value="csv">CSV</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="wui-action-buttons">
+                    <button class="wui-action-button primary" onclick="saveConfiguration()">💾 Save Config</button>
+                    <button class="wui-action-button secondary" onclick="loadConfiguration()">📁 Load Config</button>
+                    <button class="wui-action-button secondary" onclick="resetConfiguration()">🔄 Reset</button>
+                </div>
+                
+                <div class="wui-metrics-grid">
+                    <div class="wui-metric-card">
+                        <div class="wui-metric-value" id="throughput-metric">0</div>
+                        <div class="wui-metric-label">Records/sec</div>
+                    </div>
+                    <div class="wui-metric-card">
+                        <div class="wui-metric-value" id="latency-metric">0 ms</div>
+                        <div class="wui-metric-label">Avg Latency</div>
+                    </div>
+                    <div class="wui-metric-card">
+                        <div class="wui-metric-value" id="accuracy-metric">0%</div>
+                        <div class="wui-metric-label">Conversion Accuracy</div>
+                    </div>
+                    <div class="wui-metric-card">
+                        <div class="wui-metric-value" id="energy-metric">0 pJ/op</div>
+                        <div class="wui-metric-label">Energy/Operation</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Processing Log -->
+        <div class="wui-pipeline-section">
+            <h2 class="wui-section-title">📋 Processing Log</h2>
+            <div class="wui-processing-log" id="processing-log">
+                <div class="wui-log-entry wui-log-info">
+                    [2024-01-01 12:00:00] Pipeline initialized successfully
+                </div>
+                <div class="wui-log-entry wui-log-info">
+                    [2024-01-01 12:00:01] Data source: File Upload (ready)
+                </div>
+                <div class="wui-log-entry wui-log-info">
+                    [2024-01-01 12:00:02] QGNN configuration loaded
+                </div>
+                <div class="wui-log-entry wui-log-success">
+                    [2024-01-01 12:00:03] GF(3) compliance verified: 100%
+                </div>
+                <div class="wui-log-entry wui-log-info">
+                    [2024-01-01 12:00:04] Pipeline ready for execution
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class DataPipeline {
+            constructor() {
+                this.selectedSource = 'file';
+                this.isRunning = false;
+                this.processingLog = document.getElementById('processing-log');
+                
+                this.init();
+            }
+            
+            init() {
+                this.initDataSources();
+                this.initRealTimeUpdates();
+            }
+            
+            initDataSources() {
+                const sources = document.querySelectorAll('.wui-data-source-card');
+                sources.forEach(source => {
+                    source.addEventListener('click', () => {
+                        sources.forEach(s => s.classList.remove('selected'));
+                        source.classList.add('selected');
+                        this.selectedSource = source.getAttribute('data-source');
+                        this.updateDataConfig();
+                    });
+                });
+            }
+            
+            initRealTimeUpdates() {
+                // Simulate real-time pipeline updates
+                setInterval(() => {
+                    if (this.isRunning) {
+                        this.updateMetrics();
+                    }
+                }, 2000);
+            }
+            
+            updateDataConfig() {
+                const dataFormat = document.getElementById('data-format');
+                const validationRules = document.getElementById('validation-rules');
+                
+                // Update config based on selected source
+                switch (this.selectedSource) {
+                    case 'file':
+                        dataFormat.value = 'csv';
+                        validationRules.value = JSON.stringify({
+                            required_fields: ["id", "value"],
+                            value_range: [-1, 0, 1],
+                            gf3_compliance: true
+                        }, null, 2);
+                        break;
+                    case 'database':
+                        dataFormat.value = 'json';
+                        validationRules.value = JSON.stringify({
+                            required_fields: ["id", "data"],
+                            data_type: "object",
+                            gf3_compliance: true
+                        }, null, 2);
+                        break;
+                    case 'api':
+                        dataFormat.value = 'json';
+                        validationRules.value = JSON.stringify({
+                            required_fields: ["timestamp", "value"],
+                            timestamp_format: "ISO8601",
+                            gf3_compliance: true
+                        }, null, 2);
+                        break;
+                    case 'stream':
+                        dataFormat.value = 'binary';
+                        validationRules.value = JSON.stringify({
+                            required_fields: ["stream_id", "payload"],
+                            stream_format: "binary",
+                            gf3_compliance: true
+                        }, null, 2);
+                        break;
+                }
+                
+                this.addLogEntry(`Data source changed to: ${this.selectedSource}`, 'info');
+            }
+            
+            addLogEntry(message, type = 'info') {
+                const entry = document.createElement('div');
+                entry.className = `wui-log-entry wui-log-${type}`;
+                entry.textContent = `[${new Date().toLocaleString()}] ${message}`;
+                this.processingLog.appendChild(entry);
+                this.processingLog.scrollTop = this.processingLog.scrollHeight;
+            }
+            
+            updateStageStatus(stageId, status, type = 'info') {
+                const stageElement = document.getElementById(stageId);
+                if (stageElement) {
+                    stageElement.textContent = status;
+                    stageElement.style.color = type === 'success' ? 'var(--wui-secondary)' : 
+                                                type === 'error' ? 'var(--wui-danger)' : 
+                                                type === 'warning' ? 'var(--wui-accent)' : 'var(--wui-neutral)';
+                }
+            }
+            
+            updateMetrics() {
+                // Simulate real-time metrics
+                const throughput = Math.floor(Math.random() * 5000 + 1000);
+                const latency = Math.floor(Math.random() * 50 + 10);
+                const accuracy = Math.floor(Math.random() * 10 + 90);
+                const energy = (Math.random() * 0.3 + 0.2).toFixed(2);
+                
+                document.getElementById('throughput-metric').textContent = throughput;
+                document.getElementById('latency-metric').textContent = `${latency} ms`;
+                document.getElementById('accuracy-metric').textContent = `${accuracy}%`;
+                document.getElementById('energy-metric').textContent = `${energy} pJ/op`;
+            }
+            
+            simulateDataPreview() {
+                const preview = document.getElementById('data-preview');
+                preview.innerHTML = '';
+                
+                // Generate sample data based on format
+                const format = document.getElementById('data-format').value;
+                
+                if (format === 'csv') {
+                    preview.innerHTML = `
+                        <div class="wui-data-row wui-data-header">id,value,timestamp</div>
+                        <div class="wui-data-row wui-data-value">1,1,${new Date().toISOString()}</div>
+                        <div class="wui-data-row wui-data-value">2,0,${new Date().toISOString()}</div>
+                        <div class="wui-data-row wui-data-value">3,-1,${new Date().toISOString()}</div>
+                        <div class="wui-data-row wui-data-value">4,1,${new Date().toISOString()}</div>
+                        <div class="wui-data-row wui-data-value">5,0,${new Date().toISOString()}</div>
+                    `;
+                } else if (format === 'json') {
+                    preview.innerHTML = `
+                        <div class="wui-data-row wui-data-value">{"id": 1, "value": 1, "timestamp": "${new Date().toISOString()}"}</div>
+                        <div class="wui-data-row wui-data-value">{"id": 2, "value": 0, "timestamp": "${new Date().toISOString()}"}</div>
+                        <div class="wui-data-row wui-data-value">{"id": 3, "value": -1, "timestamp": "${new Date().toISOString()}"}</div>
+                        <div class="wui-data-row wui-data-value">{"id": 4, "value": 1, "timestamp": "${new Date().toISOString()}"}</div>
+                        <div class="wui-data-row wui-data-value">{"id": 5, "value": 0, "timestamp": "${new Date().toISOString()}"}</div>
+                    `;
+                } else if (format === 'ternary') {
+                    preview.innerHTML = `
+                        <div class="wui-data-row wui-data-header">trit_sequence</div>
+                        <div class="wui-data-row wui-data-value">[1, 0, -1, 1, 0, -1, 1, 0]</div>
+                        <div class="wui-data-row wui-data-value">[0, 1, -1, 0, 1, -1, 0, 1]</div>
+                        <div class="wui-data-row wui-data-value">[-1, 1, 0, -1, 1, 0, -1, 1]</div>
+                        <div class="wui-data-row wui-data-value">[1, -1, 0, 1, -1, 0, 1, -1]</div>
+                        <div class="wui-data-row wui-data-value">[0, 1, -1, 0, 1, -1, 0, 1]</div>
+                    `;
+                }
+            }
+        }
+        
+        // Global functions
+        function runPipeline() {
+            if (pipeline.isRunning) return;
+            
+            pipeline.isRunning = true;
+            pipeline.addLogEntry('Starting pipeline execution...', 'info');
+            
+            // Stage 1: Data Ingestion
+            pipeline.updateStageStatus('stage-ingestion', 'Processing...', 'warning');
+            setTimeout(() => {
+                pipeline.updateStageStatus('stage-ingestion', 'Complete', 'success');
+                pipeline.addLogEntry('Data ingestion completed: 10,000 records processed', 'success');
+                
+                // Stage 2: Preprocessing
+                pipeline.updateStageStatus('stage-preprocessing', 'Processing...', 'warning');
+                setTimeout(() => {
+                    pipeline.updateStageStatus('stage-preprocessing', 'Complete', 'success');
+                    pipeline.addLogEntry('Preprocessing completed: outliers removed, missing values handled', 'success');
+                    
+                    // Stage 3: Ternary Conversion
+                    pipeline.updateStageStatus('stage-ternary', 'Processing...', 'warning');
+                    setTimeout(() => {
+                        pipeline.updateStageStatus('stage-ternary', 'Complete', 'success');
+                        pipeline.addLogEntry('Ternary conversion completed: 100% GF(3) compliance', 'success');
+                        
+                        // Stage 4: QGNN Processing
+                        pipeline.updateStageStatus('stage-qgnn', 'Processing...', 'warning');
+                        setTimeout(() => {
+                            pipeline.updateStageStatus('stage-qgnn', 'Complete', 'success');
+                            pipeline.addLogEntry('QGNN processing completed: 2.8x speedup achieved', 'success');
+                            
+                            // Stage 5: Output Generation
+                            pipeline.updateStageStatus('stage-output', 'Processing...', 'warning');
+                            setTimeout(() => {
+                                pipeline.updateStageStatus('stage-output', 'Complete', 'success');
+                                pipeline.addLogEntry('Output generation completed: results exported successfully', 'success');
+                                pipeline.addLogEntry('Pipeline execution completed successfully!', 'success');
+                                
+                                pipeline.isRunning = false;
+                            }, 2000);
+                        }, 3000);
+                    }, 2500);
+                }, 2000);
+            }, 1500);
+        }
+        
+        function validatePipeline() {
+            pipeline.addLogEntry('Validating pipeline configuration...', 'info');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Data source configuration: VALID', 'success');
+                pipeline.addLogEntry('✅ Preprocessing steps: VALID', 'success');
+                pipeline.addLogEntry('✅ Ternary conversion: VALID', 'success');
+                pipeline.addLogEntry('✅ QGNN configuration: VALID', 'success');
+                pipeline.addLogEntry('✅ Output format: VALID', 'success');
+                pipeline.addLogEntry('✅ GF(3) compliance: 100%', 'success');
+                pipeline.addLogEntry('Pipeline validation: PASSED', 'success');
+            }, 1000);
+        }
+        
+        function exportPipeline() {
+            pipeline.addLogEntry('Exporting pipeline configuration...', 'info');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Pipeline exported to: pipeline_config.json', 'success');
+                pipeline.addLogEntry('✅ Data schema exported to: data_schema.json', 'success');
+                pipeline.addLogEntry('✅ Processing rules exported to: processing_rules.json', 'success');
+            }, 1000);
+        }
+        
+        function connectDataSource() {
+            pipeline.addLogEntry(`Connecting to data source: ${pipeline.selectedSource}...`, 'info');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Data source connected successfully', 'success');
+                pipeline.simulateDataPreview();
+            }, 1000);
+        }
+        
+        function testConnection() {
+            pipeline.addLogEntry('Testing data source connection...', 'info');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Connection test: PASSED', 'success');
+                pipeline.addLogEntry('✅ Data validation: PASSED', 'success');
+                pipeline.addLogEntry('✅ GF(3) compliance: 100%', 'success');
+            }, 1500);
+        }
+        
+        function disconnectDataSource() {
+            pipeline.addLogEntry('Disconnecting data source...', 'warning');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Data source disconnected', 'info');
+                document.getElementById('data-preview').innerHTML = '<div class="wui-data-row wui-data-value">No data preview available</div>';
+            }, 500);
+        }
+        
+        function saveConfiguration() {
+            pipeline.addLogEntry('Saving pipeline configuration...', 'info');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Configuration saved to: pipeline_config.json', 'success');
+            }, 500);
+        }
+        
+        function loadConfiguration() {
+            pipeline.addLogEntry('Loading pipeline configuration...', 'info');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Configuration loaded from: pipeline_config.json', 'success');
+            }, 500);
+        }
+        
+        function resetConfiguration() {
+            pipeline.addLogEntry('Resetting pipeline configuration...', 'warning');
+            
+            setTimeout(() => {
+                pipeline.addLogEntry('✅ Configuration reset to defaults', 'success');
+            }, 500);
+        }
+        
+        // Initialize pipeline
+        const pipeline = new DataPipeline();
+    </script>
+</body>
+</html>

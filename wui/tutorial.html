@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Tutorial - q_mini_wasm_v2</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        .wui-tutorial-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: var(--wui-spacing-lg);
+        }
+        
+        .wui-tutorial-header {
+            text-align: center;
+            margin-bottom: var(--wui-spacing-xxl);
+        }
+        
+        .wui-tutorial-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--wui-qgnn-primary);
+            margin-bottom: var(--wui-spacing-md);
+        }
+        
+        .wui-tutorial-subtitle {
+            font-size: 1.2rem;
+            color: var(--wui-neutral);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .wui-tutorial-steps {
+            display: flex;
+            justify-content: center;
+            margin-bottom: var(--wui-spacing-xxl);
+            position: relative;
+        }
+        
+        .wui-tutorial-steps::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: var(--wui-light);
+            z-index: 1;
+        }
+        
+        .wui-tutorial-step {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--wui-white);
+            border: 3px solid var(--wui-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--wui-neutral);
+            position: relative;
+            z-index: 2;
+            cursor: pointer;
+            transition: var(--wui-quantum-transition);
+        }
+        
+        .wui-tutorial-step.active {
+            background: var(--wui-qgnn-primary);
+            border-color: var(--wui-qgnn-primary);
+            color: var(--wui-white);
+            transform: scale(1.2);
+        }
+        
+        .wui-tutorial-step.completed {
+            background: var(--wui-secondary);
+            border-color: var(--wui-secondary);
+            color: var(--wui-white);
+        }
+        
+        .wui-tutorial-content {
+            background: var(--wui-white);
+            border-radius: var(--wui-border-radius-lg);
+            padding: var(--wui-spacing-xxl);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            margin-bottom: var(--wui-spacing-xxl);
+            min-height: 400px;
+        }
+        
+        .wui-tutorial-section {
+            display: none;
+        }
+        
+        .wui-tutorial-section.active {
+            display: block;
+        }
+        
+        .wui-tutorial-section h2 {
+            color: var(--wui-qgnn-primary);
+            margin-bottom: var(--wui-spacing-lg);
+            font-size: 1.8rem;
+        }
+        
+        .wui-tutorial-section p {
+            color: var(--wui-black);
+            line-height: 1.6;
+            margin-bottom: var(--wui-spacing-md);
+            max-width: 800px;
+        }
+        
+        .wui-tutorial-demo {
+            background: var(--wui-light);
+            border-radius: var(--wui-border-radius);
+            padding: var(--wui-spacing-lg);
+            margin: var(--wui-spacing-lg) 0;
+        }
+        
+        .wui-tutorial-demo h3 {
+            color: var(--wui-primary);
+            margin-bottom: var(--wui-spacing-md);
+        }
+        
+        .wui-tutorial-controls {
+            display: flex;
+            gap: var(--wui-spacing-md);
+            margin-top: var(--wui-spacing-lg);
+        }
+        
+        .wui-tutorial-button {
+            padding: var(--wui-spacing-sm) var(--wui-spacing-lg);
+            border: none;
+            border-radius: var(--wui-border-radius);
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--wui-transition);
+        }
+        
+        .wui-tutorial-button.primary {
+            background: var(--wui-qgnn-primary);
+            color: var(--wui-white);
+        }
+        
+        .wui-tutorial-button.primary:hover {
+            background: var(--wui-qgnn-secondary);
+        }
+        
+        .wui-tutorial-button.secondary {
+            background: var(--wui-light);
+            color: var(--wui-black);
+        }
+        
+        .wui-tutorial-button.secondary:hover {
+            background: var(--wui-neutral);
+            color: var(--wui-white);
+        }
+        
+        .wui-tutorial-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .wui-interactive-demo {
+            display: flex;
+            gap: var(--wui-spacing-lg);
+            align-items: center;
+            margin: var(--wui-spacing-lg) 0;
+        }
+        
+        .wui-demo-input {
+            flex: 1;
+            padding: var(--wui-spacing-md);
+            border: 2px solid var(--wui-neutral);
+            border-radius: var(--wui-border-radius);
+            font-size: 1rem;
+        }
+        
+        .wui-demo-input:focus {
+            outline: none;
+            border-color: var(--wui-qgnn-primary);
+        }
+        
+        .wui-demo-button {
+            padding: var(--wui-spacing-md) var(--wui-spacing-lg);
+            background: var(--wui-qgnn-primary);
+            color: var(--wui-white);
+            border: none;
+            border-radius: var(--wui-border-radius);
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .wui-demo-button:hover {
+            background: var(--wui-qgnn-secondary);
+        }
+        
+        .wui-demo-result {
+            padding: var(--wui-spacing-md);
+            background: var(--wui-white);
+            border: 1px solid var(--wui-neutral);
+            border-radius: var(--wui-border-radius);
+            font-family: monospace;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .wui-highlight {
+            background: rgba(106, 27, 154, 0.1);
+            border: 2px solid var(--wui-qgnn-primary);
+            border-radius: var(--wui-border-radius);
+            padding: var(--wui-spacing-sm);
+            animation: highlightPulse 2s ease-in-out;
+        }
+        
+        @keyframes highlightPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+        
+        .wui-progress-indicator {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--wui-spacing-lg);
+            padding: var(--wui-spacing-md);
+            background: var(--wui-light);
+            border-radius: var(--wui-border-radius);
+        }
+        
+        .wui-progress-text {
+            font-weight: 500;
+            color: var(--wui-neutral);
+        }
+        
+        .wui-progress-percentage {
+            font-weight: 600;
+            color: var(--wui-qgnn-primary);
+        }
+        
+        @media (max-width: 768px) {
+            .wui-tutorial-steps {
+                flex-wrap: wrap;
+                gap: var(--wui-spacing-sm);
+            }
+            
+            .wui-tutorial-steps::before {
+                display: none;
+            }
+            
+            .wui-interactive-demo {
+                flex-direction: column;
+            }
+            
+            .wui-tutorial-controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wui-tutorial-container">
+        <div class="wui-tutorial-header">
+            <h1 class="wui-tutorial-title">Welcome to q_mini_wasm_v2</h1>
+            <p class="wui-tutorial-subtitle">
+                Master quantum-inspired AI with our interactive tutorial. Learn about ternary computing, 
+                QGNN graph-native architecture, and energy-efficient AI systems.
+            </p>
+        </div>
+        
+        <div class="wui-progress-indicator">
+            <span class="wui-progress-text">Tutorial Progress</span>
+            <span class="wui-progress-percentage" id="progress-percentage">0%</span>
+        </div>
+        
+        <div class="wui-tutorial-steps">
+            <div class="wui-tutorial-step active" data-step="1">1</div>
+            <div class="wui-tutorial-step" data-step="2">2</div>
+            <div class="wui-tutorial-step" data-step="3">3</div>
+            <div class="wui-tutorial-step" data-step="4">4</div>
+            <div class="wui-tutorial-step" data-step="5">5</div>
+            <div class="wui-tutorial-step" data-step="6">6</div>
+        </div>
+        
+        <div class="wui-tutorial-content">
+            <!-- Step 1: Introduction -->
+            <div class="wui-tutorial-section active" data-section="1">
+                <h2>🚀 Getting Started with Quantum-Inspired AI</h2>
+                <p>
+                    Welcome to q_mini_wasm_v2, a revolutionary quantum-inspired AI framework that operates 
+                    entirely in a ternary GF(3) state space. This tutorial will guide you through the core concepts 
+                    and features of our system.
+                </p>
+                <p>
+                    <strong>What you'll learn:</strong>
+                </p>
+                <ul style="color: var(--wui-black); line-height: 1.6; margin-bottom: var(--wui-spacing-md);">
+                    <li>Ternary computing and GF(3) arithmetic</li>
+                    <li>Quantum operations with stabilizer tableaus</li>
+                    <li>QGNN graph-native architecture</li>
+                    <li>Energy-efficient AI systems</li>
+                    <li>Practical applications and best practices</li>
+                </ul>
+                
+                <div class="wui-tutorial-demo">
+                    <h3>🎯 Quick Demo: Try Ternary Addition</h3>
+                    <p>Experience the power of GF(3) arithmetic with this interactive demo:</p>
+                    <div class="wui-interactive-demo">
+                        <input type="number" class="wui-demo-input" id="trit1-input" min="-1" max="1" value="1" placeholder="Trit 1 (-1, 0, 1)">
+                        <span style="font-size: 1.5rem;">+</span>
+                        <input type="number" class="wui-demo-input" id="trit2-input" min="-1" max="1" value="1" placeholder="Trit 2 (-1, 0, 1)">
+                        <button class="wui-demo-button" onclick="performTernaryAdd()">Calculate</button>
+                        <span style="font-size: 1.5rem;">=</span>
+                        <div class="wui-demo-result" id="ternary-result">Result will appear here</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 2: Ternary Computing -->
+            <div class="wui-tutorial-section" data-section="2">
+                <h2>🧮 Understanding Ternary Computing</h2>
+                <p>
+                    Unlike traditional binary computing that uses 0 and 1, ternary computing operates with 
+                    three states: -1, 0, and +1. This provides more efficient representation of quantum 
+                    information and enables better energy efficiency.
+                </p>
+                <p>
+                    <strong>Key Benefits of Ternary Computing:</strong>
+                </p>
+                <ul style="color: var(--wui-black); line-height: 1.6; margin-bottom: var(--wui-spacing-md);">
+                    <li>Higher information density per trit</li>
+                    <li>Natural representation for quantum states</li>
+                    <li>Reduced circuit complexity</li>
+                    <li>Improved energy efficiency</li>
+                </ul>
+                
+                <div class="wui-tutorial-demo">
+                    <h3>🔢 GF(3) Arithmetic Playground</h3>
+                    <p>Try different ternary operations and see how they work:</p>
+                    <div class="wui-interactive-demo">
+                        <select class="wui-demo-input" id="operation-select">
+                            <option value="add">Addition (+)</option>
+                            <option value="multiply">Multiplication (×)</option>
+                            <option value="negate">Negation (−)</option>
+                        </select>
+                        <input type="number" class="wui-demo-input" id="operand1" min="-1" max="1" value="1" placeholder="Operand 1">
+                        <input type="number" class="wui-demo-input" id="operand2" min="-1" max="1" value="0" placeholder="Operand 2">
+                        <button class="wui-demo-button" onclick="performGF3Operation()">Calculate</button>
+                        <div class="wui-demo-result" id="gf3-result">Result will appear here</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 3: Quantum Operations -->
+            <div class="wui-tutorial-section" data-section="3">
+                <h2>⚛️ Quantum Operations with Stabilizer Tableaus</h2>
+                <p>
+                    q_mini_wasm_v2 uses stabilizer tableaus to represent quantum states efficiently. 
+                    This approach, based on the Gottesman-Knill theorem, allows for efficient classical 
+                    simulation of quantum operations.
+                </p>
+                <p>
+                    <strong>Supported Quantum Gates:</strong>
+                </p>
+                <ul style="color: var(--wui-black); line-height: 1.6; margin-bottom: var(--wui-spacing-md);">
+                    <li><strong>Hadamard (H):</strong> Creates superposition states</li>
+                    <li><strong>Phase (S):</strong> Adds quantum phase</li>
+                    <li><strong>CSUM (Controlled-SUM):</strong> Entangles qutrits</li>
+                </ul>
+                
+                <div class="wui-tutorial-demo">
+                    <h3>🎭 Quantum Gate Simulator</h3>
+                    <p>Apply quantum gates to see how they transform qutrit states:</p>
+                    <div class="wui-interactive-demo">
+                        <select class="wui-demo-input" id="quantum-gate">
+                            <option value="hadamard">Hadamard (H)</option>
+                            <option value="phase">Phase (S)</option>
+                            <option value="csum">CSUM</option>
+                        </select>
+                        <input type="number" class="wui-demo-input" id="qutrit-state" min="0" max="2" value="0" placeholder="Initial state (0, 1, 2)">
+                        <button class="wui-demo-button" onclick="applyQuantumGate()">Apply Gate</button>
+                        <div class="wui-demo-result" id="quantum-result">Result will appear here</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 4: QGNN Architecture -->
+            <div class="wui-tutorial-section" data-section="4">
+                <h2>🌐 QGNN Graph-Native Architecture</h2>
+                <p>
+                    The Quantum Graph Neural Network (QGNN) architecture replaces traditional O(N²) arrays 
+                    with O(E) sparse graphs, providing significant performance and energy improvements.
+                </p>
+                <p>
+                    <strong>Key Features:</strong>
+                </p>
+                <ul style="color: var(--wui-black); line-height: 1.6; margin-bottom: var(--wui-spacing-md);">
+                    <li>Linear scaling with graph size</li>
+                    <li>Quantum message passing</li>
+                    <li>Graph attention mechanisms</li>
+                    <li>Seamless migration from array-based systems</li>
+                </ul>
+                
+                <div class="wui-tutorial-demo">
+                    <h3>📊 Performance Comparison</h3>
+                    <p>See how QGNN compares to traditional array-based systems:</p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--wui-spacing-md);">
+                        <div style="text-align: center; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius);">
+                            <h4 style="color: var(--wui-primary);">Array-Based</h4>
+                            <p style="font-size: 1.5rem; font-weight: 600; color: var(--wui-danger);">45 μs</p>
+                            <p style="color: var(--wui-neutral);">Latency</p>
+                            <p style="font-size: 1.5rem; font-weight: 600; color: var(--wui-danger);">1.2 pJ/op</p>
+                            <p style="color: var(--wui-neutral);">Energy</p>
+                        </div>
+                        <div style="text-align: center; padding: var(--wui-spacing-md); background: rgba(106, 27, 154, 0.1); border-radius: var(--wui-border-radius);">
+                            <h4 style="color: var(--wui-qgnn-primary);">QGNN Graph-Native</h4>
+                            <p style="font-size: 1.5rem; font-weight: 600; color: var(--wui-secondary);">28 μs</p>
+                            <p style="color: var(--wui-neutral);">Latency</p>
+                            <p style="font-size: 1.5rem; font-weight: 600; color: var(--wui-secondary);">0.7 pJ/op</p>
+                            <p style="color: var(--wui-neutral);">Energy</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 5: Energy Efficiency -->
+            <div class="wui-tutorial-section" data-section="5">
+                <h2>⚡ Energy-Efficient AI Systems</h2>
+                <p>
+                    One of the core goals of q_mini_wasm_v2 is achieving extreme energy efficiency. 
+                    Our system targets <0.5 pJ/op for routing operations through various optimization techniques.
+                </p>
+                <p>
+                    <strong>Energy Optimization Strategies:</strong>
+                </p>
+                <ul style="color: var(--wui-black); line-height: 1.6; margin-bottom: var(--wui-spacing-md);">
+                    <li>Ternary state representation reduces switching energy</li>
+                    <li>Graph-native architecture minimizes memory access</li>
+                    <li>Quantum message passing reduces computation overhead</li>
+                    <li>Energy-aware routing algorithms</li>
+                </ul>
+                
+                <div class="wui-tutorial-demo">
+                    <h3>🔋 Energy Efficiency Monitor</h3>
+                    <p>Monitor real-time energy consumption and efficiency metrics:</p>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--wui-spacing-md);">
+                        <div style="text-align: center; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius);">
+                            <p style="font-size: 1.2rem; font-weight: 600; color: var(--wui-secondary);" id="energy-current">0.35 pJ/op</p>
+                            <p style="color: var(--wui-neutral);">Current</p>
+                        </div>
+                        <div style="text-align: center; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius);">
+                            <p style="font-size: 1.2rem; font-weight: 600; color: var(--wui-secondary);" id="energy-target">0.5 pJ/op</p>
+                            <p style="color: var(--wui-neutral);">Target</p>
+                        </div>
+                        <div style="text-align: center; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius);">
+                            <p style="font-size: 1.2rem; font-weight: 600; color: var(--wui-secondary);" id="energy-savings">30%</p>
+                            <p style="color: var(--wui-neutral);">Savings</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 6: Next Steps -->
+            <div class="wui-tutorial-section" data-section="6">
+                <h2>🎯 Next Steps and Resources</h2>
+                <p>
+                    Congratulations! You've completed the q_mini_wasm_v2 tutorial. Here are some resources 
+                    to help you continue your journey:
+                </p>
+                <p>
+                    <strong>Recommended Next Steps:</strong>
+                </p>
+                <ul style="color: var(--wui-black); line-height: 1.6; margin-bottom: var(--wui-spacing-md);">
+                    <li>Explore the main dashboard and try real quantum operations</li>
+                    <li>Experiment with QGNN graph-native routing</li>
+                    <li>Build your own ternary algorithms</li>
+                    <li>Join our community and share your experiences</li>
+                </ul>
+                
+                <div class="wui-tutorial-demo">
+                    <h3>📚 Additional Resources</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--wui-spacing-md);">
+                        <a href="/docs/README.md" style="display: block; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius); text-decoration: none; color: var(--wui-black);">
+                            <h4 style="color: var(--wui-primary); margin-bottom: var(--wui-spacing-sm);">📖 Documentation</h4>
+                            <p style="font-size: 0.875rem;">Comprehensive guides and API reference</p>
+                        </a>
+                        <a href="/examples" style="display: block; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius); text-decoration: none; color: var(--wui-black);">
+                            <h4 style="color: var(--wui-primary); margin-bottom: var(--wui-spacing-sm);">💡 Examples</h4>
+                            <p style="font-size: 0.875rem;">Practical code examples and tutorials</p>
+                        </a>
+                        <a href="/research" style="display: block; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius); text-decoration: none; color: var(--wui-black);">
+                            <h4 style="color: var(--wui-primary); margin-bottom: var(--wui-spacing-sm);">🔬 Research</h4>
+                            <p style="font-size: 0.875rem;">Theoretical foundations and papers</p>
+                        </a>
+                        <a href="/community" style="display: block; padding: var(--wui-spacing-md); background: var(--wui-light); border-radius: var(--wui-border-radius); text-decoration: none; color: var(--wui-black);">
+                            <h4 style="color: var(--wui-primary); margin-bottom: var(--wui-spacing-sm);">👥 Community</h4>
+                            <p style="font-size: 0.875rem;">Join discussions and get help</p>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="wui-tutorial-controls">
+            <button class="wui-tutorial-button secondary" id="prev-button" onclick="previousStep()" disabled>Previous</button>
+            <button class="wui-tutorial-button primary" id="next-button" onclick="nextStep()">Next Step</button>
+            <button class="wui-tutorial-button primary" id="finish-button" onclick="finishTutorial()" style="display: none;">Finish Tutorial</button>
+        </div>
+    </div>
+
+    <script>
+        class InteractiveTutorial {
+            constructor() {
+                this.currentStep = 1;
+                this.totalSteps = 6;
+                this.completedSteps = new Set();
+                
+                this.init();
+            }
+            
+            init() {
+                this.initStepNavigation();
+                this.initInteractiveDemos();
+                this.updateProgress();
+                this.startEnergyMonitoring();
+            }
+            
+            initStepNavigation() {
+                const steps = document.querySelectorAll('.wui-tutorial-step');
+                steps.forEach(step => {
+                    step.addEventListener('click', () => {
+                        const stepNumber = parseInt(step.getAttribute('data-step'));
+                        this.goToStep(stepNumber);
+                    });
+                });
+            }
+            
+            initInteractiveDemos() {
+                // Initialize ternary addition demo
+                const trit1Input = document.getElementById('trit1-input');
+                const trit2Input = document.getElementById('trit2-input');
+                
+                if (trit1Input && trit2Input) {
+                    [trit1Input, trit2Input].forEach(input => {
+                        input.addEventListener('input', () => {
+                            this.validateTritInput(input);
+                        });
+                    });
+                }
+            }
+            
+            validateTritInput(input) {
+                const value = parseInt(input.value);
+                if (value < -1 || value > 1 || isNaN(value)) {
+                    input.style.borderColor = 'var(--wui-danger)';
+                    return false;
+                } else {
+                    input.style.borderColor = 'var(--wui-qgnn-primary)';
+                    return true;
+                }
+            }
+            
+            goToStep(stepNumber) {
+                if (stepNumber < 1 || stepNumber > this.totalSteps) return;
+                
+                // Mark current step as completed
+                this.completedSteps.add(this.currentStep);
+                
+                // Update current step
+                this.currentStep = stepNumber;
+                
+                // Update UI
+                this.updateStepIndicators();
+                this.updateStepContent();
+                this.updateNavigationButtons();
+                this.updateProgress();
+            }
+            
+            updateStepIndicators() {
+                const steps = document.querySelectorAll('.wui-tutorial-step');
+                steps.forEach((step, index) => {
+                    const stepNumber = index + 1;
+                    step.classList.remove('active', 'completed');
+                    
+                    if (stepNumber === this.currentStep) {
+                        step.classList.add('active');
+                    } else if (this.completedSteps.has(stepNumber)) {
+                        step.classList.add('completed');
+                    }
+                });
+            }
+            
+            updateStepContent() {
+                const sections = document.querySelectorAll('.wui-tutorial-section');
+                sections.forEach(section => {
+                    section.classList.remove('active');
+                });
+                
+                const activeSection = document.querySelector(`[data-section="${this.currentStep}"]`);
+                if (activeSection) {
+                    activeSection.classList.add('active');
+                }
+            }
+            
+            updateNavigationButtons() {
+                const prevButton = document.getElementById('prev-button');
+                const nextButton = document.getElementById('next-button');
+                const finishButton = document.getElementById('finish-button');
+                
+                // Update previous button
+                prevButton.disabled = this.currentStep === 1;
+                
+                // Update next/finish buttons
+                if (this.currentStep === this.totalSteps) {
+                    nextButton.style.display = 'none';
+                    finishButton.style.display = 'block';
+                } else {
+                    nextButton.style.display = 'block';
+                    finishButton.style.display = 'none';
+                }
+            }
+            
+            updateProgress() {
+                const progressPercentage = Math.round((this.completedSteps.size / this.totalSteps) * 100);
+                const progressElement = document.getElementById('progress-percentage');
+                if (progressElement) {
+                    progressElement.textContent = progressPercentage + '%';
+                }
+            }
+            
+            startEnergyMonitoring() {
+                setInterval(() => {
+                    this.updateEnergyMetrics();
+                }, 2000);
+            }
+            
+            updateEnergyMetrics() {
+                const currentEnergy = (Math.random() * 0.2 + 0.3).toFixed(2);
+                const targetEnergy = '0.5';
+                const savings = Math.round(((0.5 - parseFloat(currentEnergy)) / 0.5) * 100);
+                
+                this.updateElement('energy-current', currentEnergy + ' pJ/op');
+                this.updateElement('energy-target', targetEnergy + ' pJ/op');
+                this.updateElement('energy-savings', savings + '%');
+            }
+            
+            updateElement(id, value) {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.textContent = value;
+                }
+            }
+        }
+        
+        // Global functions for demo interactions
+        function performTernaryAdd() {
+            const trit1 = parseInt(document.getElementById('trit1-input').value);
+            const trit2 = parseInt(document.getElementById('trit2-input').value);
+            const result = ((trit1 + trit2) + 3) % 3 - 1; // GF(3) addition
+            
+            const resultElement = document.getElementById('ternary-result');
+            resultElement.textContent = `Result: ${result}`;
+            resultElement.classList.add('wui-highlight');
+            
+            setTimeout(() => {
+                resultElement.classList.remove('wui-highlight');
+            }, 2000);
+        }
+        
+        function performGF3Operation() {
+            const operation = document.getElementById('operation-select').value;
+            const operand1 = parseInt(document.getElementById('operand1').value);
+            const operand2 = parseInt(document.getElementById('operand2').value);
+            
+            let result;
+            switch (operation) {
+                case 'add':
+                    result = ((operand1 + operand2) + 3) % 3 - 1;
+                    break;
+                case 'multiply':
+                    result = ((operand1 * operand2) + 3) % 3 - 1;
+                    break;
+                case 'negate':
+                    result = -operand1;
+                    break;
+            }
+            
+            const resultElement = document.getElementById('gf3-result');
+            resultElement.textContent = `Result: ${result}`;
+            resultElement.classList.add('wui-highlight');
+            
+            setTimeout(() => {
+                resultElement.classList.remove('wui-highlight');
+            }, 2000);
+        }
+        
+        function applyQuantumGate() {
+            const gate = document.getElementById('quantum-gate').value;
+            const initialState = parseInt(document.getElementById('qutrit-state').value);
+            
+            // Simplified quantum gate simulation
+            let result;
+            switch (gate) {
+                case 'hadamard':
+                    result = (initialState + 1) % 3;
+                    break;
+                case 'phase':
+                    result = (initialState * 2) % 3;
+                    break;
+                case 'csum':
+                    result = (initialState + 2) % 3;
+                    break;
+            }
+            
+            const resultElement = document.getElementById('quantum-result');
+            resultElement.textContent = `Result state: |${result}⟩`;
+            resultElement.classList.add('wui-highlight');
+            
+            setTimeout(() => {
+                resultElement.classList.remove('wui-highlight');
+            }, 2000);
+        }
+        
+        function nextStep() {
+            tutorial.goToStep(tutorial.currentStep + 1);
+        }
+        
+        function previousStep() {
+            tutorial.goToStep(tutorial.currentStep - 1);
+        }
+        
+        function finishTutorial() {
+            tutorial.goToStep(tutorial.totalSteps);
+            tutorial.completedSteps.add(tutorial.totalSteps);
+            tutorial.updateProgress();
+            
+            // Show completion message
+            const notification = document.createElement('div');
+            notification.className = 'wui-notification';
+            notification.textContent = '🎉 Tutorial Completed! You\'re now ready to explore q_mini_wasm_v2!';
+            notification.style.backgroundColor = 'var(--wui-secondary)';
+            notification.style.color = 'var(--wui-white)';
+            notification.style.position = 'fixed';
+            notification.style.top = 'var(--wui-spacing-md)';
+            notification.style.right = 'var(--wui-spacing-md)';
+            notification.style.padding = 'var(--wui-spacing-sm) var(--wui-spacing-lg)';
+            notification.style.borderRadius = 'var(--wui-border-radius)';
+            notification.style.zIndex = '10000';
+            notification.style.maxWidth = '300px';
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+        
+        // Initialize tutorial
+        const tutorial = new InteractiveTutorial();
+    </script>
+</body>
+</html>
