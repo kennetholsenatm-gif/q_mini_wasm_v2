@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,8 +70,9 @@ func NewService(config ServiceConfig) (*Service, error) {
 	var embeddingService EmbeddingService
 	switch config.EmbeddingType {
 	case "tfidf":
-		// TF-IDF would require vocabulary building
-		embeddingService = NewPlaceholderEmbeddingService(int(config.Qdrant.VectorSize))
+		// Build TF-IDF vocabulary from project documents
+		vocabulary, idf := buildTFIDFVocabulary(config.ProjectRoot)
+		embeddingService = NewTFIDFEmbeddingService(vocabulary, idf)
 	case "real":
 		// Real embedding service with API integration
 		apiEndpoint := os.Getenv("EMBEDDING_API_ENDPOINT")
@@ -470,4 +472,78 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// buildTFIDFVocabulary builds TF-IDF vocabulary from project documents
+func buildTFIDFVocabulary(projectRoot string) (map[string]int, map[string]float64) {
+	// Default vocabulary for common programming terms
+	vocabulary := map[string]int{
+		"function": 0, "class": 1, "method": 2, "variable": 3, "const": 4,
+		"import": 5, "export": 6, "return": 7, "if": 8, "else": 9,
+		"for": 10, "while": 11, "switch": 12, "case": 13, "break": 14,
+		"continue": 15, "try": 16, "catch": 17, "throw": 18, "error": 19,
+		"test": 20, "mock": 21, "assert": 22, "expect": 23, "config": 24,
+		"database": 25, "query": 26, "api": 27, "endpoint": 28, "request": 29,
+		"response": 30, "json": 31, "xml": 32, "http": 33, "url": 34,
+		"server": 35, "client": 36, "cache": 37, "memory": 38, "cpu": 39,
+		"gpu": 40, "async": 41, "await": 42, "promise": 43, "callback": 44,
+		"event": 45, "listener": 46, "handler": 47, "route": 48, "middleware": 49,
+		"quantum": 50, "qubit": 51, "qutrit": 52, "gf3": 53, "stabilizer": 54,
+		"tableau": 55, "clifford": 56, "entanglement": 57, "moe": 58, "qgnn": 59,
+	}
+
+	// Build IDF scores (simplified - in production would scan all docs)
+	idf := make(map[string]float64)
+	totalDocs := 100.0 // Assume corpus size
+
+	for term := range vocabulary {
+		// Simplified IDF: log(N / df)
+		// Assume each term appears in ~10 documents on average
+		docFreq := 10.0
+		idf[term] = math.Log(totalDocs / docFreq)
+	}
+
+	// If project root provided, scan for actual terms
+	if projectRoot != "" {
+		// Scan a few files to augment vocabulary
+		filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+
+			// Only scan source code files
+			ext := strings.ToLower(filepath.Ext(path))
+			if ext != ".go" && ext != ".cpp" && ext != ".hpp" && ext != ".py" && ext != ".js" {
+				return nil
+			}
+
+			// Limit files scanned
+			if len(vocabulary) > 500 {
+				return filepath.SkipAll
+			}
+
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+
+			// Extract words and add to vocabulary
+			words := strings.Fields(string(content))
+			for _, word := range words {
+				word = strings.ToLower(strings.TrimFunc(word, func(r rune) bool {
+					return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'))
+				}))
+				if len(word) > 2 && len(vocabulary) < 384 {
+					if _, exists := vocabulary[word]; !exists {
+						vocabulary[word] = len(vocabulary)
+						idf[word] = math.Log(totalDocs / 5.0) // Assume rare terms
+					}
+				}
+			}
+
+			return nil
+		})
+	}
+
+	return vocabulary, idf
 }
