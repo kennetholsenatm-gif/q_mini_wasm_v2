@@ -236,17 +236,22 @@ std::vector<int8_t> StabilizerTableau::measure_all() {
     return outcomes;
 }
 
-double StabilizerTableau::compute_overlap() const {
+uint8_t StabilizerTableau::compute_overlap() const {
     // In QGNN tracking, overlap is related to graph density and phase alignment
     // We compute a localized metric based on edge sparsity and phases.
-    double overlap = 0.0;
+    // GF(3) integer arithmetic ensures no floating-point contamination.
+    uint32_t overlap = 0;
     const size_t edge_count = col_idx_.size();
     
     for (size_t i = 0; i < n_; ++i) {
         overlap += phase_[i];
     }
     
-    return (edge_count == 0) ? (overlap / n_) : (overlap / edge_count);
+    if (edge_count == 0) {
+        return static_cast<uint8_t>((overlap / n_) % 3);
+    } else {
+        return static_cast<uint8_t>((overlap / edge_count) % 3);
+    }
 }
 
 // ============================================================================

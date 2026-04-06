@@ -26,13 +26,23 @@ public:
     explicit MessagePassingKernel(memory::MemoryArena& arena);
 
     /**
-     * @brief Execute one message passing iteration
-     * @param graph Graph adjacency matrix (GF(3) entanglement links)
+     * @brief Discrete unitary operator representing an entanglement edge
+     * Replaces the O(N^2) dense boolean adjacency matrix with sparse GF(3) mappings
+     */
+    struct TernaryTreeEdge {
+        size_t source_node;
+        size_t target_node;
+        int8_t weight;      // Entanglement weight in GF(3): {-1, 0, 1}
+    };
+
+    /**
+     * @brief Execute one message passing iteration using sparse ternary tree encoding
+     * @param edges Graph edges representing discrete spatial entanglement operators
      * @param node_states Node stabilizer states
      * @return Updated node states after message aggregation
      */
     std::span<const stabilizer::StabilizerTableau> forward_pass(
-        std::span<const int8_t> graph_adjacency,
+        std::span<const TernaryTreeEdge> edges,
         std::span<const stabilizer::StabilizerTableau> node_states
     ) noexcept;
 

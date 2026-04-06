@@ -51,7 +51,7 @@ public:
      * @param tableau Stabilizer tableau representing current state
      * @return Goodness value (higher = more ordered = better for positive data)
      */
-    double compute_goodness(const stabilizer::StabilizerTableau& tableau) const;
+    uint32_t compute_goodness(const stabilizer::StabilizerTableau& tableau) const;
     
     /**
      * @brief Compute goodness from activations using tropical inner product
@@ -62,7 +62,7 @@ public:
      * @param activations Layer activations
      * @return Goodness value
      */
-    double compute_goodness_tropical(const std::vector<ternary::Trit>& activations) const;
+    uint32_t compute_goodness_tropical(const std::vector<ternary::Trit>& activations) const;
     
     /**
      * @brief Compute goodness delta between positive and negative
@@ -70,7 +70,7 @@ public:
      * @param negative_goodness Goodness for corrupted data
      * @return Delta (should be positive for well-trained network)
      */
-    static double compute_delta(double positive_goodness, double negative_goodness);
+    static int32_t compute_delta(uint32_t positive_goodness, uint32_t negative_goodness);
 
     // ========================================================================
     // Entanglement Entropy Computation
@@ -86,7 +86,7 @@ public:
      * @param tableau Stabilizer tableau
      * @return Entropy value
      */
-    double compute_entropy(const stabilizer::StabilizerTableau& tableau) const;
+    uint32_t compute_entropy(const stabilizer::StabilizerTableau& tableau) const;
     
     /**
      * @brief Compute entropy of subsystem
@@ -94,7 +94,7 @@ public:
      * @param subsystem_indices Indices of qutrits in subsystem
      * @return Subsystem entropy
      */
-    double compute_subsystem_entropy(
+    uint32_t compute_subsystem_entropy(
         const stabilizer::StabilizerTableau& tableau,
         const std::vector<size_t>& subsystem_indices
     ) const;
@@ -106,7 +106,7 @@ public:
      * @param subsystem_b Second subsystem indices
      * @return Mutual information I(A:B) = S(A) + S(B) - S(AB)
      */
-    double compute_mutual_information(
+    int32_t compute_mutual_information(
         const stabilizer::StabilizerTableau& tableau,
         const std::vector<size_t>& subsystem_a,
         const std::vector<size_t>& subsystem_b
@@ -127,7 +127,7 @@ public:
      * @param activations Current activations
      * @return Learning signal vector
      */
-    std::vector<double> compute_learning_signal(
+    std::vector<int32_t> compute_learning_signal(
         const stabilizer::StabilizerTableau& tableau,
         const std::vector<ternary::Trit>& activations
     ) const;
@@ -145,9 +145,9 @@ public:
      * @return true if well-trained
      */
     static bool is_well_trained(
-        double positive_goodness,
-        double negative_goodness,
-        double threshold = 0.1
+        uint32_t positive_goodness,
+        uint32_t negative_goodness,
+        int32_t threshold = 1
     );
 
 private:

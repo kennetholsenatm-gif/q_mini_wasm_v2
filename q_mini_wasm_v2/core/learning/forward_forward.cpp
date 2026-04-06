@@ -30,26 +30,26 @@ LayerGoodness ForwardForwardLearner::train_layer(
         throw std::out_of_range("Layer index out of range");
     }
     
-    LayerGoodness goodness{0.0, 0.0, 0.0};
+    LayerGoodness goodness{0, 0, 0};
     
     // Compute goodness for positive data
-    double pos_sum = 0.0;
+    uint64_t pos_sum = 0;
     for (const auto& sample : positive_data) {
         auto activations = forward_layer(layer_idx, sample);
         pos_sum += compute_goodness(activations);
     }
-    goodness.positive_goodness = pos_sum / positive_data.size();
+    goodness.positive_goodness = positive_data.empty() ? 0 : static_cast<uint32_t>(pos_sum / positive_data.size());
     
     // Compute goodness for negative data
-    double neg_sum = 0.0;
+    uint64_t neg_sum = 0;
     for (const auto& sample : negative_data) {
         auto activations = forward_layer(layer_idx, sample);
         neg_sum += compute_goodness(activations);
     }
-    goodness.negative_goodness = neg_sum / negative_data.size();
+    goodness.negative_goodness = negative_data.empty() ? 0 : static_cast<uint32_t>(neg_sum / negative_data.size());
     
     // Compute delta (positive should be higher than negative)
-    goodness.delta = goodness.positive_goodness - goodness.negative_goodness;
+    goodness.delta = static_cast<int32_t>(goodness.positive_goodness) - static_cast<int32_t>(goodness.negative_goodness);
     
     // Update weights if positive goodness exceeds negative
     if (goodness.delta > 0) {
@@ -94,11 +94,11 @@ std::vector<std::vector<ternary::Trit>> ForwardForwardLearner::generate_negative
     return negative_samples;
 }
 
-double ForwardForwardLearner::compute_goodness(const std::vector<ternary::Trit>& activations) const {
+uint32_t ForwardForwardLearner::compute_goodness(const std::vector<ternary::Trit>& activations) const {
     // Goodness = sum of squared activations (tropical inner product with itself)
     // Optimized for GF(3) ternary values {-1, 0, 1}: square is always 0 or 1
     // This eliminates floating point multiplication entirely
-    uint64_t goodness = 0;
+    uint32_t goodness = 0;
     for (const auto& act : activations) {
         // For ternary values: (-1)^2 = 1, 0^2 = 0, 1^2 = 1
         // So we just count non-zero trits
@@ -106,12 +106,12 @@ double ForwardForwardLearner::compute_goodness(const std::vector<ternary::Trit>&
             goodness++;
         }
     }
-    return static_cast<double>(goodness);
+    return goodness;
 }
 
-double ForwardForwardLearner::compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const {
+uint32_t ForwardForwardLearner::compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const {
     EntropyGoodnessMetric metric(tableau.num_qutrits());
-    return metric.compute_goodness(tableau);
+    return static_cast<uint32_t>(metric.compute_goodness(tableau));
 }
 
 LayerGoodness ForwardForwardLearner::train_layer_entangled(
@@ -123,27 +123,27 @@ LayerGoodness ForwardForwardLearner::train_layer_entangled(
         throw std::out_of_range("Layer index out of range");
     }
     
-    LayerGoodness goodness{0.0, 0.0, 0.0};
+    LayerGoodness goodness{0, 0, 0};
     
     // Compute goodness for positive data
-    double pos_sum = 0.0;
+    uint64_t pos_sum = 0;
     for (const auto& sample : positive_data) {
         auto tableau = stabilizer::create_tableau(std::max(sample.size(), config_.neurons_per_layer));
         auto activations = entangled_forward(*tableau, sample);
         pos_sum += compute_entangled_goodness(*tableau);
     }
-    goodness.positive_goodness = pos_sum / positive_data.size();
+    goodness.positive_goodness = positive_data.empty() ? 0 : static_cast<uint32_t>(pos_sum / positive_data.size());
     
     // Compute goodness for negative data
-    double neg_sum = 0.0;
+    uint64_t neg_sum = 0;
     for (const auto& sample : negative_data) {
         auto tableau = stabilizer::create_tableau(std::max(sample.size(), config_.neurons_per_layer));
         auto activations = entangled_forward(*tableau, sample);
         neg_sum += compute_entangled_goodness(*tableau);
     }
-    goodness.negative_goodness = neg_sum / negative_data.size();
+    goodness.negative_goodness = negative_data.empty() ? 0 : static_cast<uint32_t>(neg_sum / negative_data.size());
     
-    goodness.delta = goodness.positive_goodness - goodness.negative_goodness;
+    goodness.delta = static_cast<int32_t>(goodness.positive_goodness) - static_cast<int32_t>(goodness.negative_goodness);
     
     // Update weights if positive goodness exceeds negative
     if (goodness.delta > 0) {
@@ -253,7 +253,7 @@ const std::vector<std::vector<ternary::Trit>>& ForwardForwardLearner::get_weight
 void ForwardForwardLearner::update_weights_hebbian(
     size_t layer_idx,
     const std::vector<ternary::Trit>& activations,
-    double delta
+    int32_t delta
 ) {
     if (layer_idx >= config_.num_layers) {
         throw std::out_of_range("Layer index out of range");
@@ -262,19 +262,22 @@ void ForwardForwardLearner::update_weights_hebbian(
     auto& weights = layer_weights_[layer_idx];
     
     // Hebbian learning: Δw = η * δ * pre * post
-    // For ternary, we clip updates to {-1, 0, +1}
+    // magnitude shifted by learning_rate_shift to avoid float
+    int32_t update_magnitude = delta >> config_.learning_rate_shift;
     
-    double update_magnitude = config_.learning_rate * delta;
+    if (update_magnitude == 0) return;
+    
+    int32_t direction = (update_magnitude > 0) ? 1 : -1;
     
     for (size_t o = 0; o < weights.size(); ++o) {
         for (size_t i = 0; i < weights[o].size() && i < activations.size(); ++i) {
             // Compute weight update
-            int pre = static_cast<int>(activations[i]);
-            int current_w = static_cast<int>(weights[o][i]);
+            int32_t pre = static_cast<int32_t>(activations[i]);
+            int32_t current_w = static_cast<int32_t>(weights[o][i]);
             
             // Hebbian update with ternary clipping
-            int update = static_cast<int>(std::round(update_magnitude * pre));
-            int new_w = current_w + update;
+            int32_t update = direction * pre;
+            int32_t new_w = current_w + update;
             
             // Clip to ternary range
             weights[o][i] = clip_to_ternary(new_w);
@@ -313,10 +316,10 @@ void ForwardForwardLearner::initialize_weights() {
     }
 }
 
-ternary::Trit ForwardForwardLearner::ternary_activation(double x) {
+ternary::Trit ForwardForwardLearner::ternary_activation(int32_t x) {
     // Ternary activation: sign function with zero threshold
-    if (x > 0.5) return ternary::Trit::POSITIVE;
-    if (x < -0.5) return ternary::Trit::NEGATIVE;
+    if (x > 0) return ternary::Trit::POSITIVE;
+    if (x < 0) return ternary::Trit::NEGATIVE;
     return ternary::Trit::ZERO;
 }
 
