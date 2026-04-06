@@ -1,14 +1,46 @@
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <vector>
 #include <string>
 #include <chrono>
 #include <thread>
-#include <fstream>
-#include <sstream>
+#include <algorithm>
 #include "../ternary/trit.hpp"
 #include "../network.hpp"
 
 using namespace q_mini_wasm_v2::core;
+
+// Simple JSON text extraction for dataset loading
+std::string extract_json_text(const std::string& line) {
+    // Look for "text":"..." pattern
+    size_t start = line.find("\"text\":\"");
+    if (start == std::string::npos) return "";
+    start += 8; // skip "text":"
+
+    size_t end = line.find("\",\"", start);
+    if (end == std::string::npos) {
+        end = line.find("\"}", start);
+    }
+    if (end == std::string::npos) return "";
+
+    return line.substr(start, end - start);
+}
+
+// Convert text string to ternary trits (64-dimensional)
+std::vector<ternary::Trit> text_to_trits(const std::string& text, size_t dim = 64) {
+    std::vector<ternary::Trit> result(dim, ternary::Trit::ZERO);
+
+    for (size_t i = 0; i < dim && i < text.size(); ++i) {
+        // Map char to ternary: hash and mod 3
+        int val = static_cast<unsigned char>(text[i]) % 3;
+        if (val == 0) result[i] = ternary::Trit::NEGATIVE;
+        else if (val == 1) result[i] = ternary::Trit::ZERO;
+        else result[i] = ternary::Trit::POSITIVE;
+    }
+
+    return result;
+}
 
 int main(int argc, char* argv[]) {
     // Default parameters matching the research defaults and WUI
@@ -92,42 +124,24 @@ int main(int argc, char* argv[]) {
             std::cout << "{\"status\": \"progress\", \"step\": \"Loading dataset from " << dataset_path << "\"}\n";
             std::cout.flush();
             
-            // Load ternary dataset from file
-            // Format: Each line represents one sample, with trits separated by spaces
-            // Values: -1, 0, 1 or N, Z, P
             std::ifstream file(dataset_path);
             if (file.is_open()) {
                 std::string line;
-                while (std::getline(file, line) && dataset.size() < batch_size) {
-                    std::vector<ternary::Trit> sample;
-                    std::istringstream iss(line);
-                    std::string token;
-                    
-                    while (iss >> token && sample.size() < context_window) {
-                        ternary::Trit trit = ternary::Trit::ZERO;
-                        if (token == "-1" || token == "N" || token == "n" || token == "2") {
-                            trit = ternary::Trit::NEGATIVE;
-                        } else if (token == "0" || token == "Z" || token == "z") {
-                            trit = ternary::Trit::ZERO;
-                        } else if (token == "1" || token == "P" || token == "p" || token == "1") {
-                            trit = ternary::Trit::POSITIVE;
-                        }
-                        sample.push_back(trit);
+                size_t loaded = 0;
+                while (std::getline(file, line) && loaded < batch_size) {
+                    // Extract text from JSON and convert to trits
+                    std::string text = extract_json_text(line);
+                    if (!text.empty()) {
+                        auto sample = text_to_trits(text, context_window);
+                        dataset.push_back(sample);
+                        loaded++;
                     }
-                    
-                    // Pad to context_window if necessary
-                    while (sample.size() < context_window) {
-                        sample.push_back(ternary::Trit::ZERO);
-                    }
-                    
-                    dataset.push_back(sample);
                 }
                 file.close();
                 
                 std::cout << "{\"status\": \"progress\", \"step\": \"Loaded " << dataset.size() << " samples from dataset\"}\n";
             } else {
                 std::cout << "{\"status\": \"warning\", \"step\": \"Could not open dataset file, using simulation\"}\n";
-                dataset.clear();
             }
         }
         

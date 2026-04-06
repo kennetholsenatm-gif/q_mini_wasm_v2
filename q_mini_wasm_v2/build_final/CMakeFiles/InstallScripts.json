@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -92,7 +92,7 @@ jobs:
             artifacts/**/*.dll
             artifacts/**/*.lib
         env:
-          GITHUB_TOKEN: secrets-token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   monitoring:
     name: Setup Monitoring

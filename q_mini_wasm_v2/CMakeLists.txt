@@ -114,6 +114,14 @@ add_library(q_mini_wasm_v2_core
     ${RUNTIME_SOURCES}
 )
 
+# Add /FS for multi-process PDB writes on MSVC, or disable PDB for Debug
+if(MSVC)
+    target_compile_options(q_mini_wasm_v2_core PRIVATE /FS)
+    # Disable debug info to avoid PDB conflicts entirely
+    set_property(TARGET q_mini_wasm_v2_core PROPERTY MSVC_DEBUG_INFORMATION_FORMAT "")
+    target_compile_options(q_mini_wasm_v2_core PRIVATE /Zi-)
+endif()
+
 target_include_directories(q_mini_wasm_v2_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -253,16 +261,51 @@ if(BUILD_DLL)
 endif()
 
 # ============================================================================
-# SYCL Configuration (Optional)
+# SYCL Configuration (XPU Compatible)
 # ============================================================================
 
 if(USE_SYCL)
-    find_package(IntelSYCL REQUIRED)
-    target_compile_definitions(q_mini_wasm_v2_core PUBLIC USE_SYCL=1)
-    target_link_libraries(q_mini_wasm_v2_core PUBLIC IntelSYCL::SYCL_CXX)
+    # Try multiple SYCL implementations for XPU compatibility
+    find_package(IntelSYCL QUIET)
     
-    # Add SYCL kernel sources
-    target_sources(q_mini_wasm_v2_core PRIVATE ${SYCL_SOURCES})
+    if(NOT IntelSYCL_FOUND)
+        # Fallback: Check for AdaptiveCpp (formerly hipSYCL)
+        find_package(AdaptiveCpp QUIET)
+    endif()
+    
+    if(NOT IntelSYCL_FOUND AND NOT AdaptiveCpp_FOUND)
+        # Fallback: Check for DPC++ via environment
+        if(DEFINED ENV{ONEAPI_ROOT})
+            message(STATUS "Using oneAPI DPC++ from ONEAPI_ROOT")
+            set(CMAKE_CXX_COMPILER "$ENV{ONEAPI_ROOT}/compiler/latest/bin/dpcpp.exe" CACHE FILEPATH "DPC++ compiler" FORCE)
+            set(IntelSYCL_FOUND TRUE)
+        endif()
+    endif()
+    
+    if(IntelSYCL_FOUND OR AdaptiveCpp_FOUND)
+        target_compile_definitions(q_mini_wasm_v2_core PUBLIC USE_SYCL=1)
+        
+        if(IntelSYCL_FOUND)
+            target_link_libraries(q_mini_wasm_v2_core PUBLIC IntelSYCL::SYCL_CXX)
+            message(STATUS "SYCL: Using IntelSYCL")
+        elseif(AdaptiveCpp_FOUND)
+            target_link_libraries(q_mini_wasm_v2_core PUBLIC AdaptiveCpp::acpp)
+            message(STATUS "SYCL: Using AdaptiveCpp")
+        endif()
+        
+        # Add SYCL kernel sources
+        target_sources(q_mini_wasm_v2_core PRIVATE ${SYCL_SOURCES})
+        
+        # XPU-specific optimizations
+        target_compile_options(q_mini_wasm_v2_core PRIVATE
+            $<$<CXX_COMPILER_ID:Intel>:-fsycl-targets=spir64_x86_64,native>
+        )
+        
+        message(STATUS "SYCL acceleration enabled for XPU")
+    else()
+        message(WARNING "SYCL requested but no SYCL implementation found. Install Intel oneAPI or AdaptiveCpp.")
+        message(STATUS "Continuing without SYCL acceleration")
+    endif()
 endif()
 
 # ============================================================================
@@ -376,8 +419,9 @@ endif()
 # ============================================================================
 
 # Enable warnings
-target_compile_options(q_mini_wasm_v2_core PRIVATE
+add_compile_options(
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    $<$<CXX_COMPILER_ID:MSVC>:/FS>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
 )
 

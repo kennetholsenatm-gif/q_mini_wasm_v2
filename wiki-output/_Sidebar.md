@@ -1,22 +1,48 @@
+# Wiki Navigation
+
 * [Home](Home.md)
+
+**Getting Started**
+  * [Quick Start](Guides-Quick Start.md)
+  * [Building](Guides-Building.md)
+  * [SYCL Setup](Guides-SYCL Setup.md)
+  * [243 Expert Config](Guides-243 Expert Config.md)
+  * [Contributing](Guides-Contributing.md)
+  * [MOE Training](Guides-MOE Training.md)
+  * [Rag Improvements](Guides-Rag Improvements.md)
+
 **Architecture**
   * [Overview](Architecture-Overview.md)
-  * [Ternary State Space](Architecture-Ternary-State-Space.md)
-  * [Stabilizer Tableau](Architecture-Stabilizer-Tableau.md)
-  * [MoE Routing](Architecture-MoE-Routing.md)
-  * [🆕 QGNN Architecture](Architecture-QGNN.md)
-  * [🆕 Graph Migration Guide](Graph-Migration-Guide.md)
-  * [Forward-Forward](Architecture-Forward-Forward.md)
-  * [SYCL Acceleration](Architecture-SYCL-Acceleration.md)
+  * [Expert Networks](Architecture-Expert Networks.md)
+  * [Forward Forward](Architecture-Forward Forward.md)
+  * [Graph Migration](Architecture-Graph Migration.md)
+  * [MOE Routing](Architecture-MOE Routing.md)
+  * [QGNN Architecture](Architecture-QGNN Architecture.md)
+  * [SYCL Acceleration](Architecture-SYCL Acceleration.md)
+  * [Stabilizer Tableau](Architecture-Stabilizer Tableau.md)
+  * [Ternary State Space](Architecture-Ternary State Space.md)
+
 **API Reference**
-  * [Core API](API-Core-Reference.md)
-**Guides**
-  * [Building](Guides-Building.md)
-  * [SYCL Setup](Guides-SYCL-Setup.md)
-  * [Contributing](Guides-Contributing.md)
+  * [Core Reference](API-Core Reference.md)
+
+**Advanced Guides**
+
 **Research**
-  * [Cognitive Ergonomics](Research-Cognitive-Ergonomics.md)
-  * [Clifford Entanglement](Research-Clifford-Entanglement.md)
-  * [Framework Synthesis](Research-Framework-Synthesis.md)
+* [Cognitive ergonomics model protocol research](Research-Cognitive
+ergonomics model protocol research.md)
+* [Quantum Classical system architectural review](Research-Quantum
+Classical system architectural review.md)
+* [Quantum ai architecture review synthesis](Research-Quantum ai
+architecture review synthesis.md)
+* [Quantum architecture review & integration proposal](Research-Quantum
+architecture review & integration proposal.md)
+* [Quantum betti numbers integration analysis](Research-Quantum betti
+numbers integration analysis.md)
+* [Quantum codebase analysis and synthesis](Research-Quantum codebase
+analysis and synthesis.md)
+* [Repository analysis for qgnn integration](Research-Repository analysis
+for qgnn integration.md)
+  * [Quantum Betti Numbers](Quantum Betti Numbers.md)
+
 **Decisions**
-  * [ADR-001: Ternary](Decisions-ADR-001-Ternary.md)
+  * [ADR 001 Ternary Over Binary](Decisions-ADR 001 Ternary Over Binary.md)

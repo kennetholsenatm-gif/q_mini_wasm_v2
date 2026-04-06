@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Solution>
+	<Configurations>
+		<BuildType Name="Debug"/>
+		<BuildType Name="Release"/>
+		<BuildType Name="MinSizeRel"/>
+		<BuildType Name="RelWithDebInfo"/>
+		<Platform Name="x64"/>
+	</Configurations>
+	<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="bc6048b8-f97d-36c7-8339-c01cb597b2ab" DefaultStartup="true">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_gf3_clifford.vcxproj"/>
+		<BuildDependency Project="q_gf3_maxplus.vcxproj"/>
+		<BuildDependency Project="q_gf3_serialize.vcxproj"/>
+		<BuildDependency Project="q_gf3_wasm.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_agents.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_betti_test.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_dll_api_test.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_dll_test.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_infer.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_network_test.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_remediation_test.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_tests.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_trainer.vcxproj"/>
+	</Project>
+	<Project Path="INSTALL.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="ba197834-8bd3-3c23-9f13-c3b20e5052eb">
+		<BuildDependency Project="ALL_BUILD.vcxproj"/>
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<Build Solution="Debug|*" Project="false"/>
+		<Build Solution="Release|*" Project="false"/>
+		<Build Solution="MinSizeRel|*" Project="false"/>
+		<Build Solution="RelWithDebInfo|*" Project="false"/>
+	</Project>
+	<Project Path="RUN_TESTS.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="7f52254c-b2c2-301b-9b24-9740a6f4a097">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<Build Solution="Debug|*" Project="false"/>
+		<Build Solution="Release|*" Project="false"/>
+		<Build Solution="MinSizeRel|*" Project="false"/>
+		<Build Solution="RelWithDebInfo|*" Project="false"/>
+	</Project>
+	<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="235cd787-8b2f-3d32-9f51-06a4f422724b"/>
+	<Project Path="q_gf3_clifford.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="434ee304-f94f-3b8c-9743-7e60483dcb5a">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_gf3_maxplus.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="b2b9b4aa-2f95-3075-8637-69b81847900c">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_gf3_serialize.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="74592ee8-cda2-3102-8e25-462067c08756">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_gf3_wasm.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="e9d3e375-88ee-3e17-8d92-c4a3b5c618b3">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_gf3_clifford.vcxproj"/>
+		<BuildDependency Project="q_gf3_serialize.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_agents.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="548e48d9-43bc-3aa9-8e82-0a971c273eeb">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_betti_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="e852bca3-5f5d-3d8d-861d-617f2a9277fd">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_core.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="0ed154a5-daf2-3eb2-ab95-0c2c6797c7c3">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_dll_api_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="6b3a4a09-c9b6-3fd5-99a3-362e0758e725">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_dll_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="421f1510-1413-3975-bb9a-06a30b99b07e">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_infer.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="8fffb5bb-c0fb-34a9-9f0c-df615e4d9ba6">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_network_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="18594a90-95a0-3c26-94f7-06d061dcef46">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_remediation_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="38434dd7-8719-37e9-905c-0ee47f1dfded">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_tests.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="ff3fc947-c88d-3b45-95d9-7e6480cd72be">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+	<Project Path="q_mini_wasm_v2_trainer.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="dba237e6-4e6f-366f-9906-8dc0e9445b53">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="q_mini_wasm_v2_core.vcxproj"/>
+	</Project>
+</Solution>

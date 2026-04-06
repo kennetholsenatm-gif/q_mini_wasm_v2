@@ -1,6 +1,8 @@
 #include "router.hpp"
 #include <numeric>
 #include <stdexcept>
+#include <algorithm>
+#include <random>
 
 namespace q_mini_wasm_v2::core::moe {
 

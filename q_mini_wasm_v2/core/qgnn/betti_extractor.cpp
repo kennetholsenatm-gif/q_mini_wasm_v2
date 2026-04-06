@@ -88,7 +88,7 @@ void BettiExtractor::create_vertex_stabilizers(const SimplicialComplex& complex)
             if (edge_idx < complex.num_edges()) {
                 // Apply X operator to this edge in the tableau
                 // This is represented by modifying the stabilizer generators
-                // tableau_->apply_pauli_x(edge_idx);  // Would need this method
+                tableau_->apply_pauli_x(edge_idx);
             }
         }
     }
@@ -129,7 +129,7 @@ void BettiExtractor::create_face_stabilizers(const SimplicialComplex& complex) {
         // Apply Z-stabilizer: product of Z operators on face edges
         for (size_t edge_idx : face_edges) {
             if (edge_idx < complex.num_edges()) {
-                // tableau_->apply_pauli_z(edge_idx);  // Would need this method
+                tableau_->apply_pauli_z(edge_idx);
             }
         }
     }

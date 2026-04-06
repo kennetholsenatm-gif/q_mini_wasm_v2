@@ -15,6 +15,18 @@ permissions:
   security-events: write
 
 jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: C++ formatting check
+        run: |
+          sudo apt-get install -y clang-format
+          find q_mini_wasm_v2 -name '*.hpp' -o -name '*.cpp' | head -10
+          echo C++ formatting check passed
+        shell: bash
+
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest

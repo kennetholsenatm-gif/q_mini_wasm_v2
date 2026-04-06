@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\infer_main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{B8387C62-F0C0-3DF9-AD67-725A795979F4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

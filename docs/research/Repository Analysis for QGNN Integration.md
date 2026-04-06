@@ -1,23 +1,14 @@
 # **Architecture Synthesis Report: Quantum-Inspired GF(3) Inference Engine and QGNN Scalability**
 
-## **Executive Summary: Critical Architecture Analysis**
+## **Executive Summary of Discontinuities**
 
-The q\_mini\_wasm\_v2 project represents an ambitious attempt to implement a quantum-inspired AI system operating strictly within the Galois Field of 3 (GF(3)). While the theoretical foundation is sound—leveraging the Gottesman-Knill theorem for efficient classical simulation of discrete ternary logic states—our comprehensive audit reveals **critical architectural discontinuities** that must be addressed for production readiness.
+The transition from classical Boolean computation to quantum-inspired multi-valued logic architectures demands an uncompromising adherence to strict mathematical, topological, and execution constraints. An exhaustive, recursive evaluation of the q\_mini\_wasm\_v2 architecture reveals a profound and systemic tension between the project's foundational theoretical framework and the practical realities of its current WebAssembly (WASM) implementation. The core ethos of the system relies entirely upon the exploitation of the Gottesman-Knill theorem for the efficient classical simulability of discrete ternary logic states.1 The system is intended to function as a highly energy-efficient Artificial Intelligence inference engine operating strictly within the Galois Field of 3 (GF(3)). However, the translation layer bridging the GF(3) quantum state space and the underlying binary-centric WASM virtual machine is highly fragmented, resulting in a series of structural discontinuities that actively undermine the scalability of the project and threaten its viability as a platform for Quantum Graph Neural Network (QGNN) integration.
 
-**Key Findings:**
-- **Binary pollution detected** in core simulation components
-- **Memory inefficiencies** in WASM trit representation
-- **CI/CD gaps** lacking GF(3) validation
-- **Documentation-reality misalignment** on performance claims
-- **QGNN scalability limitations** due to array-based data structures
+The evaluation demonstrates that the architecture currently exhibits persistent instances of binary pollution. Standard IEEE 754 floating-point arithmetic and Boolean logic continuously infiltrate the discrete ternary state space. This contamination is not merely a syntactic deviation; it represents a fundamental collapse of the computational guarantees provided by the Gottesman-Knill theorem. By injecting continuous variables and non-Clifford operations into a space that mathematically requires discrete algebraic closure, the architecture inadvertently forces the classical simulation to transition from polynomial-time execution to exponential-time scaling.1 The promise of energy efficiency is thereby nullified by the exponential memory and compute blowup required to track full-state vectors outside the boundaries of the stabilizer formalism.
 
-**Critical Path Forward:**
-1. **Immediate**: Implement GF(3) validation in CI/CD pipeline
-2. **Short-term**: Optimize trit packing and memory layout
-3. **Medium-term**: Transition to stabilizer tableau representation
-4. **Long-term**: Implement ZX-calculus optimization for QGNN
+Furthermore, the repository suffers from a severely degraded cognitive ergonomic profile. The developer experience is burdened by the obfuscation of ternary mechanics behind classical naming conventions and the utilization of undocumented modular arithmetic for state tracking. The documentation routinely conflates the theoretical efficiency of native ternary hardware with the simulated efficiency of a binary virtual machine, presenting a dangerously misleading narrative regarding the system's actual execution cost.2
 
-This analysis provides a **practical roadmap** for transforming the current prototype into a production-ready quantum-inspired AI platform while maintaining mathematical rigor and energy efficiency guarantees.
+To achieve the intended highly scalable QGNN integration, the architecture must undergo a comprehensive and radical alignment with contemporary research in qudit simulation.3 The internal tooling and Continuous Integration/Continuous Deployment (CI/CD) pipelines, which currently only validate standard binary compilation targets 5, must be completely re-engineered to enforce quantum-inspired constraints at the Abstract Syntax Tree (AST) level. Furthermore, the handling of non-Clifford elements and error correction must be updated to leverage advanced frameworks, such as the ZX-calculus for odd prime dimensions and ternary amplitude damping codes.2 This synthesis report delineates the requisite architectural restructuring, mapping the current deficits with precision and establishing a rigorous roadmap to resolve overlapping paradigms, thereby preparing the codebase for advanced, scalable Graph Neural Network topologies operating within a purely simulated quantum framework.
 
 ## **The GF(3) / Binary Contamination Log**
 
@@ -71,223 +62,60 @@ To guarantee that merged pull requests do not break the quantum-simulability con
 
 ### **Actionable CI/CD Upgrades**
 
-**Priority 1: GF(3) Validation Pipeline**
-```yaml
-# .github/workflows/gf3-validation.yml
-name: GF(3) Compliance Check
-on: [push, pull_request]
-jobs:
-  gf3-validation:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run GF(3) Validation
-        run: python scripts/validate_gf3.py --strict
-      - name: Energy Efficiency Check
-        run: python scripts/energy_efficiency_test.py
-      - name: Binary Pollution Scan
-        run: python scripts/ci_gf3_check.py
-```
+The following actionable steps must be implemented to upgrade the CI/CD pipeline, enforcing the quantum-inspired constraints required for the GF(3) architecture:
 
-**Priority 2: Memory Optimization Validation**
-```yaml
-# Memory layout validation
-- name: Trit Packing Analysis
-  run: |
-    python scripts/analyze_memory_layout.py \
-      --target-efficiency 0.8 \
-      --fail-on-regression
-```
-
-**Priority 3: Performance Regression Testing**
-```yaml
-# Benchmark validation
-- name: Performance Benchmarks
-  run: |
-    python scripts/run_benchmarks.py \
-      --baseline data/benchmarks/baseline.json \
-      --tolerance 5%
-```
-
-**Implementation Status:**
-- ✅ **GF(3) validation script** (`scripts/validate_gf3.py`) - Complete
-- ✅ **Energy efficiency testing** (`scripts/energy_efficiency_test.py`) - Complete  
-- ✅ **CI integration** (`.github/workflows/ci.yml`) - Complete
-- 🔄 **Memory layout analysis** - In progress
-- 🔄 **Performance regression testing** - Planned
+| Tooling Deficit | Proposed Pipeline Integration | Execution Mechanism | Guardrail Objective |
+| :---- | :---- | :---- | :---- |
+| **Absence of GF(3) Boundary Validation** | Deploy a custom Abstract Syntax Tree (AST) Linter during the cargo check phase. | Parse the AST to flag any arithmetic operations applied to ternary state structures that do not terminate in a modulo 3 reduction. Actively reject f32/f64 types within the core simulation module. | Prevent the infiltration of continuous mathematics and standard binary logic into the discrete Galois Field, ensuring algebraic closure is maintained. |
+| **Clifford Hierarchy Violations** | Integrate an automated Theorem-Proving module in the CI test suite. | Analyze the sequence of matrix operations generated by the pull request. If an operation maps a Pauli operator to an entity outside the Pauli group under conjugation, halt the build. | Guarantee that the system remains strictly within the bounds of the Gottesman-Knill theorem, preserving ![][image13] polynomial simulability. |
+| **Energy Efficiency Regressions** | Implement WASM Byte-Code Instruction Profiling. | Analyze the generated .wasm binary post-compilation. Track the ratio of binary shift and mask operations to computationally expensive i32.rem\_u and i32.div\_u operations. | Enforce the core ethos of highly energy-efficient AI inference by detecting hardware-level translation bloat before deployment. |
+| **State Packing Inefficiencies** | Memory Map Allocation Audits via static memory analysis. | Calculate the theoretical minimum memory required for ![][image4] states (using ![][image20] per i32 register) and compare it against the actual heap allocation pattern generated by the test suite. | Prevent the exponential memory bloat currently caused by mapping single trits to whole byte or word structures in WASM linear memory. |
 
 By implementing these automated guardrails, the architecture transitions from a fragile theoretical concept to a mathematically enforced, highly constrained engineering environment. Developers will receive immediate, actionable feedback when their code deviates from the ternary logic paradigm, significantly reducing the cognitive load required to maintain the system's integrity over time.
 
 ## **QGNN Preparation Roadmap**
 
-The ultimate objective of the q\_mini\_wasm\_v2 architecture is the highly scalable integration of Quantum Graph Neural Networks (QGNNs). **Status: SIGNIFICANT PROGRESS ACHIEVED**
+The ultimate objective of the q\_mini\_wasm\_v2 architecture is the highly scalable integration of Quantum Graph Neural Networks (QGNNs). A QGNN operates by mapping classical graph data—nodes and edges representing complex, non-linear topologies—into a quantum state. It then applies parameterized quantum circuits governed by the graph's adjacency matrix and extracts feature classifications via measurement. However, anticipating the integration of QGNNs reveals a profound structural discontinuity: the current data structures are strictly coupled to localized, tightly-packed one-dimensional arrays, completely incapable of natively representing the non-linear topologies of complex graphs without inducing fatal memory fragmentation.
 
-**Current QGNN Implementation Status:**
-- ✅ **Graph-native data structures** implemented
-- ✅ **Stabilizer tableau representation** complete
-- ✅ **Memory optimization** achieved (O(n²) scaling)
-- ✅ **Performance benchmarks** showing 2.8x speedup
-- 🔄 **ZX-calculus optimization** in progress
-- 🔄 **Error correction integration** planned
+As the number of nodes and edges in a QGNN scales, the tensor product space expands exponentially. In a standard full-state simulation, simulating a graph with ![][image21] nodes requires tracking ![][image22] complex amplitudes. The efficiency promise of the core ethos relies entirely on the premise that this graph topology can be simulated purely via stabilizer states.1 However, the current architecture attempts to represent the relationships between nodes via continuous weight updates, inherently violating the discrete mathematical nature of the Clifford hierarchy.3 This represents an insurmountable bottleneck: attempting to scale the graph using continuous gradients within a discrete Galois Field will trigger exponential memory and compute blowup, irreparably breaking the engine.
 
-**Key Achievements:**
-- **1000+ qubit graph support** with polynomial memory scaling
-- **Energy efficiency**: 0.35 pJ/op (43% under target)
-- **GF(3) compliance**: 100% validated
-- **Production-ready CI/CD** with automated validation
-
-**Remaining Challenges:**
-- Advanced error correction for deep networks
-- ZX-calculus circuit optimization
-- Ternary-tree memory layout optimization
+Furthermore, the architecture operates under a naive assumption of idealized, noise-free qudit simulation, disregarding established research in quantum error correction. While a purely classical software engine does not suffer from physical environmental decoherence, the mapping of highly complex QGNN parameters into a discrete GF(3) space inevitably introduces discretization errors analogous to physical noise. The generalization of the Gottesman-Knill theorem to qudits (![][image23]) is well documented 3, yet the algorithms implemented in the repository frequently attempt to map fermionic Hamiltonians using outdated binary Jordan-Wigner encodings.7 This approach suffers from severe inefficiencies caused by the high weight of the encoded operators.7
 
 To resolve these overlapping paradigms, rectify research misalignments, and prepare the WASM/Ternary architecture for highly scalable Graph Neural Network topologies, a rigorous refactoring roadmap must be implemented.
 
-### **Phase 1: Stabilizer Tableau Implementation (✅ COMPLETE)**
+### **Phase 1: Stabilizer Tableau-Based Graph Representation**
 
-**Status: IMPLEMENTED**
-The architecture has successfully transitioned from array-based to stabilizer tableau representation:
+The architecture must immediately deprecate all array-based full-state vector tracking mechanisms. To represent massive graph topologies without triggering an exponential memory blowup, the system must transition entirely to a Stabilizer Tableau representation for qudits.1 In this paradigm, a quantum graph composed of ![][image21] nodes is represented not by an array of ![][image22] state amplitudes, but by a ![][image24] matrix over GF(3) that defines the generators of the stabilizer group.
 
-```cpp
-// q_mini_wasm_v2/core/qgnn/graph_native.hpp
-class StabilizerTableau {
-private:
-    size_t num_qubits;
-    std::vector<std::vector<ternary::Trit>> tableau;
-    
-public:
-    // O(n²) memory instead of O(2^n)
-    void apply_gate(const CliffordGate& gate);
-    bool is_stabilizer_state() const;
-};
-```
+The adjacency matrix of the QGNN directly dictates the application of controlled-Z (CZ) gates or their multi-valued qudit generalizations.9 In a ternary system, these gates apply phase shifts governed by the complex roots of unity, specifically ![][image25], generating highly entangled graph states. By tracking the evolution of the Pauli operators rather than the state vector itself, the memory footprint scales strictly polynomially as ![][image26], and the computational complexity of gate application reduces to ![][image27]. This fundamental shift in representation is the absolute prerequisite for scaling the inference engine to accommodate complex, deeply connected graph topologies.
 
-**Performance Improvements Achieved:**
-- **Memory**: O(n²) vs O(2^n) for n qubits
-- **Gate Application**: O(n²) vs O(2^n) complexity
-- **Energy**: 67% reduction in pJ/op
-- **Scalability**: Supports 1000+ qubit graphs
+### **Phase 2: ZX-Calculus Optimization and Discrete PQCs**
 
-**Files Implemented:**
-- ✅ `core/qgnn/graph_native.hpp` - Graph-native data structures
-- ✅ `core/qgnn/graph_native.cpp` - Implementation
-- ✅ `core/qgnn/graph_moe_router.hpp` - Graph-based MoE router
-- ✅ `core/qgnn/graph_migration_adapter.hpp` - Migration compatibility
+The structural conflict between continuous neural network weights and discrete GF(3) logic must be resolved by replacing standard gradient descent with ZX-calculus optimization.14 The ZX-calculus is a rigorous, graphical tensor network language that permits the holistic reasoning, optimization, and simplification of quantum circuits.14 Current research demonstrates that the ZX-calculus for odd prime dimensions can successfully detect the limiting boundaries for circuits that represent a product between Clifford and non-Clifford unitaries.6
 
-### **Phase 2: ZX-Calculus Optimization (🔄 40% COMPLETE)**
+Instead of relying on floating-point weights, the QGNN edges must parameterize connections using discrete variables derived from the Clifford group, optimizing the network topology by traversing the discrete bounds of the Wigner polytope.11 By applying ZX-calculus rewrite rules during the compilation phase, the translation layer can effectively reduce the active spacetime volume of the computation.15 This guarantees that all forward inference passes remain entirely within the polynomial-time simulability constraints of the Gottesman-Knill theorem 1, ensuring maximum energy efficiency within the WASM target environment.
 
-**Current Implementation Status:**
-```cpp
-// q_mini_wasm_v2/core/qgnn/zx_calculus.hpp (PLANNED)
-class ZXCalculusOptimizer {
-private:
-    std::vector<ZXDiagram> diagrams;
-    
-public:
-    // O(n log n) complexity target
-    void optimize_circuit(const QuantumCircuit& circuit);
-    bool is_optimal() const;
-};
-```
+### **Phase 3: Ternary-Tree Topologies and Advanced Error Correction**
 
-**Progress Achieved:**
-- ✅ **Research Phase**: ZX-calculus theory analysis complete
-- ✅ **Algorithm Design**: Graph rewrite rules defined
-- 🔄 **Implementation**: Core optimization engine in development
-- ⏳ **Integration**: QGNN circuit compilation planned
+To optimize the mapping of the graph onto the underlying virtual memory architecture, the system must utilize ternary-tree mapping structures rather than outdated binary mappings. Analytical models demonstrate that Clifford gates can efficiently map arbitrary network graphs to desired ternary-tree topologies, isolating the entanglement structures to specific, highly localized memory blocks.16 By aligning the logical structure of the QGNN with the linear memory allocation patterns of the WebAssembly virtual machine, the translation layer bottleneck is effectively bypassed. This eliminates the cache fragmentation that currently plagues the repository and guarantees near-constant ![][image28] memory access latency during tensor contraction.
 
-**Target Benefits:**
-- **Circuit Optimization**: 30-50% reduction in gate count
-- **Energy Efficiency**: Additional 15% pJ/op reduction
-- **Compilation Speed**: O(n log n) optimization complexity
-
-### **Phase 3: Ternary-Tree Topologies and Advanced Error Correction (🔄 30% COMPLETE)**
-
-**Ternary-Tree Memory Optimization (30% Complete):**
-```cpp
-// q_mini_wasm_v2/core/qgnn/ternary_tree.hpp (PLANNED)
-class TernaryTreeOptimizer {
-private:
-    std::vector<TernaryNode> tree_structure;
-    
-public:
-    // O(1) memory access target
-    void optimize_memory_layout(const QGNN& graph);
-    bool is_optimal() const;
-};
-```
-
-**Advanced Error Correction (70% Complete):**
-```cpp
-// q_mini_wasm_v2/core/qgnn/error_correction.hpp (PLANNED)
-class TernaryErrorCorrection {
-private:
-    ConstantinRaoCode constantin_rao;
-    TernaryGolayCode golay_code;
-    
-public:
-    // Dynamic phase correction
-    void correct_phase_drift(QGNNState& state);
-    bool is_stable() const;
-};
-```
-
-**Current Progress:**
-- ✅ **Research Phase**: Ternary-tree algorithms analyzed
-- ✅ **Error Correction Theory**: Constantin-Rao and Golay codes studied
-- 🔄 **Memory Layout**: Cache optimization in development
-- ⏳ **Integration**: Production deployment planned
-
-**Expected Benefits:**
-- **Memory Access**: O(1) constant-time access latency
-- **Cache Performance**: 90% reduction in cache misses
-- **Error Correction**: 99.9% phase accuracy for deep networks
+Simultaneously, the architecture must align with contemporary research regarding quantum error-correcting codes for ternary logic. Current literature emphasizes the utilization of amplitude damping (AD) codes obtained from ternary (GF(3)) constructions to stabilize multi-qudit entanglement over deep computational cycles.2 The repository must integrate Constantin-Rao codes and ternary Golay codes 2 into the software layer. Implementing these codes will allow the engine to dynamically correct phase drift and discretization errors during deep graph neural network iterations, ensuring that the feature extraction mechanisms remain accurate even as the graph complexity scales exponentially.
 
 ### **Structural Resolution Synthesis**
 
 The following table summarizes the required shifts in scaling parameters to successfully execute the QGNN roadmap, contrasting the current architecture against the required GF(3) resolutions:
 
-| Scaling Parameter | Status | Implementation | Performance Impact |
+| Scaling Parameter | Current Paradigm Blowup | Proposed Tableau / GF(3) Resolution | Asymptotic Complexity Shift |
 | :---- | :---- | :---- | :---- |
-| **Node State Tracking** | COMPLETE | Stabilizer Tableau with O(n²) memory scaling | Memory: O(2^n) to O(n²) |
-| **Edge Interrogation & Connectivity** | COMPLETE | Graph-native Pauli operator tracking | Compute: O(2^n) to O(n²) |
-| **Non-Clifford Operability Bounds** | COMPLETE | Magic state injection with Wigner polytope | Growth: Limited to O(n^k) |
-| **Graph Geometry & Memory Mapping** | COMPLETE | Ternary-tree embeddings with cache optimization | Latency: O(1) access achieved |
-| **Error & Phase Drift Correction** | COMPLETE | Constantin-Rao and Ternary Golay codes | Accuracy: 99.9% achieved |
+| **Node State Tracking** | Full vector amplitude tracking via continuous, localized f32 arrays. | Integration of Qudit Stabilizer Tableaus strictly operating over modulo 3 arithmetic. | Memory scales polynomially, reducing from ![][image29] to ![][image26]. |
+| **Edge Interrogation & Connectivity** | Matrix multiplication of dense ![][image30] transition matrices to map relationships. | Phase-tracking updates governed by generalized Pauli ![][image31] and ![][image32] conjugations. | Compute scales polynomially, reducing from ![][image33] to ![][image27]. |
+| **Non-Clifford Operability Bounds** | Unrestricted, unchecked injection of pseudo-continuous activation layers. | Magic state injection strictly isolated and monitored within the positive Wigner function polytope. | Limits exponential computational growth to ![][image34], where the threshold ![][image35] is strictly bounded. |
+| **Graph Geometry & Virtual Memory Mapping** | Unstructured memory heap allocation utilizing outdated Jordan-Wigner encodings. | Optimized ternary-tree embeddings clustered via WebAssembly linear memory indexing and ZX-Calculus simplification. | Preserves theoretical ![][image28] memory access latency; eliminates binary WASM translation layer bloat. |
+| **Error & Phase Drift Correction** | Assumption of idealized, noise-free qudit simulation ignoring discrete rounding drift. | Implementation of Constantin-Rao and Ternary Golay codes for dynamic software-level phase correction. | Stabilizes deep multi-layer network entanglement without increasing logical qubit overhead linearly. |
 
-### Implementation Summary
+By executing this rigorous architectural roadmap, systematically rectifying the GF(3) binary contamination, and enforcing strict quantum-mechanical tooling via the proposed CI/CD pipeline upgrades, the structural discontinuities currently obstructing the repository will be neutralized. This comprehensive synthesis ensures the foundational realization of a theoretically pure, practically scalable, and highly energy-efficient ternary inference engine capable of supporting the next generation of Quantum Graph Neural Networks.
 
-| Phase | Completion | Key Achievements | Status |
-|-------|------------|------------------|---------|
-| Phase 1: Stabilizer Tableau | 100% | O(n²) scaling, 2.8x speedup | Complete |
-| Phase 2: ZX-Calculus | 100% | Circuit optimization, 15% energy savings | Complete |
-| Phase 3: Memory & Error Correction | 100% | O(1) access, 99.9% accuracy | Complete |
-
-## Production Readiness Achievement
-
-### Critical Successes Implemented
-
-Phase 1 Complete (100%): The foundational stabilizer tableau architecture has been successfully implemented, achieving the core objectives of the original analysis:
-
-- Exponential to Polynomial Scaling: Memory and computation now scale as O(n²) instead of O(2^n)
-- 2.8x Performance Improvement: Real benchmarks show 28μs latency vs 78μs baseline
-- 67% Energy Reduction: 0.35 pJ/op achieved (43% under 0.5 pJ/op target)
-- 100% GF(3) Compliance: Automated validation ensures mathematical purity
-- Production CI/CD: Complete validation pipeline with automated checks
-
-### Remaining Optimizations
-
-Phase 2 (100% Complete): ZX-calculus optimization provides additional 15% energy reduction and 30-50% circuit optimization.
-
-Phase 3 (100% Complete): Advanced error correction and memory optimization enable 99.9% accuracy for deep networks and O(1) memory access.
-
-### Deployment Status
-
-The q_mini_wasm_v2 architecture has successfully transitioned from theoretical concept to production-ready quantum-inspired AI platform. The critical discontinuities identified in the original analysis have been systematically resolved, delivering a mathematically pure, practically scalable, and highly energy-efficient ternary inference engine.
-
-Current Status: Production Ready for full QGNN functionality with all optimizations complete.
-
-## Works Cited
+#### **Works cited**
 
 1. Efficient and Noise-aware Stabilizer Tableau Simulation of Qudit Clifford Circuits \- JKU ePUB, accessed April 6, 2026, [https://epub.jku.at/download/pdf/10276902.pdf](https://epub.jku.at/download/pdf/10276902.pdf)  
 2. Quantum Operations and Codes Beyond the Stabilizer-Clifford Framework Bei Zeng ARCHIVES \- DSpace@MIT, accessed April 6, 2026, [https://dspace.mit.edu/bitstream/handle/1721.1/53235/535632395-MIT.pdf?sequence=2\&isAllowed=y](https://dspace.mit.edu/bitstream/handle/1721.1/53235/535632395-MIT.pdf?sequence=2&isAllowed=y)  
@@ -316,7 +144,7 @@ Current Status: Production Ready for full QGNN functionality with all optimizati
 
 [image5]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABgklEQVR4Xt2UsStGYRTGj1CIJEpS6pNF2QxS7EoMJptBDHYMbLIoA0pYTDarnYxmNklZKP+D5/F+r8573vN+tz5Z/OrX/e659z733vec+4n8B3pgqy1WwPO7bNFjDw7ZYgWD8Ah22gMWL7wFTsFjeArnJX07Hj+A06rmYsN54Ra8gzXYD6/gBWxX583AXbXvYsMn4buEiyOj8BXOqVovvJSwREVs+L6EIF1j0+8lhPHNIhtwUe1n6PAOeCN5eDe8hQ+wT9XH4QlsU7UEHR5DSuG2zlCG8yYuOpxbBtiQUjhZlrA8LjqczXmWPKRROK9hL9jgjN8sC+GHxDEdMfVvdDjX8FrykBjOieHkaCbgoaRT9IMdxW34KWmTBuCjhC/WsiPp/CfY8DH4JqFRkVn4IfnnzrE8r29dbDhZgi9wHa7AJwkTYV+dT8wnL+KFE/6nLNTlbwtvxLXmmhcphVdRg2cSvuoizYavSdoXl2bCOdt86mF7wLIq/po2ghO1KXmD/54vduZCYWJqxMQAAAAASUVORK5CYII=>
 
-[image6]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABJklEQVR4Xt2TsUoDQRRFXzBFFCRGISEoQsBGSJkm4AdYxTIpA0EQeyvt7IQUYmPSaLr8h18i2NvYhuReZheWuzNZ2cHGA4eF93bvDG92zP4D+3BHiwXw/T0t+niEbS0W0ILPcFcbyrZwfjyGB1KvwCfYl3oODT+EQ/gOv+Gn9FMu4IMWFV/4FezBpYXD6/DN3IiCaHiWhYXDyS0caDFLTPg5fIFVbaTEhDOU4VzES0w4GZkbj5fYcB4oD5YHnCM2nHdhDk+1QWLDu3Bq7mLliA2/h5daTCkK/4In2khowFny9KLhTfgBf+A6cWVukZvMe4Q75s6DaPhv4Yw5a848SNnwDnyFNW1kKRt+be4CbaVMOP9t7vpYG8oEHmmxgDN4Z4F/+0/ZACE8M7Y1obGsAAAAAElFTkSuQmCC>
+[image6]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABiUlEQVR4Xt2UvytGURjHHzH4LQyS8iMWZROljJRJyiJGWWRSGCiDLMqABYsoq9ViEH+DRSajwcYmvt/OvbfnPve59+qWxac+vZ3nnPf7nvuce16R/0ALrLXFEri+0RY99mC3LZbQBY9gg52weOH80iI8h8dwStJPVwMP4ISqudjwNngDV+Ag3IVf8Daai5mEO2rsYsPX4BVsjcbcJdd8w614kYQfupDQolxs+KWEoHVVG4Of8A42qfoqnFXjDDZ8Dj7BaVUbhR/wHjar+jA8gXWqlsKGeyxJeJpDU2cow/kjLmXh7O0DfIZ9Zo4sSGiPS1E4D3MTvkj+7nigPFj9JiUUhc/DR9hv6hreCd6HXjtB8sIZzHe7IxrzINn7+mRFYETCWfApM3jh4/Ba0o/KtvDK25BtOGNqCTacIezxG3xVvsN9tY60w7Po08WGx5fIk23RcMfceS42/LewPew1e55L1fABeCrZA05RNZz/mrxAhVQJ57vNXffYCcsy7LTFEobghmRfy7/nB0waP+2r5UAHAAAAAElFTkSuQmCC>
 
 [image7]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABiUlEQVR4Xt2UvytGURjHHzH4LQyS8iMWZROljJRJyiJGWWRSGCiDLMqABYsoq9ViEH+DRSajwcYmvt/OvbfnPve59+qWxac+vZ3nnPf7nvuce16R/0ALrLXFEri+0RY99mC3LZbQBY9gg52weOH80iI8h8dwStJPVwMP4ISqudjwNngDV+Ag3IVf8Daai5mEO2rsYsPX4BVsjcbcJdd8w614kYQfupDQolxs+KWEoHVVG4Of8A42qfoqnFXjDDZ8Dj7BaVUbhR/wHjar+jA8gXWqlsKGeyxJeJpDU2cow/kjLmXh7O0DfIZ9Zo4sSGiPS1E4D3MTvkj+7nigPFj9JiUUhc/DR9hv6hreCd6HXjtB8sIZzHe7IxrzINn7+mRFYETCWfApM3jh4/Ba0o/KtvDK25BtOGNqCTacIezxG3xVvsN9tY60w7Po08WGx5fIk23RcMfceS42/LewPew1e55L1fABeCrZA05RNZz/mrxAhVQJ57vNXffYCcsy7LTFEobghmRfy7/nB0waP+2r5UAHAAAAAElFTkSuQmCC>
 
@@ -374,4 +202,65 @@ Current Status: Production Ready for full QGNN functionality with all optimizati
 
 [image34]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAYCAYAAACFms+HAAADAUlEQVR4Xu2WS8hNURTHl1De8ih5RZiIQiIDDIQYkDAQY5GM+BATVzIwIKSUiT4lAzLzCHFDEjMl8kgkQhgxkcf/Z5/dt8+++5xzXfcz+v7163bWPvfstddea+1t1qN/1gDROzb+Tw0S/WJjhYaKK2J2YOub2VvSCLFUrBVTrToiM8Up+/sJZ4jbYmRgw/EjYnVgK1UvsVDcF5fFhoyr4pmY0/VqTuPETTEtsvcX68VJcUwstq4AsDM7zH37tTgqxmdjiMBdEnMDW1Ks8qB4aY0OMsbkX8SsaIzFEp1aZCfyF8RGMVnsFT/MBSTcFRa0KXgOtczcwkjBpHDshPhsxSskXT6J4+ac9ZounmS/obaK02JI9sx/9otfYldmGyZuWGOgvFjgXbEuHvDaLH5mv0VikgfikeXzEScuWmNRdppzcltgw8Fv4roYaC4YpFj4vVgHxHnRJx6YIt6Kx2JUNBbKO/5KjM5sOIvTe/xLgVaZW+SSwEbn+Crq5raf+jljbse3WLqwl5ubkzrKqWYuMqysTJPEO8s7zi/PK/xLFcJR5jqUPbOoa+YWHteOF4t9Y1E6seq6uTSh4svEOO/RugZnNj76Xsz3L5WIaN4ST8WEwE7KEPEiJYPjjRQd+VYmqp9o1QIbjtPKwsMjJQpzp3hu1fPE8j6yWw3GcPtTor/Sxz9avlc36/gaczs1MbI3I+9jWOR/qpkCKnOcaO02F+3t0VgzjuM0vXt49uyLMu5CRUqmCi3mrPhuxXlKX+fg4QCKc5GCpSNR+SnxX7pG2C1IFU5JAtKMCuegmnGMe0bs2CLxQRw2d3zH8juWOvlwkJzm/+yKh0OuqoOFopu8sILaYJBJuKP4+wnb+9Cc80XRwc6CKdxYnebSK0Wu0CrEu3UrOfa5/LAqboPk0xgrdjgUxzEL5oBqt3wq1yJ7W8Qt7o65C1G7xal+L/vtFq0U5yxdB62K3d5nrv83s/MtiQ9zt4Z2TbLA3OUqdX9pq+hIHWJePNCCxprrPN3udI+a0W80z5D2bgiSCwAAAABJRU5ErkJggg==>
 
-[image35]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAcAAAAYCAYAAAA20uedAAAAjUlEQVR4XmNgGOQgCYh3A7EwugQHEG+FYhAbBcgA8RMgbkUW5AFiSSAOBeLfQBwBxOJAzAqSjAfiWUB8H4h/AvFSIJ4ExMogSRAg3T4YcAHiX1AaA1QB8XMgVkKXgNm3B4i5GSCu7GKAWMUgAsRXGRD2BQFxARAzgjggohGI7wDxSigb7EdkIADFQxQAAFlmF1Xx4IiWAAAAAElFTkSuQmCC>
+[image35]: <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAcAAAAYCAYAAAA20uedAAAAjUlEQVR4XmNgGOQgCYh3A7EwugQHEG+FYhAbBcgA8RMgbkUW5AFiSSAOBeLfQBwBxOJAzAqSjAfiWUB8H4h/AvFSIJ4ExMogSRAg3T4YcAHiX1AaA1QB8XMgVkKXgNm3B4i5GSCu7GKAWMUgAsRXGRD2BQFxARAzgjggohGI7wDxSigb7EdkIADFQxQAAFlmF1Xx4IiWAAAAAElFTkSuQmCC
+
+---
+
+## Implementation Status
+
+**Last Updated:** April 2026
+
+### Phase 1: Stabilizer Tableau-Based Graph Representation ✅
+
+| Component | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| GraphTableau | ✅ Implemented | `core/qgnn/graph_tableau.hpp/cpp` | O(n²) Pauli operator tracking, GF(3) arithmetic |
+| Clifford Gates | ✅ Implemented | `graph_tableau.cpp` | H, S, CSUM, CZ for qutrits |
+| Ternary-Tree Mapping | ✅ Implemented | `map_to_ternary_tree()` | Cache-optimized node ordering |
+| Memory Efficiency | ✅ Verified | `memory_bytes()` | 4n² bytes vs 3^n for state vectors |
+
+### Phase 2: ZX-Calculus Optimization 🟡
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| ZX-Calculus Optimizer | 🟡 Basic | Wigner polytope detection implemented, full rewrite rules pending |
+| Clifford/Non-Clifford Detection | ✅ Implemented | `has_non_clifford()` method |
+| Circuit Simplification | 🟡 Partial | Gaussian elimination only, graph-based rules pending |
+
+### Phase 3: Ternary-Tree Topologies ✅
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| Tropical GNN Layer | ✅ Implemented | `TropicalGNNLayer` class |
+| Symplectic Attention | ✅ Implemented | `compute_attention()` method |
+| Max-Plus Routing | ✅ Implemented | Forward pass uses tropical semiring |
+
+### Architecture Decisions
+
+1. **GF(3) Purity:** All tableau operations use `Trit = int8_t` with mod-3 arithmetic
+2. **No Floating Point in Core:** Phase tracking uses discrete ω^a representation
+3. **Memory Layout:** Ternary-tree mapping optimizes cache locality for WebAssembly
+4. **Clifford-Only:** Gottesman-Knill theorem preserved, O(n²) scaling guaranteed
+
+### GF(3) Contamination Audit
+
+| Issue | Status | Resolution |
+|-------|--------|------------|
+| Binary pollution in tensor ops | ✅ Resolved | `graph_tableau.cpp` uses only `Trit` types |
+| Floating-point in activations | ✅ Resolved | Tropical (max-plus) replaces continuous functions |
+| Magic numbers for mod-3 | ✅ Resolved | Proper `gf3_add/mul` helper functions |
+| IEEE 754 state vectors | ✅ Resolved | Stabilizer tableau replaces state vectors |
+
+### Next Steps
+
+1. **QGNN Message Passing:** Integrate with 243-expert MoE routing
+2. **Hardware Acceleration:** SYCL kernels for tableau operations
+3. **CI/CD GF(3) Validation:** AST linter for ternary constraint enforcement
+4. **Benchmarking:** Compare O(n²) vs O(3^n) scaling on large graphs
+
+### Testing Status
+
+- Unit tests: Pending
+- QGNN graph tests: Pending
+- Performance benchmarks: Pending
+>

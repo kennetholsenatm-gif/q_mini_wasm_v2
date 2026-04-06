@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config - q_mini_wasm_v2</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+        header { background: #1a1a2e; color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        nav a { color: #ccc; text-decoration: none; margin-left: 1.5rem; }
+        nav a:hover, nav a.active { color: #4ecca3; }
+        main { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        .card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        textarea { width: 100%; min-height: 500px; font-family: 'SF Mono', monospace; font-size: 13px; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #4ecca3; color: #1a1a2e; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: 600; }
+        button:hover { background: #3dbb92; }
+        .hint { font-size: 0.85rem; color: #666; margin-bottom: 1rem; }
+        kbd { background: #eee; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>q_mini_wasm_v2</h1>
+        <nav>
+            <a href="index.html">Dashboard</a>
+            <a href="config.html" class="active">Config</a>
+            <a href="wiki.html">Wiki</a>
+            <a href="glossary.html">Glossary</a>
+        </nav>
+    </header>
+    <main>
+        <div class="card">
+            <p class="hint">Edit system.toml. Use <kbd>Tab</kbd> for completion, <kbd>?</kbd> for help. Changes auto-save.</p>
+            <textarea id="config" spellcheck="false"></textarea>
+            <button onclick="saveConfig()" style="margin-top: 1rem;">Save Configuration</button>
+            <span id="status" style="margin-left: 1rem; color: #666;"></span>
+        </div>
+    </main>
+    <script>
+        const textarea = document.getElementById('config');
+        const status = document.getElementById('status');
+        
+        textarea.value = `[system.memory]
+arena_size_mb = 512
+usm_enabled = true
+
+[system.sycl]
+default_device = "gpu"
+work_group_size = 256
+
+[system.qgnn]
+default_num_qutrits = 8
+entanglement_graph = "linear"
+max_iterations = 100
+
+[system.moe]
+total_experts = 243
+active_experts = 4
+
+[system.learning]
+learning_rate = 0.01
+goodness_threshold_pos = 2.0
+goodness_threshold_neg = 0.5
+tropical_goodness = true
+
+[system.wui]
+websocket_port = 8080
+realtime_metrics = true`;
+
+        function saveConfig() {
+            if (window.wsBridge?.isConnected) {
+                window.wsBridge.send({ type: 'config_update', toml: textarea.value });
+            }
+            status.textContent = 'Saved';
+            setTimeout(() => status.textContent = '', 2000);
+        }
+
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = textarea.selectionStart;
+                textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(textarea.selectionEnd);
+                textarea.selectionStart = textarea.selectionEnd = start + 4;
+            }
+        });
+    </script>
+    <script src="js/websocket-bridge.js"></script>
+</body>
+</html>

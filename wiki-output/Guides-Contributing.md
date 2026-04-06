@@ -1,6 +1,7 @@
 # Contributing Guide
 
-Thank you for your interest in contributing to q_mini_wasm_v2! This guide will help you get started.
+Thank you for your interest in contributing to q_mini_wasm_v2! This guide
+will help you get started.
 
 ## Getting Started
 
@@ -135,13 +136,8 @@ constexpr int8_t to_gf3(Trit t) noexcept {
 
 // Project headers
 #include "../ternary/trit.hpp"
-#include "../stabilizer/tableau.hpp"
-
-namespace q_mini_wasm_v2::core::moe {
-
-// Class/struct definitions
-
-}  // namespace q_mini_wasm_v2::core::moe
+  // ... (truncated)
+  // See source for complete code
 ```
 
 ## Documentation Standards
@@ -189,7 +185,7 @@ auto result = feature_function();
 
 ## See Also
 
-- [Related Feature](related)
+- [Related Feature](Related)
 ```
 
 ## Commit Messages
@@ -259,12 +255,8 @@ void test_gf3_operations() {
     // Test addition
     assert(gf3_add(Trit::POSITIVE, Trit::POSITIVE) == Trit::NEGATIVE);
     assert(gf3_add(Trit::POSITIVE, Trit::ZERO) == Trit::POSITIVE);
-    
-    // Test multiplication
-    assert(gf3_mul(Trit::POSITIVE, Trit::NEGATIVE) == Trit::NEGATIVE);
-    
-    std::cout << "GF(3) operations: PASSED" << std::endl;
-}
+  // ... (truncated)
+  // See source for complete code
 ```
 
 ### Test Coverage
@@ -311,17 +303,8 @@ Brief description of changes.
 - [ ] Documentation update
 - [ ] Refactoring
 
-## Testing
-
-- [ ] All tests pass
-- [ ] New tests added
-- [ ] Edge cases covered
-
-## Checklist
-
-- [ ] Code follows style guidelines
-- [ ] Documentation updated
-- [ ] No breaking changes
+  // ... (truncated)
+  // See source for complete code
 ```
 
 ### Review Process
@@ -356,8 +339,9 @@ When requesting features, include:
 
 If you need help:
 
-1. **Documentation**: Check the [docs](README)
-2. **Issues**: Search existing [GitHub Issues](https://github.com/kennetholsenatm-gif/q_mini_wasm_v2/issues)
+1. **Documentation**: Check the [docs](../readme)
+2. **Issues**: Search existing [GitHub
+Issues](https://github.com/kennetholsenatm-gif/q_mini_wasm_v2/issues)
 3. **Discussions**: Use GitHub Discussions for questions
 4. **Email**: Contact maintainers directly
 
@@ -376,4 +360,5 @@ Violations of the code of conduct will be handled by project maintainers.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under
+the MIT License.

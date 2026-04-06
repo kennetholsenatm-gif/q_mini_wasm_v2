@@ -1,0 +1,10 @@
+^C:\GITHUB\Q_MINI_WASM_V2\Q_MINI_WASM_V2\BUILD_FINAL\CMAKEFILES\2C61BF939FB9B08D813092AB237BCA41\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2 -BC:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/q_mini_wasm_v2.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
