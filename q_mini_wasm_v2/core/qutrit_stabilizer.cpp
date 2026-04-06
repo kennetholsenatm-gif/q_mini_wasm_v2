@@ -141,8 +141,13 @@ uint8_t stabilizer_measure(StabilizerTableau* t, uint32_t target) {
         }
     }
     
-    // Random outcome 0,1,2 for quantum measurement
-    uint8_t outcome = rand() % 3;
+    // GF(3) deterministic measurement outcome using stabilizer parity
+    // No floating point operations - strict discrete finite field arithmetic
+    uint32_t parity = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        parity += tableau_get(t, pivot, i) * t->phase[i];
+    }
+    uint8_t outcome = parity % 3;
     
     // Update tableau state after measurement
     if (pivot < n) {
