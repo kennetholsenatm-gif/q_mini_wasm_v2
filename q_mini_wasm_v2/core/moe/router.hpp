@@ -26,19 +26,19 @@ struct ExpertConfig {
  * entangled probability distributions for 20-30% efficiency improvement.
  */
 struct EntangledRoutingConfig {
-    double entanglement_strength;    // Strength of entanglement coupling (0.0-1.0)
-    double coherence_threshold;      // Minimum coherence for entangled routing
-    size_t measurement_shots;        // Number of measurement shots for probability estimation
-    bool use_adaptive_entanglement;  // Adapt entanglement based on input statistics
-    double efficiency_target;        // Target efficiency improvement (0.2-0.3 for 20-30%)
+    uint32_t entanglement_strength;    // Strength of entanglement coupling (0-100)
+    uint32_t coherence_threshold;      // Minimum coherence for entangled routing (0-100)
+    size_t measurement_shots;          // Number of measurement shots for probability estimation
+    bool use_adaptive_entanglement;    // Adapt entanglement based on input statistics
+    uint32_t efficiency_target;        // Target efficiency improvement (20-30 for 20-30%)
     
     // Default constructor with sensible defaults
     EntangledRoutingConfig()
-        : entanglement_strength(0.7)
-        , coherence_threshold(0.3)
+        : entanglement_strength(70)
+        , coherence_threshold(30)
         , measurement_shots(100)
         , use_adaptive_entanglement(true)
-        , efficiency_target(0.25)  // 25% improvement target
+        , efficiency_target(25)  // 25% improvement target
     {}
 };
 
@@ -99,7 +99,7 @@ public:
      * @param input Input features
      * @return Entangled routing probabilities
      */
-    std::vector<double> entangled_route(
+    std::vector<int32_t> entangled_route(
         stabilizer::StabilizerTableau& tableau,
         const std::vector<ternary::Trit>& input
     );
@@ -114,22 +114,22 @@ public:
      * @param b Second vector
      * @return Tropical inner product: max_i(a_i + b_i)
      */
-    static double tropical_inner_product(
-        const std::vector<double>& a,
-        const std::vector<double>& b
+    static int32_t tropical_inner_product(
+        const std::vector<int32_t>& a,
+        const std::vector<int32_t>& b
     );
     
     /**
      * @brief Tropical addition (max operation)
      */
-    static double tropical_add(double a, double b) {
+    static int32_t tropical_add(int32_t a, int32_t b) {
         return std::max(a, b);
     }
     
     /**
      * @brief Tropical multiplication (addition)
      */
-    static double tropical_multiply(double a, double b) {
+    static int32_t tropical_multiply(int32_t a, int32_t b) {
         return a + b;
     }
     
@@ -146,9 +146,9 @@ public:
     /**
      * @brief Compute KL-divergence for load balancing
      * @param expert_counts Usage count for each expert
-     * @return KL-divergence from uniform distribution
+     * @return KL-divergence from uniform distribution (scaled integer)
      */
-    double compute_load_balance_loss(const std::vector<size_t>& expert_counts) const;
+    int32_t compute_load_balance_loss(const std::vector<size_t>& expert_counts) const;
     
     /**
      * @brief Apply load balancing penalty to routing logits
@@ -156,8 +156,8 @@ public:
      * @param expert_counts Historical usage counts
      * @return Balanced logits
      */
-    std::vector<double> apply_load_balancing(
-        const std::vector<double>& logits,
+    std::vector<int32_t> apply_load_balancing(
+        const std::vector<int32_t>& logits,
         const std::vector<size_t>& expert_counts
     ) const;
 
@@ -165,7 +165,7 @@ public:
      * @brief Least-Loaded Expert Parallelism (LLEP) Routing
      */
     std::vector<size_t> llep_route(
-        const std::vector<double>& logits,
+        const std::vector<int32_t>& logits,
         const std::vector<size_t>& expert_loads,
         size_t k
     ) const;
@@ -217,8 +217,8 @@ private:
     // Random number generator for entangled routing
     std::mt19937 rng_;
     
-    // Entanglement coupling matrix for correlated routing
-    std::vector<std::vector<double>> entanglement_coupling_;
+    // Entanglement coupling matrix for correlated routing (scaled integer)
+    std::vector<std::vector<int32_t>> entanglement_coupling_;
     
     // ========================================================================
     // Internal Helpers
@@ -247,7 +247,7 @@ private:
     /**
      * @brief Compute coherence metric for entangled routing
      */
-    double compute_coherence(const std::vector<double>& probabilities) const;
+    int32_t compute_coherence(const std::vector<int32_t>& probabilities) const;
 };
 
 /**

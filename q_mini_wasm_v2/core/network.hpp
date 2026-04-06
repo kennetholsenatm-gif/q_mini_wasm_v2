@@ -23,7 +23,7 @@ struct NetworkConfig {
     size_t total_experts;
     size_t active_experts;
     size_t routing_qutrits;
-    double learning_rate;
+    uint32_t learning_rate_shift;
     size_t worker_threads;
     bool enable_steane;
     bool enable_flash_cim;

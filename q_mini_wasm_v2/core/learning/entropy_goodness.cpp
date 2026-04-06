@@ -15,62 +15,66 @@ EntropyGoodnessMetric::~EntropyGoodnessMetric() = default;
 // Goodness Computation
 // ============================================================================
 
-double EntropyGoodnessMetric::compute_goodness(const stabilizer::StabilizerTableau& tableau) const {
+uint32_t EntropyGoodnessMetric::compute_goodness(const stabilizer::StabilizerTableau& tableau) const {
     // Goodness = -entropy (higher is better for positive data)
-    double entropy = compute_entropy(tableau);
-    return -entropy;
+    // Since entropy is N - k, goodness can just be k (the rank)
+    // Maximum goodness = N, Minimum goodness = 0
+    std::vector<size_t> full_system(num_qutrits_);
+    std::iota(full_system.begin(), full_system.end(), 0);
+    size_t k = compute_stabilizer_rank(tableau, full_system);
+    return static_cast<uint32_t>(k);
 }
 
-double EntropyGoodnessMetric::compute_goodness_tropical(const std::vector<ternary::Trit>& activations) const {
+uint32_t EntropyGoodnessMetric::compute_goodness_tropical(const std::vector<ternary::Trit>& activations) const {
     // Tropical inner product: goodness = Σ_i (a_i)^2
     // For ternary: (-1)^2 = 1, 0^2 = 0, 1^2 = 1
-    double goodness = 0.0;
+    uint32_t goodness = 0;
     
     for (const auto& act : activations) {
-        double val = static_cast<double>(act);
-        goodness += val * val;
+        if (act != ternary::Trit::ZERO) {
+            goodness++;
+        }
     }
     
     return goodness;
 }
 
-double EntropyGoodnessMetric::compute_delta(double positive_goodness, double negative_goodness) {
-    return positive_goodness - negative_goodness;
+int32_t EntropyGoodnessMetric::compute_delta(uint32_t positive_goodness, uint32_t negative_goodness) {
+    return static_cast<int32_t>(positive_goodness) - static_cast<int32_t>(negative_goodness);
 }
 
 // ============================================================================
 // Entanglement Entropy Computation
 // ============================================================================
 
-double EntropyGoodnessMetric::compute_entropy(const stabilizer::StabilizerTableau& tableau) const {
+uint32_t EntropyGoodnessMetric::compute_entropy(const stabilizer::StabilizerTableau& tableau) const {
     // For full system, entropy is determined by stabilizer rank
     std::vector<size_t> full_system(num_qutrits_);
     std::iota(full_system.begin(), full_system.end(), 0);
     
     size_t rank = compute_stabilizer_rank(tableau, full_system);
     
-    // Entropy = k * log(d) where d = 3 for qutrits
-    // For pure stabilizer states, full system entropy is typically 0
-    // We compute the "mixedness" based on stabilizer structure
-    return rank * std::log(3.0);
+    // Entropy formula: S = (N - k) * log_2(3)
+    // We normalize to logical entropy by omitting the log_2(3) factor
+    return static_cast<uint32_t>(num_qutrits_ - rank);
 }
 
-double EntropyGoodnessMetric::compute_subsystem_entropy(
+uint32_t EntropyGoodnessMetric::compute_subsystem_entropy(
     const stabilizer::StabilizerTableau& tableau,
     const std::vector<size_t>& subsystem_indices
 ) const {
     size_t rank = compute_stabilizer_rank(tableau, subsystem_indices);
-    return rank * std::log(3.0);
+    return static_cast<uint32_t>(subsystem_indices.size() - rank);
 }
 
-double EntropyGoodnessMetric::compute_mutual_information(
+int32_t EntropyGoodnessMetric::compute_mutual_information(
     const stabilizer::StabilizerTableau& tableau,
     const std::vector<size_t>& subsystem_a,
     const std::vector<size_t>& subsystem_b
 ) const {
     // I(A:B) = S(A) + S(B) - S(AB)
-    double s_a = compute_subsystem_entropy(tableau, subsystem_a);
-    double s_b = compute_subsystem_entropy(tableau, subsystem_b);
+    uint32_t s_a = compute_subsystem_entropy(tableau, subsystem_a);
+    uint32_t s_b = compute_subsystem_entropy(tableau, subsystem_b);
     
     // Combine subsystems
     std::vector<size_t> combined = subsystem_a;
@@ -80,43 +84,43 @@ double EntropyGoodnessMetric::compute_mutual_information(
     std::sort(combined.begin(), combined.end());
     combined.erase(std::unique(combined.begin(), combined.end()), combined.end());
     
-    double s_ab = compute_subsystem_entropy(tableau, combined);
+    uint32_t s_ab = compute_subsystem_entropy(tableau, combined);
     
-    return s_a + s_b - s_ab;
+    return static_cast<int32_t>(s_a) + static_cast<int32_t>(s_b) - static_cast<int32_t>(s_ab);
 }
 
 // ============================================================================
 // Learning Signal
 // ============================================================================
 
-std::vector<double> EntropyGoodnessMetric::compute_learning_signal(
+std::vector<int32_t> EntropyGoodnessMetric::compute_learning_signal(
     const stabilizer::StabilizerTableau& tableau,
     const std::vector<ternary::Trit>& activations
 ) const {
     // Learning signal approximated via stabilizer structure
     // Signal is proportional to the "disorder" contribution of each qutrit
     
-    std::vector<double> signal(activations.size());
+    std::vector<int32_t> signal(activations.size());
     
     for (size_t i = 0; i < activations.size(); ++i) {
         // For each qutrit, compute its contribution to entropy
         std::vector<size_t> single_qutrit = {i};
-        double local_entropy = compute_subsystem_entropy(tableau, single_qutrit);
+        uint32_t local_entropy = compute_subsystem_entropy(tableau, single_qutrit);
         
         // Learning signal: negative entropy contribution
         // (we want to minimize entropy for positive data)
-        signal[i] = -local_entropy;
+        signal[i] = -static_cast<int32_t>(local_entropy);
     }
     
     return signal;
 }
 
 bool EntropyGoodnessMetric::is_well_trained(
-    double positive_goodness,
-    double negative_goodness,
-    double threshold
+    uint32_t positive_goodness,
+    uint32_t negative_goodness,
+    int32_t threshold
 ) {
-    double delta = compute_delta(positive_goodness, negative_goodness);
+    int32_t delta = compute_delta(positive_goodness, negative_goodness);
     return delta > threshold;
 }
 

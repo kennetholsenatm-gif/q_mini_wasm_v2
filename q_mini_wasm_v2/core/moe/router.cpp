@@ -100,7 +100,7 @@ std::vector<int8_t> MoERouter::compute_routing_logits(const std::vector<ternary:
     return symplectic_scores;
 }
 
-std::vector<double> MoERouter::entangled_route(
+std::vector<int32_t> MoERouter::entangled_route(
     stabilizer::StabilizerTableau& tableau,
     const std::vector<ternary::Trit>& input
 ) {
@@ -121,17 +121,17 @@ std::vector<double> MoERouter::entangled_route(
     // Measure qutrits to get routing decisions
     auto measurements = tableau.measure_all();
     
-    // Convert measurements to routing probabilities
-    std::vector<double> probs(config_.total_experts, 0.0);
+    // Convert measurements to routing probabilities (scaled to 0-100)
+    std::vector<int32_t> probs(config_.total_experts, 0);
     for (size_t i = 0; i < std::min(measurements.size(), config_.total_experts); ++i) {
-        probs[i] = (measurements[i] + 1.0) / 3.0;  // Map -1,0,1 to 0, 1/3, 2/3
+        probs[i] = (measurements[i] + 1) * 33;  // Map -1,0,1 to ~0, 33, 66
     }
     
-    // Normalize
-    double sum = std::accumulate(probs.begin(), probs.end(), 0.0);
+    // Normalize to sum to 100
+    int32_t sum = std::accumulate(probs.begin(), probs.end(), 0);
     if (sum > 0) {
         for (auto& p : probs) {
-            p /= sum;
+            p = (p * 100) / sum;
         }
     }
     
@@ -142,9 +142,9 @@ std::vector<double> MoERouter::entangled_route(
 // Tropical Geometry Operations
 // ============================================================================
 
-double MoERouter::tropical_inner_product(
-    const std::vector<double>& a,
-    const std::vector<double>& b
+int32_t MoERouter::tropical_inner_product(
+    const std::vector<int32_t>& a,
+    const std::vector<int32_t>& b
 ) {
     if (a.size() != b.size()) {
         throw std::invalid_argument("Vector sizes must match for tropical inner product");
@@ -160,19 +160,19 @@ double MoERouter::tropical_inner_product(
     // This operation is the max-plus algebra equivalent of the standard dot product.
     // It satisfies the tropical triangle inequality and induces a tropical metric.
     
-    double result = -std::numeric_limits<double>::infinity();
+    int32_t result = -2147483647; // Minimal 32-bit int minus 1
     
     for (size_t i = 0; i < a.size(); ++i) {
         // Tropical multiplication: a ⊗ b = a + b
-        double tropical_product = tropical_multiply(a[i], b[i]);
+        int32_t tropical_product = tropical_multiply(a[i], b[i]);
         
         // Tropical addition: a ⊕ b = max(a, b)
         result = tropical_add(result, tropical_product);
     }
     
-    // Handle case where all products were -infinity
-    if (result == -std::numeric_limits<double>::infinity()) {
-        return 0.0;
+    // Handle case where all products were minimal
+    if (result == -2147483647) {
+        return 0;
     }
     
     return result;
@@ -187,45 +187,40 @@ size_t MoERouter::compute_hypersimplex_capacity() const {
 // Load Balancing
 // ============================================================================
 
-double MoERouter::compute_load_balance_loss(const std::vector<size_t>& expert_counts) const {
-    // KL-divergence from uniform distribution
-    double uniform_prob = 1.0 / config_.total_experts;
-    double total_count = std::accumulate(expert_counts.begin(), expert_counts.end(), 0.0);
+int32_t MoERouter::compute_load_balance_loss(const std::vector<size_t>& expert_counts) const {
+    // Integer approximation of KL-divergence from uniform distribution
+    // Avoids floating point by scaling
+    int32_t total_count = static_cast<int32_t>(std::accumulate(expert_counts.begin(), expert_counts.end(), 0));
+    if (total_count == 0) return 0;
     
-    if (total_count == 0) {
-        return 0.0;
-    }
+    int32_t expected_count = total_count / config_.total_experts;
+    if (expected_count == 0) return 0;
     
-    double kl_div = 0.0;
+    int32_t loss = 0;
     for (size_t i = 0; i < config_.total_experts; ++i) {
-        double p = expert_counts[i] / total_count;
-        if (p > 0) {
-            kl_div += p * std::log(p / uniform_prob);
-        }
+        int32_t diff = static_cast<int32_t>(expert_counts[i]) - expected_count;
+        loss += (diff * diff) / expected_count; // Chi-squared-like approximation
     }
-    
-    return kl_div;
+    return loss;
 }
 
-std::vector<double> MoERouter::apply_load_balancing(
-    const std::vector<double>& logits,
+std::vector<int32_t> MoERouter::apply_load_balancing(
+    const std::vector<int32_t>& logits,
     const std::vector<size_t>& expert_counts
 ) const {
-    std::vector<double> balanced_logits = logits;
+    std::vector<int32_t> balanced_logits = logits;
     
-    double total_count = std::accumulate(expert_counts.begin(), expert_counts.end(), 0.0);
-    if (total_count == 0) {
-        return balanced_logits;
-    }
+    int32_t total_count = static_cast<int32_t>(std::accumulate(expert_counts.begin(), expert_counts.end(), 0));
+    if (total_count == 0) return balanced_logits;
     
     // Apply penalty for overused experts
     for (size_t i = 0; i < config_.total_experts; ++i) {
-        double usage_ratio = expert_counts[i] / total_count;
-        double expected_ratio = 1.0 / config_.total_experts;
+        int32_t usage_ratio_scaled = (static_cast<int32_t>(expert_counts[i]) * 1000) / total_count;
+        int32_t expected_ratio_scaled = 1000 / config_.total_experts;
         
         // Penalize experts that are used more than expected
-        if (usage_ratio > expected_ratio) {
-            balanced_logits[i] -= (usage_ratio - expected_ratio) * 0.1;
+        if (usage_ratio_scaled > expected_ratio_scaled) {
+            balanced_logits[i] -= (usage_ratio_scaled - expected_ratio_scaled) / 10;
         }
     }
     
@@ -233,7 +228,7 @@ std::vector<double> MoERouter::apply_load_balancing(
 }
 
 std::vector<size_t> MoERouter::llep_route(
-    const std::vector<double>& logits,
+    const std::vector<int32_t>& logits,
     const std::vector<size_t>& expert_loads,
     size_t k
 ) const {
@@ -241,10 +236,10 @@ std::vector<size_t> MoERouter::llep_route(
     // Dynamically routes overflow tokens from overloaded hypersimplex cones
     // Eliminates 20-40% standard MoE load imbalance penalties
     
-    const double MAX_CAPACITY = logits.size() / static_cast<double>(config_.total_experts);
-    const double OVERFLOW_THRESHOLD = MAX_CAPACITY * 1.2;
+    const int32_t MAX_CAPACITY = static_cast<int32_t>(logits.size()) / config_.total_experts;
+    const int32_t OVERFLOW_THRESHOLD = (MAX_CAPACITY * 12) / 10;
     
-    std::vector<std::pair<double, size_t>> scored_experts;
+    std::vector<std::pair<int32_t, size_t>> scored_experts;
     scored_experts.reserve(config_.total_experts);
     
     for (size_t i = 0; i < config_.total_experts; ++i) {
@@ -344,37 +339,36 @@ size_t MoERouter::binomial_coefficient(size_t n, size_t k) {
 void MoERouter::initialize_entanglement_coupling() {
     // Initialize entanglement coupling matrix for correlated expert routing
     // This creates a symmetric matrix where entry [i][j] represents the
-    // coupling strength between expert i and expert j
+    // coupling strength between expert i and expert j (0-100)
     size_t n = config_.total_experts;
-    entanglement_coupling_.resize(n, std::vector<double>(n, 0.0));
+    entanglement_coupling_.resize(n, std::vector<int32_t>(n, 0));
     
-    std::uniform_real_distribution<double> dist(0.0, entangled_config_.entanglement_strength);
+    std::uniform_int_distribution<int32_t> dist(0, entangled_config_.entanglement_strength);
     
     for (size_t i = 0; i < n; ++i) {
-        entanglement_coupling_[i][i] = 1.0;  // Self-coupling is always 1
+        entanglement_coupling_[i][i] = 100;  // Self-coupling is always 100
         for (size_t j = i + 1; j < n; ++j) {
-            double coupling = dist(rng_);
+            int32_t coupling = dist(rng_);
             entanglement_coupling_[i][j] = coupling;
             entanglement_coupling_[j][i] = coupling;  // Symmetric
         }
     }
 }
 
-double MoERouter::compute_coherence(const std::vector<double>& probabilities) const {
-    // Compute coherence as the inverse of entropy (normalized)
-    // Higher coherence = more peaked distribution = more decisive routing
-    double entropy = 0.0;
-    for (double p : probabilities) {
-        if (p > 1e-10) {
-            entropy -= p * std::log2(p);
-        }
+int32_t MoERouter::compute_coherence(const std::vector<int32_t>& probabilities) const {
+    // Compute an integer approximation of coherence (inverse entropy)
+    // probabilities are scaled to 0-100
+    int32_t peak = 0;
+    for (int32_t p : probabilities) {
+        if (p > peak) peak = p;
     }
     
-    double max_entropy = std::log2(config_.total_experts);
-    if (max_entropy < 1e-10) return 1.0;
+    // Simplistic coherence approximation without float log2:
+    // How much does the peak deviate from a uniform distribution?
+    int32_t uniform = 100 / config_.total_experts;
+    if (peak <= uniform) return 0;
     
-    // Coherence = 1 - (normalized entropy)
-    return 1.0 - (entropy / max_entropy);
+    return ((peak - uniform) * 100) / (100 - uniform);
 }
 
 std::vector<std::vector<size_t>> MoERouter::expert_choice_route(

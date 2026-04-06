@@ -16,18 +16,18 @@ namespace q_mini_wasm_v2::core::learning {
 struct FFConfig {
     size_t num_layers;              // Number of hidden layers
     size_t neurons_per_layer;       // Neurons in each layer
-    double learning_rate;           // Local learning rate
-    double positive_threshold;      // Goodness threshold for positive data
-    double negative_threshold;      // Goodness threshold for negative data
+    uint32_t learning_rate_shift;   // Bit-shift for learning rate (avoid float)
+    uint32_t positive_threshold;    // Goodness threshold for positive data
+    uint32_t negative_threshold;    // Goodness threshold for negative data
 };
 
 /**
  * @brief Layer goodness metrics
  */
 struct LayerGoodness {
-    double positive_goodness;   // Goodness for positive (real) data
-    double negative_goodness;   // Goodness for negative (corrupted) data
-    double delta;               // Difference: positive - negative
+    uint32_t positive_goodness;   // Goodness for positive (real) data
+    uint32_t negative_goodness;   // Goodness for negative (corrupted) data
+    int32_t delta;                // Difference: positive - negative
 };
 
 /**
@@ -89,14 +89,14 @@ public:
      * @param activations Layer activations
      * @return Goodness score (higher is better for positive data)
      */
-    double compute_goodness(const std::vector<ternary::Trit>& activations) const;
+    uint32_t compute_goodness(const std::vector<ternary::Trit>& activations) const;
 
     /**
      * @brief Compute goodness using Entanglement Entropy
      * @param tableau The state tracking tableau
      * @return Goodness score (higher = lower entropy = better for positive data)
      */
-    double compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const;
+    uint32_t compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const;
 
     /**
      * @brief Train a layer using Entanglement Entropy metric and Clifford circuits
@@ -164,7 +164,7 @@ public:
     void update_weights_hebbian(
         size_t layer_idx,
         const std::vector<ternary::Trit>& activations,
-        double delta
+        int32_t delta
     );
     
     /**
@@ -182,9 +182,9 @@ public:
     const FFConfig& config() const { return config_; }
     
     /**
-     * @brief Update learning rate
+     * @brief Update learning rate shift
      */
-    void set_learning_rate(double lr) { config_.learning_rate = lr; }
+    void set_learning_rate_shift(uint32_t shift) { config_.learning_rate_shift = shift; }
 
 private:
     FFConfig config_;
@@ -209,7 +209,7 @@ private:
      * @param x Input value
      * @return Ternary output {-1, 0, +1}
      */
-    static ternary::Trit ternary_activation(double x);
+    static ternary::Trit ternary_activation(int32_t x);
     
     /**
      * @brief Compute gradient-free weight update

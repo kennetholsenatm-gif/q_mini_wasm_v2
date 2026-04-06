@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
     net_config.total_experts = moe_experts;
     net_config.active_experts = moe_top_k;
     net_config.routing_qutrits = 8;
-    net_config.learning_rate = lr;
+    net_config.learning_rate_shift = 2; // Fixed shift equivalent to old learning rate approximation
     net_config.worker_threads = 4;
     net_config.enable_steane = steane_correction;
     net_config.enable_flash_cim = flash_cim;
