@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>243-Expert MoE Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0e1a;
+            color: #e0e6ed;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1a1f3a 0%, #0d1220 100%);
+            padding: 20px 40px;
+            border-bottom: 1px solid #2a3f5f;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #64ffda;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header .subtitle {
+            font-size: 14px;
+            color: #8892b0;
+            margin-top: 4px;
+        }
+        
+        .container {
+            padding: 30px 40px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: #112240;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #233554;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8892b0;
+            margin-bottom: 8px;
+        }
+        
+        .metric-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #64ffda;
+        }
+        
+        .metric-delta {
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .metric-delta.positive {
+            color: #4caf50;
+        }
+        
+        .metric-delta.negative {
+            color: #f44336;
+        }
+        
+        .section {
+            background: #112240;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #233554;
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ccd6f6;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .expert-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 8px;
+        }
+        
+        .expert-cell {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .expert-cell:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        
+        .expert-cell::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0a0e1a;
+            color: #64ffda;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            border: 1px solid #233554;
+        }
+        
+        .expert-cell:hover::after {
+            opacity: 1;
+        }
+        
+        /* Heat map colors based on utilization */
+        .expert-unused {
+            background: #1a2332;
+            color: #4a5568;
+        }
+        
+        .expert-low {
+            background: #1e3a5f;
+            color: #64ffda;
+        }
+        
+        .expert-medium {
+            background: #234e70;
+            color: #64ffda;
+        }
+        
+        .expert-high {
+            background: #2d6a4f;
+            color: #95e1d3;
+        }
+        
+        .expert-very-high {
+            background: #f4a261;
+            color: #1a1f3a;
+        }
+        
+        .chart-container {
+            height: 300px;
+            background: #0a0e1a;
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+        }
+        
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            padding: 16px 24px;
+            background: #0a0e1a;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        .status-dot.online {
+            background: #4caf50;
+            box-shadow: 0 0 8px #4caf50;
+        }
+        
+        .status-dot.warning {
+            background: #ff9800;
+            box-shadow: 0 0 8px #ff9800;
+        }
+        
+        .status-text {
+            font-size: 14px;
+            color: #ccd6f6;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            background: #233554;
+            color: #64ffda;
+            border: 1px solid #64ffda;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background: #64ffda;
+            color: #0a0e1a;
+        }
+        
+        .btn-primary {
+            background: #64ffda;
+            color: #0a0e1a;
+        }
+        
+        .btn-primary:hover {
+            background: #4ecdc4;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-size: 12px;
+            color: #8892b0;
+            margin-top: 16px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #233554;
+        }
+        
+        .info-label {
+            color: #8892b0;
+            font-size: 14px;
+        }
+        
+        .info-value {
+            color: #ccd6f6;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .header {
+                padding: 16px 20px;
+            }
+            
+            .expert-grid {
+                grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64ffda" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            243-Expert MoE Dashboard
+        </h1>
+        <div class="subtitle">Real-time monitoring of Mixture of Experts system</div>
+    </div>
+
+    <div class="container">
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot online"></div>
+                <span class="status-text">Router: Online</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot online"></div>
+                <span class="status-text">Experts: 243 Active</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot online"></div>
+                <span class="status-text">Training: Converged</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot warning"></div>
+                <span class="status-text">Load Balance: Moderate Imbalance</span>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Experts</div>
+                <div class="metric-value">243</div>
+                <div class="metric-delta positive">↑ 16 from default config</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Active Experts (Top-K)</div>
+                <div class="metric-value">16</div>
+                <div class="metric-delta">6.6% activated per token</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Avg Routing Latency</div>
+                <div class="metric-value">67μs</div>
+                <div class="metric-delta positive">↓ 12% from yesterday</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Goodness Delta</div>
+                <div class="metric-value">0.73</div>
+                <div class="metric-delta positive">↑ Training improving</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Load Balance Score</div>
+                <div class="metric-value">0.32</div>
+                <div class="metric-delta">Healthy specialization</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Energy per Token</div>
+                <div class="metric-value">2.1μJ</div>
+                <div class="metric-delta positive">↓ 5% under budget</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button class="btn btn-primary" onclick="refreshData()">Refresh Data</button>
+            <button class="btn" onclick="rebalanceLoads()">Rebalance Loads</button>
+            <button class="btn" onclick="saveCheckpoint()">Save Checkpoint</button>
+            <button class="btn" onclick="exportMetrics()">Export Metrics</button>
+        </div>
+
+        <!-- Expert Utilization Heatmap -->
+        <div class="section">
+            <div class="section-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M3 9h18M9 21V9"/>
+                </svg>
+                Expert Utilization Heatmap
+            </div>
+            <div class="expert-grid" id="expertGrid">
+                <!-- Generated by JavaScript -->
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #1a2332;"></div>
+                    <span>Unused (0%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #1e3a5f;"></div>
+                    <span>Low (1-3%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #234e70;"></div>
+                    <span>Medium (3-8%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2d6a4f;"></div>
+                    <span>High (8-15%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f4a261;"></div>
+                    <span>Very High (15%+)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cluster View -->
+        <div class="section">
+            <div class="section-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Hierarchical Cluster Status (16 clusters × 16 experts)
+            </div>
+            <div class="info-grid" id="clusterInfo">
+                <!-- Generated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Training Metrics -->
+        <div class="section">
+            <div class="section-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 20v-6M6 20V10M18 20V4"/>
+                </svg>
+                Training Progress
+            </div>
+            <div class="chart-container">
+                <canvas id="trainingChart"></canvas>
+            </div>
+            <div class="info-grid" style="margin-top: 20px;">
+                <div class="info-item">
+                    <span class="info-label">Current Epoch</span>
+                    <span class="info-value">47 / 100</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Positive Goodness</span>
+                    <span class="info-value">0.82</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Negative Goodness</span>
+                    <span class="info-value">0.09</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Batches Processed</span>
+                    <span class="info-value">2,847</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Summary -->
+        <div class="section">
+            <div class="section-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Configuration Summary
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Topology</span>
+                    <span class="info-value">Hierarchical (16×16 clusters)</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Specialization Dim</span>
+                    <span class="info-value">128</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Routing Dim</span>
+                    <span class="info-value">64</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Load Balance Alpha</span>
+                    <span class="info-value">0.01</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Energy Budget</span>
+                    <span class="info-value">Medium</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Memory Usage</span>
+                    <span class="info-value">1.47 MB</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Generate expert grid
+        function generateExpertGrid() {
+            const grid = document.getElementById('expertGrid');
+            const utilizations = generateMockUtilizationData();
+            
+            for (let i = 0; i < 243; i++) {
+                const cell = document.createElement('div');
+                const util = utilizations[i];
+                
+                cell.className = 'expert-cell ' + getUtilizationClass(util);
+                cell.textContent = i;
+                cell.setAttribute('data-tooltip', `Expert ${i}: ${util.toFixed(1)}% utilization`);
+                
+                cell.onclick = () => showExpertDetails(i, util);
+                
+                grid.appendChild(cell);
+            }
+        }
+        
+        function generateMockUtilizationData() {
+            // Generate realistic utilization with some experts heavily used, others not
+            const data = [];
+            for (let i = 0; i < 243; i++) {
+                // Create power-law distribution (few experts very popular)
+                const base = Math.random();
+                const popularity = Math.pow(base, 2) * 20; // 0-20%
+                data.push(popularity);
+            }
+            return data;
+        }
+        
+        function getUtilizationClass(util) {
+            if (util === 0) return 'expert-unused';
+            if (util < 3) return 'expert-low';
+            if (util < 8) return 'expert-medium';
+            if (util < 15) return 'expert-high';
+            return 'expert-very-high';
+        }
+        
+        function showExpertDetails(id, utilization) {
+            alert(`Expert ${id} Details:\nUtilization: ${utilization.toFixed(2)}%\nSpecialization: Code generation\nLast updated: Just now`);
+        }
+        
+        // Generate cluster info
+        function generateClusterInfo() {
+            const container = document.getElementById('clusterInfo');
+            
+            for (let i = 0; i < 16; i++) {
+                const item = document.createElement('div');
+                item.className = 'info-item';
+                
+                const load = (Math.random() * 100).toFixed(1);
+                
+                item.innerHTML = `
+                    <span class="info-label">Cluster ${i} (Experts ${i*16}-${i*16+15})</span>
+                    <span class="info-value">${load}% load</span>
+                `;
+                
+                container.appendChild(item);
+            }
+        }
+        
+        // Mock chart drawing
+        function drawTrainingChart() {
+            const canvas = document.getElementById('trainingChart');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear
+            ctx.fillStyle = '#0a0e1a';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw grid
+            ctx.strokeStyle = '#1a2332';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < 10; i++) {
+                const y = (height / 10) * i;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            
+            // Draw goodness delta line
+            ctx.strokeStyle = '#64ffda';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            for (let i = 0; i < 47; i++) {
+                const x = (width / 50) * i;
+                // Simulated convergence curve
+                const value = 0.2 + (0.73 - 0.2) * (1 - Math.exp(-i / 15));
+                const y = height - (value * height * 0.8) - 20;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+            
+            // Labels
+            ctx.fillStyle = '#8892b0';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('Goodness Delta Over Time', 20, 30);
+            ctx.fillText('Epoch 0', 20, height - 10);
+            ctx.fillText('Epoch 47', width - 60, height - 10);
+            ctx.fillText('0.8', 10, 40);
+            ctx.fillText('0.0', 10, height - 20);
+        }
+        
+        // Button handlers
+        function refreshData() {
+            location.reload();
+        }
+        
+        function rebalanceLoads() {
+            alert('Rebalancing loads...\nAll expert request counts have been decayed by 50%.\nNew routing will naturally rebalance.');
+        }
+        
+        function saveCheckpoint() {
+            alert('Checkpoint saved:\nmoe_checkpoint_epoch_47.chk\n\nSize: 1.47 MB\nLocation: /checkpoints/');
+        }
+        
+        function exportMetrics() {
+            const metrics = {
+                timestamp: new Date().toISOString(),
+                total_experts: 243,
+                active_experts: 16,
+                avg_latency_us: 67,
+                goodness_delta: 0.73,
+                load_balance: 0.32
+            };
+            
+            const blob = new Blob([JSON.stringify(metrics, null, 2)], 
+                                  { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'moe_metrics_' + Date.now() + '.json';
+            a.click();
+        }
+        
+        // Initialize
+        window.onload = function() {
+            generateExpertGrid();
+            generateClusterInfo();
+            drawTrainingChart();
+        };
+        
+        // Refresh chart on resize
+        window.onresize = function() {
+            drawTrainingChart();
+        };
+    </script>
+</body>
+</html>
