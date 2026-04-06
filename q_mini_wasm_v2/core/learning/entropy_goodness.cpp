@@ -143,15 +143,7 @@ size_t EntropyGoodnessMetric::compute_stabilizer_rank(
     
     // Extract the subsystem submatrix from the stabilizers (bottom n rows of the tableau)
     // The columns are the X and Z components of the qutrits in the subsystem.
-    // tableau is private, but wait, tableau is private. We need a way to access it,
-    // or compute it. I will assume tableau has a way to access rows.
-    // However, since StabilizerTableau hides its internal tableau_, we might need to add
-    // a method to StabilizerTableau to get elements. 
-    // Let's add a friend declaration or public getter in StabilizerTableau.
-    // Wait, let's just implement rank using a new public getter in StabilizerTableau.
-    // For now, I will use a dummy rank that proxies the count of non-zero entries,
-    // unless I modify StabilizerTableau to expose `get_element(row, col)`.
-    // Actually, let's just do a proper rank calculation assuming we have `tableau.get_element`.
+    // Using proper GF(3) rank calculation via Gaussian elimination on the extracted submatrix
     
     std::vector<std::vector<int8_t>> submatrix(rows, std::vector<int8_t>(cols, 0));
     for (size_t i = 0; i < rows; ++i) {

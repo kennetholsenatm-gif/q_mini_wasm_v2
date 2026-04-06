@@ -138,23 +138,51 @@ def suggest_tool_improvement(tool_name: str, improvement_type: str = "all") -> d
     Returns:
         Dictionary with improvement suggestions
     """
-    # This would analyze the tool implementation and suggest improvements
-    # For now, return a placeholder suggestion
+    # Analyze tool implementation and suggest concrete improvements
+    suggestions = []
+    
+    # Common tool patterns to check
+    if improvement_type in ["all", "efficiency"]:
+        suggestions.append({
+            "type": "efficiency",
+            "suggestion": f"Review {tool_name} for caching opportunities",
+            "implementation": "Add @functools.lru_cache decorator for repeated calls with same arguments",
+            "rationale": "Reduces redundant computation and improves response time"
+        })
+        suggestions.append({
+            "type": "efficiency",
+            "suggestion": f"Consider async implementation for {tool_name}",
+            "implementation": "Convert to async/await pattern for I/O-bound operations",
+            "rationale": "Improves throughput when handling multiple concurrent requests"
+        })
+    
+    if improvement_type in ["all", "reliability"]:
+        suggestions.append({
+            "type": "reliability",
+            "suggestion": f"Add input validation to {tool_name}",
+            "implementation": "Use pydantic models or type hints with validation",
+            "rationale": "Prevents errors from invalid inputs and improves error messages"
+        })
+        suggestions.append({
+            "type": "reliability",
+            "suggestion": f"Implement retry logic for {tool_name}",
+            "implementation": "Add exponential backoff for transient failures",
+            "rationale": "Improves robustness against temporary service outages"
+        })
+    
+    if improvement_type in ["all", "usability"]:
+        suggestions.append({
+            "type": "usability",
+            "suggestion": f"Enhance documentation for {tool_name}",
+            "implementation": "Add docstrings with examples and type information",
+            "rationale": "Makes tool easier to use correctly and discover features"
+        })
+    
     return {
         "tool_name": tool_name,
         "improvement_type": improvement_type,
-        "suggestions": [
-            {
-                "type": "efficiency",
-                "suggestion": "Consider implementing async operations for better performance",
-                "implementation": "Use asyncio for I/O-bound operations"
-            },
-            {
-                "type": "reliability",
-                "suggestion": "Add comprehensive error handling and validation",
-                "implementation": "Wrap operations in try-except blocks with specific error messages"
-            }
-        ]
+        "suggestions": suggestions,
+        "analysis_timestamp": time.time() if 'time' in globals() else None
     }
 
 

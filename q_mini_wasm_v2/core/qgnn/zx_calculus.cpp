@@ -220,13 +220,13 @@ std::vector<size_t> ZXDiagram::get_boundary_nodes() const {
 }
 
 // ZXCalculusOptimizer Implementation
-ZXCalculusOptimizer::ZXCalculusOptimizer() 
-    : optimization_threshold(0.1), max_iterations(1000), enable_parallel_optimization(false) {
+ZXCalculusOptimizer::ZXCalculusOptimizer()
+    : optimization_threshold(0.1), max_iterations(1000), enable_parallel_optimization(false), original_gate_count_(0) {
     current_diagram = std::make_unique<ZXDiagram>(1, 1);
 }
 
-ZXCalculusOptimizer::ZXCalculusOptimizer(double threshold, size_t max_iter) 
-    : optimization_threshold(threshold), max_iterations(max_iter), enable_parallel_optimization(false) {
+ZXCalculusOptimizer::ZXCalculusOptimizer(double threshold, size_t max_iter)
+    : optimization_threshold(threshold), max_iterations(max_iter), enable_parallel_optimization(false), original_gate_count_(0) {
     current_diagram = std::make_unique<ZXDiagram>(1, 1);
 }
 
@@ -236,7 +236,7 @@ void ZXCalculusOptimizer::optimize_circuit(QuantumCircuit& circuit) {
     *current_diagram = ZXDiagram::from_quantum_circuit(circuit);
     
     // Store original metrics
-    size_t original_gates = circuit.get_gate_count();
+    original_gate_count_ = circuit.get_gate_count();
     double original_energy = circuit.estimate_energy_pj();
     
     // Apply optimization
@@ -377,8 +377,7 @@ double ZXCalculusOptimizer::get_optimization_score() const {
 }
 
 size_t ZXCalculusOptimizer::get_original_gate_count() const {
-    // This would be stored during optimization
-    return 100;  // Placeholder
+    return original_gate_count_;
 }
 
 size_t ZXCalculusOptimizer::get_optimized_gate_count() const {

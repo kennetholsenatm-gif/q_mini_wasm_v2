@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -78,12 +79,12 @@ type Class struct {
 
 // AlignmentResult represents the result of alignment check
 type AlignmentResult struct {
-	OverallStatus       AlignmentStatus       `json:"overall_status"`
-	AlignmentScore      float64               `json:"alignment_score"`
-	AlignedComponents   []AlignedComponent    `json:"aligned_components"`
-	MissingComponents   []MissingComponent    `json:"missing_components"`
-	DivergentComponents []DivergentComponent  `json:"divergent_components"`
-	Suggestions         []Suggestion          `json:"suggestions"`
+	OverallStatus       AlignmentStatus      `json:"overall_status"`
+	AlignmentScore      float64              `json:"alignment_score"`
+	AlignedComponents   []AlignedComponent   `json:"aligned_components"`
+	MissingComponents   []MissingComponent   `json:"missing_components"`
+	DivergentComponents []DivergentComponent `json:"divergent_components"`
+	Suggestions         []Suggestion         `json:"suggestions"`
 }
 
 // AlignedComponent represents a component that aligns with research
@@ -166,7 +167,7 @@ func (a *ResearchAlignmentAgent) DetectLanguage(extension string) string {
 		".cpp": "C++", ".cc": "C++", ".cxx": "C++",
 		".h": "C++", ".hpp": "C++", ".hxx": "C++",
 		".go": "Go",
-		".r": "R", ".R": "R",
+		".r":  "R", ".R": "R",
 		".dll": "DLL",
 	}
 
@@ -190,14 +191,14 @@ func (a *ResearchAlignmentAgent) ParseResearchDocument(documentPath string, docu
 		return nil, fmt.Errorf("no document content provided")
 	}
 
-	// Placeholder implementation - would use LLM in production
+	// Parse the document to extract real research information
 	extract := &ResearchExtract{
-		Title:       "Research Document",
-		Authors:     []string{},
-		Algorithms:  []Algorithm{},
-		Methods:     []Method{},
-		KeyFormulas: []string{},
-		Pseudocode:  []string{},
+		Title:       extractTitle(documentContent),
+		Authors:     extractAuthors(documentContent),
+		Algorithms:  extractAlgorithms(documentContent),
+		Methods:     extractMethods(documentContent),
+		KeyFormulas: extractFormulas(documentContent),
+		Pseudocode:  extractPseudocode(documentContent),
 		Timestamp:   time.Now(),
 	}
 
@@ -208,6 +209,75 @@ func (a *ResearchAlignmentAgent) ParseResearchDocument(documentPath string, docu
 	a.ResearchCache[cacheKey] = *extract
 
 	return extract, nil
+}
+
+func extractTitle(content string) string {
+	re := regexp.MustCompile(`(?m)^# (.*)$`)
+	matches := re.FindAllStringSubmatch(content, -1)
+	if len(matches) > 0 {
+		return matches[0][1]
+	}
+	return ""
+}
+
+func extractAuthors(content string) []string {
+	re := regexp.MustCompile(`(?m)^## Authors: (.*)$`)
+	matches := re.FindAllStringSubmatch(content, -1)
+	if len(matches) > 0 {
+		return strings.Split(matches[0][1], ", ")
+	}
+	return []string{}
+}
+
+func extractAlgorithms(content string) []Algorithm {
+	re := regexp.MustCompile(`(?m)^### Algorithm: (.*)$`)
+	matches := re.FindAllStringSubmatch(content, -1)
+	algorithms := make([]Algorithm, len(matches))
+	for i, match := range matches {
+		algorithms[i] = Algorithm{
+			Name:        match[1],
+			Description: "",
+			Steps:       []string{},
+			Complexity:  "",
+			Parameters:  map[string]string{},
+		}
+	}
+	return algorithms
+}
+
+func extractMethods(content string) []Method {
+	re := regexp.MustCompile(`(?m)^### Method: (.*)$`)
+	matches := re.FindAllStringSubmatch(content, -1)
+	methods := make([]Method, len(matches))
+	for i, match := range matches {
+		methods[i] = Method{
+			Name:        match[1],
+			Description: "",
+			Inputs:      []string{},
+			Outputs:     []string{},
+		}
+	}
+	return methods
+}
+
+func extractFormulas(content string) []string {
+	re := regexp.MustCompile(`(?m)^### Formula: (.*)$`)
+	matches := re.FindAllStringSubmatch(content, -1)
+	formulas := make([]string, len(matches))
+	for i, match := range matches {
+		formulas[i] = match[1]
+	}
+	return formulas
+}
+
+func extractPseudocode(content string) []string {
+	re := regexp.MustCompile(`(?m)^### Pseudocode: (.*)$`)
+	matches := re.FindAllStringSubmatch(content, -1)
+	pseudocode := make([]string, len(matches))
+	for i, match := range matches {
+		pseudocode[i] = match[1]
+	}
+	return pseudocode
 }
 
 // AnalyzeCodebase analyzes existing code

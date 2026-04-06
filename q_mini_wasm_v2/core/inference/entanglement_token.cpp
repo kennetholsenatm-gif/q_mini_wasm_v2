@@ -33,7 +33,22 @@ EntanglementTokenManager::entangle_tokens(
     const EntanglementToken& control,
     const EntanglementToken& target
 ) {
-    return {control, target}; // Stub
+    // Create entangled pair using stabilizer tableau operations
+    EntanglementToken entangled_control = control;
+    EntanglementToken entangled_target = target;
+    
+    // Apply CNOT-like entanglement in GF(3)
+    // Update stabilizer states to reflect entanglement
+    if (shared_tableau_) {
+        // Apply controlled operation in stabilizer formalism
+        shared_tableau_->apply_csum(0, 1); // Create entanglement between positions
+    }
+    
+    // Mark tokens as entangled
+    entangled_control.coherence *= 0.95; // Slight decoherence from entanglement
+    entangled_target.coherence *= 0.95;
+    
+    return {entangled_control, entangled_target};
 }
 
 EntanglementTokenManager::EntangledSequence EntanglementTokenManager::create_sequence_entanglement(
@@ -50,7 +65,36 @@ EntanglementTokenManager::EntangledSequence EntanglementTokenManager::internaliz
     const EntangledSequence& sequence,
     const EntangledSequence& context_tokens
 ) {
-    return sequence; // Stub
+    // Merge context into sequence by creating entanglement between them
+    EntangledSequence merged;
+    
+    // Add context tokens first (as "memory")
+    for (const auto& ctx_token : context_tokens.tokens) {
+        EntanglementToken merged_token = ctx_token;
+        merged_token.coherence *= 0.8; // Context has slightly lower coherence
+        merged.tokens.push_back(merged_token);
+    }
+    
+    // Add sequence tokens
+    for (const auto& seq_token : sequence.tokens) {
+        merged.tokens.push_back(seq_token);
+    }
+    
+    merged.sequence_length = merged.tokens.size();
+    merged.tableau = shared_tableau_;
+    
+    // Create entanglement between context and sequence
+    if (!merged.tokens.empty() && !context_tokens.tokens.empty()) {
+        // Entangle last context token with first sequence token
+        auto [ctx, seq] = entangle_tokens(
+            merged.tokens[context_tokens.tokens.size() - 1],
+            merged.tokens[context_tokens.tokens.size()]
+        );
+        merged.tokens[context_tokens.tokens.size() - 1] = ctx;
+        merged.tokens[context_tokens.tokens.size()] = seq;
+    }
+    
+    return merged;
 }
 
 void EntanglementTokenManager::initialize_embeddings() {

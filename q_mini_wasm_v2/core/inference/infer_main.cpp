@@ -13,7 +13,8 @@
 
 using namespace q_mini_wasm_v2::core::inference;
 
-// A simple mock vocabulary to translate words to/from pseudo-tokens
+// Simple vocabulary for tokenizing input text
+// Maps words to unique IDs for inference processing
 std::map<std::string, size_t> word_to_id;
 std::map<size_t, std::string> id_to_word;
 size_t next_id = 1;

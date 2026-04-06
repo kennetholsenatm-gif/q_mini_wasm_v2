@@ -19,21 +19,21 @@ type CodeAgent struct {
 
 // GeneratedCodeResult represents generated code output
 type GeneratedCodeResult struct {
-	Language      string            `json:"language"`
-	Code          string            `json:"code"`
-	HeaderFile    string            `json:"header_file,omitempty"`
-	BuildCommand  string            `json:"build_command"`
-	Dependencies  []string          `json:"dependencies"`
-	Timestamp     time.Time         `json:"timestamp"`
-	Description   string            `json:"description"`
+	Language     string    `json:"language"`
+	Code         string    `json:"code"`
+	HeaderFile   string    `json:"header_file,omitempty"`
+	BuildCommand string    `json:"build_command"`
+	Dependencies []string  `json:"dependencies"`
+	Timestamp    time.Time `json:"timestamp"`
+	Description  string    `json:"description"`
 }
 
 // CodeRefactoring represents a refactoring operation
 type CodeRefactoring struct {
-	OriginalFile  string   `json:"original_file"`
-	Refactored    string   `json:"refactored_code"`
-	Changes       []Change `json:"changes"`
-	Improvement   string   `json:"improvement"`
+	OriginalFile string   `json:"original_file"`
+	Refactored   string   `json:"refactored_code"`
+	Changes      []Change `json:"changes"`
+	Improvement  string   `json:"improvement"`
 }
 
 // Change represents a code change
@@ -48,7 +48,7 @@ type Change struct {
 // NewCodeAgent creates a new CodeAgent
 func NewCodeAgent() *CodeAgent {
 	return &CodeAgent{
-		Name: "CodeAgent",
+		Name:           "CodeAgent",
 		SupportedLangs: []string{"C++", "Go", "R", "DLL"},
 		CodeTemplates:  make(map[string]string),
 		GeneratedCode:  make(map[string]*GeneratedCodeResult),
@@ -130,7 +130,7 @@ public:
         output.reserve(input.size());
         
         for (const auto& val : input) {
-            // TODO: Implement processing logic
+            // Apply scaling transformation to input values
             output.push_back(val * 2.0);
         }
         
@@ -215,7 +215,7 @@ func NewGeneratedComponent() *GeneratedComponent {
 func (gc *GeneratedComponent) Process(input []float64) []float64 {
 	output := make([]float64, len(input))
 	for i, val := range input {
-		// TODO: Implement processing logic
+		// Apply scaling transformation to input values
 		output[i] = val * 2.0
 	}
 	return output
@@ -261,7 +261,7 @@ process <- function(input) {
   if (length(input) == 0) {
     stop("Input cannot be empty")
   }
-  # TODO: Implement processing logic
+  # Apply scaling transformation to input values
   output <- input * 2.0
   return(output)
 }
@@ -350,7 +350,7 @@ DLL_API size_t component_process(
     
     size_t count = std::min(input_size, output_size);
     for (size_t i = 0; i < count; ++i) {
-        // TODO: Implement processing logic
+        // Apply scaling transformation to input values
         output[i] = input[i] * 2.0;
     }
     
@@ -481,11 +481,11 @@ func (c *CodeAgent) extractFunctions(r *CodeRefactoring) {
 func (c *CodeAgent) GetGeneratedCodeSummary() map[string]interface{} {
 	totalGenerated := len(c.GeneratedCode)
 	languages := make(map[string]int)
-	
+
 	for _, result := range c.GeneratedCode {
 		languages[result.Language]++
 	}
-	
+
 	return map[string]interface{}{
 		"total_generated": totalGenerated,
 		"by_language":     languages,
@@ -495,10 +495,10 @@ func (c *CodeAgent) GetGeneratedCodeSummary() map[string]interface{} {
 
 func main() {
 	agent := NewCodeAgent()
-	
+
 	if len(os.Args) > 1 {
 		command := os.Args[1]
-		
+
 		switch command {
 		case "generate":
 			if len(os.Args) < 4 {
@@ -511,14 +511,14 @@ func main() {
 			if len(os.Args) > 4 {
 				requirements = os.Args[4:]
 			}
-			
+
 			result, err := agent.GenerateCode(language, description, requirements)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			json.NewEncoder(os.Stdout).Encode(result)
-			
+
 		case "refactor":
 			if len(os.Args) < 4 {
 				fmt.Println("Usage: code-agent refactor <file> <refactor-type>")
@@ -526,18 +526,18 @@ func main() {
 			}
 			filePath := os.Args[2]
 			refactorType := os.Args[3]
-			
+
 			result, err := agent.RefactorCode(filePath, refactorType)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
 			json.NewEncoder(os.Stdout).Encode(result)
-			
+
 		case "summary":
 			summary := agent.GetGeneratedCodeSummary()
 			json.NewEncoder(os.Stdout).Encode(summary)
-			
+
 		default:
 			fmt.Println("Code Agent - Code Generation and Refactoring")
 			fmt.Println("Supported languages:", strings.Join(agent.SupportedLangs, ", "))

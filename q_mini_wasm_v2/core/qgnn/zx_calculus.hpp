@@ -71,6 +71,7 @@ class ZXCalculusOptimizer {
 private:
     std::vector<ZXDiagram> optimization_cache;
     std::unique_ptr<ZXDiagram> current_diagram;
+    size_t original_gate_count_;
     
     // Optimization parameters
     double optimization_threshold;

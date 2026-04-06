@@ -343,8 +343,28 @@ class RAGClient:
             
             result_ptr = dll.CognitiveErgonomics_ChunkRAGResults(chunk_data, len(chunks))
             
-            # TODO: Full deserialize from Go memory
-            # Fallback to native implementation while wiring is completed
+            # Deserialize result from Go memory
+            # The DLL returns a JSON string pointer that we need to parse
+            if result_ptr:
+                try:
+                    # Read the result string from memory
+                    result_bytes = ctypes.cast(result_ptr, ctypes.c_char_p).value
+                    if result_bytes:
+                        result_json = json.loads(result_bytes.decode('utf-8'))
+                        # Parse chunked results
+                        grouped_chunks = []
+                        for group in result_json.get('groups', []):
+                            group_chunks = []
+                            for chunk_idx in group.get('indices', []):
+                                if 0 <= chunk_idx < len(chunks):
+                                    group_chunks.append(chunks[chunk_idx])
+                            if group_chunks:
+                                grouped_chunks.append(group_chunks)
+                        return grouped_chunks
+                except (json.JSONDecodeError, UnicodeDecodeError, AttributeError) as e:
+                    logger.warning(f"Failed to deserialize DLL result: {e}")
+            
+            # Fallback to native implementation if DLL deserialization fails
             CHUNK_SIZE = 7
             MAX_GROUP_SIZE = 9
             

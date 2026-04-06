@@ -186,6 +186,9 @@ private:
     // Phase tracking vector over GF(3)
     std::vector<uint8_t> phase_;
     
+    // GF(3) arithmetic helper
+    static uint8_t gf3_multiply(uint8_t a, uint8_t b) noexcept;
+    
     // ========================================================================
     // Internal Operations
     // ========================================================================

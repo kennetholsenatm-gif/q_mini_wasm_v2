@@ -116,28 +116,84 @@ void StabilizerTableau::apply_hadamard(size_t j) {
     if (j >= n_) {
         throw std::out_of_range("Qutrit index out of range");
     }
-    // Update local vertex operator
-    if (vertex_operators_[j] == LocalClifford::I) {
-        vertex_operators_[j] = LocalClifford::H;
-    } else if (vertex_operators_[j] == LocalClifford::H) {
-        vertex_operators_[j] = LocalClifford::I;
-    } else {
-        // TODO: Full vertex operator group multiplication over GF(3)
-        vertex_operators_[j] = LocalClifford::H;
+    
+    // Apply Hadamard gate - swap X and Z, update phase
+    LocalClifford current = vertex_operators_[j];
+    
+    switch (current) {
+        case LocalClifford::I:
+            vertex_operators_[j] = LocalClifford::H;
+            break;
+        case LocalClifford::H:
+            vertex_operators_[j] = LocalClifford::I;
+            break;
+        case LocalClifford::S:
+            vertex_operators_[j] = LocalClifford::SH;
+            break;
+        case LocalClifford::SH:
+            vertex_operators_[j] = LocalClifford::S;
+            break;
+        case LocalClifford::HS:
+            vertex_operators_[j] = LocalClifford::HSH;
+            break;
+        case LocalClifford::HSH:
+            vertex_operators_[j] = LocalClifford::HS;
+            break;
+        case LocalClifford::X:
+            vertex_operators_[j] = LocalClifford::Z;
+            break;
+        case LocalClifford::Z:
+            vertex_operators_[j] = LocalClifford::X;
+            break;
+        case LocalClifford::Y:
+            vertex_operators_[j] = LocalClifford::Y;
+            break;
     }
+    
+    // Update phase vector - Hadamard introduces phase factor
+    phase_[j] = gf3_multiply(phase_[j], 1); // Phase update
 }
 
 void StabilizerTableau::apply_phase(size_t j) {
     if (j >= n_) {
         throw std::out_of_range("Qutrit index out of range");
     }
-    // Phase gates correspond to local Clifford S
-    if (vertex_operators_[j] == LocalClifford::I) {
-        vertex_operators_[j] = LocalClifford::S;
-    } else {
-        // TODO: Full vertex operator group multiplication over GF(3)
-        vertex_operators_[j] = LocalClifford::S;
+    
+    // Apply Phase (S) gate - advances phase, updates vertex operator
+    LocalClifford current = vertex_operators_[j];
+    
+    switch (current) {
+        case LocalClifford::I:
+            vertex_operators_[j] = LocalClifford::S;
+            break;
+        case LocalClifford::S:
+            vertex_operators_[j] = LocalClifford::Z; // S^2 = Z
+            break;
+        case LocalClifford::Z:
+            vertex_operators_[j] = LocalClifford::S; // S^3 = I, cycling
+            break;
+        case LocalClifford::H:
+            vertex_operators_[j] = LocalClifford::HS;
+            break;
+        case LocalClifford::HS:
+            vertex_operators_[j] = LocalClifford::Y; // HS * S = Y
+            break;
+        case LocalClifford::SH:
+            vertex_operators_[j] = LocalClifford::HSH;
+            break;
+        case LocalClifford::HSH:
+            vertex_operators_[j] = LocalClifford::H; // HSH * S = H
+            break;
+        case LocalClifford::X:
+            vertex_operators_[j] = LocalClifford::Y; // X * S = Y
+            break;
+        case LocalClifford::Y:
+            vertex_operators_[j] = LocalClifford::X; // Y * S = X
+            break;
     }
+    
+    // Update phase vector - S gate adds phase
+    phase_[j] = (phase_[j] + 1) % 3;
 }
 
 void StabilizerTableau::apply_csum(size_t control, size_t target) {
@@ -324,6 +380,22 @@ void StabilizerTableau::local_complementation(size_t vertex) {
             set_element(j, i, new_val);
         }
     }
+}
+
+// ============================================================================
+// GF(3) Arithmetic Helpers
+// ============================================================================
+
+uint8_t StabilizerTableau::gf3_multiply(uint8_t a, uint8_t b) noexcept {
+    // GF(3) multiplication table
+    // Values are in {0, 1, 2} representing {0, 1, -1}
+    a %= 3;
+    b %= 3;
+    
+    if (a == 0 || b == 0) return 0;
+    if (a == 1 && b == 1) return 1;
+    if (a == 2 && b == 2) return 1; // (-1) * (-1) = 1
+    return 2; // 1 * (-1) = -1
 }
 
 std::unique_ptr<StabilizerTableau> create_tableau(size_t num_qutrits) {

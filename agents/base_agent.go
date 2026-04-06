@@ -2,7 +2,6 @@ package agents
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -115,23 +114,23 @@ func (m *AgentMemory) GetRecentImprovements(limit int) []map[string]interface{} 
 
 // AgentConfig is the configuration for an agent
 type AgentConfig struct {
-	Name                     string   `json:"name"`
-	Description              string   `json:"description"`
-	SystemPrompt             string   `json:"system_prompt"`
-	Tools                    []string `json:"tools"`
-	MaxIterations            int      `json:"max_iterations"`
-	ImprovementCycleFrequency string  `json:"improvement_cycle_frequency"`
-	RateLimitRPM             int      `json:"rate_limit_rpm"`
-	RateLimitTPM             int      `json:"rate_limit_tpm"`
-	CacheTTL                 int      `json:"cache_ttl"`
+	Name                      string   `json:"name"`
+	Description               string   `json:"description"`
+	SystemPrompt              string   `json:"system_prompt"`
+	Tools                     []string `json:"tools"`
+	MaxIterations             int      `json:"max_iterations"`
+	ImprovementCycleFrequency string   `json:"improvement_cycle_frequency"`
+	RateLimitRPM              int      `json:"rate_limit_rpm"`
+	RateLimitTPM              int      `json:"rate_limit_tpm"`
+	CacheTTL                  int      `json:"cache_ttl"`
 }
 
 // BaseAgent provides common functionality for all agents
 type BaseAgent struct {
-	Config        AgentConfig
-	State         AgentState
-	Memory        *AgentMemory
-	Logger        zerolog.Logger
+	Config AgentConfig
+	State  AgentState
+	Memory *AgentMemory
+	Logger zerolog.Logger
 
 	startTime          time.Time
 	taskCount          int64
@@ -147,10 +146,10 @@ func NewBaseAgent(config AgentConfig) *BaseAgent {
 	logger := log.With().Str("agent", config.Name).Logger()
 
 	return &BaseAgent{
-		Config:        config,
-		State:         AgentStateIdle,
-		Memory:        NewAgentMemory(),
-		Logger:        logger,
+		Config: config,
+		State:  AgentStateIdle,
+		Memory: NewAgentMemory(),
+		Logger: logger,
 		performanceMetrics: map[string][]float64{
 			"response_time": {},
 			"token_usage":   {},
@@ -218,7 +217,7 @@ func (a *BaseAgent) Shutdown() error {
 // loadMemory loads agent memory from persistent storage
 func (a *BaseAgent) loadMemory() error {
 	memoryPath := filepath.Join("agents", "memory", fmt.Sprintf("%s_memory.json", a.Name()))
-	
+
 	if _, err := os.Stat(memoryPath); os.IsNotExist(err) {
 		return nil
 	}
@@ -239,7 +238,7 @@ func (a *BaseAgent) saveMemory() error {
 	}
 
 	memoryPath := filepath.Join(memoryDir, fmt.Sprintf("%s_memory.json", a.Name()))
-	
+
 	data, err := json.MarshalIndent(a.Memory, "", "  ")
 	if err != nil {
 		return err
@@ -350,16 +349,95 @@ func (a *BaseAgent) SuggestImprovements() ([]map[string]interface{}, error) {
 
 	improvements := make([]map[string]interface{}, 0)
 
-	// Base improvement logic
-	if a.taskCount > 100 {
+	// Analyze token usage patterns
+	if a.tokenUsage > 100000 {
+		savings := float64(a.tokenUsage) * 0.2
 		improvements = append(improvements, map[string]interface{}{
-			"type":        "performance",
-			"suggestion":  "Consider caching frequent operations",
-			"confidence":  0.75,
+			"type":       "cost_optimization",
+			"suggestion": fmt.Sprintf("Implement response caching to reduce token usage (potential 20%% savings: %.0f tokens)", savings),
+			"confidence": 0.85,
+			"impact":     "high",
+			"category":   "token_efficiency",
 		})
 	}
 
+	// Analyze task frequency for caching opportunities
+	if a.taskCount > 50 {
+		hitRate := calculateOptimalCacheHitRate(a.taskCount, a.dailyRequests)
+		if hitRate > 0.6 {
+			improvements = append(improvements, map[string]interface{}{
+				"type":       "performance",
+				"suggestion": fmt.Sprintf("Enable aggressive caching (estimated hit rate: %.0f%%)", hitRate*100),
+				"confidence": hitRate,
+				"impact":     "medium",
+				"category":   "caching",
+			})
+		}
+	}
+
+	// Analyze request patterns for scaling needs
+	if a.dailyRequests > 1000 {
+		improvements = append(improvements, map[string]interface{}{
+			"type":       "scalability",
+			"suggestion": "Consider load balancing for high request volume",
+			"confidence": 0.8,
+			"impact":     "high",
+			"category":   "infrastructure",
+		})
+	}
+
+	// Analyze performance metrics for bottlenecks
+	for metric, values := range a.performanceMetrics {
+		if len(values) >= 10 {
+			// Calculate trend
+			recent := values[len(values)-5:]
+			older := values[len(values)-10 : len(values)-5]
+
+			recentAvg := average(recent)
+			olderAvg := average(older)
+
+			// Detect degradation
+			if recentAvg > olderAvg*1.2 {
+				improvements = append(improvements, map[string]interface{}{
+					"type":       "performance_regression",
+					"suggestion": fmt.Sprintf("Investigate %s degradation (%.1f%% increase)", metric, (recentAvg/olderAvg-1)*100),
+					"confidence": 0.75,
+					"impact":     "high",
+					"category":   metric,
+				})
+			}
+		}
+	}
+
 	return improvements, nil
+}
+
+// calculateOptimalCacheHitRate estimates optimal cache hit rate based on usage patterns
+func calculateOptimalCacheHitRate(taskCount, dailyRequests int64) float64 {
+	if dailyRequests == 0 {
+		return 0.0
+	}
+
+	// Simple heuristic: higher request count with stable task types = better caching
+	ratio := float64(taskCount) / float64(dailyRequests)
+	if ratio < 0.1 {
+		return 0.8 // Stable workload, high cache benefit
+	} else if ratio < 0.3 {
+		return 0.6 // Moderate variety
+	}
+	return 0.4 // High variety, lower cache benefit
+}
+
+// average calculates the average of a slice
+func average(values []float64) float64 {
+	if len(values) == 0 {
+		return 0.0
+	}
+	sum := 0.0
+	for _, v := range values {
+		sum += v
+	}
+	return sum / float64(len(values))
 }
 
 // RecordPerformanceMetric records a performance metric

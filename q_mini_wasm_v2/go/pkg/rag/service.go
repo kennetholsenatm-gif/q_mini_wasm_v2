@@ -13,14 +13,14 @@ import (
 
 // ServiceConfig holds RAG service configuration
 type ServiceConfig struct {
-	Qdrant        QdrantConfig        `json:"qdrant"`
-	Chunker       ChunkConfig         `json:"chunker"`
-	Scaler        TokenScalerConfig   `json:"scaler"`
-	HybridSearch  HybridSearchConfig  `json:"hybrid_search"`
-	Cache         CacheConfig         `json:"cache"`
-	ProjectRoot   string              `json:"project_root"`
-	AutoIndex     bool                `json:"auto_index"`
-	EmbeddingType string              `json:"embedding_type"` // "placeholder", "tfidf", "composite"
+	Qdrant        QdrantConfig       `json:"qdrant"`
+	Chunker       ChunkConfig        `json:"chunker"`
+	Scaler        TokenScalerConfig  `json:"scaler"`
+	HybridSearch  HybridSearchConfig `json:"hybrid_search"`
+	Cache         CacheConfig        `json:"cache"`
+	ProjectRoot   string             `json:"project_root"`
+	AutoIndex     bool               `json:"auto_index"`
+	EmbeddingType string             `json:"embedding_type"` // "placeholder", "tfidf", "composite"
 }
 
 // Service is the main RAG service
@@ -40,15 +40,15 @@ type Service struct {
 
 // Metrics tracks RAG performance
 type Metrics struct {
-	TotalDocuments   int64   `json:"total_documents"`
-	TotalChunks      int64   `json:"total_chunks"`
-	TotalQueries     int64   `json:"total_queries"`
-	CacheHits        int64   `json:"cache_hits"`
-	CacheMisses      int64   `json:"cache_misses"`
-	AvgLatencyMs     float64 `json:"avg_latency_ms"`
-	AvgTokensSaved   float64 `json:"avg_tokens_saved"`
-	CacheHitRate     float64 `json:"cache_hit_rate"`
-	mu               sync.RWMutex
+	TotalDocuments int64   `json:"total_documents"`
+	TotalChunks    int64   `json:"total_chunks"`
+	TotalQueries   int64   `json:"total_queries"`
+	CacheHits      int64   `json:"cache_hits"`
+	CacheMisses    int64   `json:"cache_misses"`
+	AvgLatencyMs   float64 `json:"avg_latency_ms"`
+	AvgTokensSaved float64 `json:"avg_tokens_saved"`
+	CacheHitRate   float64 `json:"cache_hit_rate"`
+	mu             sync.RWMutex
 }
 
 // NewService creates a new RAG service
@@ -71,8 +71,22 @@ func NewService(config ServiceConfig) (*Service, error) {
 	case "tfidf":
 		// TF-IDF would require vocabulary building
 		embeddingService = NewPlaceholderEmbeddingService(int(config.Qdrant.VectorSize))
+	case "real":
+		// Real embedding service with API integration
+		apiEndpoint := os.Getenv("EMBEDDING_API_ENDPOINT")
+		if apiEndpoint == "" {
+			apiEndpoint = "https://api.openai.com/v1/embeddings"
+		}
+		apiKey := os.Getenv("EMBEDDING_API_KEY")
+		embeddingService = NewRealEmbeddingService(int(config.Qdrant.VectorSize), apiEndpoint, apiKey)
 	default:
-		embeddingService = NewPlaceholderEmbeddingService(int(config.Qdrant.VectorSize))
+		// Default to real embedding service for production
+		apiEndpoint := os.Getenv("EMBEDDING_API_ENDPOINT")
+		if apiEndpoint == "" {
+			apiEndpoint = "https://api.openai.com/v1/embeddings"
+		}
+		apiKey := os.Getenv("EMBEDDING_API_KEY")
+		embeddingService = NewRealEmbeddingService(int(config.Qdrant.VectorSize), apiEndpoint, apiKey)
 	}
 
 	// Create caches

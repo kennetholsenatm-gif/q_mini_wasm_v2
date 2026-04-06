@@ -89,6 +89,8 @@ set(CORE_SOURCES
     core/qgnn/graph_migration_adapter.cpp
     core/qgnn/message_passing.hpp
     core/qgnn/message_passing.cpp
+    core/qgnn/ternary_tree.hpp
+    core/qgnn/ternary_tree.cpp
 )
 
 set(RUNTIME_SOURCES
@@ -99,11 +101,6 @@ set(RUNTIME_SOURCES
 set(SYCL_SOURCES
     sycl/tableau_kernels.hpp
     sycl/tableau_kernels.cpp
-)
-
-set(DLL_SOURCES
-    dll/q_mini_wasm_v2_api.hpp
-    dll/impl/q_mini_wasm_v2_api.cpp
 )
 
 # ============================================================================
@@ -120,42 +117,135 @@ target_include_directories(q_mini_wasm_v2_core PUBLIC
 )
 
 # ============================================================================
-# DLL Target (C API)
+# Modular DLL Targets (4 GF(3) Acceleration Libraries)
 # ============================================================================
 
 if(BUILD_DLL)
-    add_library(q_mini_wasm_v2_dll SHARED
-        ${DLL_SOURCES}
+
+    # ------------------------------------------------------------------------
+    # 1. GF(3) Clifford Operations DLL
+    # ------------------------------------------------------------------------
+    add_library(q_gf3_clifford SHARED
+        dll/clifford/clifford_api.hpp
+        dll/clifford/clifford_api.cpp
+        dll/clifford/clifford_kernels.cpp
     )
     
-    target_link_libraries(q_mini_wasm_v2_dll PRIVATE
+    target_link_libraries(q_gf3_clifford PRIVATE
         q_mini_wasm_v2_core
     )
     
-    target_include_directories(q_mini_wasm_v2_dll PUBLIC
+    target_include_directories(q_gf3_clifford PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/dll
     )
     
-    # Set DLL export macro
-    target_compile_definitions(q_mini_wasm_v2_dll PRIVATE
-        Q_MINI_WASM_V2_EXPORTS
+    target_compile_definitions(q_gf3_clifford PRIVATE
+        Q_GF3_CLIFFORD_EXPORTS
     )
     
-    # Set output name
-    set_target_properties(q_mini_wasm_v2_dll PROPERTIES
-        OUTPUT_NAME "q_mini_wasm_v2"
+    set_target_properties(q_gf3_clifford PROPERTIES
+        OUTPUT_NAME "q_gf3_clifford"
         PREFIX ""
     )
+
+    # ------------------------------------------------------------------------
+    # 2. GF(3) Serialization DLL
+    # ------------------------------------------------------------------------
+    add_library(q_gf3_serialize SHARED
+        dll/serialize/serialize_api.hpp
+        dll/serialize/serialize_api.cpp
+        dll/serialize/packing_kernels.cpp
+    )
     
-    # Install DLL
-    install(TARGETS q_mini_wasm_v2_dll
+    target_link_libraries(q_gf3_serialize PRIVATE
+        q_mini_wasm_v2_core
+    )
+    
+    target_include_directories(q_gf3_serialize PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/dll
+    )
+    
+    target_compile_definitions(q_gf3_serialize PRIVATE
+        Q_GF3_SERIALIZE_EXPORTS
+    )
+    
+    set_target_properties(q_gf3_serialize PROPERTIES
+        OUTPUT_NAME "q_gf3_serialize"
+        PREFIX ""
+    )
+
+    # ------------------------------------------------------------------------
+    # 3. GF(3) WASM Bridge DLL
+    # ------------------------------------------------------------------------
+    add_library(q_gf3_wasm SHARED
+        dll/wasm_bridge/wasm_api.hpp
+        dll/wasm_bridge/wasm_api.cpp
+        dll/wasm_bridge/sycl_runtime.cpp
+    )
+    
+    target_link_libraries(q_gf3_wasm PRIVATE
+        q_mini_wasm_v2_core
+        q_gf3_clifford
+        q_gf3_serialize
+    )
+    
+    target_include_directories(q_gf3_wasm PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/dll
+    )
+    
+    target_compile_definitions(q_gf3_wasm PRIVATE
+        Q_GF3_WASM_EXPORTS
+    )
+    
+    set_target_properties(q_gf3_wasm PROPERTIES
+        OUTPUT_NAME "q_gf3_wasm"
+        PREFIX ""
+    )
+
+    # ------------------------------------------------------------------------
+    # 4. GF(3) Max-Plus Topologies DLL
+    # ------------------------------------------------------------------------
+    add_library(q_gf3_maxplus SHARED
+        dll/maxplus/maxplus_api.hpp
+        dll/maxplus/maxplus_api.cpp
+        dll/maxplus/maxplus_kernels.cpp
+    )
+    
+    target_link_libraries(q_gf3_maxplus PRIVATE
+        q_mini_wasm_v2_core
+    )
+    
+    target_include_directories(q_gf3_maxplus PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/dll
+    )
+    
+    target_compile_definitions(q_gf3_maxplus PRIVATE
+        Q_GF3_MAXPLUS_EXPORTS
+    )
+    
+    set_target_properties(q_gf3_maxplus PROPERTIES
+        OUTPUT_NAME "q_gf3_maxplus"
+        PREFIX ""
+    )
+
+    # ------------------------------------------------------------------------
+    # Install all DLL targets
+    # ------------------------------------------------------------------------
+    install(TARGETS 
+        q_gf3_clifford
+        q_gf3_serialize
+        q_gf3_wasm
+        q_gf3_maxplus
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin
     )
     
-    # Install DLL header
-    install(FILES dll/q_mini_wasm_v2_api.hpp
+    install(FILES 
+        dll/clifford/clifford_api.hpp
+        dll/serialize/serialize_api.hpp
+        dll/wasm_bridge/wasm_api.hpp
+        dll/maxplus/maxplus_api.hpp
         DESTINATION include/q_mini_wasm_v2/dll
     )
 endif()
@@ -184,6 +274,9 @@ if(BUILD_TESTS)
     add_executable(q_mini_wasm_v2_network_test tests/test_network.cpp)
     target_link_libraries(q_mini_wasm_v2_network_test PRIVATE q_mini_wasm_v2_core)
     
+    add_executable(q_mini_wasm_v2_remediation_test tests/test_remediation.cpp)
+    target_link_libraries(q_mini_wasm_v2_remediation_test PRIVATE q_mini_wasm_v2_core)
+    
     # DLL integration test
     if(BUILD_DLL)
         add_executable(q_mini_wasm_v2_dll_test tests/integration_test.cpp)
@@ -205,6 +298,7 @@ if(BUILD_TESTS)
     enable_testing()
     add_test(NAME q_mini_wasm_v2_tests COMMAND q_mini_wasm_v2_tests)
     add_test(NAME q_mini_wasm_v2_network_test COMMAND q_mini_wasm_v2_network_test)
+    add_test(NAME q_mini_wasm_v2_remediation_test COMMAND q_mini_wasm_v2_remediation_test)
 endif()
 
 # ============================================================================

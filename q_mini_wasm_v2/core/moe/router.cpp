@@ -13,6 +13,8 @@ MoERouter::MoERouter(const ExpertConfig& config)
     , ternary_seed_(42)  // Deterministic seed for reproducibility
     , learning_episode_(0)
     , rl_initialized_(false)
+    , expert_loads_(config.total_experts, 0)  // Initialize load tracking
+    , expert_request_counts_(config.total_experts, 0)
 {
     // Initialize routing weights with deterministic ternary values
     for (auto& row : routing_weights_) {
@@ -38,6 +40,8 @@ MoERouter::MoERouter(const ExpertConfig& config, const EntangledRoutingConfig& e
     , ternary_seed_(42)  // Deterministic seed for reproducibility
     , learning_episode_(0)
     , rl_initialized_(false)
+    , expert_loads_(config.total_experts, 0)  // Initialize load tracking
+    , expert_request_counts_(config.total_experts, 0)
 {
     // Initialize routing weights with deterministic ternary values
     for (auto& row : routing_weights_) {
@@ -469,12 +473,19 @@ std::vector<size_t> MoERouter::priority_route(const std::vector<ternary::Trit>& 
     // Apply priority bias
     adjusted_logits = apply_priority_bias(adjusted_logits, priority);
     
-    // Apply load balancing
-    std::vector<size_t> dummy_loads(config_.total_experts, 0);
-    adjusted_logits = apply_load_balancing(adjusted_logits, dummy_loads);
+    // Apply load balancing with REAL expert loads (not dummy)
+    adjusted_logits = apply_load_balancing(adjusted_logits, expert_loads_);
     
-    // Select top K based on current active expert count
-    return llep_route(adjusted_logits, dummy_loads, current_active_experts_);
+    // Update load counts for selected experts
+    auto selected = llep_route(adjusted_logits, expert_loads_, current_active_experts_);
+    for (size_t expert_idx : selected) {
+        if (expert_idx < expert_loads_.size()) {
+            expert_loads_[expert_idx]++;
+            expert_request_counts_[expert_idx]++;
+        }
+    }
+    
+    return selected;
 }
 
 std::vector<int32_t> MoERouter::apply_priority_bias(const std::vector<int32_t>& logits, PriorityLevel priority) const {
@@ -590,13 +601,22 @@ std::vector<size_t> MoERouter::adaptive_expert_selection(
         }
     }
     
-    // Apply load balancing
-    std::vector<size_t> dummy_loads(config_.total_experts, 0);
-    adaptive_scores = apply_load_balancing(adaptive_scores, dummy_loads);
+    // Apply load balancing with real expert loads
+    adaptive_scores = apply_load_balancing(adaptive_scores, expert_loads_);
     
-    // Select top K
-    return select_topk(std::vector<int8_t>(adaptive_scores.begin(), adaptive_scores.end()), 
+    // Select top K and update load tracking
+    auto selected = select_topk(std::vector<int8_t>(adaptive_scores.begin(), adaptive_scores.end()), 
                       current_active_experts_);
+    
+    // Update load counts for selected experts
+    for (size_t expert_idx : selected) {
+        if (expert_idx < expert_loads_.size()) {
+            expert_loads_[expert_idx]++;
+            expert_request_counts_[expert_idx]++;
+        }
+    }
+    
+    return selected;
 }
 
 std::vector<size_t> MoERouter::quantum_entangled_selection(

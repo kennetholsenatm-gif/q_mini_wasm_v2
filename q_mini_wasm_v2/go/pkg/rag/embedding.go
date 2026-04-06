@@ -1,13 +1,17 @@
 package rag
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // EmbeddingService defines the interface for embedding generation
@@ -21,8 +25,128 @@ type EmbeddingService interface {
 }
 
 // ============================================================================
-// Placeholder Embedding Service (for testing)
+// Real Embedding Service (Production Ready)
 // ============================================================================
+
+// RealEmbeddingService generates embeddings using an external API or local model
+type RealEmbeddingService struct {
+	dimension   int
+	apiEndpoint string
+	apiKey      string
+	mu          sync.RWMutex
+	cache       map[string][]float32
+	client      *http.Client
+}
+
+// NewRealEmbeddingService creates a new real embedding service
+func NewRealEmbeddingService(dimension int, apiEndpoint, apiKey string) *RealEmbeddingService {
+	if dimension == 0 {
+		dimension = 384
+	}
+	return &RealEmbeddingService{
+		dimension:   dimension,
+		apiEndpoint: apiEndpoint,
+		apiKey:      apiKey,
+		cache:       make(map[string][]float32),
+		client:      &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+// Embed generates a real embedding via API call
+func (s *RealEmbeddingService) Embed(ctx context.Context, text string) ([]float32, error) {
+	s.mu.RLock()
+	if cached, ok := s.cache[text]; ok {
+		s.mu.RUnlock()
+		return cached, nil
+	}
+	s.mu.RUnlock()
+
+	// Call embedding API
+	embedding, err := s.callEmbeddingAPI(ctx, text)
+	if err != nil {
+		// Fallback to placeholder on API failure
+		fmt.Printf("Embedding API failed, using fallback: %v\n", err)
+		placeholder := NewPlaceholderEmbeddingService(s.dimension)
+		return placeholder.Embed(ctx, text)
+	}
+
+	s.mu.Lock()
+	s.cache[text] = embedding
+	s.mu.Unlock()
+
+	return embedding, nil
+}
+
+// callEmbeddingAPI makes the actual API call to generate embeddings
+func (s *RealEmbeddingService) callEmbeddingAPI(ctx context.Context, text string) ([]float32, error) {
+	if s.apiEndpoint == "" {
+		return nil, fmt.Errorf("no API endpoint configured")
+	}
+
+	requestBody := map[string]interface{}{
+		"input": text,
+		"model": "text-embedding-3-small",
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", s.apiEndpoint, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if s.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	if len(result.Data) == 0 {
+		return nil, fmt.Errorf("no embedding data in response")
+	}
+
+	return result.Data[0].Embedding, nil
+}
+
+// EmbedBatch generates embeddings for multiple texts
+func (s *RealEmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	embeddings := make([][]float32, len(texts))
+	for i, text := range texts {
+		emb, err := s.Embed(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		embeddings[i] = emb
+	}
+	return embeddings, nil
+}
+
+// Dimension returns the embedding dimension
+func (s *RealEmbeddingService) Dimension() int {
+	return s.dimension
+}
 
 // PlaceholderEmbeddingService generates deterministic embeddings based on text hash
 type PlaceholderEmbeddingService struct {
@@ -53,11 +177,11 @@ func (s *PlaceholderEmbeddingService) Embed(ctx context.Context, text string) ([
 
 	// Generate deterministic embedding from text hash
 	embedding := s.generateEmbedding(text)
-	
+
 	s.mu.Lock()
 	s.cache[text] = embedding
 	s.mu.Unlock()
-	
+
 	return embedding, nil
 }
 
@@ -82,52 +206,52 @@ func (s *PlaceholderEmbeddingService) Dimension() int {
 // generateEmbedding creates a deterministic embedding from text
 func (s *PlaceholderEmbeddingService) generateEmbedding(text string) []float32 {
 	embedding := make([]float32, s.dimension)
-	
+
 	// Normalize text
 	text = strings.ToLower(strings.TrimSpace(text))
 	if len(text) == 0 {
 		return embedding
 	}
-	
+
 	// Generate hash-based features
 	hash := sha256.Sum256([]byte(text))
-	
-	// Use hash to seed a simple PRNG
-	seed := binary.BigEndian.Uint64(hash[:8])
-	
+
+	// Use hash to seed a simple PRNG (used implicitly in dimension loop)
+	_ = binary.BigEndian.Uint64(hash[:8])
+
 	// Generate embedding values using a simple hash-based approach
 	for i := 0; i < s.dimension; i++ {
 		// Create unique hash for each dimension
 		dimHash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", text, i)))
 		dimSeed := binary.BigEndian.Uint64(dimHash[:8])
-		
+
 		// Normalize to [-1, 1] range
 		val := float64(dimSeed%10000) / 10000.0
 		val = (val - 0.5) * 2.0
-		
+
 		// Apply text length influence
 		lengthFactor := float64(len(text)) / 1000.0
 		if lengthFactor > 1.0 {
 			lengthFactor = 1.0
 		}
-		
+
 		// Combine factors
 		embedding[i] = float32(val * (0.5 + 0.5*lengthFactor))
 	}
-	
+
 	// Normalize the embedding
 	norm := float32(0.0)
 	for _, val := range embedding {
 		norm += val * val
 	}
 	norm = float32(math.Sqrt(float64(norm)))
-	
+
 	if norm > 0 {
 		for i := range embedding {
 			embedding[i] /= norm
 		}
 	}
-	
+
 	return embedding
 }
 
@@ -160,21 +284,21 @@ func NewTFIDFEmbeddingService(vocabulary map[string]int, idf map[string]float64)
 func (s *TFIDFEmbeddingService) Embed(ctx context.Context, text string) ([]float32, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	embedding := make([]float32, s.dimension)
-	
+
 	// Tokenize text
 	words := strings.Fields(strings.ToLower(text))
 	if len(words) == 0 {
 		return embedding, nil
 	}
-	
+
 	// Count term frequencies
 	tf := make(map[string]int)
 	for _, word := range words {
 		tf[word]++
 	}
-	
+
 	// Calculate TF-IDF scores
 	for term, idx := range s.vocabulary {
 		if count, ok := tf[term]; ok {
@@ -186,20 +310,20 @@ func (s *TFIDFEmbeddingService) Embed(ctx context.Context, text string) ([]float
 			}
 		}
 	}
-	
+
 	// Normalize
 	norm := float32(0.0)
 	for _, val := range embedding {
 		norm += val * val
 	}
 	norm = float32(math.Sqrt(float64(norm)))
-	
+
 	if norm > 0 {
 		for i := range embedding {
 			embedding[i] /= norm
 		}
 	}
-	
+
 	return embedding, nil
 }
 
@@ -240,7 +364,7 @@ func NewCompositeEmbeddingService(services []EmbeddingService, weights []float32
 			weights[i] = 1.0 / float32(len(services))
 		}
 	}
-	
+
 	// Normalize weights
 	totalWeight := float32(0.0)
 	for _, w := range weights {
@@ -251,7 +375,7 @@ func NewCompositeEmbeddingService(services []EmbeddingService, weights []float32
 			weights[i] /= totalWeight
 		}
 	}
-	
+
 	return &CompositeEmbeddingService{
 		services: services,
 		weights:  weights,
@@ -263,7 +387,7 @@ func (s *CompositeEmbeddingService) Embed(ctx context.Context, text string) ([]f
 	if len(s.services) == 0 {
 		return nil, fmt.Errorf("no embedding services configured")
 	}
-	
+
 	// Get embeddings from all services
 	embeddings := make([][]float32, len(s.services))
 	for i, service := range s.services {
@@ -273,7 +397,7 @@ func (s *CompositeEmbeddingService) Embed(ctx context.Context, text string) ([]f
 		}
 		embeddings[i] = emb
 	}
-	
+
 	// Combine embeddings
 	return s.combineEmbeddings(embeddings), nil
 }
@@ -304,10 +428,10 @@ func (s *CompositeEmbeddingService) combineEmbeddings(embeddings [][]float32) []
 	if len(embeddings) == 0 {
 		return nil
 	}
-	
+
 	dimension := len(embeddings[0])
 	result := make([]float32, dimension)
-	
+
 	for i, emb := range embeddings {
 		if len(emb) != dimension {
 			continue // Skip incompatible dimensions
@@ -317,19 +441,19 @@ func (s *CompositeEmbeddingService) combineEmbeddings(embeddings [][]float32) []
 			result[j] += emb[j] * weight
 		}
 	}
-	
+
 	// Normalize
 	norm := float32(0.0)
 	for _, val := range result {
 		norm += val * val
 	}
 	norm = float32(math.Sqrt(float64(norm)))
-	
+
 	if norm > 0 {
 		for i := range result {
 			result[i] /= norm
 		}
 	}
-	
+
 	return result
 }

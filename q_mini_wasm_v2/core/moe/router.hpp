@@ -539,6 +539,10 @@ private:
     uint32_t load_balancing_episodes_;
     ternary::ProbTrit load_balancing_accuracy_;  // Ternary accuracy tracking
     
+    // Expert load tracking (CRITICAL: replaces dummy_loads)
+    std::vector<size_t> expert_loads_;
+    std::vector<size_t> expert_request_counts_;
+    
     // ========================================================================
     // Internal Helpers
     // ========================================================================
