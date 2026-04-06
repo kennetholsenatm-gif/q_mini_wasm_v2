@@ -293,6 +293,166 @@
       }
     },
     {
+      "name": "wui_init_training_pipeline",
+      "description": "Initialize complete autonomous training pipeline with DataSynthesizer, 243-expert MoE, BettiExtractor, and Forward-Forward training",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "acquisition_threads": {
+            "type": "integer",
+            "default": 4,
+            "description": "DataSynthesizer acquisition thread count"
+          },
+          "num_experts": {
+            "type": "integer",
+            "default": 243,
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Number of MoE experts"
+          },
+          "graph_nodes": {
+            "type": "integer",
+            "default": 64,
+            "description": "Initial graph node count"
+          },
+          "enable_betti_guidance": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable Betti-guided topology optimization"
+          },
+          "enable_knowledge_engine": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable DataSynthesizer knowledge engine APIs"
+          },
+          "epochs": {
+            "type": "integer",
+            "default": 1000,
+            "description": "Training epochs"
+          },
+          "batch_size": {
+            "type": "integer",
+            "default": 32,
+            "description": "Training batch size"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_set_pipeline_config",
+      "description": "Update training pipeline configuration",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "batch_size": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Training batch size"
+          },
+          "learning_rate": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Forward-Forward learning rate"
+          },
+          "betti_guidance_threshold": {
+            "type": "integer",
+            "description": "β₁ threshold for topology optimization"
+          },
+          "enable_wui_streaming": {
+            "type": "boolean",
+            "description": "Enable real-time metrics streaming"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_get_training_metrics",
+      "description": "Get comprehensive training metrics from all pipeline stages including Forward-Forward, MoE, Betti numbers, graph state, and DataSynthesizer",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "include_betti": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include Betti number analysis"
+          },
+          "include_graph_state": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include graph topology state"
+          },
+          "include_expert_stats": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include per-expert statistics"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_apply_betti_guidance",
+      "description": "Trigger Betti-guided topology optimization to adjust quantum graph structure based on topological data analysis",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "default": false,
+            "description": "Force optimization even if below threshold"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_pause_training",
+      "description": "Pause training pipeline (can be resumed)",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_resume_training",
+      "description": "Resume paused training pipeline",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_export_model",
+      "description": "Export trained expert model weights and topology to file",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Export file path"
+          },
+          "include_topology": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include graph topology in export"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "wui_import_model",
+      "description": "Import trained expert model from file",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Import file path"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
       "name": "wui_start_ff_training",
       "description": "Start Forward-Forward training process",
       "input_schema": {

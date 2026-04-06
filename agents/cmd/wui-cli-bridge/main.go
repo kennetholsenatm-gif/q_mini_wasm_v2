@@ -224,6 +224,14 @@ func (s *MCPServer) registerTools() {
 	s.tools["wui_add_graph_edge"] = s.handleAddGraphEdge
 	s.tools["wui_read_memory"] = s.handleReadMemory
 	s.tools["wui_write_memory"] = s.handleWriteMemory
+	s.tools["wui_init_training_pipeline"] = s.handleInitTrainingPipeline
+	s.tools["wui_set_pipeline_config"] = s.handleSetPipelineConfig
+	s.tools["wui_get_training_metrics"] = s.handleGetTrainingMetrics
+	s.tools["wui_apply_betti_guidance"] = s.handleApplyBettiGuidance
+	s.tools["wui_pause_training"] = s.handlePauseTraining
+	s.tools["wui_resume_training"] = s.handleResumeTraining
+	s.tools["wui_export_model"] = s.handleExportModel
+	s.tools["wui_import_model"] = s.handleImportModel
 }
 
 // Run starts the MCP server loop
