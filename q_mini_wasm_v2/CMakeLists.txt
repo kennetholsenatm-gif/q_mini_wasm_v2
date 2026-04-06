@@ -91,6 +91,8 @@ set(CORE_SOURCES
     core/qgnn/message_passing.cpp
     core/qgnn/ternary_tree.hpp
     core/qgnn/ternary_tree.cpp
+    core/qgnn/betti_extractor.hpp
+    core/qgnn/betti_extractor.cpp
 )
 
 set(RUNTIME_SOURCES
@@ -277,6 +279,9 @@ if(BUILD_TESTS)
     add_executable(q_mini_wasm_v2_remediation_test tests/test_remediation.cpp)
     target_link_libraries(q_mini_wasm_v2_remediation_test PRIVATE q_mini_wasm_v2_core)
     
+    add_executable(q_mini_wasm_v2_betti_test tests/test_betti_extractor.cpp)
+    target_link_libraries(q_mini_wasm_v2_betti_test PRIVATE q_mini_wasm_v2_core)
+    
     # DLL integration test
     if(BUILD_DLL)
         add_executable(q_mini_wasm_v2_dll_test tests/integration_test.cpp)
@@ -299,6 +304,7 @@ if(BUILD_TESTS)
     add_test(NAME q_mini_wasm_v2_tests COMMAND q_mini_wasm_v2_tests)
     add_test(NAME q_mini_wasm_v2_network_test COMMAND q_mini_wasm_v2_network_test)
     add_test(NAME q_mini_wasm_v2_remediation_test COMMAND q_mini_wasm_v2_remediation_test)
+    add_test(NAME q_mini_wasm_v2_betti_test COMMAND q_mini_wasm_v2_betti_test)
 endif()
 
 # ============================================================================

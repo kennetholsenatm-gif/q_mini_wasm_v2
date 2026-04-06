@@ -168,6 +168,16 @@ public:
      */
     size_t edge_count() const noexcept { return col_idx_.size(); }
 
+    /**
+     * @brief Calculate rank of stabilizer tableau over GF(3)
+     * 
+     * Uses Gaussian elimination over GF(3) to compute matrix rank.
+     * This enables Betti number extraction via the rank-nullity theorem.
+     * 
+     * @return Rank of the 2n×2n tableau matrix over GF(3)
+     */
+    uint32_t calculate_gf3_rank() const;
+
 private:
     size_t n_;  // Number of qutrits
     

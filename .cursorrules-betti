@@ -1,0 +1,148 @@
+# .cursorrules - Quantum Betti Numbers Integration
+# This file provides cognitive ergonomics for LLM agents working with the BettiExtractor module
+
+## Purpose
+
+The BettiExtractor module implements Quantum Betti Numbers computation by mapping classical simplicial complexes to ternary homological CSS stabilizer codes over GF(3).
+
+## Key Mental Models
+
+### 1. The Mapping: Classical → Quantum
+
+When working with this code, remember:
+```
+Classical TDA          Quantum Stabilizer
+------------------     ------------------
+Edges                  Qutrits (trits)
+Vertices               X-stabilizers  
+Faces                  Z-stabilizers
+Betti numbers          Tableau rank
+```
+
+### 2. Memory Efficiency
+
+- `TritPack5`: 5 trits in 8 bits (vs 160 bits for 5×32-bit floats)
+- 60% memory reduction enables larger complexes on edge devices
+- CSR matrix format for sparse stabilizer tableau
+
+### 3. GF(3) Mental Math
+
+Values are {0, 1, 2} representing {0, 1, -1}:
+- 0 means ZERO (quantum |0⟩)
+- 1 means POSITIVE (quantum |2⟩)
+- 2 means NEGATIVE (quantum |1⟩)
+
+Inverse in GF(3): 
+- 1⁻¹ = 1
+- 2⁻¹ = 2 (since 2×2 = 4 ≡ 1 mod 3)
+
+### 4. O(n²) Complexity Guarantee
+
+The implementation uses Gottesman-Knill theorem:
+- NO state vectors (would be O(2ⁿ))
+- NO density matrices (would be O(4ⁿ))
+- ONLY stabilizer tableau (O(n²))
+
+## Common Tasks
+
+### Adding a New Simplicial Complex
+
+```cpp
+// 1. Create extractor with max capacity
+BettiExtractor extractor(max_edges);
+
+// 2. Build complex
+SimplicialComplex complex;
+complex.vertices = {0, 1, 2, ...};
+
+// 3. Add edges as TritPack5
+TritPack5 edge;
+edge.packed = encode_edge(v1, v2);  // Your encoding
+complex.edges.push_back(edge);
+
+// 4. Load and compute
+extractor.load_complex(complex);
+auto betti = extractor.compute_betti();
+```
+
+### Understanding Betti Numbers
+
+For a graph with V vertices and E edges:
+- **β₀** = number of connected components (≥ 1)
+- **β₁** = E - V + β₀ (cyclomatic number, cycles)
+- **β₂** = 0 for graphs (2-voids only in 3D)
+
+Example triangle (3 vertices, 3 edges):
+- β₀ = 1 (connected)
+- β₁ = 3 - 3 + 1 = 1 (one cycle)
+- β₂ = 0
+
+## Critical Constraints
+
+When modifying this code, YOU MUST:
+
+✓ Use ONLY GF(3) arithmetic (no floats)
+✓ Maintain O(n²) complexity (no state vectors)
+✓ Keep energy <0.5 pJ/op (use LUTs)
+✓ Use ONLY Clifford gates (H, S, CSUM)
+✓ NOT modify QGNN MoE, Forward-Forward, or MCP layers
+
+## Energy Tracking
+
+```cpp
+// Energy is measured in ternary levels
+EnergyTrit::LOW    = < 0.3 pJ/op
+EnergyTrit::MEDIUM = 0.3-0.7 pJ/op  
+EnergyTrit::HIGH   = > 0.7 pJ/op
+
+// Budget enforcement
+auto betti = extractor.compute_betti_with_budget(EnergyTrit::MEDIUM);
+```
+
+## Testing Strategy
+
+When adding features, test:
+
+1. **TritPack5**: All 3⁵ = 243 combinations
+2. **GF(3) LUTs**: Verify multiplication/addition tables
+3. **Betti numbers**: Compare against NetworkX for small graphs
+4. **Rank computation**: Test against known matrices
+5. **Energy**: Profile L1 cache hit rates
+
+## Integration Points
+
+This module is designed to be isolated. Valid integration patterns:
+
+✓ **Post-QGNN**: Analyze learned graphs after training
+✓ **Pre-routing**: Compute topological features for MoE decisions
+✓ **Standalone**: Analysis tool separate from training loop
+
+✗ **Forbidden**: Direct integration into MoE routing loop
+✗ **Forbidden**: Modifying QGNN loss functions
+✗ **Forbidden**: Integration into Forward-Forward learning
+
+## File Organization
+
+```
+core/
+  ternary/
+    trit.hpp           ← TritPack5 definition
+  qgnn/
+    betti_extractor.hpp ← Main interface
+    betti_extractor.cpp ← Implementation
+  stabilizer/
+    tableau.hpp        ← GF(3) rank method
+tests/
+  test_betti_extractor.cpp ← Unit tests
+docs/
+  QUANTUM_BETTI_NUMBERS.md ← User documentation
+```
+
+## Research Alignment
+
+This implementation follows:
+- Paper: "Enhancing the QMINIWASM Framework: Integrating Qutrit Clifford Entanglement"
+- Algorithm: Gottesman-Knill theorem for stabilizer simulation
+- Hardware: Flash-Cosmos Multi-Wordline Sensing for BCT execution
+
+When in doubt, refer to: `docs/research/Quantum Betti Numbers Integration Analysis.md`

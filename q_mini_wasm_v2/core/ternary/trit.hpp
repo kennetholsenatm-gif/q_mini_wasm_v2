@@ -178,6 +178,53 @@ struct TritBlock5 {
 };
 
 /**
+ * @brief 5-Trit packed structure for memory-efficient storage
+ * 
+ * Packs 5 ternary values {-1, 0, +1} into 8 bits (vs 160 bits for 5x32-bit floats)
+ * Memory reduction: 60% vs floating-point representations
+ * 
+ * Used for Betti number computation edge storage in simplicial complexes.
+ * Encoding: trit[i] = (packed >> (i*2)) & 0x3
+ * Mapping: 0->0 (ZERO), 1->+1 (POSITIVE), 2->-1 (NEGATIVE), 3->unused
+ */
+struct TritPack5 {
+    uint8_t packed; // 5 trits in 8 bits: 2 bits per trit + 2 bits padding
+    
+    static constexpr uint8_t TRIT_ZERO = 0;
+    static constexpr uint8_t TRIT_POS  = 1;
+    static constexpr uint8_t TRIT_NEG  = 2;
+    
+    void set(size_t idx, Trit value) noexcept {
+        uint8_t bits = trit_to_bits(value);
+        packed &= ~(0x3 << (idx * 2));  // Clear bits at position
+        packed |= (bits << (idx * 2));   // Set new bits
+    }
+    
+    Trit get(size_t idx) const noexcept {
+        uint8_t bits = (packed >> (idx * 2)) & 0x3;
+        return bits_to_trit(bits);
+    }
+    
+    static uint8_t trit_to_bits(Trit t) noexcept {
+        switch (t) {
+            case Trit::ZERO:     return TRIT_ZERO;
+            case Trit::POSITIVE: return TRIT_POS;
+            case Trit::NEGATIVE: return TRIT_NEG;
+        }
+        return TRIT_ZERO;
+    }
+    
+    static Trit bits_to_trit(uint8_t bits) noexcept {
+        switch (bits) {
+            case TRIT_ZERO: return Trit::ZERO;
+            case TRIT_POS:  return Trit::POSITIVE;
+            case TRIT_NEG:  return Trit::NEGATIVE;
+        }
+        return Trit::ZERO;
+    }
+};
+
+/**
  * @brief Trit arithmetic operations over GF(3)
  */
 namespace trit_ops {

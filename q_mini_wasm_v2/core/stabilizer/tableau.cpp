@@ -381,8 +381,6 @@ void StabilizerTableau::local_complementation(size_t vertex) {
         }
     }
 }
-
-// ============================================================================
 // GF(3) Arithmetic Helpers
 // ============================================================================
 
@@ -396,6 +394,76 @@ uint8_t StabilizerTableau::gf3_multiply(uint8_t a, uint8_t b) noexcept {
     if (a == 1 && b == 1) return 1;
     if (a == 2 && b == 2) return 1; // (-1) * (-1) = 1
     return 2; // 1 * (-1) = -1
+}
+
+uint32_t StabilizerTableau::calculate_gf3_rank() const {
+    const size_t size = 2 * n_;
+    
+    if (size == 0) return 0;
+    
+    // Build full matrix from CSR representation
+    std::vector<uint8_t> matrix(size * size, 0);
+    
+    // Fill matrix from CSR data (only fills existing edges)
+    for (size_t row = 0; row < n_; ++row) {
+        const size_t start = row_ptr_[row];
+        const size_t end = row_ptr_[row + 1];
+        
+        for (size_t idx = start; idx < end; ++idx) {
+            const size_t col = col_idx_[idx];
+            const uint8_t val = values_[idx];
+            
+            // Set in both X and Z blocks of the 2n x 2n tableau
+            matrix[row * size + col] = val;
+            matrix[(row + n_) * size + (col + n_)] = val;
+        }
+    }
+    
+    // Gaussian elimination over GF(3)
+    uint32_t rank = 0;
+    
+    for (size_t col = 0; col < size && rank < size; ++col) {
+        // Find pivot
+        size_t pivot = size;
+        for (size_t row = rank; row < size; ++row) {
+            if (matrix[row * size + col] != 0) {
+                pivot = row;
+                break;
+            }
+        }
+        
+        if (pivot == size) continue;  // No pivot in this column
+        
+        // Swap rows
+        if (pivot != rank) {
+            for (size_t j = col; j < size; ++j) {
+                std::swap(matrix[rank * size + j], matrix[pivot * size + j]);
+            }
+        }
+        
+        // Normalize pivot row
+        uint8_t pivot_val = matrix[rank * size + col];
+        uint8_t inv_pivot = (pivot_val == 1) ? 1 : 2;  // 2 is its own inverse mod 3
+        
+        for (size_t j = col; j < size; ++j) {
+            matrix[rank * size + j] = (matrix[rank * size + j] * inv_pivot) % 3;
+        }
+        
+        // Eliminate other rows
+        for (size_t row = 0; row < size; ++row) {
+            if (row != rank && matrix[row * size + col] != 0) {
+                uint8_t factor = matrix[row * size + col];
+                for (size_t j = col; j < size; ++j) {
+                    uint8_t prod = (matrix[rank * size + j] * factor) % 3;
+                    matrix[row * size + j] = (matrix[row * size + j] + 3 - prod) % 3;
+                }
+            }
+        }
+        
+        ++rank;
+    }
+    
+    return rank;
 }
 
 std::unique_ptr<StabilizerTableau> create_tableau(size_t num_qutrits) {
