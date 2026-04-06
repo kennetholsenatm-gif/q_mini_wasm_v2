@@ -485,7 +485,7 @@ accessed April 6, 2026,
 <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABgklEQVR4Xt2UsStGYRTGj1CIJEpS6pNF2QxS7EoMJptBDHYMbLIoA0pYTDarnYxmNklZKP+D5/F+r8573vN+tz5Z/OrX/e659z733vec+4n8B3pgqy1WwPO7bNFjDw7ZYgWD8Ah22gMWL7wFTsFjeArnJX07Hj+A06rmYsN54Ra8gzXYD6/gBWxX583AXbXvYsMn4buEiyOj8BXOqVovvJSwREVs+L6EIF1j0+8lhPHNIhtwUe1n6PAOeCN5eDe8hQ+wT9XH4QlsU7UEHR5DSuG2zlCG8yYuOpxbBtiQUjhZlrA8LjqczXmWPKRROK9hL9jgjN8sC+GHxDEdMfVvdDjX8FrykBjOieHkaCbgoaRT9IMdxW34KWmTBuCjhC/WsiPp/CfY8DH4JqFRkVn4IfnnzrE8r29dbDhZgi9wHa7AJwkTYV+dT8wnL+KFE/6nLNTlbwtvxLXmmhcphVdRg2cSvuoizYavSdoXl2bCOdt86mF7wLIq/po2ghO1KXmD/54vduZCYWJqxMQAAAAASUVORK5CYII=>
 
 [image6]:
-<data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABJklEQVR4Xt2TsUoDQRRFXzBFFCRGISEoQsBGSJkm4AdYxTIpA0EQeyvt7IQUYmPSaLr8h18i2NvYhuReZheWuzNZ2cHGA4eF93bvDG92zP4D+3BHiwXw/T0t+niEbS0W0ILPcFcbyrZwfjyGB1KvwCfYl3oODT+EQ/gOv+Gn9FMu4IMWFV/4FezBpYXD6/DN3IiCaHiWhYXDyS0caDFLTPg5fIFVbaTEhDOU4VzES0w4GZkbj5fYcB4oD5YHnCM2nHdhDk+1QWLDu3Bq7mLliA2/h5daTCkK/4In2khowFny9KLhTfgBf+A6cWVukZvMe4Q75s6DaPhv4Yw5a848SNnwDnyFNW1kKRt+be4CbaVMOP9t7vpYG8oEHmmxgDN4Z4F/+0/ZACE8M7Y1obGsAAAAAElFTkSuQmCC>
+<data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABiUlEQVR4Xt2UvytGURjHHzH4LQyS8iMWZROljJRJyiJGWWRSGCiDLMqABYsoq9ViEH+DRSajwcYmvt/OvbfnPve59+qWxac+vZ3nnPf7nvuce16R/0ALrLXFEri+0RY99mC3LZbQBY9gg52weOH80iI8h8dwStJPVwMP4ISqudjwNngDV+Ag3IVf8Daai5mEO2rsYsPX4BVsjcbcJdd8w614kYQfupDQolxs+KWEoHVVG4Of8A42qfoqnFXjDDZ8Dj7BaVUbhR/wHjar+jA8gXWqlsKGeyxJeJpDU2cow/kjLmXh7O0DfIZ9Zo4sSGiPS1E4D3MTvkj+7nigPFj9JiUUhc/DR9hv6hreCd6HXjtB8sIZzHe7IxrzINn7+mRFYETCWfApM3jh4/Ba0o/KtvDK25BtOGNqCTacIezxG3xVvsN9tY60w7Po08WGx5fIk23RcMfceS42/LewPew1e55L1fABeCrZA05RNZz/mrxAhVQJ57vNXffYCcsy7LTFEobghmRfy7/nB0waP+2r5UAHAAAAAElFTkSuQmCC>
 
 [image7]:
 <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABiUlEQVR4Xt2UvytGURjHHzH4LQyS8iMWZROljJRJyiJGWWRSGCiDLMqABYsoq9ViEH+DRSajwcYmvt/OvbfnPve59+qWxac+vZ3nnPf7nvuce16R/0ALrLXFEri+0RY99mC3LZbQBY9gg52weOH80iI8h8dwStJPVwMP4ISqudjwNngDV+Ag3IVf8Daai5mEO2rsYsPX4BVsjcbcJdd8w614kYQfupDQolxs+KWEoHVVG4Of8A42qfoqnFXjDDZ8Dj7BaVUbhR/wHjar+jA8gXWqlsKGeyxJeJpDU2cow/kjLmXh7O0DfIZ9Zo4sSGiPS1E4D3MTvkj+7nigPFj9JiUUhc/DR9hv6hreCd6HXjtB8sIZzHe7IxrzINn7+mRFYETCWfApM3jh4/Ba0o/KtvDK25BtOGNqCTacIezxG3xVvsN9tY60w7Po08WGx5fIk23RcMfceS42/LewPew1e55L1fABeCrZA05RNZz/mrxAhVQJ57vNXffYCcsy7LTFEobghmRfy7/nB0waP+2r5UAHAAAAAElFTkSuQmCC>
@@ -575,4 +575,70 @@ accessed April 6, 2026,
 <data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAYCAYAAACFms+HAAADAUlEQVR4Xu2WS8hNURTHl1De8ih5RZiIQiIDDIQYkDAQY5GM+BATVzIwIKSUiT4lAzLzCHFDEjMl8kgkQhgxkcf/Z5/dt8+++5xzXfcz+v7163bWPvfstddea+1t1qN/1gDROzb+Tw0S/WJjhYaKK2J2YOub2VvSCLFUrBVTrToiM8Up+/sJZ4jbYmRgw/EjYnVgK1UvsVDcF5fFhoyr4pmY0/VqTuPETTEtsvcX68VJcUwstq4AsDM7zH37tTgqxmdjiMBdEnMDW1Ks8qB4aY0OMsbkX8SsaIzFEp1aZCfyF8RGMVnsFT/MBSTcFRa0KXgOtczcwkjBpHDshPhsxSskXT6J4+ac9ZounmS/obaK02JI9sx/9otfYldmGyZuWGOgvFjgXbEuHvDaLH5mv0VikgfikeXzEScuWmNRdppzcltgw8Fv4roYaC4YpFj4vVgHxHnRJx6YIt6Kx2JUNBbKO/5KjM5sOIvTe/xLgVaZW+SSwEbn+Crq5raf+jljbse3WLqwl5ubkzrKqWYuMqysTJPEO8s7zi/PK/xLFcJR5jqUPbOoa+YWHteOF4t9Y1E6seq6uTSh4svEOO/RugZnNj76Xsz3L5WIaN4ST8WEwE7KEPEiJYPjjRQd+VYmqp9o1QIbjtPKwsMjJQpzp3hu1fPE8j6yWw3GcPtTor/Sxz9avlc36/gaczs1MbI3I+9jWOR/qpkCKnOcaO02F+3t0VgzjuM0vXt49uyLMu5CRUqmCi3mrPhuxXlKX+fg4QCKc5GCpSNR+SnxX7pG2C1IFU5JAtKMCuegmnGMe0bs2CLxQRw2d3zH8juWOvlwkJzm/+yKh0OuqoOFopu8sILaYJBJuKP4+wnb+9Cc80XRwc6CKdxYnebSK0Wu0CrEu3UrOfa5/LAqboPk0xgrdjgUxzEL5oBqt3wq1yJ7W8Qt7o65C1G7xal+L/vtFq0U5yxdB62K3d5nrv83s/MtiQ9zt4Z2TbLA3OUqdX9pq+hIHWJePNCCxprrPN3udI+a0W80z5D2bgiSCwAAAABJRU5ErkJggg==>
 
 [image35]:
-<data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAcAAAAYCAYAAAA20uedAAAAjUlEQVR4XmNgGOQgCYh3A7EwugQHEG+FYhAbBcgA8RMgbkUW5AFiSSAOBeLfQBwBxOJAzAqSjAfiWUB8H4h/AvFSIJ4ExMogSRAg3T4YcAHiX1AaA1QB8XMgVkKXgNm3B4i5GSCu7GKAWMUgAsRXGRD2BQFxARAzgjggohGI7wDxSigb7EdkIADFQxQAAFlmF1Xx4IiWAAAAAElFTkSuQmCC>
+<data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAcAAAAYCAYAAAA20uedAAAAjUlEQVR4XmNgGOQgCYh3A7EwugQHEG+FYhAbBcgA8RMgbkUW5AFiSSAOBeLfQBwBxOJAzAqSjAfiWUB8H4h/AvFSIJ4ExMogSRAg3T4YcAHiX1AaA1QB8XMgVkKXgNm3B4i5GSCu7GKAWMUgAsRXGRD2BQFxARAzgjggohGI7wDxSigb7EdkIADFQxQAAFlmF1Xx4IiWAAAAAElFTkSuQmCC
+
+---
+
+## Implementation Status
+
+**Last Updated:** April 2026
+
+### Phase 1: Stabilizer Tableau-Based Graph Representation ✅
+
+| Component | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| GraphTableau | ✅ Implemented | `core/qgnn/graph_tableau.hpp/cpp` | O(n²) Pauli operator tracking, GF(3) arithmetic |
+| Clifford Gates | ✅ Implemented | `graph_tableau.cpp` | H, S, CSUM, CZ for qutrits |
+| Ternary-Tree Mapping | ✅ Implemented | `map_to_ternary_tree()` | Cache-optimized node ordering |
+| Memory Efficiency | ✅ Verified | `memory_bytes()` | 4n² bytes vs 3^n for state vectors |
+
+### Phase 2: ZX-Calculus Optimization 🟡
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| ZX-Calculus Optimizer | 🟡 Basic | Wigner polytope detection implemented, full rewrite rules pending |
+| Clifford/Non-Clifford Detection | ✅ Implemented | `has_non_clifford()` method |
+| Circuit Simplification | 🟡 Partial | Gaussian elimination only, graph-based rules pending |
+
+### Phase 3: Ternary-Tree Topologies ✅
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| Tropical GNN Layer | ✅ Implemented | `TropicalGNNLayer` class |
+| Symplectic Attention | ✅ Implemented | `compute_attention()` method |
+| Max-Plus Routing | ✅ Implemented | Forward pass uses tropical semiring |
+
+### Architecture Decisions
+
+1. **GF(3) Purity:** All tableau operations use `Trit = int8_t` with mod-3
+arithmetic
+2. **No Floating Point in Core:** Phase tracking uses discrete ω^a
+representation
+3. **Memory Layout:** Ternary-tree mapping optimizes cache locality for
+WebAssembly
+4. **Clifford-Only:** Gottesman-Knill theorem preserved, O(n²) scaling
+guaranteed
+
+### GF(3) Contamination Audit
+
+| Issue | Status | Resolution |
+|-------|--------|------------|
+| Binary pollution in tensor ops | ✅ Resolved | `graph_tableau.cpp` uses only `Trit` types |
+| Floating-point in activations | ✅ Resolved | Tropical (max-plus) replaces continuous functions |
+| Magic numbers for mod-3 | ✅ Resolved | Proper `gf3_add/mul` helper functions |
+| IEEE 754 state vectors | ✅ Resolved | Stabilizer tableau replaces state vectors |
+
+### Next Steps
+
+1. **QGNN Message Passing:** Integrate with 243-expert MoE routing
+2. **Hardware Acceleration:** SYCL kernels for tableau operations
+3. **CI/CD GF(3) Validation:** AST linter for ternary constraint
+enforcement
+4. **Benchmarking:** Compare O(n²) vs O(3^n) scaling on large graphs
+
+### Testing Status
+
+- Unit tests: Pending
+- QGNN graph tests: Pending
+- Performance benchmarks: Pending
+>

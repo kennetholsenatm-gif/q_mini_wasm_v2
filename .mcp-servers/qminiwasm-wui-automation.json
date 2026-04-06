@@ -1,0 +1,444 @@
+{
+  "name": "qminiwasm-wui-automation",
+  "description": "MCP server for WUI automation - CLI hooks for LLMs and automations to control q_mini_wasm_v2 Web UI via WebSocket bridge",
+  "tools": [
+    {
+      "name": "wui_connect",
+      "description": "Establish WebSocket connection to WUI backend engine",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "default": "localhost",
+            "description": "WebSocket server host"
+          },
+          "port": {
+            "type": "integer",
+            "default": 8080,
+            "description": "WebSocket server port"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "default": 5000,
+            "description": "Connection timeout in milliseconds"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_disconnect",
+      "description": "Close WebSocket connection to WUI backend",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_apply_hadamard",
+      "description": "Apply Hadamard gate to specified qutrit (creates superposition in GF(3))",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "qutrit_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Target qutrit index"
+          },
+          "await_result": {
+            "type": "boolean",
+            "default": true,
+            "description": "Wait for operation completion"
+          }
+        },
+        "required": ["qutrit_index"]
+      }
+    },
+    {
+      "name": "wui_apply_phase",
+      "description": "Apply Phase gate (S gate) to specified qutrit (adds phase in GF(3))",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "qutrit_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Target qutrit index"
+          },
+          "await_result": {
+            "type": "boolean",
+            "default": true,
+            "description": "Wait for operation completion"
+          }
+        },
+        "required": ["qutrit_index"]
+      }
+    },
+    {
+      "name": "wui_apply_csum",
+      "description": "Apply Controlled-SUM gate between two qutrits (entangling operation)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "control": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Control qutrit index"
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Target qutrit index"
+          },
+          "await_result": {
+            "type": "boolean",
+            "default": true,
+            "description": "Wait for operation completion"
+          }
+        },
+        "required": ["control", "target"]
+      }
+    },
+    {
+      "name": "wui_apply_pauli_x",
+      "description": "Apply Pauli-X gate (shift/NOT operation in GF(3))",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "qutrit_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Target qutrit index"
+          }
+        },
+        "required": ["qutrit_index"]
+      }
+    },
+    {
+      "name": "wui_apply_pauli_z",
+      "description": "Apply Pauli-Z gate (clock operation in GF(3))",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "qutrit_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Target qutrit index"
+          }
+        },
+        "required": ["qutrit_index"]
+      }
+    },
+    {
+      "name": "wui_measure",
+      "description": "Measure qutrit in computational basis (collapses to 0, 1, or 2)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "qutrit_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Qutrit to measure"
+          },
+          "await_result": {
+            "type": "boolean",
+            "default": true,
+            "description": "Wait for measurement result"
+          }
+        },
+        "required": ["qutrit_index"]
+      }
+    },
+    {
+      "name": "wui_set_config",
+      "description": "Update system configuration parameter",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "section": {
+            "type": "string",
+            "description": "Configuration section (e.g., 'system.qgnn')"
+          },
+          "key": {
+            "type": "string",
+            "description": "Configuration key"
+          },
+          "value": {
+            "type": ["string", "integer", "boolean", "number"],
+            "description": "Configuration value"
+          }
+        },
+        "required": ["section", "key", "value"]
+      }
+    },
+    {
+      "name": "wui_set_num_qutrits",
+      "description": "Set number of qutrits for quantum operations",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "Number of qutrits"
+          }
+        },
+        "required": ["count"]
+      }
+    },
+    {
+      "name": "wui_set_entanglement_graph",
+      "description": "Set entanglement graph topology for QGNN",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "graph_type": {
+            "type": "string",
+            "enum": ["linear", "circular", "star", "complete", "random", "grid"],
+            "description": "Graph topology type"
+          }
+        },
+        "required": ["graph_type"]
+      }
+    },
+    {
+      "name": "wui_run_inference",
+      "description": "Execute inference with ternary input data",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "enum": [-1, 0, 1]
+            },
+            "description": "Ternary input values (-1, 0, +1)"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "default": 5000,
+            "description": "Inference timeout"
+          }
+        },
+        "required": ["input"]
+      }
+    },
+    {
+      "name": "wui_get_metrics",
+      "description": "Retrieve current system metrics and status",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "subscribe": {
+            "type": "boolean",
+            "default": false,
+            "description": "Subscribe to continuous metrics updates"
+          },
+          "interval_ms": {
+            "type": "integer",
+            "default": 5000,
+            "description": "Metrics update interval if subscribed"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_get_pipeline_status",
+      "description": "Get CI/CD pipeline execution status",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_trigger_pipeline",
+      "description": "Trigger CI/CD pipeline execution",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pipeline_type": {
+            "type": "string",
+            "enum": ["build", "test", "deploy", "full"],
+            "description": "Type of pipeline to trigger"
+          },
+          "branch": {
+            "type": "string",
+            "default": "main",
+            "description": "Git branch to run pipeline on"
+          }
+        },
+        "required": ["pipeline_type"]
+      }
+    },
+    {
+      "name": "wui_compute_betti",
+      "description": "Compute Betti numbers for topological data analysis",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of graph nodes"
+          },
+          "edges": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of graph edges"
+          }
+        },
+        "required": ["nodes", "edges"]
+      }
+    },
+    {
+      "name": "wui_start_ff_training",
+      "description": "Start Forward-Forward training process",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "layers": {
+            "type": "array",
+            "items": {"type": "integer"},
+            "description": "Layer indices to train"
+          },
+          "epochs": {
+            "type": "integer",
+            "default": 100,
+            "description": "Training epochs"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_stop_ff_training",
+      "description": "Stop Forward-Forward training process",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_init_graph",
+      "description": "Initialize QGNN graph with specified nodes and edges",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 8,
+            "description": "Number of nodes"
+          },
+          "edges": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 14,
+            "description": "Number of edges"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_add_graph_node",
+      "description": "Add node to QGNN graph",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_add_graph_edge",
+      "description": "Add edge to QGNN graph",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_read_memory",
+      "description": "Read bytes from shared memory at specified offset",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Memory offset in bytes"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65536,
+            "description": "Number of bytes to read"
+          }
+        },
+        "required": ["offset", "length"]
+      }
+    },
+    {
+      "name": "wui_write_memory",
+      "description": "Write bytes to shared memory at specified offset",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Memory offset in bytes"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "description": "Bytes to write"
+          }
+        },
+        "required": ["offset", "data"]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file://q_mini_wasm_v2/wui/js/websocket-bridge.js",
+      "name": "websocket_bridge",
+      "description": "WebSocket bridge implementation for WUI communication"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/wui/js/wui-mcp-bridge.js",
+      "name": "wui_mcp_bridge",
+      "description": "MCP protocol bridge for WUI automation"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/q_mini_wasm_v2/dll/q_mini_wasm_v2_api.hpp",
+      "name": "dll_api",
+      "description": "C++ DLL API for engine integration"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/config/system.toml",
+      "name": "system_config",
+      "description": "System configuration file"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/docs/BETTI_EXTRACTOR_TRACE.md",
+      "name": "betti_extractor_docs",
+      "description": "BettiExtractor code trace documentation"
+    }
+  ],
+  "config": {
+    "transport": {
+      "type": "stdio",
+      "description": "Standard input/output transport for MCP protocol"
+    },
+    "websocket": {
+      "default_host": "localhost",
+      "default_port": 8080,
+      "reconnect_attempts": 5,
+      "reconnect_delay_ms": 1000
+    }
+  }
+}
