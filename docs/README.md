@@ -36,7 +36,7 @@ The repository has achieved 100% implementation purity through a comprehensive t
 
 // Create graph-based MoE router
 qgnn::GraphMoERouter::GraphConfig config{
-    .max_experts = 100,
+    .max_experts = 243,
     .active_experts = 8,
     .specialization_dim = 16,
     .energy_budget = ternary::EnergyTrit::LOW
@@ -184,7 +184,7 @@ using namespace q_mini_wasm_v2;
 int main() {
     // Configure graph-based MoE router
     qgnn::GraphMoERouter::GraphConfig config{
-        .max_experts = 100,
+        .max_experts = 243,
         .active_experts = 8,
         .specialization_dim = 16,
         .energy_budget = ternary::EnergyTrit::LOW

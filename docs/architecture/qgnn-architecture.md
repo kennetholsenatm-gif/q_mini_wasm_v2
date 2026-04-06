@@ -148,7 +148,7 @@ public:
 - **Graph Routing**: 28 μs, 0.7 pJ/op
 - **Speedup**: 1.6x, Energy: 42% reduction
 
-#### Large Scale (N=100 experts)
+#### Large Scale (N=243 experts)
 - **Array Routing**: 180 μs, 2.1 pJ/op
 - **Graph Routing**: 65 μs, 0.9 pJ/op
 - **Speedup**: 2.8x, Energy: 57% reduction

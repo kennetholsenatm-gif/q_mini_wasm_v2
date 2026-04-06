@@ -377,7 +377,7 @@
 
 int main() {
     // Initialize QGNN graph
-    auto graph = create_qgnn_graph(100, 8);
+    auto graph = create_qgnn_graph(243, 8);
     
     // Configure expert nodes
     for (int i = 0; i < 8; i++) {
@@ -509,8 +509,8 @@ int main() {
 #include <core/qgnn/graph_moe_router.hpp>
 
 int main() {
-    // Initialize QGNN graph with 100 nodes, 8 experts
-    auto graph = create_qgnn_graph(100, 8);
+    // Initialize QGNN graph with 243 nodes, 8 experts
+    auto graph = create_qgnn_graph(243, 8);
     
     // Configure expert nodes with 16-dimensional specialization
     for (int i = 0; i < 8; i++) {
@@ -540,14 +540,14 @@ int main() {
     // Configure high-performance QGNN
     GraphConfig config;
     config.max_nodes = 1000;
-    config.max_experts = 64;
+    config.max_experts = 243;
     config.specialization_dim = 32;
     config.energy_optimization = true;
     
     auto graph = create_qgnn_graph(config);
     
     // Initialize expert nodes with quantum capabilities
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 243; i++) {
         ExpertNode expert(i, 32);
         expert.enable_quantum_operations();
         expert.set_energy_target(0.3); // pJ/op
@@ -781,7 +781,7 @@ int main() {
                 workbench.addTerminalOutput('Initializing QGNN graph...', 'output');
                 
                 setTimeout(() => {
-                    workbench.addTerminalOutput('✅ Graph initialized with 100 nodes, 8 experts', 'success');
+                    workbench.addTerminalOutput('✅ Graph initialized with 243 nodes, 8 experts', 'success');
                     workbench.addTerminalOutput('Creating quantum entanglement patterns...', 'output');
                     
                     setTimeout(() => {

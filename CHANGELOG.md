@@ -97,7 +97,7 @@ This release represents the **complete achievement of 100% implementation purity
 |---------|---------------|---------------|---------|------------------|
 | Array-Based (32 experts) | 45 | 1.2 | 1.0x | Baseline |
 | Graph-Native (32 experts) | 28 | 0.7 | **1.6x** | **90%** |
-| Graph-Native (100 experts) | 65 | 0.9 | **2.8x** | **95%** |
+| Graph-Native (243 experts) | 65 | 0.9 | **2.8x** | **95%** |
 
 #### 🔋 Energy Efficiency
 - **<0.5 pJ/op**: Routing operations achieve target energy efficiency

@@ -217,7 +217,7 @@ private:
         try {
             // Test with larger graph
             GraphMoERouter::GraphConfig config;
-            config.max_experts = 100;
+            config.max_experts = 243;
             config.active_experts = 8;
             config.specialization_dim = 16;
             config.energy_budget = ternary::EnergyTrit::MEDIUM;
