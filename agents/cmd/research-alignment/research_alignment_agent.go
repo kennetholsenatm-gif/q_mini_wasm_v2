@@ -326,17 +326,86 @@ func (a *ResearchAlignmentAgent) CheckAlignment(researchKey string, codeKey stri
 		return nil, fmt.Errorf("no code analysis found for key: %s", codeKey)
 	}
 
-	// Placeholder - would use LLM in production
-	_ = researchExtract
-	_ = codeAnalysis
+	// Perform actual alignment analysis
+	alignedComponents := []AlignedComponent{}
+	missingComponents := []MissingComponent{}
+	divergentComponents := []DivergentComponent{}
+	suggestions := []Suggestion{}
+
+	// Check each algorithm from research against code
+	for _, algorithm := range researchExtract.Algorithms {
+		found := false
+		for _, implAlgo := range codeAnalysis.AlgorithmsImplemented {
+			if strings.EqualFold(algorithm.Name, implAlgo) ||
+				strings.Contains(strings.ToLower(implAlgo), strings.ToLower(algorithm.Name)) {
+				found = true
+				alignedComponents = append(alignedComponents, AlignedComponent{
+					ResearchComponent: algorithm.Name,
+					CodeComponent:     implAlgo,
+					Quality:           "high",
+				})
+				break
+			}
+		}
+
+		if !found {
+			// Check if partially implemented via function name matching
+			partialMatch := ""
+			for _, fn := range codeAnalysis.Functions {
+				if strings.Contains(strings.ToLower(fn.Name), strings.ToLower(algorithm.Name)) {
+					partialMatch = fn.Name
+					break
+				}
+			}
+
+			if partialMatch != "" {
+				divergentComponents = append(divergentComponents, DivergentComponent{
+					ResearchSpec: algorithm.Name,
+					CodeImpl:     partialMatch,
+					Impact:       "Partial implementation - may not cover all algorithm steps",
+				})
+			} else {
+				importance := "medium"
+				if strings.Contains(algorithm.Complexity, "O(n²)") || strings.Contains(algorithm.Complexity, "O(n^2)") {
+					importance = "high"
+				}
+				missingComponents = append(missingComponents, MissingComponent{
+					Component:   algorithm.Name,
+					Importance:  importance,
+					Description: fmt.Sprintf("Missing %s affects %s", algorithm.Name, algorithm.Complexity),
+				})
+			}
+		}
+	}
+
+	// Calculate alignment score
+	alignmentScore := 0.5
+	totalResearchItems := len(researchExtract.Algorithms) + len(researchExtract.Methods)
+	if totalResearchItems > 0 {
+		alignedCount := len(alignedComponents)
+		partialCount := len(divergentComponents)
+		alignmentScore = float64(alignedCount) / float64(totalResearchItems)
+		alignmentScore += float64(partialCount) * 0.3 / float64(totalResearchItems)
+		if alignmentScore > 1.0 {
+			alignmentScore = 1.0
+		}
+	}
+
+	// Determine overall status
+	overallStatus := PartiallyAligned
+	if alignmentScore >= 0.8 {
+		overallStatus = Aligned
+	} else if alignmentScore < 0.3 {
+		overallStatus = NotAligned
+	}
 
 	result := &AlignmentResult{
-		OverallStatus:       PartiallyAligned,
-		AlignmentScore:      0.5,
-		AlignedComponents:   []AlignedComponent{},
-		MissingComponents:   []MissingComponent{},
-		DivergentComponents: []DivergentComponent{},
-		Suggestions:         []Suggestion{},
+		OverallStatus:       overallStatus,
+		AlignmentScore:      alignmentScore,
+		AlignedComponents:   alignedComponents,
+		MissingComponents:   missingComponents,
+		DivergentComponents: divergentComponents,
+		Suggestions:         suggestions,
 	}
 
 	a.AlignmentHistory = append(a.AlignmentHistory, *result)
@@ -366,23 +435,25 @@ func (a *ResearchAlignmentAgent) GenerateAlignedCode(researchKey string, targetL
 
 	switch targetLanguage {
 	case "C++":
-		code = "// C++ implementation based on research: " + researchExtract.Title + "\n#include <iostream>\n\n// TODO: Implement algorithms from research\n"
-		headerFile = "// Header file\n#pragma once\n\n// TODO: Add declarations\n"
-		buildInstructions = "g++ -o output main.cpp"
-		dependencies = []string{"C++17 or later"}
+		code = a.generateCppTemplate(researchExtract, component)
+		headerFile = a.generateCppHeaderTemplate(researchExtract, component)
+		buildInstructions = "g++ -std=c++17 -o output main.cpp -Wall -Wextra"
+		dependencies = []string{"C++17 or later", "CMake 3.14+"}
 	case "Go":
-		code = "// Go implementation based on research: " + researchExtract.Title + "\npackage main\n\n// TODO: Implement algorithms from research\n"
-		buildInstructions = "go build -o output"
-		dependencies = []string{"Go 1.21 or later"}
+		code = a.generateGoTemplate(researchExtract, component)
+		buildInstructions = "go build -o output -v"
+		dependencies = []string{"Go 1.21 or later", "Go modules"}
 	case "R":
-		code = "# R implementation based on research: " + researchExtract.Title + "\n\n# TODO: Implement algorithms from research\n"
+		code = a.generateRTemplate(researchExtract, component)
 		buildInstructions = "Rscript main.R"
-		dependencies = []string{"R 4.0 or later"}
+		dependencies = []string{"R 4.0 or later", "required packages: listed in file"}
 	case "DLL":
-		code = "// DLL (C++) implementation based on research: " + researchExtract.Title + "\n#include <windows.h>\n\n// TODO: Implement DLL export functions\n"
-		headerFile = "// DLL header\n#pragma once\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n// TODO: Add DLL exports\n\n#ifdef __cplusplus\n}\n#endif\n"
-		buildInstructions = "cl /LD /Fe:output.dll main.cpp"
-		dependencies = []string{"Windows SDK", "C++ compiler"}
+		code = a.generateDLLTemplate(researchExtract, component)
+		headerFile = a.generateDLLHeaderTemplate(researchExtract, component)
+		buildInstructions = "cl /LD /Fe:output.dll main.cpp /O2"
+		dependencies = []string{"Windows SDK", "MSVC C++ compiler", "C++17 or later"}
+	default:
+		return nil, fmt.Errorf("unsupported language: %s", targetLanguage)
 	}
 
 	return &GeneratedCode{
@@ -572,4 +643,264 @@ func main() {
 		fmt.Println("Supported languages: C++, DLL, Go, R")
 		fmt.Println("\nUsage: research-alignment-agent <command> [args]")
 	}
+}
+
+// Template generation methods
+
+func (a *ResearchAlignmentAgent) generateCppTemplate(extract ResearchExtract, component string) string {
+	code := fmt.Sprintf(`// C++ Implementation: %s
+// Based on research: %s
+// Auto-generated by Research Alignment Agent
+
+#include <iostream>
+#include <vector>
+#include <string>
+#include <memory>
+
+namespace research_impl {
+
+`, component, extract.Title)
+
+	// Generate class stubs for each algorithm
+	for _, algo := range extract.Algorithms {
+		code += fmt.Sprintf(`// %s - %s
+// Complexity: %s
+class %s {
+public:
+    %s() = default;
+    ~%s() = default;
+    
+    // Initialize with parameters from research
+    void initialize(%s) {
+        // TODO: Initialize with specific parameters
+    }
+    
+    // Main execution method
+    auto execute() {
+        // Steps from research:
+`, algo.Name, algo.Description, algo.Complexity, algo.Name, algo.Name, algo.Name, algo.Parameters)
+
+		for i, step := range algo.Steps {
+			code += fmt.Sprintf(`        // Step %d: %s
+`, i+1, step)
+		}
+
+		code += fmt.Sprintf(`        return nullptr; // TODO: Implement return value
+    }
+};
+
+`)
+	}
+
+	code += `} // namespace research_impl
+
+int main() {
+    // Example usage
+    research_impl::Algorithm instance;
+    instance.initialize();
+    auto result = instance.execute();
+    return 0;
+}
+`
+	return code
+}
+
+func (a *ResearchAlignmentAgent) generateCppHeaderTemplate(extract ResearchExtract, component string) string {
+	header := fmt.Sprintf(`#pragma once
+// Header for: %s
+// Based on research: %s
+
+#include <vector>
+#include <string>
+#include <memory>
+
+namespace research_impl {
+`, component, extract.Title)
+
+	// Forward declarations
+	for _, algo := range extract.Algorithms {
+		header += fmt.Sprintf(`
+// %s - %s
+class %s {
+public:
+    %s();
+    ~%s();
+    void initialize();
+    auto execute();
+};
+`, algo.Name, algo.Description, algo.Name, algo.Name, algo.Name)
+	}
+
+	header += `
+} // namespace research_impl
+`
+	return header
+}
+
+func (a *ResearchAlignmentAgent) generateGoTemplate(extract ResearchExtract, component string) string {
+	code := fmt.Sprintf(`// Go Implementation: %s
+// Based on research: %s
+// Auto-generated by Research Alignment Agent
+
+package main
+
+import (
+	"fmt"
+	"log"
+)
+
+`, component, extract.Title)
+
+	// Generate struct and methods for each algorithm
+	for _, algo := range extract.Algorithms {
+		code += fmt.Sprintf(`// %s implements the %s algorithm
+// Complexity: %s
+type %s struct {
+	// Add fields based on research parameters
+}
+
+// New%s creates a new instance
+func New%s() *%s {
+	return &%s{}
+}
+
+// Execute runs the algorithm
+func (a *%s) Execute() (interface{}, error) {
+	// Algorithm steps from research:
+`, algo.Name, algo.Description, algo.Complexity, algo.Name, algo.Name, algo.Name, algo.Name, algo.Name, algo.Name)
+
+		for i, step := range algo.Steps {
+			code += fmt.Sprintf(`	// Step %d: %s
+`, i+1, step)
+		}
+
+		code += fmt.Sprintf(`	return nil, fmt.Errorf("not implemented: %s")
+}
+
+`, algo.Name)
+	}
+
+	code += `func main() {
+	// Example usage
+	instance := NewAlgorithm()
+	result, err := instance.Execute()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(result)
+}
+`
+	return code
+}
+
+func (a *ResearchAlignmentAgent) generateRTemplate(extract ResearchExtract, component string) string {
+	code := fmt.Sprintf(`# R Implementation: %s
+# Based on research: %s
+# Auto-generated by Research Alignment Agent
+
+`, component, extract.Title)
+
+	// Generate functions for each algorithm
+	for _, algo := range extract.Algorithms {
+		code += fmt.Sprintf(`
+#' %s
+#' %s
+#' @export
+%s <- function(params = list()) {
+  # Algorithm steps from research:
+`, algo.Name, algo.Description, algo.Name)
+
+		for i, step := range algo.Steps {
+			code += fmt.Sprintf(`  # Step %d: %s
+`, i+1, step)
+		}
+
+		code += fmt.Sprintf(`  
+  stop("Not implemented: %s")
+}
+`, algo.Name)
+	}
+
+	code += `
+# Example usage
+# result <- algorithm(params=list())
+`
+	return code
+}
+
+func (a *ResearchAlignmentAgent) generateDLLTemplate(extract ResearchExtract, component string) string {
+	code := fmt.Sprintf(`// DLL Implementation: %s
+// Based on research: %s
+// Auto-generated by Research Alignment Agent
+
+#include <windows.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef BUILDING_DLL
+#define DLL_EXPORT __declspec(dllexport)
+#else
+#define DLL_EXPORT __declspec(dllimport)
+#endif
+
+`, component, extract.Title)
+
+	// Generate export functions for each algorithm
+	for _, algo := range extract.Algorithms {
+		code += fmt.Sprintf(`
+// %s - %s
+// Complexity: %s
+DLL_EXPORT int32_t %s_Initialize(void);
+DLL_EXPORT int32_t %s_Execute(void* input, void* output);
+DLL_EXPORT void %s_Cleanup(void);
+`, algo.Name, algo.Description, algo.Complexity, algo.Name, algo.Name, algo.Name)
+	}
+
+	code += `
+
+#ifdef __cplusplus
+}
+#endif
+`
+	return code
+}
+
+func (a *ResearchAlignmentAgent) generateDLLHeaderTemplate(extract ResearchExtract, component string) string {
+	header := fmt.Sprintf(`#pragma once
+// DLL Header: %s
+// Based on research: %s
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef BUILDING_DLL
+#define DLL_EXPORT __declspec(dllexport)
+#else
+#define DLL_EXPORT __declspec(dllimport)
+#endif
+
+`, component, extract.Title)
+
+	// Export declarations
+	for _, algo := range extract.Algorithms {
+		header += fmt.Sprintf(`
+// %s API
+DLL_EXPORT int32_t %s_Initialize(void);
+DLL_EXPORT int32_t %s_Execute(void* input, void* output);
+DLL_EXPORT void %s_Cleanup(void);
+`, algo.Name, algo.Name, algo.Name, algo.Name)
+	}
+
+	header += `
+#ifdef __cplusplus
+}
+#endif
+`
+	return header
 }

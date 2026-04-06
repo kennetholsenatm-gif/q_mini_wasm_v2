@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"net/http"
 	"strings"
@@ -64,10 +65,9 @@ func (s *RealEmbeddingService) Embed(ctx context.Context, text string) ([]float3
 	// Call embedding API
 	embedding, err := s.callEmbeddingAPI(ctx, text)
 	if err != nil {
-		// Fallback to placeholder on API failure
-		fmt.Printf("Embedding API failed, using fallback: %v\n", err)
-		placeholder := NewPlaceholderEmbeddingService(s.dimension)
-		return placeholder.Embed(ctx, text)
+		// Fallback to local TF-IDF embedding on API failure
+		fmt.Printf("Embedding API failed, using local TF-IDF fallback: %v\n", err)
+		return s.generateLocalEmbedding(text), nil
 	}
 
 	s.mu.Lock()
@@ -146,6 +146,47 @@ func (s *RealEmbeddingService) EmbedBatch(ctx context.Context, texts []string) (
 // Dimension returns the embedding dimension
 func (s *RealEmbeddingService) Dimension() int {
 	return s.dimension
+}
+
+// generateLocalEmbedding creates a local TF-IDF style embedding as fallback
+func (s *RealEmbeddingService) generateLocalEmbedding(text string) []float32 {
+	// Simple character n-gram based embedding (TF-IDF style)
+	// This provides semantic similarity based on character patterns
+
+	embedding := make([]float32, s.dimension)
+
+	// Generate character trigrams
+	trigrams := make(map[string]int)
+	text = strings.ToLower(text)
+	for i := 0; i < len(text)-2; i++ {
+		trigram := text[i : i+3]
+		trigrams[trigram]++
+	}
+
+	// Hash trigrams to embedding dimensions
+	for trigram, count := range trigrams {
+		hash := fnv.New32a()
+		hash.Write([]byte(trigram))
+		idx := int(hash.Sum32()) % s.dimension
+
+		// TF-IDF weighting: term frequency * log scaling
+		weight := float32(count) * float32(math.Log(1+float64(count)))
+		embedding[idx] += weight
+	}
+
+	// Normalize to unit vector
+	norm := float32(0)
+	for _, v := range embedding {
+		norm += v * v
+	}
+	if norm > 0 {
+		norm = float32(math.Sqrt(float64(norm)))
+		for i := range embedding {
+			embedding[i] /= norm
+		}
+	}
+
+	return embedding
 }
 
 // PlaceholderEmbeddingService generates deterministic embeddings based on text hash
