@@ -17,10 +17,43 @@ env:
 
 jobs:
   # ===========================================================================
+  # GF(3) VALIDATION - Quantum Simulability Checks
+  # ===========================================================================
+  gf3-validation:
+    name: GF(3) Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Run GF(3) Validation
+        run: |
+          python scripts/validate_gf3.py q_mini_wasm_v2/core --recursive --completeness --energy --output gf3_report.txt
+          
+      - name: Run Energy Efficiency Tests
+        run: |
+          python scripts/energy_efficiency_test.py q_mini_wasm_v2/core --output energy_report.txt
+          
+      - name: Upload Validation Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gf3-validation-reports
+          path: |
+            gf3_report.txt
+            energy_report.txt
+          retention-days: 30
+
+  # ===========================================================================
   # LINT & STATIC ANALYSIS
   # ===========================================================================
   lint:
     name: Lint & Format
+    needs: gf3-validation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +71,7 @@ jobs:
   # ===========================================================================
   build:
     name: Build (${{ matrix.os }}, SYCL=${{ matrix.sycl }})
-    needs: lint
+    needs: [gf3-validation, lint]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -70,6 +103,11 @@ jobs:
 
       - name: Build
         run: cmake --build q_mini_wasm_v2/build --config ${{ matrix.build_type }} -j$(nproc 2>/dev/null || echo 4)
+        shell: bash
+
+      - name: Post-build GF(3) Validation
+        run: |
+          python scripts/ci_gf3_check.py
         shell: bash
 
       - name: Upload build artifacts
@@ -117,7 +155,7 @@ jobs:
   # ===========================================================================
   sycl-build:
     name: SYCL Build
-    needs: lint
+    needs: [gf3-validation, lint]
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:

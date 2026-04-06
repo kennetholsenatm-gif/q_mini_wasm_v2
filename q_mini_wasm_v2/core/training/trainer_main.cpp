@@ -3,8 +3,7 @@
 #include <string>
 #include <chrono>
 #include <thread>
-#include <random>
-#include <iomanip>
+#include "../ternary/trit.hpp"
 #include "../network.hpp"
 
 using namespace q_mini_wasm_v2::core;
@@ -13,7 +12,7 @@ int main(int argc, char* argv[]) {
     // Default parameters matching the research defaults and WUI
     size_t epochs = 100;
     size_t batch_size = 32;
-    double lr = 0.0001;
+    ternary::ProbTrit learning_rate = ternary::ProbTrit::LOW_PROB;  // Ternary learning rate
     size_t context_window = 4096;
     size_t entanglement_tokens = 256;
     size_t moe_experts = 8;
@@ -33,7 +32,11 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--batch-size" && i + 1 < argc) {
             batch_size = std::stoull(argv[++i]);
         } else if (arg == "--learning-rate" && i + 1 < argc) {
-            lr = std::stod(argv[++i]);
+            std::string val = argv[++i];
+            int lr_int = std::stoi(val);
+            if (lr_int <= 33) learning_rate = ternary::ProbTrit::LOW_PROB;
+            else if (lr_int <= 66) learning_rate = ternary::ProbTrit::MED_PROB;
+            else learning_rate = ternary::ProbTrit::HIGH_PROB;
         } else if (arg == "--context-window" && i + 1 < argc) {
             context_window = std::stoull(argv[++i]);
         } else if (arg == "--entanglement-tokens" && i + 1 < argc) {
@@ -82,23 +85,27 @@ int main(int argc, char* argv[]) {
         std::cout.flush();
 
         // Dataset loading or simulation
-        std::vector<std::vector<double>> dataset;
+        std::vector<std::vector<ternary::Trit>> dataset;
         if (!dataset_path.empty()) {
             std::cout << "{\"status\": \"progress\", \"step\": \"Loading dataset from " << dataset_path << "\"}\n";
             std::cout.flush();
             // Stub for actual dataset logic; for now we simulate it to ensure pipeline validates
-            dataset.resize(batch_size, std::vector<double>(context_window, 0.5));
+            dataset.resize(batch_size, std::vector<ternary::Trit>(context_window, ternary::Trit::ZERO));
         } else {
             std::cout << "{\"status\": \"progress\", \"step\": \"No dataset provided. Simulating Quantum Distribution...\"}\n";
             std::cout.flush();
-            std::random_device rd;
-            std::mt19937 gen(rd());
-            std::normal_distribution<double> dist(0.0, 1.0);
             
-            dataset.resize(batch_size, std::vector<double>(context_window));
+            // Generate ternary dataset using deterministic seed
+            uint32_t seed = 42;
+            dataset.resize(batch_size, std::vector<ternary::Trit>(context_window));
             for (auto& row : dataset) {
                 for (auto& val : row) {
-                    val = dist(gen);
+                    // Simple deterministic ternary generation
+                    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+                    int trit_val = seed % 3;
+                    if (trit_val == 0) val = ternary::Trit::NEGATIVE;
+                    else if (trit_val == 1) val = ternary::Trit::ZERO;
+                    else val = ternary::Trit::POSITIVE;
                 }
             }
         }

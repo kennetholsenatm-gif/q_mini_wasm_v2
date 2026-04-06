@@ -1,0 +1,88 @@
+name: GF(3) Integrity Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-gf3:
+    name: Validate GF(3) Architectural Constraints
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Run GF(3) Integrity Validator
+      run: python scripts/validate_gf3_integrity.py
+
+    - name: Check for forbidden Boolean operations
+      run: |
+        echo "Scanning for boolean contamination in critical paths..."
+        FORBIDDEN=$(grep -r -E "\b(bool|boolean|true|false)\b" q_mini_wasm_v2/core/stabilizer q_mini_wasm_v2/core/ternary q_mini_wasm_v2/core/qgnn q_mini_wasm_v2/core/learning || true)
+        if [ ! -z "$FORBIDDEN" ]; then
+          echo "❌ Boolean contamination detected:"
+          echo "$FORBIDDEN"
+          exit 1
+        fi
+        echo "✅ No boolean contamination found"
+
+    - name: Verify architectural constitution compliance
+      run: |
+        echo "Verifying Q_MINI_WASM_V2 Architectural Constitution..."
+        
+        # Check for PPO/RL which are FORBIDDEN
+        PPO=$(grep -r -i "ppo\|proximal policy\|reinforcement learning" q_mini_wasm_v2/core/ || true)
+        if [ ! -z "$PPO" ]; then
+          echo "❌ Forbidden reinforcement learning code detected:"
+          echo "$PPO"
+          exit 1
+        fi
+        
+        # Check for gRPC which is FORBIDDEN
+        GRPC=$(grep -r -i "grpc" q_mini_wasm_v2/core/ || true)
+        if [ ! -z "$GRPC" ]; then
+          echo "❌ Forbidden gRPC code detected:"
+          echo "$GRPC"
+          exit 1
+        fi
+        
+        echo "✅ All architectural constraints verified"
+
+  build-wasm:
+    name: Build and Validate WASM Binary
+    runs-on: ubuntu-latest
+    needs: validate-gf3
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Emscripten
+      uses: mymindstorm/setup-emsdk@v14
+
+    - name: Build WASM module
+      run: |
+        cd q_mini_wasm_v2
+        mkdir -p build
+        cd build
+        emcmake cmake ..
+        emmake make
+
+    - name: Audit WASM instructions
+      run: |
+        npm install -g wabt
+        wasm-objdump -d q_mini_wasm_v2/build/qminiwasm.wasm > wasm_dump.txt
+        
+        FLOAT_INST=$(grep -c -E "f32\.|f64\.|f32x4\.|f64x2\." wasm_dump.txt || true)
+        if [ $FLOAT_INST -gt 0 ]; then
+          echo "❌ Found $FLOAT_INST floating point instructions in WASM binary"
+          exit 1
+        fi
+        
+        echo "✅ WASM binary is pure integer - no floating point instructions detected"

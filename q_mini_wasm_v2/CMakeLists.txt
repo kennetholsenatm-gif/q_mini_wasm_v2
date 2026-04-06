@@ -66,7 +66,7 @@ set(CORE_SOURCES
     core/moe/router.cpp
     core/learning/forward_forward.hpp
     core/learning/forward_forward.cpp
-        core/network.hpp
+    core/network.hpp
     core/network.cpp
     core/inference/geometric_context.hpp
     core/inference/geometric_context.cpp
@@ -80,6 +80,15 @@ set(CORE_SOURCES
     core/inference/inference_pipeline.cpp
     core/flash_cim/flash_cim.hpp
     core/flash_cim/flash_cim.cpp
+    # QGNN Graph-Native Components
+    core/qgnn/graph_native.hpp
+    core/qgnn/graph_native.cpp
+    core/qgnn/graph_moe_router.hpp
+    core/qgnn/graph_moe_router.cpp
+    core/qgnn/graph_migration_adapter.hpp
+    core/qgnn/graph_migration_adapter.cpp
+    core/qgnn/message_passing.hpp
+    core/qgnn/message_passing.cpp
 )
 
 set(RUNTIME_SOURCES

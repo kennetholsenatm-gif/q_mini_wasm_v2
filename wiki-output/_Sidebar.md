@@ -4,6 +4,8 @@
   * [Ternary State Space](Architecture-Ternary-State-Space.md)
   * [Stabilizer Tableau](Architecture-Stabilizer-Tableau.md)
   * [MoE Routing](Architecture-MoE-Routing.md)
+  * [🆕 QGNN Architecture](Architecture-QGNN.md)
+  * [🆕 Graph Migration Guide](Graph-Migration-Guide.md)
   * [Forward-Forward](Architecture-Forward-Forward.md)
   * [SYCL Acceleration](Architecture-SYCL-Acceleration.md)
 **API Reference**

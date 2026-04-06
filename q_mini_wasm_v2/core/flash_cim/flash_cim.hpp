@@ -67,7 +67,7 @@ struct BlockStatus {
 struct CIMResult {
     bool success;
     uint64_t cycles;
-    double energy_pj;       // Energy consumption in picojoules
+    ternary::EnergyTrit energy_level;  // Ternary energy consumption level
     size_t data_size;
     std::string error_message;
 };
@@ -194,20 +194,91 @@ public:
     
     /**
      * @brief Get energy consumption statistics
-     * @return Total energy consumed in picojoules
+     * @return Total energy consumed as ternary level
      */
-    double get_total_energy_pj() const;
+    ternary::EnergyTrit get_total_energy_level() const;
     
     /**
      * @brief Get performance metrics
-     * @return Map of metric names to values
+     * @return Map of metric names to ternary values
      */
-    std::vector<std::pair<std::string, double>> get_metrics() const;
+    std::vector<std::pair<std::string, ternary::EnergyTrit>> get_energy_metrics() const;
     
     /**
      * @brief Reset energy and performance counters
      */
     void reset_metrics();
+
+    // ========================================================================
+    // Multi-Wordline Sensing
+    // ========================================================================
+    
+    /**
+     * @brief Perform parallel multi-wordline sensing
+     * @param wordlines Vector of wordline indices to sense simultaneously
+     * @return Vector of cell states for each sensed wordline
+     */
+    std::vector<std::vector<CellState>> multi_wordline_sense(const std::vector<size_t>& wordlines);
+    
+    /**
+     * @brief 8-level parallel sensing for threshold detection
+     * @param block_id Block to sense
+     * @param wordline_count Number of parallel wordlines (max 8)
+     * @return Sensed cell states with threshold resolution
+     */
+    std::vector<CellState> parallel_sense_8w(uint32_t block_id, size_t wordline_count = 8);
+
+    // ========================================================================
+    // Threshold Voltage Logic
+    // ========================================================================
+    
+    enum class ThresholdLevel : uint8_t {
+        LEVEL_0 = 0,  // < 2.0V
+        LEVEL_1 = 1,  // 2.0V - 2.5V
+        LEVEL_2 = 2,  // 2.5V - 3.0V
+        LEVEL_3 = 3   // > 3.0V
+    };
+    
+    /**
+     * @brief Measure threshold voltage distribution
+     * @param block_id Block to measure
+     * @return Vector of threshold levels for each cell
+     */
+    std::vector<ThresholdLevel> measure_threshold_distribution(uint32_t block_id);
+    
+    /**
+     * @brief Apply threshold-based ternary decoding
+     * @param threshold_levels Measured threshold levels
+     * @return Decoded trit values
+     */
+    std::vector<ternary::Trit> threshold_decode(const std::vector<ThresholdLevel>& threshold_levels) const;
+
+    // ========================================================================
+    // Hardware Abstraction Layer
+    // ========================================================================
+    
+    enum class HardwareBackend : uint8_t {
+        SOFTWARE_SIMULATION = 0,
+        NVME_SSD = 1,
+        3D_XPOINT = 2,
+        FPGA_ACCELERATOR = 3
+    };
+    
+    /**
+     * @brief Get current hardware backend
+     */
+    HardwareBackend get_backend() const;
+    
+    /**
+     * @brief Set hardware backend at runtime
+     * @param backend Hardware backend to use
+     */
+    void set_backend(HardwareBackend backend);
+    
+    /**
+     * @brief Check if backend is hardware-accelerated
+     */
+    bool is_hardware_accelerated() const;
 
     // ========================================================================
     // Configuration
@@ -222,9 +293,10 @@ public:
 private:
     FlashCIMConfig config_;
     bool operational_;
+    HardwareBackend current_backend_;
     
     // Energy tracking
-    double total_energy_pj_;
+    ternary::EnergyTrit total_energy_level_;
     uint64_t total_operations_;
     uint64_t total_cycles_;
     
@@ -239,10 +311,10 @@ private:
     std::vector<ternary::Trit> decode_cells_to_trits(const std::vector<CellState>& cells);
     
     // Energy calculation helpers
-    double calculate_write_energy(size_t num_cells) const;
-    double calculate_read_energy(size_t num_cells) const;
-    double calculate_erase_energy(size_t num_blocks) const;
-    double calculate_cim_energy(size_t operations) const;
+    ternary::EnergyTrit calculate_write_energy_level(size_t num_cells) const;
+    ternary::EnergyTrit calculate_read_energy_level(size_t num_cells) const;
+    ternary::EnergyTrit calculate_erase_energy_level(size_t num_blocks) const;
+    ternary::EnergyTrit calculate_cim_energy_level(size_t operations) const;
 };
 
 /**

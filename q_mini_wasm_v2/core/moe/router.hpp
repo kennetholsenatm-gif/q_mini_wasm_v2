@@ -1,12 +1,10 @@
 #pragma once
 
-#include <vector>
-#include <cstdint>
-#include <memory>
-#include <functional>
-#include <random>
-#include "../stabilizer/tableau.hpp"
 #include "../ternary/trit.hpp"
+#include "../stabilizer/tableau.hpp"
+#include <vector>
+#include <memory>
+#include <cstdint>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -187,10 +185,66 @@ public:
         const std::vector<size_t>& expert_loads,
         size_t tokens_per_expert
     ) const;
-
-    // ========================================================================
-    // Configuration
-    // ========================================================================
+    
+    /**
+     * @brief Advanced load balancing with predictive analytics
+     * 
+     * Implements sophisticated load balancing with:
+     * - Predictive load forecasting
+     * - Dynamic capacity reallocation
+     * - Load-aware expert selection
+     * - Bottleneck detection and mitigation
+     * 
+     * @param current_loads Current expert loads
+     * @param load_predictions Predicted future loads
+     * @param bottleneck_threshold Threshold for bottleneck detection
+     * @return Optimized load-balanced expert selection
+     */
+    std::vector<size_t> predictive_load_balance(
+        const std::vector<size_t>& current_loads,
+        const std::vector<uint32_t>& load_predictions,
+        uint32_t bottleneck_threshold
+    );
+    
+    /**
+     * @brief Adaptive load balancing with machine learning
+     * 
+     * Uses ML-based approaches for load balancing:
+     * - Reinforcement learning for load distribution
+     * - Anomaly detection for load spikes
+     * - Self-adaptive balancing parameters
+     * - Performance-driven optimization
+     * 
+     * @param expert_performance Historical expert performance data
+     * @param system_metrics Current system performance metrics
+     * @param learning_rate ML learning rate parameter
+     * @return ML-optimized load-balanced routing
+     */
+    std::vector<size_t> ml_adaptive_balance(
+        const std::vector<std::vector<int32_t>>& expert_performance,
+        const std::vector<int32_t>& system_metrics,
+        ternary::ProbTrit learning_rate = ternary::ProbTrit::LOW_PROB
+    );
+    
+    /**
+     * @brief Hierarchical load balancing for large-scale systems
+     * 
+     * Implements multi-level load balancing:
+     * - Local expert group balancing
+     * - Cross-group load distribution
+     * - Hierarchical bottleneck resolution
+     * - Scalable coordination mechanisms
+     * 
+     * @param expert_groups Group assignments for experts
+     * @param group_loads Load per expert group
+     * @param global_load Global system load
+     * @return Hierarchically balanced expert selection
+     */
+    std::vector<size_t> hierarchical_balance(
+        const std::vector<std::vector<size_t>>& expert_groups,
+        const std::vector<uint32_t>& group_loads,
+        uint32_t global_load
+    );
     
     /**
      * @brief Get expert configuration
@@ -204,7 +258,240 @@ public:
      */
     void update_expert_weights(size_t expert_idx, const std::vector<std::vector<ternary::Trit>>& weights);
 
+    // ========================================================================
+    // Dynamic Expert Scaling
+    // ========================================================================
+    
+    /**
+     * @brief Dynamically adjust active expert count based on load
+     * @param current_load Current system load (0-100)
+     * @return New active expert count
+     */
+    size_t adjust_expert_scale(uint32_t current_load);
+    
+    /**
+     * @brief Get current scaling factor
+     */
+    float get_scaling_factor() const;
+    
+    /**
+     * @brief Predictive expert scaling based on load patterns
+     * 
+     * Uses historical load data to predict optimal expert count:
+     * - Time series analysis of load patterns
+     * - Proactive scaling before load spikes
+     * - Energy-aware scaling decisions
+     * 
+     * @param current_load Current system load (0-100)
+     * @param load_history Historical load data
+     * @return Predicted optimal expert count
+     */
+    size_t predictive_expert_scaling(
+        uint32_t current_load,
+        const std::vector<uint32_t>& load_history
+    );
+    
+    /**
+     * @brief Energy-aware expert scaling
+     * 
+     * Optimizes expert count for energy efficiency:
+     * - Energy per expert computation
+     * - Load vs energy trade-off analysis
+     * - Thermal constraints consideration
+     * 
+     * @param current_load Current system load (0-100)
+     * @param energy_budget Available energy budget (relative)
+     * @param thermal_limit Thermal constraint limit
+     * @return Energy-optimized expert count
+     */
+    size_t energy_aware_scaling(
+        uint32_t current_load,
+        double energy_budget,
+        uint32_t thermal_limit
+    );
+    
+    /**
+     * @brief Latency-critical expert scaling
+     * 
+     * Prioritizes low latency for time-sensitive workloads:
+     * - Latency prediction models
+     * - Aggressive scaling for latency spikes
+     * - Quality-of-service guarantees
+     * 
+     * @param current_load Current system load (0-100)
+     * @param latency_target Target latency in microseconds
+     * @param current_latency Current measured latency
+     * @return Latency-optimized expert count
+     */
+    size_t latency_critical_scaling(
+        uint32_t current_load,
+        uint32_t latency_target,
+        uint32_t current_latency
+    );
+    
+    // ========================================================================
+    // Priority-Based Routing
+    // ========================================================================
+    
+    enum class PriorityLevel : uint8_t {
+        LOW = 0,
+        NORMAL = 1,
+        HIGH = 2,
+        CRITICAL = 3
+    };
+    
+    /**
+     * @brief Route with priority level
+     * @param input Input features
+     * @param priority Request priority level
+     * @return Selected expert indices
+     */
+    std::vector<size_t> priority_route(const std::vector<ternary::Trit>& input, PriorityLevel priority);
+    
+    /**
+     * @brief Apply priority-based scheduling bias
+     * @param logits Base routing logits
+     * @param priority Request priority
+     * @return Priority-adjusted logits
+     */
+    std::vector<int32_t> apply_priority_bias(const std::vector<int32_t>& logits, PriorityLevel priority) const;
+    
+    /**
+     * @brief Advanced priority routing with QoS guarantees
+     * 
+     * Implements sophisticated priority-based routing with:
+     * - Service level agreement (SLA) enforcement
+     * - Dynamic priority adjustment based on system state
+     * - Priority inheritance and preemption
+     * - Fairness guarantees across priority levels
+     * 
+     * @param input Input features
+     * @param priority Request priority level
+     * @param sla_constraints SLA requirements (latency, throughput)
+     * @param system_load Current system load (0-100)
+     * @return Priority-routed expert indices with QoS guarantees
+     */
+    std::vector<size_t> advanced_priority_route(
+        const std::vector<ternary::Trit>& input,
+        PriorityLevel priority,
+        const std::vector<uint32_t>& sla_constraints,
+        uint32_t system_load
+    );
+    
+    /**
+     * @brief Adaptive priority scaling
+     * 
+     * Dynamically adjusts priority weights based on:
+     * - System congestion levels
+     * - Historical priority performance
+     * - Resource availability
+     * - Fairness metrics
+     * 
+     * @param base_priority Original priority level
+     * @param congestion_level Current congestion (0-100)
+     * @param resource_availability Available resources (0-100)
+     * @return Adaptively adjusted priority level
+     */
+    PriorityLevel adaptive_priority_scaling(
+        PriorityLevel base_priority,
+        uint32_t congestion_level,
+        uint32_t resource_availability
+    );
+    
+    /**
+     * @brief Priority-aware load balancing
+     * 
+     * Balances load while respecting priority constraints:
+     * - High-priority requests get preferred routing
+     * - Low-priority requests use less optimal experts
+     * - Priority-based expert reservation
+     * - Dynamic priority queue management
+     * 
+     * @param requests Vector of requests with priorities
+     * @param expert_loads Current expert loads
+     * @return Priority-aware assignment matrix
+     */
+    std::vector<std::vector<size_t>> priority_aware_load_balance(
+        const std::vector<std::pair<std::vector<ternary::Trit>, PriorityLevel>>& requests,
+        const std::vector<size_t>& expert_loads
+    );
+
+    // ========================================================================
+    // Advanced Expert Selection Algorithms
+    // ========================================================================
+    
+    /**
+     * @brief Adaptive Expert Selection with Context-Aware Routing
+     * 
+     * Implements advanced expert selection that considers:
+     * - Historical expert performance
+     * - Input pattern similarity
+     * - Expert specialization scores
+     * - Dynamic capacity constraints
+     * 
+     * @param input Input features
+     * @param expert_performance Historical performance metrics
+     * @param specialization_scores Expert specialization scores
+     * @return Selected expert indices with adaptive routing
+     */
+    std::vector<size_t> adaptive_expert_selection(
+        const std::vector<ternary::Trit>& input,
+        const std::vector<std::vector<int32_t>>& expert_performance,
+        const std::vector<std::vector<int32_t>>& specialization_scores
+    );
+    
+    /**
+     * 
+     * @param input Input features
+     * @param coherence_threshold Minimum coherence threshold (0-100)
+     * @return Quantum-selected expert indices
+     */
+    std::vector<size_t> quantum_entangled_selection(
+        const std::vector<ternary::Trit>& input,
+        int32_t coherence_threshold = 30
+    );
+    
+    /**
+     * @brief Multi-Objective Expert Selection
+     * 
+     * Balances multiple objectives simultaneously:
+     * - Performance optimization
+     * - Load balancing
+     * - Energy efficiency
+     * - Latency minimization
+     * 
+     * @param input Input features
+     * @param objectives Weight vector for different objectives
+     * @return Pareto-optimal expert selection
+     */
+    std::vector<size_t> multi_objective_selection(
+        const std::vector<ternary::Trit>& input,
+        const std::vector<ternary::ProbTrit>& objectives = {
+            ternary::ProbTrit::HIGH_PROB, ternary::ProbTrit::MED_PROB, 
+            ternary::ProbTrit::MED_PROB, ternary::ProbTrit::LOW_PROB
+        }
+    );
+    
+    /**
+     * @brief Reinforcement Learning-based Expert Selection
+     * 
+     * Uses Q-learning for adaptive expert selection:
+     * - State: current system load and input pattern
+     * - Action: expert selection
+     * - Reward: performance and load balance improvement
+     * 
+     * @param input Input features
+     * @param system_state Current system state
+     * @return RL-optimized expert selection
+     */
+    std::vector<size_t> rl_expert_selection(
+        const std::vector<ternary::Trit>& input,
+        const std::vector<int32_t>& system_state
+    );
+
 private:
+    size_t current_active_experts_;
+    uint32_t last_load_measurement_;
     ExpertConfig config_;
     EntangledRoutingConfig entangled_config_;
     
@@ -214,11 +501,43 @@ private:
     // Routing weight matrix (ternary)
     std::vector<std::vector<ternary::Trit>> routing_weights_;
     
-    // Random number generator for entangled routing
-    std::mt19937 rng_;
+    // Ternary deterministic state generator
+    uint32_t ternary_seed_;
     
     // Entanglement coupling matrix for correlated routing (scaled integer)
     std::vector<std::vector<int32_t>> entanglement_coupling_;
+    
+    // Advanced selection algorithm state
+    std::vector<std::vector<int32_t>> expert_performance_history_;
+    std::vector<std::vector<int32_t>> expert_specialization_scores_;
+    std::vector<std::vector<ternary::ProbTrit>> q_learning_table_;  // Ternary Q-table for RL
+    std::vector<int32_t> last_system_state_;
+    uint32_t learning_episode_;
+    bool rl_initialized_;
+    
+    // Dynamic scaling state
+    std::vector<uint32_t> load_history_;
+    std::vector<uint32_t> latency_history_;
+    std::vector<ternary::EnergyTrit> energy_history_;  // Ternary energy tracking
+    uint32_t scaling_decision_count_;
+    uint32_t last_scaling_time_;
+    ternary::EnergyTrit energy_per_expert_;  // Ternary energy per expert
+    uint32_t thermal_current_;
+    
+    // Priority routing state
+    std::vector<std::vector<uint32_t>> priority_performance_history_; // [priority][time_step]
+    std::vector<uint32_t> priority_queue_sizes_;
+    std::vector<ternary::ProbTrit> priority_fairness_metrics_;  // Ternary fairness
+    uint32_t priority_preemptions_;
+    std::vector<std::vector<size_t>> priority_reserved_experts_; // [priority][expert_indices]
+    
+    // Advanced load balancing state
+    std::vector<std::vector<uint32_t>> load_prediction_history_; // [expert][future_time_steps]
+    std::vector<bool> bottleneck_flags_; // Per expert bottleneck detection
+    std::vector<std::vector<ternary::ProbTrit>> ml_balancing_weights_; // Ternary ML weights
+    std::vector<std::vector<size_t>> expert_groups_; // Hierarchical grouping
+    uint32_t load_balancing_episodes_;
+    ternary::ProbTrit load_balancing_accuracy_;  // Ternary accuracy tracking
     
     // ========================================================================
     // Internal Helpers
@@ -248,6 +567,112 @@ private:
      * @brief Compute coherence metric for entangled routing
      */
     int32_t compute_coherence(const std::vector<int32_t>& probabilities) const;
+    
+    /**
+     * @brief Initialize advanced selection state
+     */
+    void initialize_advanced_selection();
+    
+    /**
+     * @brief Compute input pattern similarity
+     */
+    int32_t compute_pattern_similarity(
+        const std::vector<ternary::Trit>& input1,
+        const std::vector<ternary::Trit>& input2
+    ) const;
+    
+    /**
+     * @brief Update Q-learning table
+     */
+    void update_q_learning(
+        const std::vector<int32_t>& state,
+        size_t action,
+        double reward,
+        const std::vector<int32_t>& next_state
+    );
+    
+    /**
+     * @brief Compute Pareto-optimal frontier
+     */
+    std::vector<size_t> compute_pareto_frontier(
+        const std::vector<std::vector<double>>& objective_scores
+    ) const;
+    
+    /**
+     * @brief Predict load using exponential smoothing
+     */
+    uint32_t predict_load(const std::vector<uint32_t>& load_history) const;
+    
+    /**
+     * @brief Compute energy cost for expert count
+     */
+    double compute_energy_cost(size_t expert_count) const;
+    
+    /**
+     * @brief Estimate latency for expert count
+     */
+    uint32_t estimate_latency(size_t expert_count, uint32_t current_load) const;
+    
+    /**
+     * @brief Check SLA compliance for priority level
+     */
+    bool check_sla_compliance(
+        PriorityLevel priority,
+        const std::vector<uint32_t>& sla_constraints,
+        uint32_t current_latency,
+        uint32_t current_throughput
+    ) const;
+    
+    /**
+     * @brief Compute priority fairness metrics
+     */
+    double compute_priority_fairness() const;
+    
+    /**
+     * @brief Reserve experts for high priority
+     */
+    void reserve_priority_experts(PriorityLevel priority, size_t expert_count);
+    
+    /**
+     * @brief Advanced priority bias with context awareness
+     */
+    std::vector<int32_t> advanced_priority_bias(const std::vector<int32_t>& logits, PriorityLevel priority) const;
+    
+    /**
+     * @brief Predict future loads using time series analysis
+     */
+    std::vector<uint32_t> predict_future_loads(const std::vector<size_t>& current_loads) const;
+    
+    /**
+     * @brief Detect bottlenecks in expert utilization
+     */
+    std::vector<bool> detect_bottlenecks(const std::vector<size_t>& expert_loads) const;
+    
+    /**
+     * @brief Update ML balancing model
+     */
+    void update_ml_balancing_model(
+        const std::vector<std::vector<int32_t>>& expert_performance,
+        const std::vector<int32_t>& system_metrics,
+        double learning_rate
+    );
+    
+    /**
+     * @brief Create expert groups for hierarchical balancing
+     */
+    void create_expert_groups(size_t num_groups);
+    
+    /**
+     * @brief Generate deterministic ternary random value
+     * @return Ternary value in GF(3) space
+     */
+    ternary::Trit ternary_random() noexcept;
+    
+    /**
+     * @brief Generate deterministic ternary probability
+     * @return Ternary probability value
+     */
+    ternary::ProbTrit ternary_prob_random() noexcept;
 };
 
 /**

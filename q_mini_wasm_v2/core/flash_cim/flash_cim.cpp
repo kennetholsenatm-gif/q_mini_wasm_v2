@@ -31,6 +31,7 @@ FlashCIMConfig create_default_d_drive_config() {
 FlashCIMController::FlashCIMController(const FlashCIMConfig& config)
     : config_(config)
     , operational_(false)
+    , current_backend_(HardwareBackend::SOFTWARE_SIMULATION)
     , total_energy_pj_(0.0)
     , total_operations_(0)
     , total_cycles_(0)
@@ -464,6 +465,110 @@ double FlashCIMController::calculate_cim_energy(size_t operations) const {
 // ============================================================================
 // Factory Function
 // ============================================================================
+
+// ============================================================================
+// Multi-Wordline Sensing Implementation
+// ============================================================================
+
+std::vector<std::vector<CellState>> FlashCIMController::multi_wordline_sense(const std::vector<size_t>& wordlines) {
+    std::vector<std::vector<CellState>> results;
+    results.reserve(wordlines.size());
+    
+    // Parallel sensing simulation - in hardware this happens simultaneously
+    for (size_t wl : wordlines) {
+        if (wl < flash_cells_.size()) {
+            results.push_back(flash_cells_[wl]);
+        } else {
+            results.emplace_back();
+        }
+    }
+    
+    // Energy cost: parallel sensing reduces per-wordline cost by 70%
+    total_energy_pj_ += wordlines.size() * calculate_read_energy(config_.cells_per_page) * 0.3;
+    total_operations_++;
+    
+    return results;
+}
+
+std::vector<CellState> FlashCIMController::parallel_sense_8w(uint32_t block_id, size_t wordline_count) {
+    wordline_count = std::min(wordline_count, static_cast<size_t>(8));
+    
+    std::vector<size_t> wordlines(wordline_count);
+    std::iota(wordlines.begin(), wordlines.end(), block_id * 8);
+    
+    auto parallel_results = multi_wordline_sense(wordlines);
+    
+    // Merge parallel sense results
+    std::vector<CellState> merged;
+    for (const auto& wl_data : parallel_results) {
+        merged.insert(merged.end(), wl_data.begin(), wl_data.end());
+    }
+    
+    return merged;
+}
+
+// ============================================================================
+// Threshold Voltage Logic Implementation
+// ============================================================================
+
+std::vector<FlashCIMController::ThresholdLevel> FlashCIMController::measure_threshold_distribution(uint32_t block_id) {
+    std::vector<ThresholdLevel> levels;
+    
+    if (block_id >= block_status_.size()) {
+        return levels;
+    }
+    
+    const auto& cells = flash_cells_[block_id];
+    levels.reserve(cells.size());
+    
+    // Simulate threshold voltage measurement
+    for (CellState state : cells) {
+        switch (state) {
+            case CellState::ERASED: levels.push_back(ThresholdLevel::LEVEL_0); break;
+            case CellState::LOW:    levels.push_back(ThresholdLevel::LEVEL_1); break;
+            case CellState::MEDIUM: levels.push_back(ThresholdLevel::LEVEL_2); break;
+            case CellState::HIGH:   levels.push_back(ThresholdLevel::LEVEL_3); break;
+            default:                levels.push_back(ThresholdLevel::LEVEL_0); break;
+        }
+    }
+    
+    total_energy_pj_ += cells.size() * 0.5; // Threshold measurement cost
+    total_operations_++;
+    
+    return levels;
+}
+
+std::vector<ternary::Trit> FlashCIMController::threshold_decode(const std::vector<ThresholdLevel>& threshold_levels) const {
+    std::vector<ternary::Trit> trits;
+    trits.reserve(threshold_levels.size());
+    
+    for (ThresholdLevel level : threshold_levels) {
+        switch (level) {
+            case ThresholdLevel::LEVEL_1: trits.push_back(ternary::Trit::NEGATIVE); break;
+            case ThresholdLevel::LEVEL_2: trits.push_back(ternary::Trit::ZERO);     break;
+            case ThresholdLevel::LEVEL_3: trits.push_back(ternary::Trit::POSITIVE); break;
+            default:                       trits.push_back(ternary::Trit::ZERO);     break;
+        }
+    }
+    
+    return trits;
+}
+
+// ============================================================================
+// Hardware Abstraction Layer Implementation
+// ============================================================================
+
+FlashCIMController::HardwareBackend FlashCIMController::get_backend() const {
+    return current_backend_;
+}
+
+void FlashCIMController::set_backend(HardwareBackend backend) {
+    current_backend_ = backend;
+}
+
+bool FlashCIMController::is_hardware_accelerated() const {
+    return current_backend_ != HardwareBackend::SOFTWARE_SIMULATION;
+}
 
 std::unique_ptr<FlashCIMController> create_flash_cim_controller(const FlashCIMConfig& config) {
     return std::make_unique<FlashCIMController>(config);

@@ -21,6 +21,83 @@ enum class Trit : int8_t {
 };
 
 /**
+ * @brief Ternary energy tracking in GF(3) space
+ * 
+ * Maps energy consumption to discrete ternary levels for Gottesman-Knill
+ * simulability. Energy is quantized to avoid floating-point contamination.
+ * 
+ * Energy levels: {-1, 0, +1} representing {low, medium, high} energy states
+ * Each unit represents ~0.1 pJ for sub-picojoule precision
+ */
+enum class EnergyTrit : int8_t {
+    LOW = -1,      // < 0.3 pJ/op
+    MEDIUM = 0,    // 0.3 - 0.7 pJ/op  
+    HIGH = 1       // > 0.7 pJ/op
+};
+
+/**
+ * @brief Convert energy in picojoules to ternary energy level
+ * @param energy_pj Energy in picojoules
+ * @return Ternary energy level
+ */
+constexpr EnergyTrit energy_to_trit(double energy_pj) noexcept {
+    if (energy_pj < 0.3) return EnergyTrit::LOW;
+    if (energy_pj > 0.7) return EnergyTrit::HIGH;
+    return EnergyTrit::MEDIUM;
+}
+
+/**
+ * @brief Convert ternary energy level to approximate picojoules
+ * @param energy_trit Ternary energy level
+ * @return Approximate energy in picojoules
+ */
+constexpr double trit_to_energy(EnergyTrit energy_trit) noexcept {
+    switch (energy_trit) {
+        case EnergyTrit::LOW: return 0.2;   // 0.2 pJ/op
+        case EnergyTrit::MEDIUM: return 0.5; // 0.5 pJ/op
+        case EnergyTrit::HIGH: return 1.0;   // 1.0 pJ/op
+    }
+    return 0.5; // Default medium
+}
+
+/**
+ * @brief Ternary probability distribution for ML operations
+ * 
+ * Replaces floating-point probabilities with GF(3) discrete values
+ * Each trit represents probability ranges: {-1: 0-33%, 0: 34-66%, +1: 67-100%}
+ */
+enum class ProbTrit : int8_t {
+    LOW_PROB = -1,   // 0-33%
+    MED_PROB = 0,    // 34-66%
+    HIGH_PROB = 1    // 67-100%
+};
+
+/**
+ * @brief Convert probability (0-100) to ternary probability
+ * @param prob Percentage probability (0-100)
+ * @return Ternary probability
+ */
+constexpr ProbTrit prob_to_trit(uint32_t prob) noexcept {
+    if (prob < 34) return ProbTrit::LOW_PROB;
+    if (prob > 66) return ProbTrit::HIGH_PROB;
+    return ProbTrit::MED_PROB;
+}
+
+/**
+ * @brief Convert ternary probability to percentage
+ * @param prob_trit Ternary probability
+ * @return Representative percentage
+ */
+constexpr uint32_t trit_to_prob(ProbTrit prob_trit) noexcept {
+    switch (prob_trit) {
+        case ProbTrit::LOW_PROB: return 17;   // 17% ~ center of 0-33%
+        case ProbTrit::MED_PROB: return 50;   // 50% ~ center of 34-66%
+        case ProbTrit::HIGH_PROB: return 83;  // 83% ~ center of 67-100%
+    }
+    return 50;
+}
+
+/**
  * @brief Unbalanced Z3 mapping for arithmetic operations
  * Maps balanced ternary {-1, 0, +1} to GF(3) {0, 1, 2}
  */
@@ -127,5 +204,51 @@ constexpr Trit negate(Trit a) noexcept {
 }
 
 } // namespace trit_ops
+
+/**
+ * @brief Energy trit arithmetic operations
+ */
+namespace energy_ops {
+
+constexpr EnergyTrit add(EnergyTrit a, EnergyTrit b) noexcept {
+    // Energy addition in GF(3) space
+    int sum = static_cast<int>(a) + static_cast<int>(b);
+    if (sum > 1) return static_cast<EnergyTrit>(sum - 3);
+    if (sum < -1) return static_cast<EnergyTrit>(sum + 3);
+    return static_cast<EnergyTrit>(sum);
+}
+
+constexpr EnergyTrit multiply(EnergyTrit a, EnergyTrit b) noexcept {
+    // Energy multiplication in GF(3)
+    int prod = static_cast<int>(a) * static_cast<int>(b);
+    if (prod > 1) return static_cast<EnergyTrit>(prod - 3);
+    if (prod < -1) return static_cast<EnergyTrit>(prod + 3);
+    return static_cast<EnergyTrit>(prod);
+}
+
+} // namespace energy_ops
+
+/**
+ * @brief Probability trit arithmetic operations
+ */
+namespace prob_ops {
+
+constexpr ProbTrit add(ProbTrit a, ProbTrit b) noexcept {
+    // Probability addition in GF(3) space
+    int sum = static_cast<int>(a) + static_cast<int>(b);
+    if (sum > 1) return static_cast<ProbTrit>(sum - 3);
+    if (sum < -1) return static_cast<ProbTrit>(sum + 3);
+    return static_cast<ProbTrit>(sum);
+}
+
+constexpr ProbTrit multiply(ProbTrit a, ProbTrit b) noexcept {
+    // Probability multiplication in GF(3)
+    int prod = static_cast<int>(a) * static_cast<int>(b);
+    if (prod > 1) return static_cast<ProbTrit>(prod - 3);
+    if (prod < -1) return static_cast<ProbTrit>(prod + 3);
+    return static_cast<ProbTrit>(prod);
+}
+
+} // namespace prob_ops
 
 } // namespace q_mini_wasm_v2::core::ternary
