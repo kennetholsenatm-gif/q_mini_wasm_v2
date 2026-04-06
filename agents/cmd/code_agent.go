@@ -467,14 +467,176 @@ func (c *CodeAgent) addErrorHandling(r *CodeRefactoring) {
 
 // simplifyConditionals simplifies conditional expressions
 func (c *CodeAgent) simplifyConditionals(r *CodeRefactoring) {
-	// Placeholder for conditional simplification
-	r.Improvement = "Conditional simplifications analyzed"
+	// Analyze code for complex conditionals that can be simplified
+	content := r.Refactored
+	lines := strings.Split(content, "\n")
+	improvements := 0
+
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Pattern 1: Nested if statements that could be combined
+		if strings.Contains(line, "if ") && strings.Count(line, "&&") == 0 && strings.Count(line, "||") == 0 {
+			// Check for consecutive if statements with same body pattern
+			if i+1 < len(lines) && strings.Contains(lines[i+1], "if ") {
+				r.Changes = append(r.Changes, Change{
+					Type:        "simplify",
+					Line:        i + 1,
+					OldCode:     line,
+					NewCode:     "// Consider combining with next if using &&",
+					Description: "Nested if statements can be combined",
+				})
+				improvements++
+			}
+		}
+
+		// Pattern 2: Boolean comparisons that can be simplified
+		if strings.Contains(line, "== true") || strings.Contains(line, "== false") {
+			r.Changes = append(r.Changes, Change{
+				Type:        "simplify",
+				Line:        i + 1,
+				OldCode:     line,
+				NewCode:     strings.Replace(strings.Replace(line, "== true", "", -1), "== false", "!", -1),
+				Description: "Remove redundant boolean comparison",
+			})
+			improvements++
+		}
+	}
+
+	if improvements > 0 {
+		r.Improvement = fmt.Sprintf("Found %d conditional simplification opportunities", improvements)
+	} else {
+		r.Improvement = "No conditional simplification opportunities found"
+	}
 }
 
-// extractFunctions extracts code into separate functions
+// extractFunctions extracts code blocks into separate functions
 func (c *CodeAgent) extractFunctions(r *CodeRefactoring) {
-	// Placeholder for function extraction
-	r.Improvement = "Function extraction opportunities identified"
+	lines := strings.Split(r.Refactored, "\n")
+	extractionOpportunities := 0
+
+	// Track function boundaries and identify extractable blocks
+	inFunction := false
+	braceDepth := 0
+	blockStart := -1
+	blockLines := []string{}
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Detect function start
+		if !inFunction && (strings.Contains(trimmed, "func ") ||
+			(strings.Contains(trimmed, "{") && i > 0 && strings.Contains(lines[i-1], "func "))) {
+			inFunction = true
+			braceDepth = 0
+		}
+
+		if inFunction {
+			// Track brace depth
+			braceDepth += strings.Count(line, "{")
+			braceDepth -= strings.Count(line, "}")
+
+			// Detect potential extraction: code blocks with comments indicating operations
+			if strings.Contains(trimmed, "// ") && len(trimmed) > 20 {
+				if blockStart == -1 {
+					blockStart = i
+					blockLines = []string{}
+				}
+				blockLines = append(blockLines, line)
+			}
+
+			// End of a potential block (empty line or closing brace)
+			if blockStart != -1 && (trimmed == "" || trimmed == "}") {
+				if len(blockLines) >= 3 {
+					// This is a good candidate for extraction
+					comment := strings.TrimPrefix(strings.TrimSpace(blockLines[0]), "// ")
+					funcName := generateFunctionName(comment)
+
+					r.Changes = append(r.Changes, Change{
+						Type:        "extract",
+						Line:        blockStart + 1,
+						OldCode:     strings.Join(blockLines, "\n"),
+						NewCode:     fmt.Sprintf("%s() // Extracted from comment: %s", funcName, comment),
+						Description: fmt.Sprintf("Extract lines %d-%d into function '%s'", blockStart+1, i, funcName),
+					})
+					extractionOpportunities++
+				}
+				blockStart = -1
+				blockLines = []string{}
+			}
+
+			// End of function
+			if braceDepth <= 0 && inFunction {
+				inFunction = false
+			}
+		}
+	}
+
+	// Look for repeated patterns (duplicate code detection)
+	duplicates := findDuplicatePatterns(lines)
+	for _, dup := range duplicates {
+		r.Changes = append(r.Changes, Change{
+			Type:        "extract",
+			Line:        dup.StartLine,
+			OldCode:     dup.Code,
+			NewCode:     fmt.Sprintf("%s() // Extracted common pattern", dup.SuggestedName),
+			Description: fmt.Sprintf("Extract duplicate code at line %d into function '%s'", dup.StartLine, dup.SuggestedName),
+		})
+		extractionOpportunities++
+	}
+
+	if extractionOpportunities > 0 {
+		r.Improvement = fmt.Sprintf("Found %d function extraction opportunities", extractionOpportunities)
+	} else {
+		r.Improvement = "No function extraction opportunities found"
+	}
+}
+
+// generateFunctionName creates a function name from a comment
+type DuplicatePattern struct {
+	StartLine       int
+	Code            string
+	SuggestedName   string
+	OccurrenceCount int
+}
+
+func generateFunctionName(comment string) string {
+	// Extract meaningful words from comment
+	words := strings.Fields(strings.ToLower(comment))
+	name := "perform"
+	for _, w := range words {
+		if len(w) > 3 && !strings.Contains(w, "the") && !strings.Contains(w, "and") {
+			name = strings.Title(w)
+			break
+		}
+	}
+	return name + "Operation"
+}
+
+// findDuplicatePatterns detects repeated code blocks
+func findDuplicatePatterns(lines []string) []DuplicatePattern {
+	duplicates := []DuplicatePattern{}
+	seen := make(map[string]int)
+
+	// Look for 3+ line sequences that repeat
+	for i := 0; i < len(lines)-2; i++ {
+		block := strings.TrimSpace(lines[i]) + "|" +
+			strings.TrimSpace(lines[i+1]) + "|" +
+			strings.TrimSpace(lines[i+2])
+
+		if prevIdx, found := seen[block]; found && prevIdx != i {
+			// Found a duplicate
+			duplicates = append(duplicates, DuplicatePattern{
+				StartLine:       i + 1,
+				Code:            strings.Join(lines[i:i+3], "\n"),
+				SuggestedName:   "commonOperation",
+				OccurrenceCount: 2,
+			})
+		}
+		seen[block] = i
+	}
+
+	return duplicates
 }
 
 // GetGeneratedCodeSummary returns summary of generated code
