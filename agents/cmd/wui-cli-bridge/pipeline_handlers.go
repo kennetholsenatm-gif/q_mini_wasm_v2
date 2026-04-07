@@ -57,7 +57,7 @@ func (s PipelineState) String() string {
 
 // PipelineConfig holds training pipeline configuration
 type PipelineConfig struct {
-	AcquisitionThreads      int     `json:"acquisition_threads"`
+	AcquisitionThreads     int     `json:"acquisition_threads"`
 	NumExperts             int     `json:"num_experts"`
 	GraphNodes             int     `json:"graph_nodes"`
 	GraphEdges             int     `json:"graph_edges"`
@@ -79,7 +79,7 @@ type PipelineConfig struct {
 // DefaultPipelineConfig returns default configuration
 func DefaultPipelineConfig() PipelineConfig {
 	return PipelineConfig{
-		AcquisitionThreads:      4,
+		AcquisitionThreads:     4,
 		NumExperts:             243,
 		GraphNodes:             64,
 		GraphEdges:             112,
@@ -101,76 +101,76 @@ func DefaultPipelineConfig() PipelineConfig {
 
 // FFMetrics holds Forward-Forward training metrics
 type FFMetrics struct {
-	PositiveGoodness uint32  `json:"positive_goodness"`
-	NegativeGoodness uint32  `json:"negative_goodness"`
-	GoodnessDelta    int32   `json:"goodness_delta"`
-	TotalTrainCalls  uint64  `json:"total_train_calls"`
+	PositiveGoodness uint32 `json:"positive_goodness"`
+	NegativeGoodness uint32 `json:"negative_goodness"`
+	GoodnessDelta    int32  `json:"goodness_delta"`
+	TotalTrainCalls  uint64 `json:"total_train_calls"`
 }
 
 // MoEMetrics holds MoE routing metrics
 type MoEMetrics struct {
-	LoadBalanceScore      float32   `json:"load_balance_score"`
-	AvgRoutingLatencyMs   float32   `json:"avg_routing_latency_ms"`
-	ExpertUtilization     []float32  `json:"expert_utilization"`
-	ExpertDeltas          []int32    `json:"expert_deltas"`
-	ExpertRequestCounts   []uint32   `json:"expert_request_counts"`
+	LoadBalanceScore    float32   `json:"load_balance_score"`
+	AvgRoutingLatencyMs float32   `json:"avg_routing_latency_ms"`
+	ExpertUtilization   []float32 `json:"expert_utilization"`
+	ExpertDeltas        []int32   `json:"expert_deltas"`
+	ExpertRequestCounts []uint32  `json:"expert_request_counts"`
 }
 
 // BettiNumbers holds topological data analysis results
 type BettiNumbers struct {
-	Beta0                uint32 `json:"beta_0"`
-	Beta1                uint32 `json:"beta_1"`
-	Beta2                uint32 `json:"beta_2"`
-	EulerCharacteristic  int32  `json:"euler_characteristic"`
+	Beta0               uint32 `json:"beta_0"`
+	Beta1               uint32 `json:"beta_1"`
+	Beta2               uint32 `json:"beta_2"`
+	EulerCharacteristic int32  `json:"euler_characteristic"`
 }
 
 // GraphState holds quantum graph topology state
 type GraphState struct {
-	Nodes     int    `json:"nodes"`
-	Edges     int    `json:"edges"`
-	Topology  string `json:"topology"`
+	Nodes    int    `json:"nodes"`
+	Edges    int    `json:"edges"`
+	Topology string `json:"topology"`
 }
 
 // DataSynthesizerStats holds data acquisition statistics
 type DataSynthesizerStats struct {
-	TotalAcquired   int `json:"total_acquired"`
-	TotalPerturbed  int `json:"total_perturbed"`
-	APIFailures     int `json:"api_failures"`
-	QueueDepth      int `json:"queue_depth"`
+	TotalAcquired  int `json:"total_acquired"`
+	TotalPerturbed int `json:"total_perturbed"`
+	APIFailures    int `json:"api_failures"`
+	QueueDepth     int `json:"queue_depth"`
 }
 
 // TrainingMetrics holds comprehensive pipeline metrics
 type TrainingMetrics struct {
-	FFMetrics       FFMetrics            `json:"ff_metrics"`
-	MoEMetrics      MoEMetrics           `json:"moe_metrics"`
-	BettiNumbers    BettiNumbers         `json:"betti_numbers"`
-	GraphState      GraphState           `json:"graph_state"`
-	DataSynthesizer DataSynthesizerStats `json:"data_synthesizer"`
-	CurrentEpoch    uint64               `json:"current_epoch"`
-	CurrentBatch    uint64               `json:"current_batch"`
-	TrainingProgress float32             `json:"training_progress"`
-	IsRunning       bool                 `json:"is_running"`
-	StatusMessage   string               `json:"status_message"`
+	FFMetrics        FFMetrics            `json:"ff_metrics"`
+	MoEMetrics       MoEMetrics           `json:"moe_metrics"`
+	BettiNumbers     BettiNumbers         `json:"betti_numbers"`
+	GraphState       GraphState           `json:"graph_state"`
+	DataSynthesizer  DataSynthesizerStats `json:"data_synthesizer"`
+	CurrentEpoch     uint64               `json:"current_epoch"`
+	CurrentBatch     uint64               `json:"current_batch"`
+	TrainingProgress float32              `json:"training_progress"`
+	IsRunning        bool                 `json:"is_running"`
+	StatusMessage    string               `json:"status_message"`
 }
 
 // PipelineController manages the training pipeline lifecycle
 type PipelineController struct {
-	state      PipelineState
-	config     PipelineConfig
-	metrics    TrainingMetrics
-	wsClient   *WebSocketClient
-	startedAt  time.Time
-	pausedAt   *time.Time
-	stopChan   chan bool
+	state     PipelineState
+	config    PipelineConfig
+	metrics   TrainingMetrics
+	wsClient  *WebSocketClient
+	startedAt time.Time
+	pausedAt  *time.Time
+	stopChan  chan bool
 }
 
 // NewPipelineController creates a new pipeline controller
 func NewPipelineController(wsClient *WebSocketClient) *PipelineController {
 	return &PipelineController{
-		state:     StateIdle,
-		config:    DefaultPipelineConfig(),
-		wsClient:  wsClient,
-		stopChan:  make(chan bool),
+		state:    StateIdle,
+		config:   DefaultPipelineConfig(),
+		wsClient: wsClient,
+		stopChan: make(chan bool),
 	}
 }
 
@@ -186,8 +186,8 @@ func (c *PipelineController) InitializePipeline(config PipelineConfig) error {
 	// Send initialization message to WUI backend
 	if c.wsClient != nil && c.wsClient.IsConnected() {
 		initMsg := map[string]interface{}{
-			"type":                     "init_training_pipeline",
-			"acquisition_threads":      config.AcquisitionThreads,
+			"type":                    "init_training_pipeline",
+			"acquisition_threads":     config.AcquisitionThreads,
 			"num_experts":             config.NumExperts,
 			"graph_nodes":             config.GraphNodes,
 			"graph_edges":             config.GraphEdges,
@@ -312,10 +312,10 @@ func (c *PipelineController) UpdateConfig(config PipelineConfig) error {
 	if c.wsClient != nil && c.wsClient.IsConnected() {
 		c.wsClient.Send(map[string]interface{}{
 			"type":                     "set_pipeline_config",
-			"batch_size":              config.BatchSize,
-			"learning_rate":           config.LearningRate,
+			"batch_size":               config.BatchSize,
+			"learning_rate":            config.LearningRate,
 			"betti_guidance_threshold": config.BettiGuidanceThreshold,
-			"enable_wui_streaming":    config.EnableWUIStreaming,
+			"enable_wui_streaming":     config.EnableWUIStreaming,
 		})
 	}
 
@@ -341,9 +341,9 @@ func (c *PipelineController) ApplyBettiGuidance(force bool) error {
 
 	// Simulate evaluation then optimization
 	c.state = StateOptimizingGraph
-	
+
 	// Would wait for backend response here in production
-	
+
 	c.state = prevState
 	return nil
 }
@@ -352,9 +352,9 @@ func (c *PipelineController) ApplyBettiGuidance(force bool) error {
 func (c *PipelineController) ExportModel(path string, includeTopology bool) error {
 	if c.wsClient != nil && c.wsClient.IsConnected() {
 		c.wsClient.Send(map[string]interface{}{
-			"type":              "export_model",
-			"path":              path,
-			"include_topology":  includeTopology,
+			"type":             "export_model",
+			"path":             path,
+			"include_topology": includeTopology,
 		})
 	}
 	return nil
@@ -406,7 +406,7 @@ func (c *PipelineController) trainingLoop() {
 // updateSimulatedMetrics generates simulated metrics for demonstration
 func (c *PipelineController) updateSimulatedMetrics() {
 	c.metrics.CurrentBatch++
-	
+
 	if c.metrics.CurrentBatch%100 == 0 {
 		c.metrics.CurrentEpoch++
 	}
@@ -420,7 +420,7 @@ func (c *PipelineController) updateSimulatedMetrics() {
 	// Simulate MoE metrics
 	c.metrics.MoEMetrics.LoadBalanceScore = 0.85
 	c.metrics.MoEMetrics.AvgRoutingLatencyMs = 2.3
-	
+
 	// Simulate Betti numbers (periodically)
 	if c.metrics.CurrentBatch%10 == 0 {
 		c.metrics.BettiNumbers.Beta0 = 1
@@ -455,52 +455,52 @@ func (c *PipelineController) updateSimulatedMetrics() {
 
 func (s *MCPServer) handleInitTrainingPipeline(params json.RawMessage) (interface{}, error) {
 	var args struct {
-		AcquisitionThreads      int  `json:"acquisition_threads"`
-		NumExperts             int  `json:"num_experts"`
-		GraphNodes             int  `json:"graph_nodes"`
-		EnableBettiGuidance    bool `json:"enable_betti_guidance"`
-		EnableKnowledgeEngine  bool `json:"enable_knowledge_engine"`
-		Epochs                 int  `json:"epochs"`
-		BatchSize              int  `json:"batch_size"`
+		AcquisitionThreads    int  `json:"acquisition_threads"`
+		NumExperts            int  `json:"num_experts"`
+		GraphNodes            int  `json:"graph_nodes"`
+		EnableBettiGuidance   bool `json:"enable_betti_guidance"`
+		EnableKnowledgeEngine bool `json:"enable_knowledge_engine"`
+		Epochs                int  `json:"epochs"`
+		BatchSize             int  `json:"batch_size"`
 	}
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
 
-	config := DefaultPipelineConfig()
-	if args.AcquisitionThreads > 0 {
-		config.AcquisitionThreads = args.AcquisitionThreads
-	}
-	if args.NumExperts > 0 {
-		config.NumExperts = args.NumExperts
-	}
-	if args.GraphNodes > 0 {
-		config.GraphNodes = args.GraphNodes
-		config.GraphEdges = args.GraphNodes + args.GraphNodes/2
-	}
-	config.EnableBettiGuidance = args.EnableBettiGuidance
-	config.EnableKnowledgeEngine = args.EnableKnowledgeEngine
-	if args.Epochs > 0 {
-		config.Epochs = args.Epochs
-	}
-	if args.BatchSize > 0 {
-		config.BatchSize = args.BatchSize
+	// Use CGO to create training pipeline
+	pipeline, err := NewTrainingPipelineCGO(
+		args.NumExperts,
+		args.GraphNodes,
+		args.EnableBettiGuidance,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pipeline: %w", err)
 	}
 
-	// Create pipeline controller
-	pipelineController := NewPipelineController(s.wsClient)
-	
-	if err := pipelineController.InitializePipeline(config); err != nil {
-		return nil, err
+	// Store pipeline reference
+	s.pipeline = pipeline
+
+	// Initialize with config
+	config := PipelineConfigCGO{
+		AcquisitionThreads:    args.AcquisitionThreads,
+		NumExperts:            args.NumExperts,
+		GraphNodes:            args.GraphNodes,
+		EnableBettiGuidance:   args.EnableBettiGuidance,
+		EnableKnowledgeEngine: args.EnableKnowledgeEngine,
+		Epochs:                args.Epochs,
+		BatchSize:             args.BatchSize,
+	}
+
+	if err := pipeline.Initialize(config); err != nil {
+		return nil, fmt.Errorf("failed to initialize pipeline: %w", err)
 	}
 
 	return map[string]interface{}{
 		"initialized":             true,
-		"state":                   pipelineController.GetState().String(),
-		"config":                  config,
-		"num_experts":            config.NumExperts,
-		"enable_betti_guidance":  config.EnableBettiGuidance,
-		"enable_knowledge_engine": config.EnableKnowledgeEngine,
+		"state":                   pipeline.GetState(),
+		"num_experts":             args.NumExperts,
+		"enable_betti_guidance":   args.EnableBettiGuidance,
+		"enable_knowledge_engine": args.EnableKnowledgeEngine,
 	}, nil
 }
 
@@ -518,10 +518,10 @@ func (s *MCPServer) handleSetPipelineConfig(params json.RawMessage) (interface{}
 	if s.wsClient != nil && s.wsClient.IsConnected() {
 		s.wsClient.Send(map[string]interface{}{
 			"type":                     "set_pipeline_config",
-			"batch_size":              args.BatchSize,
-			"learning_rate":           args.LearningRate,
+			"batch_size":               args.BatchSize,
+			"learning_rate":            args.LearningRate,
 			"betti_guidance_threshold": args.BettiGuidanceThreshold,
-			"enable_wui_streaming":    args.EnableWUIStreaming,
+			"enable_wui_streaming":     args.EnableWUIStreaming,
 		})
 	}
 
@@ -548,10 +548,10 @@ func (s *MCPServer) handleGetTrainingMetrics(params json.RawMessage) (interface{
 	if s.wsClient != nil && s.wsClient.IsConnected() {
 		resp, err := s.wsClient.SendAndWait(
 			map[string]interface{}{
-				"type":                   "get_training_metrics",
-				"include_betti":          args.IncludeBetti,
-				"include_graph_state":    args.IncludeGraphState,
-				"include_expert_stats":   args.IncludeExpertStats,
+				"type":                 "get_training_metrics",
+				"include_betti":        args.IncludeBetti,
+				"include_graph_state":  args.IncludeGraphState,
+				"include_expert_stats": args.IncludeExpertStats,
 			},
 			"training_metrics",
 			5*time.Second,
@@ -580,7 +580,7 @@ func (s *MCPServer) handleApplyBettiGuidance(params json.RawMessage) (interface{
 		})
 		return map[string]interface{}{
 			"guidance_applied": true,
-			"forced":          args.Force,
+			"forced":           args.Force,
 		}, nil
 	}
 
@@ -614,9 +614,9 @@ func (s *MCPServer) handleExportModel(params json.RawMessage) (interface{}, erro
 
 	if s.wsClient != nil && s.wsClient.IsConnected() {
 		s.wsClient.Send(map[string]interface{}{
-			"type":              "export_model",
-			"path":              args.Path,
-			"include_topology":  args.IncludeTopology,
+			"type":             "export_model",
+			"path":             args.Path,
+			"include_topology": args.IncludeTopology,
 		})
 		return map[string]interface{}{
 			"exported":         true,

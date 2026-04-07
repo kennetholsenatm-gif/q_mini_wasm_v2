@@ -180,6 +180,7 @@ func (c *WebSocketClient) IsConnected() bool {
 // MCPServer handles MCP protocol
 type MCPServer struct {
 	wsClient *WebSocketClient
+	pipeline *TrainingPipelineCGO
 	scanner  *bufio.Scanner
 	writer   *bufio.Writer
 	tools    map[string]ToolHandler
