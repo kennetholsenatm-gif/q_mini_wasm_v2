@@ -133,8 +133,9 @@ public:
 
     /**
      * @brief Get sparsity (fraction of zero weights)
+     * @return Q24.8 fixed point representation
      */
-    float GetSparsity() const;
+    uint32_t GetSparsity() const;
 
 private:
     LayerConfig config_;

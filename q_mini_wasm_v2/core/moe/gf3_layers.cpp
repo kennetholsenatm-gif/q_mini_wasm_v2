@@ -198,7 +198,7 @@ void GF3LinearLayer::UpdateWeightsHebbian(
     }
 }
 
-float GF3LinearLayer::GetSparsity() const {
+uint32_t GF3LinearLayer::GetSparsity() const {
     size_t zeros = 0;
     size_t total = config_.input_dim * config_.output_dim;
     
@@ -208,7 +208,8 @@ float GF3LinearLayer::GetSparsity() const {
         }
     }
     
-    return static_cast<float>(zeros) / static_cast<float>(total);
+    // Q24.8 fixed point representation: (zeros << 8) / total
+    return static_cast<uint32_t>((zeros << 8) / total);
 }
 
 // ============================================================================

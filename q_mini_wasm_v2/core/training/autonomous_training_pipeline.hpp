@@ -290,6 +290,9 @@ private:
     void adjust_topology_based_on_betti(const qgnn::BettiExtractor::BettiNumbers& betti);
     
     // Helper functions
+    std::vector<ternary::Trit> extract_ternary_vector(const TrainingSample& sample);
+    std::vector<ternary::Trit> generate_negative_sample(const std::vector<ternary::Trit>& positive);
+    
     std::vector<std::unique_ptr<moe::ExpertNetwork>> create_experts(
         size_t num_experts, 
         const moe::ExpertNetwork::ExpertConfig& expert_config

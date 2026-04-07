@@ -723,9 +723,9 @@ std::vector<size_t> MoERouter::rl_expert_selection(
     } else {
         // Exploitation: best Q-values
         auto& q_values = q_learning_table_[state_index];
-        std::vector<std::pair<double, size_t>> scored_experts;
+        std::vector<std::pair<uint32_t, size_t>> scored_experts;
         for (size_t e = 0; e < config_.total_experts; ++e) {
-            scored_experts.emplace_back(q_values[e], e);
+            scored_experts.emplace_back(trit_to_prob(q_values[e]), e);
         }
         std::sort(scored_experts.begin(), scored_experts.end(), std::greater<>());
         
@@ -782,13 +782,17 @@ void MoERouter::update_q_learning(
     next_state_idx %= q_learning_table_.size();
     
     // Find max Q-value for next state
-    double max_next_q = *std::max_element(q_learning_table_[next_state_idx].begin(), 
-                                          q_learning_table_[next_state_idx].end());
+    auto max_it = std::max_element(q_learning_table_[next_state_idx].begin(), 
+                                   q_learning_table_[next_state_idx].end(),
+                                   [](ternary::ProbTrit a, ternary::ProbTrit b) {
+                                       return trit_to_prob(a) < trit_to_prob(b);
+                                   });
+    double max_next_q = trit_to_prob(*max_it);
     
     // Q-learning update: Q(s,a) = Q(s,a) + α[r + γ*max(Q(s',a')) - Q(s,a)]
-    double old_q = q_learning_table_[state_idx][action];
+    double old_q = trit_to_prob(q_learning_table_[state_idx][action]);
     double new_q = old_q + ALPHA * (reward + GAMMA * max_next_q - old_q);
-    q_learning_table_[state_idx][action] = new_q;
+    q_learning_table_[state_idx][action] = prob_to_trit(static_cast<uint32_t>(std::clamp(new_q, 0.0, 100.0)));
     
     learning_episode_++;
 }
@@ -994,7 +998,7 @@ uint32_t MoERouter::predict_load(const std::vector<uint32_t>& load_history) cons
 
 double MoERouter::compute_energy_cost(size_t expert_count) const {
     // Base energy cost: energy per expert * number of experts
-    double base_cost = expert_count * energy_per_expert_;
+    double base_cost = expert_count * trit_to_energy(energy_per_expert_);
     
     // Overhead cost: quadratic scaling for coordination
     double overhead = (expert_count * expert_count) * 0.01; // 0.01 pJ/op per expert pair
