@@ -4,7 +4,6 @@
 #include <numeric>
 #include <iostream>
 #include <fstream>
-#include <cmath>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -71,10 +70,10 @@ MoETrainingMetrics MoETrainer::TrainEpoch(
         auto batch_result = TrainBatch(batch_data);
         batch_metrics.push_back(batch_result);
         
-        // Periodic logging
-        if (config_.verbose && batch_idx % config_.log_interval == 0) {
+    // Periodic logging (fixed-point output)
+        if (config_.verbose == ternary::Trit::POSITIVE && batch_idx % config_.log_interval == 0) {
             std::cout << "  Batch " << batch_idx << "/" << num_batches 
-                      << " - Delta: " << batch_result.avg_goodness_delta << std::endl;
+                      << " - Delta: " << batch_result.avg_goodness_delta_fixed << std::endl;
         }
         
         current_batch_++;
@@ -109,27 +108,27 @@ MoETrainingMetrics MoETrainer::Train(
     const std::vector<std::vector<ternary::Trit>>& data,
     size_t num_epochs
 ) {
-    if (config_.verbose) {
-        std::cout << "Starting MoE training for " << num_epochs << " epochs" << std::endl;
-        std::cout << "Experts: " << router_.GetConfig().total_experts 
-                  << ", Active: " << router_.GetConfig().active_experts << std::endl;
-    }
+    if (config_.verbose == ternary::Trit::POSITIVE) {
+            std::cout << "Starting MoE training for " << num_epochs << " epochs" << std::endl;
+            std::cout << "Experts: " << router_.GetConfig().total_experts 
+                      << ", Active: " << router_.GetConfig().active_experts << std::endl;
+        }
     
     for (size_t epoch = 0; epoch < num_epochs; ++epoch) {
-        if (config_.verbose) {
-            std::cout << "Epoch " << epoch << "/" << num_epochs << std::endl;
+        if (config_.verbose == ternary::Trit::POSITIVE) {
+                std::cout << "Epoch " << epoch << "/" << num_epochs << std::endl;
         }
         
         auto metrics = TrainEpoch(data);
         
-        if (config_.verbose && epoch % 5 == 0) {
+        if (config_.verbose == ternary::Trit::POSITIVE && epoch % 5 == 0) {
             PrintMetrics(metrics);
         }
         
         // Early stopping check
-        if (HasConverged() && epoch > config_.early_stopping_patience) {
-            std::cout << "Early stopping at epoch " << epoch << std::endl;
-            break;
+        if (HasConverged() == ternary::Trit::POSITIVE && epoch > config_.early_stopping_patience) {
+                std::cout << "Early stopping at epoch " << epoch << std::endl;
+                break;
         }
     }
     
@@ -142,14 +141,14 @@ MoETrainingMetrics MoETrainer::TrainBatch(
     MoETrainingMetrics batch_metrics;
     batch_metrics.batch = current_batch_;
     
-    float total_pos_goodness = 0.0f;
-    float total_neg_goodness = 0.0f;
-    float total_delta = 0.0f;
-    float total_latency = 0.0f;
+    int32_t total_pos_goodness = 0;
+    int32_t total_neg_goodness = 0;
+    int32_t total_delta = 0;
+    int32_t total_latency = 0;
     
     // Track expert utilization for this batch
     std::vector<uint32_t> expert_counts(router_.GetConfig().total_experts, 0);
-    std::vector<float> expert_deltas(router_.GetConfig().total_experts, 0.0f);
+    std::vector<int32_t> expert_deltas(router_.GetConfig().total_experts, 0);
     
     // Process each sample in batch
     for (const auto& sample : batch_data) {
@@ -163,7 +162,8 @@ MoETrainingMetrics MoETrainer::TrainBatch(
         // Train selected experts
         for (size_t i = 0; i < routing_result.selected_experts.size(); ++i) {
             size_t expert_id = routing_result.selected_experts[i];
-            float weight = routing_result.routing_weights[i];
+            int32_t weight = (i < routing_result.routing_weights_fixed.size()) ? 
+                              routing_result.routing_weights_fixed[i] : 1000;
             
             // Get expert
             auto expert = GetExpert(expert_id);
@@ -172,10 +172,10 @@ MoETrainingMetrics MoETrainer::TrainBatch(
             // Train with Forward-Forward
             int32_t delta = expert->TrainForwardForward(sample, negative);
             
-            // Accumulate metrics
+            // Accumulate metrics (fixed-point)
             total_pos_goodness += expert->ComputeGoodness(expert->Forward(sample));
             total_neg_goodness += expert->ComputeGoodness(expert->Forward(negative));
-            total_delta += delta * weight;
+            total_delta += (delta * weight) / 1000;
             
             // Track expert stats
             expert_counts[expert_id]++;
@@ -183,30 +183,31 @@ MoETrainingMetrics MoETrainer::TrainBatch(
         }
     }
     
-    // Compute averages
+    // Compute averages (fixed-point)
     size_t num_samples = batch_data.size();
     if (num_samples > 0) {
-        batch_metrics.avg_positive_goodness = total_pos_goodness / num_samples;
-        batch_metrics.avg_negative_goodness = total_neg_goodness / num_samples;
-        batch_metrics.avg_goodness_delta = total_delta / num_samples;
-        batch_metrics.avg_routing_latency_ms = total_latency / (num_samples * 1000.0f);
+        batch_metrics.avg_positive_goodness_fixed = total_pos_goodness / static_cast<int32_t>(num_samples);
+        batch_metrics.avg_negative_goodness_fixed = total_neg_goodness / static_cast<int32_t>(num_samples);
+        batch_metrics.avg_goodness_delta_fixed = total_delta / static_cast<int32_t>(num_samples);
+        batch_metrics.avg_routing_latency_ms = total_latency / static_cast<int32_t>(num_samples);
     }
     
     // Expert utilization
     batch_metrics.expert_request_counts = expert_counts;
-    batch_metrics.expert_goodness_deltas = expert_deltas;
+    batch_metrics.expert_goodness_deltas_fixed = expert_deltas;
     
-    // Compute utilization rates
-    batch_metrics.expert_utilization.resize(router_.GetConfig().total_experts);
-    float total_routes = std::accumulate(expert_counts.begin(), expert_counts.end(), 0.0f);
+    // Compute utilization rates in fixed-point (scale 1000)
+    batch_metrics.expert_utilization_fixed.resize(router_.GetConfig().total_experts);
+    uint32_t total_routes = std::accumulate(expert_counts.begin(), expert_counts.end(), 0u);
     if (total_routes > 0) {
         for (size_t i = 0; i < expert_counts.size(); ++i) {
-            batch_metrics.expert_utilization[i] = expert_counts[i] / total_routes;
+            batch_metrics.expert_utilization_fixed[i] = 
+                static_cast<int32_t>((expert_counts[i] * 1000) / total_routes);
         }
     }
     
-    // Load balance score
-    batch_metrics.load_balance_score = router_.GetLoadStats().imbalance_score;
+    // Load balance score (fixed-point from LoadStats)
+    batch_metrics.load_balance_score_fixed = router_.GetLoadStats().imbalance_score_fixed;
     
     return batch_metrics;
 }
@@ -247,7 +248,7 @@ void MoETrainer::InitializeExperts(int seed) {
 void MoETrainer::TrainExpertsForwardForward(
     const std::vector<ternary::Trit>& positive,
     const std::vector<size_t>& selected_experts,
-    const std::vector<float>& routing_weights
+    const std::vector<int32_t>& routing_weights_fixed
 ) {
     // Generate negative sample once for all experts
     auto negative = GenerateNegativeSample(positive);
@@ -255,13 +256,13 @@ void MoETrainer::TrainExpertsForwardForward(
     // Train each selected expert
     for (size_t i = 0; i < selected_experts.size(); ++i) {
         size_t expert_id = selected_experts[i];
-        float weight = (i < routing_weights.size()) ? routing_weights[i] : 1.0f;
+        int32_t weight = (i < routing_weights_fixed.size()) ? routing_weights_fixed[i] : 1000;
         
         auto expert = GetExpert(expert_id);
         if (!expert) continue;
         
-        // Scale learning by routing weight
-        int32_t scaled_lr = static_cast<int32_t>(config_.learning_rate * weight);
+        // Scale learning by routing weight (fixed-point: weight is scale 1000)
+        int32_t scaled_lr = (config_.learning_rate * weight) / 1000;
         if (scaled_lr == 0) scaled_lr = 1;
         
         // Train
@@ -269,41 +270,44 @@ void MoETrainer::TrainExpertsForwardForward(
     }
 }
 
-float MoETrainer::ComputeCombinedLoss(
+int32_t MoETrainer::ComputeCombinedLoss(
     const std::vector<MoETrainingMetrics>& batch_metrics
 ) {
-    float total_ff_loss = 0.0f;
+    int32_t total_ff_loss = 0;
     
     for (const auto& metrics : batch_metrics) {
         // Forward-Forward loss: negative of goodness delta (we want to maximize)
-        total_ff_loss -= metrics.avg_goodness_delta;
+        total_ff_loss -= metrics.avg_goodness_delta_fixed;
     }
     
-    // Add load balancing loss
-    float lb_loss = ComputeLoadBalancingLoss();
+    // Add load balancing loss (already in fixed-point)
+    int32_t lb_loss = ComputeLoadBalancingLoss();
     
-    return total_ff_loss + config_.load_balance_alpha * lb_loss;
+    // Combine: total = ff_loss + (alpha * lb_loss) / 1000
+    return total_ff_loss + (config_.load_balance_alpha_fixed * lb_loss) / 1000;
 }
 
 // ============================================================================
 // Load Balancing
 // ============================================================================
 
-float MoETrainer::ComputeLoadBalancingLoss() {
+int32_t MoETrainer::ComputeLoadBalancingLoss() {
     auto stats = router_.GetLoadStats();
     
-    // Compute variance from uniform distribution
-    float expected_rate = 1.0f / router_.GetConfig().total_experts;
-    float variance = 0.0f;
+    // Compute variance from uniform distribution (fixed-point)
+    // expected_rate = 1000 / total_experts (in fixed-point scale 1000)
+    int32_t expected_rate = 1000 / static_cast<int32_t>(router_.GetConfig().total_experts);
+    int32_t variance = 0;
     
-    for (float rate : stats.utilization_rates) {
-        float diff = rate - expected_rate;
-        variance += diff * diff;
+    for (int32_t rate : stats.utilization_rates_fixed) {
+        int32_t diff = rate - expected_rate;
+        variance += (diff * diff) / 1000;  // Keep scale at 1000
     }
     
-    variance /= router_.GetConfig().total_experts;
+    variance /= static_cast<int32_t>(router_.GetConfig().total_experts);
     
-    return variance * config_.load_balance_alpha;
+    // Return loss = variance * alpha / 1000
+    return (variance * config_.load_balance_alpha_fixed) / 1000;
 }
 
 void MoETrainer::ApplyLoadBalancing() {
@@ -318,23 +322,23 @@ void MoETrainer::RebalanceLoads() {
 // Monitoring
 // ============================================================================
 
-bool MoETrainer::HasConverged() const {
-    if (current_metrics_.avg_goodness_delta < config_.min_goodness_delta_threshold) {
+ternary::Trit MoETrainer::HasConverged() const {
+    if (current_metrics_.avg_goodness_delta_fixed < config_.min_goodness_delta_threshold_fixed) {
         epochs_without_improvement_++;
         
         if (epochs_without_improvement_ >= config_.early_stopping_patience) {
-            return true;
+            return ternary::Trit::POSITIVE;
         }
     } else {
         epochs_without_improvement_ = 0;
         
         // Update best metrics
-        if (current_metrics_.avg_goodness_delta > best_metrics_.avg_goodness_delta) {
+        if (current_metrics_.avg_goodness_delta_fixed > best_metrics_.avg_goodness_delta_fixed) {
             best_metrics_ = current_metrics_;
         }
     }
     
-    return false;
+    return ternary::Trit::ZERO;
 }
 
 MoETrainingMetrics MoETrainer::GetBestMetrics() const {
@@ -343,10 +347,10 @@ MoETrainingMetrics MoETrainer::GetBestMetrics() const {
 
 void MoETrainer::PrintMetrics(const MoETrainingMetrics& metrics) const {
     std::cout << "=== Epoch " << metrics.epoch << " Metrics ===" << std::endl;
-    std::cout << "  Goodness Delta: " << metrics.avg_goodness_delta << std::endl;
-    std::cout << "  Positive Goodness: " << metrics.avg_positive_goodness << std::endl;
-    std::cout << "  Negative Goodness: " << metrics.avg_negative_goodness << std::endl;
-    std::cout << "  Load Balance Score: " << metrics.load_balance_score << std::endl;
+    std::cout << "  Goodness Delta: " << metrics.avg_goodness_delta_fixed << std::endl;
+    std::cout << "  Positive Goodness: " << metrics.avg_positive_goodness_fixed << std::endl;
+    std::cout << "  Negative Goodness: " << metrics.avg_negative_goodness_fixed << std::endl;
+    std::cout << "  Load Balance Score: " << metrics.load_balance_score_fixed << std::endl;
     std::cout << "  Avg Routing Latency: " << metrics.avg_routing_latency_ms << " ms" << std::endl;
     std::cout << "  Active Experts: " << router_.GetConfig().active_experts << std::endl;
 }
@@ -379,30 +383,30 @@ std::vector<ternary::Trit> MoETrainer::GenerateNegativeSample(
 void MoETrainer::UpdateMetrics(const std::vector<MoETrainingMetrics>& batch_metrics) {
     if (batch_metrics.empty()) return;
     
-    // Average across batches
-    float total_delta = 0.0f;
-    float total_pos = 0.0f;
-    float total_neg = 0.0f;
-    float total_lb = 0.0f;
-    float total_latency = 0.0f;
+    // Average across batches (fixed-point)
+    int32_t total_delta = 0;
+    int32_t total_pos = 0;
+    int32_t total_neg = 0;
+    int32_t total_lb = 0;
+    int32_t total_latency = 0;
     
     for (const auto& batch : batch_metrics) {
-        total_delta += batch.avg_goodness_delta;
-        total_pos += batch.avg_positive_goodness;
-        total_neg += batch.avg_negative_goodness;
-        total_lb += batch.load_balance_score;
+        total_delta += batch.avg_goodness_delta_fixed;
+        total_pos += batch.avg_positive_goodness_fixed;
+        total_neg += batch.avg_negative_goodness_fixed;
+        total_lb += batch.load_balance_score_fixed;
         total_latency += batch.avg_routing_latency_ms;
     }
     
     size_t n = batch_metrics.size();
     current_metrics_.epoch = current_epoch_;
-    current_metrics_.avg_goodness_delta = total_delta / n;
-    current_metrics_.avg_positive_goodness = total_pos / n;
-    current_metrics_.avg_negative_goodness = total_neg / n;
-    current_metrics_.load_balance_score = total_lb / n;
-    current_metrics_.avg_routing_latency_ms = total_latency / n;
-    current_metrics_.load_balance_loss = ComputeLoadBalancingLoss();
-    current_metrics_.expert_utilization = batch_metrics.back().expert_utilization;
+    current_metrics_.avg_goodness_delta_fixed = total_delta / static_cast<int32_t>(n);
+    current_metrics_.avg_positive_goodness_fixed = total_pos / static_cast<int32_t>(n);
+    current_metrics_.avg_negative_goodness_fixed = total_neg / static_cast<int32_t>(n);
+    current_metrics_.load_balance_score_fixed = total_lb / static_cast<int32_t>(n);
+    current_metrics_.avg_routing_latency_ms = total_latency / static_cast<int32_t>(n);
+    current_metrics_.load_balance_loss_fixed = ComputeLoadBalancingLoss();
+    current_metrics_.expert_utilization_fixed = batch_metrics.back().expert_utilization_fixed;
     current_metrics_.expert_request_counts = batch_metrics.back().expert_request_counts;
 }
 
@@ -413,7 +417,7 @@ int32_t MoETrainer::ComputeExpertDiversity() const {
     // Uses tropical (max-plus) inner product instead of floating point dot product
     // to maintain constitutional GF(3) purity
     
-    const auto& utilization = current_metrics_.expert_utilization;
+    const auto& utilization = current_metrics_.expert_utilization_fixed;
     const auto& request_counts = current_metrics_.expert_request_counts;
     const auto& goodness_deltas = current_metrics_.expert_goodness_deltas;
     
@@ -425,10 +429,10 @@ int32_t MoETrainer::ComputeExpertDiversity() const {
     // All values scaled to ternary-compatible integers (fixed-point: 1000 = 1.0)
     std::vector<std::vector<int32_t>> expert_vectors(num_experts);
     for (size_t i = 0; i < num_experts; ++i) {
-        // Convert to fixed-point integers (scale by 1000)
-        int32_t util = (i < utilization.size()) ? static_cast<int32_t>(utilization[i] * 1000.0f) : 0;
+        // Already in fixed-point or integer form
+        int32_t util = (i < utilization.size()) ? utilization[i] : 0;
         int32_t req = (i < request_counts.size()) ? static_cast<int32_t>(request_counts[i]) : 0;
-        int32_t delta = (i < goodness_deltas.size()) ? static_cast<int32_t>(goodness_deltas[i] * 1000.0f) : 0;
+        int32_t delta = (i < goodness_deltas.size()) ? goodness_deltas[i] : 0;
         
         expert_vectors[i] = {util, req, delta};
     }

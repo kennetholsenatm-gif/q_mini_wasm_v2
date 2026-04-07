@@ -66,43 +66,40 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::Route(
     // Select routing strategy based on scale
     if (config_.use_hierarchical_selection && config_.total_experts > 128) {
         result = HierarchicalRoute(input);
-        result.used_hierarchical = true;
+        result.used_hierarchical = ternary::Trit::POSITIVE;
     } else {
-        // Direct tropical routing
+        // Direct tropical routing (fixed-point, no float conversion)
         auto logits = ComputeTropicalLogits(input);
         
-        // Convert to float for Top-K
-        std::vector<float> float_logits(logits.size());
-        for (size_t i = 0; i < logits.size(); ++i) {
-            float_logits[i] = static_cast<float>(logits[i]);
-        }
-        
-        // Apply load balancing if enabled
+        // Apply load balancing if enabled (fixed-point version)
         if (config_.enable_load_balancing) {
             auto stats = GetLoadStats();
-            float_logits = ApplyLoadBalancing(float_logits, stats);
+            logits = ApplyLoadBalancingFixed(logits, stats);
         }
         
-        // Select Top-K
-        result.selected_experts = SelectTopK(float_logits, config_.active_experts);
-        result.routing_weights = std::vector<float>(config_.active_experts);
+        // Select Top-K using fixed-point logits
+        result.selected_experts = SelectTopK(logits, config_.active_experts);
+        result.routing_weights_fixed = std::vector<int32_t>(config_.active_experts);
         
-        // Compute weights from logits
+        // Compute weights using tropical normalization (no exp/softmax)
+        // Use linear scaling based on tropical scores
         for (size_t i = 0; i < result.selected_experts.size(); ++i) {
             size_t expert = result.selected_experts[i];
-            result.routing_weights[i] = std::exp(float_logits[expert] / 10.0f);  // Softmax-like
+            // Map int8_t [-128, 127] to fixed-point [100, 1000]
+            result.routing_weights_fixed[i] = 100 + (static_cast<int32_t>(logits[expert]) + 128) * 900 / 255;
         }
         
-        // Normalize weights
-        float sum = std::accumulate(result.routing_weights.begin(), 
-                                     result.routing_weights.end(), 0.0f);
-        if (sum > 0) {
-            for (auto& w : result.routing_weights) {
-                w /= sum;
+        // Normalize weights using tropical sum (max instead of sum)
+        int32_t max_weight = *std::max_element(result.routing_weights_fixed.begin(), 
+                                                result.routing_weights_fixed.end());
+        if (max_weight > 0) {
+            for (auto& w : result.routing_weights_fixed) {
+                // Tropical normalization: weight = weight * 1000 / max_weight
+                w = (w * 1000) / max_weight;
             }
         }
         
-        result.used_hierarchical = false;
+        result.used_hierarchical = ternary::Trit::ZERO;
     }
     
     // Update statistics
@@ -152,8 +149,8 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::HierarchicalRoute(
 ) {
     RoutingResult result;
     
-    // Level 1: Select clusters
-    std::vector<float> cluster_scores(clusters_.size(), 0.0f);
+    // Level 1: Select clusters using fixed-point scores
+    std::vector<int32_t> cluster_scores(clusters_.size(), 0);
     
     for (size_t c = 0; c < clusters_.size(); ++c) {
         // Compute similarity to cluster centroid using tropical inner product
@@ -165,32 +162,30 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::HierarchicalRoute(
                           static_cast<int32_t>(clusters_[c].centroid[i]);
         }
         
-        cluster_scores[c] = static_cast<float>(tropical_sim);
+        cluster_scores[c] = tropical_sim;
     }
     
     // Select top clusters (typically 2-4 for 243 experts)
     size_t num_clusters_select = std::max(size_t(2), config_.active_experts / 4);
     std::vector<size_t> selected_clusters = SelectTopK(cluster_scores, num_clusters_select);
     
-    // Level 2: Route to experts within selected clusters
-    std::vector<std::pair<float, size_t>> expert_scores;
+    // Level 2: Route to experts within selected clusters using fixed-point
+    std::vector<std::pair<int32_t, size_t>> expert_scores;
     
     for (size_t cluster_idx : selected_clusters) {
         for (size_t expert_id : clusters_[cluster_idx].expert_ids) {
-            // Compute routing score for this expert
-            float score = 0.0f;
+            // Compute routing score for this expert (fixed-point)
+            int32_t score = 0;
             size_t min_dim = std::min(input.size(), specializations_[expert_id].size());
             
             for (size_t i = 0; i < min_dim; ++i) {
-                score += static_cast<float>(
-                    static_cast<int32_t>(input[i]) * 
-                    static_cast<int32_t>(specializations_[expert_id][i])
-                );
+                score += static_cast<int32_t>(input[i]) * 
+                         static_cast<int32_t>(specializations_[expert_id][i]);
             }
             
-            // Add load balancing penalty
+            // Add load balancing penalty (fixed-point: 0.01 = 10/1000)
             if (config_.enable_load_balancing) {
-                float load_penalty = static_cast<float>(expert_request_counts_[expert_id]) * 0.01f;
+                int32_t load_penalty = static_cast<int32_t>(expert_request_counts_[expert_id]) * 10 / 1000;
                 score -= load_penalty;
             }
             
@@ -204,19 +199,25 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::HierarchicalRoute(
     
     size_t k = std::min(config_.active_experts, expert_scores.size());
     result.selected_experts.reserve(k);
-    result.routing_weights.reserve(k);
+    result.routing_weights_fixed.reserve(k);
     
     for (size_t i = 0; i < k; ++i) {
         result.selected_experts.push_back(expert_scores[i].second);
-        result.routing_weights.push_back(std::exp(expert_scores[i].first / 10.0f));
+        // Fixed-point weight: map score to [100, 1000] range
+        int32_t weight = 100 + (expert_scores[i].first % 900);
+        if (weight < 100) weight = 100;
+        if (weight > 1000) weight = 1000;
+        result.routing_weights_fixed.push_back(weight);
     }
     
-    // Normalize weights
-    float sum = std::accumulate(result.routing_weights.begin(), 
-                                 result.routing_weights.end(), 0.0f);
-    if (sum > 0) {
-        for (auto& w : result.routing_weights) {
-            w /= sum;
+    // Normalize weights using tropical normalization (max-based)
+    if (!result.routing_weights_fixed.empty()) {
+        int32_t max_weight = *std::max_element(result.routing_weights_fixed.begin(), 
+                                                result.routing_weights_fixed.end());
+        if (max_weight > 0) {
+            for (auto& w : result.routing_weights_fixed) {
+                w = (w * 1000) / max_weight;
+            }
         }
     }
     
@@ -335,35 +336,35 @@ void UnifiedMoERouter::CreateRingTopology() {
     for (size_t i = 0; i < config_.total_experts; ++i) {
         size_t next = (i + 1) % config_.total_experts;
         
-        // Bidirectional ring
-        entanglement_edges_.push_back({i, next, 1.0f});
-        entanglement_edges_.push_back({next, i, 1.0f});
+        // Bidirectional ring (strength = 1000 in fixed-point = 1.0)
+        entanglement_edges_.push_back({i, next, 1000});
+        entanglement_edges_.push_back({next, i, 1000});
     }
 }
 
-void UnifiedMoERouter::CreateSmallWorldTopology(double rewiring_prob, size_t k) {
+void UnifiedMoERouter::CreateSmallWorldTopology(int32_t rewiring_prob_fixed, size_t k) {
     entanglement_edges_.clear();
     
     // Start with regular ring lattice (k/2 neighbors on each side)
     for (size_t i = 0; i < config_.total_experts; ++i) {
         for (size_t j = 1; j <= k / 2; ++j) {
             size_t neighbor = (i + j) % config_.total_experts;
-            entanglement_edges_.push_back({i, neighbor, 1.0f});
+            entanglement_edges_.push_back({i, neighbor, 1000});  // Fixed-point: 1000 = 1.0
         }
     }
     
-    // Rewire with probability p
+    // Rewire with probability p (fixed-point comparison)
     std::mt19937 rng(42);
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    std::uniform_int_distribution<int32_t> dist(0, 1000);  // 0-1000 for fixed-point prob
     std::uniform_int_distribution<size_t> node_dist(0, config_.total_experts - 1);
     
     for (auto& edge : entanglement_edges_) {
-        if (dist(rng) < rewiring_prob) {
+        if (dist(rng) < rewiring_prob_fixed) {
             // Rewire: change target to random node
             size_t new_target = node_dist(rng);
             if (new_target != edge.from) {
                 edge.to = new_target;
-                edge.strength = 0.7f;  // Weaker for long-range connections
+                edge.strength_fixed = 700;  // Weaker for long-range: 0.7 in fixed-point
             }
         }
     }
@@ -377,20 +378,20 @@ void UnifiedMoERouter::CreateHierarchicalTopology(size_t cluster_size) {
         BuildClusters();
     }
     
-    // Intra-cluster: dense connections
+    // Intra-cluster: dense connections (strength = 1000 = 1.0)
     for (const auto& cluster : clusters_) {
         for (size_t i = 0; i < cluster.expert_ids.size(); ++i) {
             for (size_t j = i + 1; j < cluster.expert_ids.size(); ++j) {
                 entanglement_edges_.push_back({
                     cluster.expert_ids[i],
                     cluster.expert_ids[j],
-                    1.0f  // Strong intra-cluster
+                    1000  // Strong intra-cluster
                 });
             }
         }
     }
     
-    // Inter-cluster: ring between cluster centroids
+    // Inter-cluster: ring between cluster centroids (strength = 500 = 0.5)
     for (size_t c = 0; c < clusters_.size(); ++c) {
         size_t next_c = (c + 1) % clusters_.size();
         
@@ -399,7 +400,7 @@ void UnifiedMoERouter::CreateHierarchicalTopology(size_t cluster_size) {
             entanglement_edges_.push_back({
                 clusters_[c].expert_ids[0],
                 clusters_[next_c].expert_ids[0],
-                0.5f  // Weaker inter-cluster
+                500  // Weaker inter-cluster: 0.5 in fixed-point
             });
         }
     }
@@ -418,9 +419,8 @@ int32_t UnifiedMoERouter::ComputeLoadBalanceLossFixed(const LoadStats& stats) {
     int32_t expected_rate_fixed = 1000 / static_cast<int32_t>(config_.total_experts);
     int32_t loss = 0;
     
-    for (float rate : stats.utilization_rates) {
-        // Convert rate to fixed-point (rate is already 0-1, so scale by 1000)
-        int32_t rate_fixed = static_cast<int32_t>(rate * 1000);
+    for (int32_t rate_fixed : stats.utilization_rates_fixed) {
+        // Rate already in fixed-point (scale 1000)
         int32_t diff = rate_fixed - expected_rate_fixed;
         // Accumulate squared difference, divide by 1000 to prevent overflow
         loss += (diff * diff) / 1000;
@@ -440,8 +440,8 @@ std::vector<int32_t> UnifiedMoERouter::ApplyLoadBalancingFixed(
         // Penalize over-utilized experts
         // Fixed-point: expected_rate = 1000 / total_experts
         int32_t expected_rate_fixed = 1000 / static_cast<int32_t>(config_.total_experts);
-        int32_t rate_fixed = static_cast<int32_t>(stats.utilization_rates[i] * 1000);
-        int32_t penalty = (rate_fixed - expected_rate_fixed) * 10; // 10.0f in fixed-point
+        // utilization_rates already in fixed-point (scale 1000)
+        int32_t penalty = (stats.utilization_rates_fixed[i] - expected_rate_fixed) * 10; // 10.0f in fixed-point
         balanced[i] -= penalty;
     }
     
@@ -503,64 +503,6 @@ std::vector<size_t> UnifiedMoERouter::SelectTopK(const std::vector<int32_t>& log
     return result;
 }
 
-float UnifiedMoERouter::ComputeLoadBalanceLoss(const LoadStats& stats) {
-    if (stats.total_requests == 0) {
-        return 0.0f;
-    }
-    
-    float expected_rate = 1.0f / config_.total_experts;
-    float loss = 0.0f;
-    
-    for (float rate : stats.utilization_rates) {
-        float diff = rate - expected_rate;
-        loss += diff * diff;
-    }
-    
-    return loss * config_.load_balance_alpha;
-}
-
-std::vector<float> UnifiedMoERouter::ApplyLoadBalancing(
-    const std::vector<float>& logits,
-    const LoadStats& stats
-) {
-    std::vector<float> balanced = logits;
-    
-    for (size_t i = 0; i < balanced.size(); ++i) {
-        // Penalize over-utilized experts
-        float penalty = (stats.utilization_rates[i] - 1.0f / config_.total_experts) * 10.0f;
-        balanced[i] -= penalty;
-    }
-    
-    return balanced;
-}
-
-std::vector<size_t> UnifiedMoERouter::LLEPRoute(
-    const std::vector<float>& logits,
-    size_t k
-) {
-    // Least-Loaded Expert Parallelism
-    std::vector<std::pair<float, size_t>> scored;
-    scored.reserve(config_.total_experts);
-    
-    for (size_t i = 0; i < config_.total_experts; ++i) {
-        // Score = logit - load_penalty
-        float load_penalty = static_cast<float>(expert_request_counts_[i]) * 0.01f;
-        scored.emplace_back(logits[i] - load_penalty, i);
-    }
-    
-    std::sort(scored.begin(), scored.end(),
-              [](const auto& a, const auto& b) { return a.first > b.first; });
-    
-    std::vector<size_t> selected;
-    selected.reserve(k);
-    
-    for (size_t i = 0; i < k && i < scored.size(); ++i) {
-        selected.push_back(scored[i].second);
-    }
-    
-    return selected;
-}
-
 void UnifiedMoERouter::UpdateLoadStats(const std::vector<size_t>& selected_experts) {
     for (size_t expert : selected_experts) {
         expert_request_counts_[expert]++;
@@ -571,21 +513,35 @@ void UnifiedMoERouter::UpdateLoadStats(const std::vector<size_t>& selected_exper
         expert_request_counts_.begin(), expert_request_counts_.end()
     );
     
-    // Compute utilization rates
-    load_stats_.utilization_rates.resize(config_.total_experts);
+    // Compute utilization rates in fixed-point (scale 1000)
+    load_stats_.utilization_rates_fixed.resize(config_.total_experts);
     for (size_t i = 0; i < config_.total_experts; ++i) {
-        load_stats_.utilization_rates[i] = 
-            static_cast<float>(expert_request_counts_[i]) / load_stats_.total_requests;
+        // rate = count / total in fixed-point: (count * 1000) / total
+        load_stats_.utilization_rates_fixed[i] = 
+            static_cast<int32_t>((expert_request_counts_[i] * 1000) / load_stats_.total_requests);
     }
     
-    // Compute imbalance score (std dev of utilization)
-    float mean = 1.0f / config_.total_experts;
-    float variance = 0.0f;
-    for (float rate : load_stats_.utilization_rates) {
-        variance += (rate - mean) * (rate - mean);
+    // Compute imbalance score using tropical variance (fixed-point)
+    // Mean in fixed-point: 1000 / total_experts
+    int32_t mean_fixed = 1000 / static_cast<int32_t>(config_.total_experts);
+    int32_t variance_fixed = 0;
+    for (int32_t rate_fixed : load_stats_.utilization_rates_fixed) {
+        int32_t diff = rate_fixed - mean_fixed;
+        variance_fixed += (diff * diff) / 1000;  // Divide by 1000 to keep scale
     }
-    variance /= config_.total_experts;
-    load_stats_.imbalance_score = std::sqrt(variance);
+    variance_fixed /= static_cast<int32_t>(config_.total_experts);
+    // Convert to standard deviation approximation (sqrt via bit shift approximation)
+    // For fixed-point: approximate sqrt by finding highest bit
+    int32_t std_dev_approx = 0;
+    if (variance_fixed > 0) {
+        int32_t temp = variance_fixed;
+        while (temp > 0) {
+            temp >>= 1;
+            std_dev_approx++;
+        }
+        std_dev_approx = std_dev_approx * 100;  // Scale appropriately
+    }
+    load_stats_.imbalance_score_fixed = std_dev_approx;
 }
 
 UnifiedMoERouter::LoadStats UnifiedMoERouter::GetLoadStats() const {
@@ -629,9 +585,9 @@ std::vector<size_t> UnifiedMoERouter::HierarchicalSelect(
         }
     }
     
-    // Level 2: Select top-K experts within best cluster using entanglement-aware scoring
+    // Level 2: Select top-K experts within best cluster using entanglement-aware scoring (fixed-point)
     const auto& cluster = clusters_[best_cluster];
-    std::vector<std::pair<float, size_t>> expert_scores;
+    std::vector<std::pair<int32_t, size_t>> expert_scores;
     
     for (size_t expert_id : cluster.expert_ids) {
         // Base score from tropical logits
@@ -642,18 +598,19 @@ std::vector<size_t> UnifiedMoERouter::HierarchicalSelect(
                          static_cast<int32_t>(specializations_[expert_id][i]);
         }
         
-        // Add entanglement bonus from entanglement topology
-        float entanglement_bonus = 0.0f;
+        // Add entanglement bonus from entanglement topology (fixed-point)
+        int32_t entanglement_bonus = 0;
         for (const auto& edge : entanglement_edges_) {
             if (edge.from == expert_id || edge.to == expert_id) {
-                entanglement_bonus += edge.strength * 0.1f; // Small boost from entangled neighbors
+                // edge.strength_fixed is in fixed-point (1000 = 1.0), convert to 0-100 range
+                entanglement_bonus += (edge.strength_fixed * 100) / 1000;
             }
         }
         
-        // Performance-optimized: penalize heavily loaded experts
-        float load_penalty = static_cast<float>(expert_request_counts_[expert_id]) * 0.01f;
+        // Performance-optimized: penalize heavily loaded experts (fixed-point: 0.01 = 10/1000)
+        int32_t load_penalty = static_cast<int32_t>(expert_request_counts_[expert_id]) * 10 / 1000;
         
-        float final_score = static_cast<float>(base_score) + entanglement_bonus - load_penalty;
+        int32_t final_score = base_score + entanglement_bonus - load_penalty;
         expert_scores.emplace_back(final_score, expert_id);
     }
     
@@ -727,40 +684,19 @@ size_t UnifiedMoERouter::AdjustExpertScale(uint32_t current_load) {
 // Utility Methods
 // ============================================================================
 
-std::vector<size_t> UnifiedMoERouter::SelectTopK(const std::vector<float>& logits, size_t k) {
-    // Use partial sort for efficiency with large N
-    std::vector<std::pair<float, size_t>> indexed;
-    indexed.reserve(logits.size());
-    
-    for (size_t i = 0; i < logits.size(); ++i) {
-        indexed.emplace_back(logits[i], i);
+ternary::Trit UnifiedMoERouter::Validate243Config() const {
+    ternary::Trit valid = (config_.total_experts == 243) ? ternary::Trit::POSITIVE : ternary::Trit::ZERO;
+    if (valid == ternary::Trit::POSITIVE && !config_.use_hierarchical_selection) {
+        valid = ternary::Trit::ZERO;
     }
-    
-    // Partial sort to find top k
-    if (k < indexed.size()) {
-        std::partial_sort(indexed.begin(), indexed.begin() + k, indexed.end(),
-            [](const auto& a, const auto& b) { return a.first > b.first; });
-    } else {
-        std::sort(indexed.begin(), indexed.end(),
-            [](const auto& a, const auto& b) { return a.first > b.first; });
-        k = indexed.size();
+    if (valid == ternary::Trit::POSITIVE && 
+        !(config_.topology == UnifiedMoEConfig::TopologyType::HIERARCHICAL ||
+          config_.topology == UnifiedMoEConfig::TopologyType::SMALL_WORLD)) {
+        valid = ternary::Trit::ZERO;
     }
-    
-    std::vector<size_t> result;
-    result.reserve(k);
-    for (size_t i = 0; i < k; ++i) {
-        result.push_back(indexed[i].second);
+    if (valid == ternary::Trit::POSITIVE && config_.active_experts > 32) {
+        valid = ternary::Trit::ZERO;  // Reasonable K for 243 experts
     }
-    
-    return result;
-}
-
-bool UnifiedMoERouter::Validate243Config() const {
-    bool valid = config_.total_experts == 243;
-    valid &= config_.use_hierarchical_selection;
-    valid &= config_.topology == UnifiedMoEConfig::TopologyType::HIERARCHICAL ||
-             config_.topology == UnifiedMoEConfig::TopologyType::SMALL_WORLD;
-    valid &= config_.active_experts <= 32;  // Reasonable K for 243 experts
     return valid;
 }
 

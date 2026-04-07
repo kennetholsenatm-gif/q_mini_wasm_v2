@@ -19,20 +19,20 @@ struct MoETrainingConfig {
     uint32_t training_batch_size = 64;     // Tokens per batch
     
     // Load balancing
-    float load_balance_alpha = 0.01f;       // Load balancing loss weight
+    int32_t load_balance_alpha_fixed = 10;       // 0.01 in fixed-point (10/1000)
     size_t rebalance_interval = 100;        // Rebalance every N batches
     
     // Expert capacity
     size_t tokens_per_expert = 128;        // Max tokens per expert per batch
-    float capacity_factor = 1.25f;         // Capacity buffer
+    int32_t capacity_factor_fixed = 1250;  // 1.25 in fixed-point (1250/1000)
     
     // Convergence
-    float min_goodness_delta_threshold = 0.1f; // Stop if delta below this
+    int32_t min_goodness_delta_threshold_fixed = 100; // 0.1 in fixed-point (100/1000)
     size_t max_epochs = 100;               // Maximum training epochs
     size_t early_stopping_patience = 10;     // Epochs without improvement
     
     // Monitoring
-    bool verbose = true;
+    ternary::Trit verbose = ternary::Trit::POSITIVE;
     size_t log_interval = 10;              // Log every N batches
 };
 
@@ -43,23 +43,23 @@ struct MoETrainingMetrics {
     uint32_t epoch = 0;
     uint32_t batch = 0;
     
-    // Forward-Forward metrics
-    float avg_positive_goodness = 0.0f;
-    float avg_negative_goodness = 0.0f;
-    float avg_goodness_delta = 0.0f;
+    // Forward-Forward metrics (fixed-point: 1000 = 1.0)
+    int32_t avg_positive_goodness_fixed = 0;
+    int32_t avg_negative_goodness_fixed = 0;
+    int32_t avg_goodness_delta_fixed = 0;
     
-    // Load balancing
-    float load_balance_loss = 0.0f;
-    float load_balance_score = 0.0f;
-    std::vector<float> expert_utilization;
+    // Load balancing (fixed-point)
+    int32_t load_balance_loss_fixed = 0;
+    int32_t load_balance_score_fixed = 0;
+    std::vector<int32_t> expert_utilization_fixed;
     
-    // Routing
-    float avg_routing_latency_ms = 0.0f;
-    float avg_confidence = 0.0f;
+    // Routing (fixed-point)
+    int32_t avg_routing_latency_ms = 0;  // Integer milliseconds
+    int32_t avg_confidence_fixed = 0;  // Fixed-point: 1000 = 1.0
     
     // Expert-specific
     std::vector<uint32_t> expert_request_counts;
-    std::vector<float> expert_goodness_deltas;
+    std::vector<int32_t> expert_goodness_deltas_fixed;
 };
 
 /**
@@ -157,13 +157,13 @@ public:
     void TrainExpertsForwardForward(
         const std::vector<ternary::Trit>& positive,
         const std::vector<size_t>& selected_experts,
-        const std::vector<float>& routing_weights
+        const std::vector<int32_t>& routing_weights_fixed
     );
     
     /**
      * @brief Compute combined loss (FF goodness + load balancing)
      */
-    float ComputeCombinedLoss(
+    int32_t ComputeCombinedLoss(
         const std::vector<MoETrainingMetrics>& batch_metrics
     );
 
@@ -172,9 +172,9 @@ public:
     // ========================================================================
     
     /**
-     * @brief Compute load balancing loss for current state
+     * @brief Compute load balancing loss for current state (fixed-point)
      */
-    float ComputeLoadBalancingLoss();
+    int32_t ComputeLoadBalancingLoss();
     
     /**
      * @brief Apply load balancing penalty to routing
@@ -203,7 +203,7 @@ public:
     /**
      * @brief Check if training has converged
      */
-    bool HasConverged() const;
+    ternary::Trit HasConverged() const;
     
     /**
      * @brief Get best epoch metrics

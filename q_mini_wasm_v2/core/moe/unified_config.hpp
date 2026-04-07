@@ -31,8 +31,8 @@ struct UnifiedMoEConfig {
     };
     TopologyType topology = TopologyType::SMALL_WORLD;
     
-    // Small-world parameters
-    double small_world_rewiring_prob = 0.3;  // Probability of rewiring edges
+    // Small-world parameters (fixed-point: 1000 = 1.0)
+    int32_t small_world_rewiring_prob_fixed = 300;  // 0.3 probability = 300/1000
     size_t small_world_k = 4;                // Initial neighbors per node
     
     // Hierarchical parameters (for 243 experts)
@@ -40,32 +40,32 @@ struct UnifiedMoEConfig {
     size_t num_clusters = 16;          // Total clusters (16x16 = 256 capacity)
     
     // Entanglement configuration
-    bool enable_entanglement = true;
+    ternary::Trit enable_entanglement = ternary::Trit::POSITIVE;
     uint32_t entanglement_strength = 70;     // 0-100
     uint32_t coherence_threshold = 30;       // Minimum coherence for entanglement
     
     // Load balancing
-    bool enable_load_balancing = true;
+    ternary::Trit enable_load_balancing = ternary::Trit::POSITIVE;
     uint32_t load_balance_interval = 100;    // Rebalance every N routings
-    float load_balance_alpha = 0.1f;         // Load balancing loss weight
+    int32_t load_balance_alpha_fixed = 100;  // 0.1 in fixed-point (100/1000)
     
     // Energy management
     ternary::EnergyTrit energy_budget = ternary::EnergyTrit::MEDIUM;
-    bool energy_aware_routing = true;
+    ternary::Trit energy_aware_routing = ternary::Trit::POSITIVE;
     
     // Performance tuning
-    bool use_hierarchical_selection = true;  // Required for 243 experts
-    bool use_parallel_topk = true;           // SYCL-accelerated Top-K
+    ternary::Trit use_hierarchical_selection = ternary::Trit::POSITIVE;  // Required for 243 experts
+    ternary::Trit use_parallel_topk = ternary::Trit::POSITIVE;           // SYCL-accelerated Top-K
     uint32_t topk_batch_size = 64;           // Batch size for parallel Top-K
     
     // Validation
-    bool validate() const {
-        return total_experts > 0 && 
+    ternary::Trit validate() const {
+        return (total_experts > 0 && 
                total_experts <= 256 &&
                active_experts > 0 && 
                active_experts <= total_experts &&
                specialization_dim > 0 &&
-               routing_qutrits > 0;
+               routing_qutrits > 0) ? ternary::Trit::POSITIVE : ternary::Trit::ZERO;
     }
     
     // Recommended configs for different scales
@@ -74,7 +74,7 @@ struct UnifiedMoEConfig {
         config.total_experts = 16;
         config.active_experts = 4;
         config.topology = TopologyType::RING;
-        config.use_hierarchical_selection = false;
+        config.use_hierarchical_selection = ternary::Trit::ZERO;
         return config;
     }
     
@@ -83,7 +83,7 @@ struct UnifiedMoEConfig {
         config.total_experts = 64;
         config.active_experts = 8;
         config.topology = TopologyType::SMALL_WORLD;
-        config.use_hierarchical_selection = true;
+        config.use_hierarchical_selection = ternary::Trit::POSITIVE;
         return config;
     }
     
@@ -92,7 +92,7 @@ struct UnifiedMoEConfig {
         config.total_experts = 243;
         config.active_experts = 16;
         config.topology = TopologyType::HIERARCHICAL;
-        config.use_hierarchical_selection = true;
+        config.use_hierarchical_selection = ternary::Trit::POSITIVE;
         config.cluster_size = 16;
         config.num_clusters = 16;
         return config;
@@ -124,8 +124,8 @@ public:
         return *this;
     }
     
-    MoEConfigBuilder& SmallWorldParams(double rewiring_prob, size_t k) {
-        config_.small_world_rewiring_prob = rewiring_prob;
+    MoEConfigBuilder& SmallWorldParams(int32_t rewiring_prob_fixed, size_t k) {
+        config_.small_world_rewiring_prob_fixed = rewiring_prob_fixed;
         config_.small_world_k = k;
         return *this;
     }
@@ -136,7 +136,7 @@ public:
         return *this;
     }
     
-    MoEConfigBuilder& EnableLoadBalancing(bool enable) {
+    MoEConfigBuilder& EnableLoadBalancing(ternary::Trit enable) {
         config_.enable_load_balancing = enable;
         return *this;
     }

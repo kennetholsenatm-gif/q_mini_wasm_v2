@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <random>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -27,7 +28,7 @@ struct EntangledRoutingConfig {
     uint32_t entanglement_strength;    // Strength of entanglement coupling (0-100)
     uint32_t coherence_threshold;      // Minimum coherence for entangled routing (0-100)
     size_t measurement_shots;          // Number of measurement shots for probability estimation
-    bool use_adaptive_entanglement;    // Adapt entanglement based on input statistics
+    ternary::Trit use_adaptive_entanglement;    // Adapt entanglement based on input statistics
     uint32_t efficiency_target;        // Target efficiency improvement (20-30 for 20-30%)
     
     // Default constructor with sensible defaults
@@ -35,7 +36,7 @@ struct EntangledRoutingConfig {
         : entanglement_strength(70)
         , coherence_threshold(30)
         , measurement_shots(100)
-        , use_adaptive_entanglement(true)
+        , use_adaptive_entanglement(ternary::Trit::POSITIVE)
         , efficiency_target(25)  // 25% improvement target
     {}
 };
@@ -270,8 +271,31 @@ public:
     size_t adjust_expert_scale(uint32_t current_load);
     
     /**
-     * @brief Get current scaling factor
+     * @brief Get current active expert count
      */
+    size_t get_active_experts() const { return current_active_experts_; }
+    
+    /**
+     * @brief Update load balancing state
+     * @param loaded_expert Expert index to add load to
+     */
+    void update_load_balancing(size_t loaded_expert) {
+        if (loaded_expert < expert_loads_.size()) {
+            expert_loads_[loaded_expert]++;
+            expert_request_counts_[loaded_expert]++;
+        }
+    }
+    
+    /**
+     * @brief Update load balancing state for multiple experts
+     * @param selected_experts Expert indices to add load to
+     */
+    void update_load_balancing(const std::vector<size_t>& selected_experts) {
+        for (size_t expert_idx : selected_experts) {
+            update_load_balancing(expert_idx);
+        }
+    }
+    
     /**
      * @brief Get scaling factor as fixed-point (1000 = 1.0)
      * @return Scaling factor in fixed-point format
@@ -316,7 +340,7 @@ public:
      * @param thermal_limit Thermal constraint limit
      * @return Energy-optimized expert count
      */
-    size_t energy_aware_scaling(
+    size_t energy_aware_scaling_fixed(
         uint32_t current_load,
         int32_t energy_budget_fixed,
         uint32_t thermal_limit
@@ -404,7 +428,7 @@ public:
      * @param resource_availability Available resources (0-100)
      * @return Adaptively adjusted priority level
      */
-    PriorityLevel adaptive_priority_scaling(
+    int adaptive_priority_scaling(
         PriorityLevel base_priority,
         uint32_t congestion_level,
         uint32_t resource_availability
@@ -523,7 +547,7 @@ private:
     std::vector<std::vector<int32_t>> state_action_scores_;  // Tropical scores [state][action]
     std::vector<int32_t> last_system_state_;  // Last observed state
     uint32_t selection_episode_;  // Selection iteration counter
-    bool tropical_initialized_;
+    ternary::Trit tropical_initialized_;
     
     // Dynamic scaling state
     std::vector<uint32_t> load_history_;
@@ -534,16 +558,20 @@ private:
     ternary::EnergyTrit energy_per_expert_;  // Ternary energy per expert
     uint32_t thermal_current_;
     
+    // Internal RNG
+    std::mt19937 rng_{42};
+    
     // Priority routing state
     std::vector<std::vector<uint32_t>> priority_performance_history_; // [priority][time_step]
     std::vector<uint32_t> priority_queue_sizes_;
     std::vector<ternary::ProbTrit> priority_fairness_metrics_;  // Ternary fairness
     uint32_t priority_preemptions_;
     std::vector<std::vector<size_t>> priority_reserved_experts_; // [priority][expert_indices]
+    std::vector<std::vector<int32_t>> expert_performance_history_; // [expert][time_steps]
     
     // Advanced load balancing state
     std::vector<std::vector<uint32_t>> load_prediction_history_; // [expert][future_time_steps]
-    std::vector<bool> bottleneck_flags_; // Per expert bottleneck detection
+    std::vector<ternary::Trit> bottleneck_flags_; // Per expert bottleneck detection
     std::vector<std::vector<ternary::ProbTrit>> ml_balancing_weights_; // Ternary ML weights
     std::vector<std::vector<size_t>> expert_groups_; // Hierarchical grouping
     uint32_t load_balancing_episodes_;
@@ -616,7 +644,7 @@ private:
      * @brief Compute Pareto-optimal frontier
      */
     std::vector<size_t> compute_pareto_frontier(
-        const std::vector<std::vector<double>>& objective_scores
+        const std::vector<std::vector<int32_t>>& objective_scores_fixed
     ) const;
     
     /**
@@ -642,7 +670,7 @@ private:
     /**
      * @brief Check SLA compliance for priority level
      */
-    bool check_sla_compliance(
+    ternary::Trit check_sla_compliance(
         PriorityLevel priority,
         const std::vector<uint32_t>& sla_constraints,
         uint32_t current_latency,
@@ -676,7 +704,7 @@ private:
     /**
      * @brief Detect bottlenecks in expert utilization
      */
-    std::vector<bool> detect_bottlenecks(const std::vector<size_t>& expert_loads) const;
+    std::vector<ternary::Trit> detect_bottlenecks(const std::vector<size_t>& expert_loads) const;
     
     /**
      * @brief Update ML balancing model
@@ -684,7 +712,7 @@ private:
     void update_ml_balancing_model(
         const std::vector<std::vector<int32_t>>& expert_performance,
         const std::vector<int32_t>& system_metrics,
-        double learning_rate
+        int32_t learning_rate_fixed
     );
     
     /**

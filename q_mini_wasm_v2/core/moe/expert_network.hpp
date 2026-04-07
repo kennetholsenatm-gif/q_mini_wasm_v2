@@ -23,7 +23,7 @@ public:
         size_t output_dim = 64;         // Output feature dimension
         size_t hidden_dim = 128;        // Hidden layer dimension
         size_t num_layers = 2;          // Number of layers
-        bool use_activation = true;     // Apply ternary activation
+        ternary::Trit use_activation = ternary::Trit::POSITIVE;     // Apply ternary activation
         ternary::EnergyTrit energy_budget = ternary::EnergyTrit::MEDIUM;
     };
 

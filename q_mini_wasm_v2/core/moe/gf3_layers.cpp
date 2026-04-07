@@ -231,7 +231,7 @@ GF3MultiLayerExpert::GF3MultiLayerExpert(const ExpertConfig& config)
     AddLayer(config_.output_dim);
 }
 
-void GF3MultiLayerExpert::AddLayer(size_t output_dim, bool use_tropical) {
+void GF3MultiLayerExpert::AddLayer(size_t output_dim, ternary::Trit use_tropical) {
     size_t input_dim = layers_.empty() ? config_.input_dim : layers_.back()->GetOutputDim();
     
     GF3LinearLayer::LayerConfig layer_config;
@@ -247,13 +247,13 @@ void GF3MultiLayerExpert::InitializeAllLayers(int seed) {
     for (auto& layer : layers_) {
         layer->InitializeWeights(layer_seed++);
     }
-    initialized_ = true;
+    initialized_ = ternary::Trit::POSITIVE;
 }
 
 std::vector<ternary::Trit> GF3MultiLayerExpert::Forward(
     const std::vector<ternary::Trit>& input
 ) {
-    if (!initialized_) {
+    if (initialized_ == ternary::Trit::ZERO) {
         InitializeAllLayers();
     }
     
@@ -263,7 +263,7 @@ std::vector<ternary::Trit> GF3MultiLayerExpert::Forward(
         current = layers_[i]->Forward(current);
         
         // Don't apply activation on final layer if not requested
-        if (!config_.use_activation && i == layers_.size() - 1) {
+        if (config_.use_activation == ternary::Trit::ZERO && i == layers_.size() - 1) {
             break;
         }
     }

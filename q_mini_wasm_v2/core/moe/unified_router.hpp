@@ -30,11 +30,11 @@ public:
      */
     struct RoutingResult {
         std::vector<size_t> selected_experts;
-        std::vector<float> routing_weights;
+        std::vector<int32_t> routing_weights_fixed;  // Fixed-point: 1000 = 1.0 (was float)
         ternary::EnergyTrit energy_consumed;
         uint32_t latency_us;
-        float load_balance_score;
-        bool used_hierarchical;
+        int32_t load_balance_score_fixed;  // Fixed-point: 1000 = 1.0 (was float)
+        ternary::Trit used_hierarchical;  // Was bool
     };
     
     /**
@@ -42,8 +42,8 @@ public:
      */
     struct LoadStats {
         std::vector<size_t> request_counts;
-        std::vector<float> utilization_rates;
-        float imbalance_score;  // 0=perfect, 1=worst
+        std::vector<int32_t> utilization_rates_fixed;  // Fixed-point: 1000 = 1.0 (was float)
+        int32_t imbalance_score_fixed;  // Fixed-point: 1000 = 1.0, 0=perfect (was float)
         size_t total_requests;
     };
 
@@ -122,7 +122,7 @@ public:
     /**
      * @brief Small-world topology (Watts-Strogatz)
      */
-    void CreateSmallWorldTopology(double rewiring_prob, size_t k);
+    void CreateSmallWorldTopology(int32_t rewiring_prob_fixed, size_t k);  // Fixed-point: 1000 = 1.0 (was double)
     
     /**
      * @brief Hierarchical cluster topology
@@ -233,7 +233,7 @@ public:
     /**
      * @brief Validate configuration for 243-expert scale
      */
-    bool Validate243Config() const;
+    ternary::Trit Validate243Config() const;  // Was bool
     
     /**
      * @brief Estimate memory usage for 243 experts

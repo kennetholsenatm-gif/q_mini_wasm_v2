@@ -26,8 +26,8 @@ public:
     struct LayerConfig {
         size_t input_dim;
         size_t output_dim;
-        bool use_bias = true;
-        bool use_tropical = false;  // true = tropical, false = standard GF(3)
+        ternary::Trit use_bias = ternary::Trit::POSITIVE;
+        ternary::Trit use_tropical = ternary::Trit::ZERO;  // POSITIVE = tropical, ZERO = standard GF(3)
     };
 
     explicit GF3LinearLayer(const LayerConfig& config);
@@ -193,7 +193,7 @@ public:
     ) override;
 
     // Layer management
-    void AddLayer(size_t output_dim, bool use_tropical = false);
+    void AddLayer(size_t output_dim, ternary::Trit use_tropical = ternary::Trit::ZERO);
     void InitializeAllLayers(int seed = 42);
     
     /**
@@ -209,7 +209,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<GF3LinearLayer>> layers_;
-    bool initialized_ = false;
+    ternary::Trit initialized_ = ternary::Trit::ZERO;
 };
 
 } // namespace q_mini_wasm_v2::core::moe
