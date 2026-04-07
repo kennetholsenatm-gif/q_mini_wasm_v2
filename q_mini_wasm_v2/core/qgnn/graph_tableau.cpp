@@ -239,6 +239,44 @@ size_t GraphTableau::stabilizer_weight(size_t generator_idx) const {
     return weight;
 }
 
+std::vector<std::pair<size_t, size_t>> GraphTableau::get_edges() const {
+    std::vector<std::pair<size_t, size_t>> edges;
+    
+    // Detect entanglement by checking which nodes have correlated stabilizers
+    // Two nodes are "connected" if they share non-trivial stabilizer generators
+    for (size_t i = 0; i < num_qutrits_; ++i) {
+        for (size_t j = i + 1; j < num_qutrits_; ++j) {
+            bool entangled = false;
+            
+            // Check if nodes i and j are correlated in any generator
+            for (size_t gen = 0; gen < num_generators_ && !entangled; ++gen) {
+                // Both nodes have non-identity Pauli on same generator = entanglement
+                bool i_non_trivial = (x_part_[gen][i] != 0) || (z_part_[gen][i] != 0);
+                bool j_non_trivial = (x_part_[gen][j] != 0) || (z_part_[gen][j] != 0);
+                
+                if (i_non_trivial && j_non_trivial) {
+                    entangled = true;
+                }
+            }
+            
+            if (entangled) {
+                edges.emplace_back(i, j);
+            }
+        }
+    }
+    
+    return edges;
+}
+
+void GraphTableau::remove_edge(size_t node_a, size_t node_b) {
+    if (node_a >= num_qutrits_ || node_b >= num_qutrits_) return;
+    if (node_a == node_b) return;
+    
+    // To remove edge, we apply inverse entangling operation
+    // CZ is self-inverse, so apply CZ again to undo
+    apply_cz(node_a, node_b);
+}
+
 // ============================================================================
 // Ternary-Tree Mapping (Phase 3)
 // ============================================================================

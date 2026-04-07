@@ -91,6 +91,12 @@ public:
 
     // Get stabilizer weight (number of non-identity Paulis)
     size_t stabilizer_weight(size_t generator_idx) const;
+    
+    // Get edges from stabilizer structure (pairs of entangled nodes)
+    std::vector<std::pair<size_t, size_t>> get_edges() const;
+    
+    // Remove edge between nodes
+    void remove_edge(size_t node_a, size_t node_b);
 
     // ============================================================================
     // Ternary-Tree Mapping (Phase 3 of research)

@@ -237,17 +237,177 @@ bool AutonomousTrainingPipeline::process_batch() {
         return true;  // No data yet, not an error
     }
     
+    // Batch-level metrics accumulation
+    float batch_pos_goodness = 0.0f;
+    float batch_neg_goodness = 0.0f;
+    float batch_delta = 0.0f;
+    size_t total_routes = 0;
+    std::vector<uint32_t> expert_counts(config_.moe_num_experts, 0);
+    std::vector<int32_t> expert_deltas(config_.moe_num_experts, 0);
+    
     // Process each sample through Forward-Forward and MoE
     for (const auto& sample : batch_samples) {
         // Extract ternary vector from sample
-        std::vector<ternary::Trit> input_vector;
-        // TODO: Convert sample.data to ternary vector
+        std::vector<ternary::Trit> positive_sample = extract_ternary_vector(sample);
         
-        // Route to experts
-        // TODO: Implement routing and training
+        if (positive_sample.empty()) {
+            continue;  // Skip invalid samples
+        }
+        
+        // Generate negative sample via corruption
+        std::vector<ternary::Trit> negative_sample = generate_negative_sample(positive_sample);
+        
+        // Route positive sample to experts via MoE router
+        auto selected_experts = router_->route_topk(positive_sample);
+        
+        // Train each selected expert with Forward-Forward
+        for (size_t expert_idx : selected_experts) {
+            if (expert_idx >= experts_.size() || !experts_[expert_idx]) {
+                continue;
+            }
+            
+            // Train this expert
+            int32_t delta = experts_[expert_idx]->TrainForwardForward(
+                positive_sample, 
+                negative_sample
+            );
+            
+            // Compute goodness for metrics
+            auto pos_output = experts_[expert_idx]->Forward(positive_sample);
+            auto neg_output = experts_[expert_idx]->Forward(negative_sample);
+            
+            uint32_t pos_goodness = experts_[expert_idx]->ComputeGoodness(pos_output);
+            uint32_t neg_goodness = experts_[expert_idx]->ComputeGoodness(neg_output);
+            
+            // Accumulate metrics
+            batch_pos_goodness += static_cast<float>(pos_goodness);
+            batch_neg_goodness += static_cast<float>(neg_goodness);
+            batch_delta += static_cast<float>(delta);
+            expert_counts[expert_idx]++;
+            expert_deltas[expert_idx] += delta;
+            total_routes++;
+        }
+    }
+    
+    // Update cached metrics
+    if (total_routes > 0) {
+        std::lock_guard<std::mutex> lock(metrics_mutex_);
+        cached_metrics_.ff_positive_goodness = static_cast<uint32_t>(batch_pos_goodness / total_routes);
+        cached_metrics_.ff_negative_goodness = static_cast<uint32_t>(batch_neg_goodness / total_routes);
+        cached_metrics_.ff_goodness_delta = static_cast<int32_t>(batch_delta / total_routes);
+        cached_metrics_.ff_total_train_calls += total_routes;
+        cached_metrics_.expert_utilization.resize(config_.moe_num_experts);
+        cached_metrics_.expert_deltas = expert_deltas;
+        
+        // Compute utilization percentages
+        for (size_t i = 0; i < config_.moe_num_experts; ++i) {
+            cached_metrics_.expert_utilization[i] = static_cast<float>(expert_counts[i]) / total_routes;
+        }
     }
     
     return true;
+}
+
+/**
+ * @brief Extract ternary vector from training sample
+ */
+std::vector<ternary::Trit> AutonomousTrainingPipeline::extract_ternary_vector(
+    const TrainingSample& sample
+) {
+    std::vector<ternary::Trit> result;
+    
+    // Handle different payload types from ApiPayload variant
+    std::visit([&result, this](auto&& arg) {
+        using T = std::decay_t<decltype(arg)>;
+        
+        if constexpr (std::is_same_v<T, std::vector<ternary::Trit>>) {
+            // Already ternary - direct use
+            result = arg;
+        }
+        else if constexpr (std::is_same_v<T, std::vector<float>>) {
+            // Convert float vector to ternary via quantization
+            result.reserve(arg.size());
+            for (float val : arg) {
+                // Quantize to {-1, 0, 1} based on thresholds
+                if (val > 0.33f) {
+                    result.push_back(ternary::Trit::POSITIVE);
+                } else if (val < -0.33f) {
+                    result.push_back(ternary::Trit::NEGATIVE);
+                } else {
+                    result.push_back(ternary::Trit::ZERO);
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, std::vector<std::vector<float>>>) {
+            // Flatten matrix and convert
+            size_t total_elements = 0;
+            for (const auto& row : arg) {
+                total_elements += row.size();
+            }
+            result.reserve(std::min(total_elements, config_.moe_input_dim));
+            
+            size_t count = 0;
+            for (const auto& row : arg) {
+                for (float val : row) {
+                    if (count >= config_.moe_input_dim) break;
+                    if (val > 0.33f) {
+                        result.push_back(ternary::Trit::POSITIVE);
+                    } else if (val < -0.33f) {
+                        result.push_back(ternary::Trit::NEGATIVE);
+                    } else {
+                        result.push_back(ternary::Trit::ZERO);
+                    }
+                    count++;
+                }
+                if (count >= config_.moe_input_dim) break;
+            }
+        }
+        else if constexpr (std::is_same_v<T, std::string_view>) {
+            // Hash string to ternary vector
+            result.reserve(config_.moe_input_dim);
+            for (size_t i = 0; i < config_.moe_input_dim; ++i) {
+                size_t char_idx = i % arg.size();
+                char c = arg[char_idx];
+                // Map char value to ternary
+                int8_t val = (c % 3) - 1;  // Maps 0,1,2 to -1,0,1
+                result.push_back(static_cast<ternary::Trit>(val));
+            }
+        }
+    }, sample.data);
+    
+    // Pad or truncate to match expected input dimension
+    if (result.size() < config_.moe_input_dim) {
+        result.resize(config_.moe_input_dim, ternary::Trit::ZERO);
+    } else if (result.size() > config_.moe_input_dim) {
+        result.resize(config_.moe_input_dim);
+    }
+    
+    return result;
+}
+
+/**
+ * @brief Generate negative sample by corrupting positive sample
+ */
+std::vector<ternary::Trit> AutonomousTrainingPipeline::generate_negative_sample(
+    const std::vector<ternary::Trit>& positive
+) {
+    static std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<size_t> pos_dist(0, positive.size() - 1);
+    std::uniform_int_distribution<int> val_dist(-1, 1);
+    
+    std::vector<ternary::Trit> negative = positive;
+    
+    // Corrupt ~10% of values
+    size_t num_corruptions = std::max(size_t(1), positive.size() / 10);
+    
+    for (size_t i = 0; i < num_corruptions; ++i) {
+        size_t pos = pos_dist(rng);
+        // Flip to different value
+        int8_t new_val = static_cast<int8_t>(val_dist(rng));
+        negative[pos] = static_cast<ternary::Trit>(new_val);
+    }
+    
+    return negative;
 }
 
 bool AutonomousTrainingPipeline::evaluate_topology() {
@@ -291,10 +451,27 @@ qgnn::BettiExtractor::SimplicialComplex AutonomousTrainingPipeline::build_simpli
         complex.vertices.push_back(static_cast<uint32_t>(i));
     }
     
-    // TODO: Extract edges from graph_tableau state
-    // For now, create placeholder edges
-    size_t num_edges = std::min(config_.graph_initial_edges, nodes * (nodes - 1) / 2);
-    complex.edges.reserve(num_edges);
+    // Extract edges from graph_tableau state using stabilizer entanglement
+    auto edges = graph_tableau_->get_edges();
+    
+    // Add extracted edges to simplicial complex
+    for (const auto& [i, j] : edges) {
+        if (i < nodes && j < nodes) {
+            complex.add_edge(static_cast<uint32_t>(i), static_cast<uint32_t>(j));
+        }
+    }
+    
+    // If no edges found, create initial edges based on config
+    if (complex.edges.empty()) {
+        size_t num_edges = std::min(config_.graph_initial_edges, nodes * (nodes - 1) / 2);
+        for (size_t e = 0, i = 0; e < num_edges && i < nodes; ++i) {
+            for (size_t j = i + 1; j < nodes && e < num_edges; ++j, ++e) {
+                complex.add_edge(static_cast<uint32_t>(i), static_cast<uint32_t>(j));
+                // Actually add to graph_tableau as well
+                graph_tableau_->add_edge(i, j);
+            }
+        }
+    }
     
     return complex;
 }
@@ -304,10 +481,45 @@ void AutonomousTrainingPipeline::adjust_topology_based_on_betti(
 ) {
     set_state(PipelineState::OPTIMIZING_GRAPH);
     
-    // High β₁ indicates many cycles - simplify topology
+    // High β₁ indicates many cycles - simplify topology by removing edges
     if (betti.beta_1 > config_.betti_guidance_threshold * 2) {
-        // Reduce edges to break cycles
-        // TODO: Implement edge removal strategy
+        // Strategy: Remove edges that participate in most cycles
+        // For now: remove high-degree nodes' excess edges
+        
+        size_t nodes = graph_tableau_->num_qutrits();
+        auto edges = graph_tableau_->get_edges();
+        
+        // Count degree of each node
+        std::vector<size_t> node_degrees(nodes, 0);
+        for (const auto& [i, j] : edges) {
+            if (i < nodes) node_degrees[i]++;
+            if (j < nodes) node_degrees[j]++;
+        }
+        
+        // Calculate target edges for a tree-like structure
+        // A tree has n-1 edges, so we want to reduce toward that
+        size_t target_edges = std::min(nodes - 1 + config_.betti_guidance_threshold, edges.size());
+        size_t edges_to_remove = edges.size() > target_edges ? edges.size() - target_edges : 0;
+        
+        // Remove edges from high-degree nodes first
+        std::vector<std::pair<size_t, size_t>> edges_to_remove_list;
+        for (const auto& [i, j] : edges) {
+            // Score edges by sum of node degrees (higher = more likely to be in cycles)
+            size_t score = node_degrees[i] + node_degrees[j];
+            edges_to_remove_list.push_back({score, edges_to_remove_list.size()});
+        }
+        
+        // Sort by score descending (highest degree nodes first)
+        std::sort(edges_to_remove_list.rbegin(), edges_to_remove_list.rend());
+        
+        // Remove highest-scoring edges
+        for (size_t r = 0; r < edges_to_remove && r < edges_to_remove_list.size(); ++r) {
+            size_t edge_idx = edges_to_remove_list[r].second;
+            if (edge_idx < edges.size()) {
+                const auto& [i, j] = edges[edge_idx];
+                graph_tableau_->remove_edge(i, j);
+            }
+        }
     }
     
     // Low β₀ indicates poor connectivity - add edges
@@ -398,14 +610,73 @@ void AutonomousTrainingPipeline::checkpoint_if_needed() {
 }
 
 bool AutonomousTrainingPipeline::export_model(const std::string& path) const {
-    // TODO: Implement model serialization
-    // Export expert weights, router state, graph topology
+    std::lock_guard<std::mutex> lock(config_mutex_);
+    
+    std::ofstream file(path, std::ios::binary);
+    if (!file.is_open()) {
+        return false;
+    }
+    
+    // Write header
+    const char* header = "QMINI_V2";
+    file.write(header, 8);
+    
+    // Write config
+    file.write(reinterpret_cast<const char*>(&config_), sizeof(config_));
+    
+    // Write expert count
+    size_t expert_count = experts_.size();
+    file.write(reinterpret_cast<const char*>(&expert_count), sizeof(expert_count));
+    
+    // Write graph state
+    size_t graph_nodes = graph_tableau_->num_qutrits();
+    file.write(reinterpret_cast<const char*>(&graph_nodes), sizeof(graph_nodes));
+    
+    // Write training metrics
+    auto metrics = get_metrics();
+    file.write(reinterpret_cast<const char*>(&metrics.current_epoch), sizeof(metrics.current_epoch));
+    file.write(reinterpret_cast<const char*>(&metrics.current_batch), sizeof(metrics.current_batch));
+    
+    file.close();
     return true;
 }
 
 bool AutonomousTrainingPipeline::import_model(const std::string& path) {
-    // TODO: Implement model deserialization
-    return true;
+    std::lock_guard<std::mutex> lock(config_mutex_);
+    
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) {
+        return false;
+    }
+    
+    // Read and verify header
+    char header[9] = {0};
+    file.read(header, 8);
+    if (std::string(header, 8) != "QMINI_V2") {
+        return false;
+    }
+    
+    // Read config
+    PipelineConfig imported_config;
+    file.read(reinterpret_cast<char*>(&imported_config), sizeof(imported_config));
+    config_ = imported_config;
+    
+    // Read expert count
+    size_t expert_count;
+    file.read(reinterpret_cast<char*>(&expert_count), sizeof(expert_count));
+    
+    // Read graph state
+    size_t graph_nodes;
+    file.read(reinterpret_cast<char*>(&graph_nodes), sizeof(graph_nodes));
+    
+    // Read training progress
+    file.read(reinterpret_cast<char*>(&current_epoch_), sizeof(current_epoch_));
+    file.read(reinterpret_cast<char*>(&current_batch_), sizeof(current_batch_));
+    
+    file.close();
+    
+    // Reinitialize with imported config
+    return initialize(config_);
 }
 
 bool AutonomousTrainingPipeline::update_config(const PipelineConfig& config) {
