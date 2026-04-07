@@ -166,7 +166,7 @@ private:
             // Configure migration
             GraphMigrationAdapter::MigrationConfig migration_config;
             migration_config.use_graph_routing = false;
-            migration_config.migration_ratio = 0.5;
+            migration_config.migration_ratio_fixed = 500;
             migration_config.enable_performance_logging = false;
             migration_config.migration_batch_size = 10;
             
@@ -191,8 +191,8 @@ private:
             assert(!graph_result.empty());
             
             // Test migration progress
-            double progress = adapter->get_migration_progress();
-            assert(progress >= 0.0 && progress <= 1.0);
+            int32_t progress_fixed = adapter->get_migration_progress_fixed();
+            assert(progress_fixed >= 0 && progress_fixed <= 1000);
             
             // Test performance benchmark
             auto metrics = adapter->benchmark_performance(input, 10);

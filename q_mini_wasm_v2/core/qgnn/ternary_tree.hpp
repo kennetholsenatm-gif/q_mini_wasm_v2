@@ -30,13 +30,13 @@ struct TernaryNode {
     
     // Quantum data storage
     std::vector<ternary::Trit> quantum_state;
-    std::complex<double> phase;
+    std::complex<int32_t> phase;
     size_t memory_offset;
     size_t cache_line;
     
     // Performance metrics
     mutable size_t access_count;
-    mutable double total_access_time;
+    mutable int32_t total_access_time;
     
     TernaryNode(NodeType t = NodeType::INTERNAL) 
         : type(t), node_id(0), children{0, 0, 0}, parent(0), phase(1.0),
@@ -66,8 +66,8 @@ private:
         size_t total_accesses;
         size_t cache_hits;
         size_t cache_misses;
-        double hit_rate;
-        double average_access_time;
+        int32_t hit_rate;
+        int32_t average_access_time;
     };
     
     std::vector<TernaryNode> nodes;
@@ -77,7 +77,7 @@ private:
     // Optimization parameters
     size_t cache_line_size;
     size_t memory_block_size;
-    double optimization_threshold;
+    int32_t optimization_threshold;
     bool enable_cache_optimization;
     
     // Tree structure
@@ -86,7 +86,7 @@ private:
     std::unordered_map<size_t, size_t> node_depths;
     
     // Performance tracking
-    mutable std::vector<double> access_times;
+    mutable std::vector<int32_t> access_times;
     mutable std::vector<bool> cache_hit_history;
     
     // Internal methods
@@ -126,9 +126,9 @@ public:
     bool is_cache_resident(size_t node_id) const;
     
     // Performance analysis
-    double get_access_latency(size_t node_id) const;
-    double get_average_access_latency() const;
-    double get_cache_hit_rate() const;
+    int32_t get_access_latency(size_t node_id) const;
+    int32_t get_average_access_latency() const;
+    int32_t get_cache_hit_rate() const;
     size_t get_cache_miss_count() const;
     
     // Layout information
@@ -139,7 +139,7 @@ public:
     // Configuration
     void set_cache_line_size(size_t size);
     void set_memory_block_size(size_t size);
-    void set_optimization_threshold(double threshold);
+    void set_optimization_threshold(int32_t threshold);
     void enable_cache_optimization(bool enable);
     
     // Advanced features
@@ -189,7 +189,7 @@ private:
     mutable size_t cache_hits;
     mutable size_t cache_misses;
     mutable size_t prefetch_hits;
-    mutable std::vector<double> access_times;
+    mutable std::vector<int32_t> access_times;
     
     // Internal methods
     size_t find_victim_line() const;
@@ -207,9 +207,9 @@ public:
     void flush_cache();
     
     // Performance metrics
-    double get_hit_rate() const;
-    double get_miss_rate() const;
-    double get_average_access_time() const;
+    int32_t get_hit_rate() const;
+    int32_t get_miss_rate() const;
+    int32_t get_average_access_time() const;
     size_t get_prefetch_efficiency() const;
     
     // Configuration
@@ -223,7 +223,7 @@ public:
     void optimize_for_random_access();
     
     // Analysis
-    std::vector<double> get_access_pattern_analysis() const;
+    std::vector<int32_t> get_access_pattern_analysis() const;
     void generate_cache_report() const;
     void export_cache_statistics(const std::string& filename) const;
 };
@@ -238,7 +238,7 @@ class TernaryAccessPredictor {
 private:
     struct AccessPattern {
         std::vector<size_t> sequence;
-        double probability;
+        int32_t probability;
         std::chrono::steady_clock::time_point last_seen;
         size_t frequency;
     };
@@ -248,7 +248,7 @@ private:
     
     // Prediction parameters
     size_t pattern_length;
-    double prediction_threshold;
+    int32_t prediction_threshold;
     bool enable_learning;
     
     // Performance tracking
@@ -260,7 +260,7 @@ private:
     void extract_patterns(const std::vector<size_t>& access_history);
     void update_probabilities();
     std::vector<size_t> predict_next_access(size_t current_node);
-    double calculate_pattern_probability(const std::vector<size_t>& pattern);
+    int32_t calculate_pattern_probability(const std::vector<size_t>& pattern);
     
 public:
     TernaryAccessPredictor(size_t pattern_length = 5);
@@ -268,16 +268,16 @@ public:
     // Prediction interface
     void record_access(size_t node_id);
     std::vector<size_t> predict_next_accesses(size_t current_node, size_t count = 3);
-    double get_prediction_confidence(const std::vector<size_t>& prediction) const;
+    int32_t get_prediction_confidence(const std::vector<size_t>& prediction) const;
     
     // Learning
     void enable_pattern_learning(bool enable);
     void set_pattern_length(size_t length);
-    void set_prediction_threshold(double threshold);
+    void set_prediction_threshold(int32_t threshold);
     
     // Analysis
     std::vector<AccessPattern> get_detected_patterns() const;
-    double get_prediction_accuracy() const;
+    int32_t get_prediction_accuracy() const;
     void generate_pattern_report() const;
     
     // Advanced features
@@ -314,7 +314,7 @@ private:
     // Performance tracking
     mutable size_t allocation_count;
     mutable size_t deallocation_count;
-    mutable std::vector<double> allocation_times;
+    mutable std::vector<int32_t> allocation_times;
     
     // Internal methods
     size_t find_free_block(size_t size, size_t alignment);
@@ -335,7 +335,7 @@ public:
     void defragment_memory();
     size_t get_free_memory() const;
     size_t get_allocated_memory() const;
-    double get_fragmentation_ratio() const;
+    int32_t get_fragmentation_ratio() const;
     
     // Configuration
     void set_allocation_strategy(AllocationStrategy strategy);
@@ -343,7 +343,7 @@ public:
     
     // Analysis
     std::vector<MemoryBlock> get_memory_blocks() const;
-    double get_average_allocation_time() const;
+    int32_t get_average_allocation_time() const;
     void generate_memory_report() const;
     void export_memory_map(const std::string& filename) const;
     
@@ -377,7 +377,7 @@ private:
     } config;
     
     // Performance tracking
-    mutable std::vector<double> system_performance;
+    mutable std::vector<int32_t> system_performance;
     mutable std::chrono::steady_clock::time_point last_optimization;
     
 public:
@@ -395,15 +395,15 @@ public:
     void release_node_data(size_t node_id);
     
     // Performance monitoring
-    double get_system_performance() const;
-    double get_memory_efficiency() const;
-    double get_cache_efficiency() const;
-    double get_prediction_accuracy() const;
+    int32_t get_system_performance() const;
+    int32_t get_memory_efficiency() const;
+    int32_t get_cache_efficiency() const;
+    int32_t get_prediction_accuracy() const;
     
     // Configuration
     void configure(const SystemConfig& config);
     void enable_adaptive_optimization(bool enable);
-    void set_optimization_targets(double cache_target, double memory_target);
+    void set_optimization_targets(int32_t cache_target, int32_t memory_target);
     
     // Advanced features
     void enable_continuous_optimization(bool enable);

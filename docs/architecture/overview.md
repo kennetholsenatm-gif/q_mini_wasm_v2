@@ -182,3 +182,4 @@ RuntimeConfig config{
 - [Ternary State Space](ternary-state-space.md) - GF(3) arithmetic details
 - [Stabilizer Tableau](stabilizer-tableau.md) - Clifford gate operations
 - [Build Guide](../guides/building.md) - Build instructions
+- [Runtime → SYCL Traceability](runtime-to-sycl-traceability.md) - Verified execution-path mapping and gap register

@@ -20,4 +20,17 @@ jobs:
         
     - name: Run Architecture Enforcement Checks
       run: |
-        python scripts/enforce_architecture.py
+        python scripts/enforce_architecture.py --json reports/architecture_enforcement_report.json
+
+    - name: Run GF(3) Integrity Validator
+      run: |
+        python scripts/validate_gf3_integrity.py
+
+    - name: Upload Architecture Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: architecture-enforcement-reports
+        path: |
+          reports/architecture_enforcement_report.json
+        retention-days: 14

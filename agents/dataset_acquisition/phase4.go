@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"log"
+	"strings"
 )
 
 // RunPhase4Academia handles downloading paper abstracts from ArXiv API
@@ -32,21 +33,31 @@ func RunPhase4Academia() error {
 	var feed Feed
 	if err := xml.Unmarshal(body, &feed); err == nil {
 		for _, e := range feed.Entries {
+			text := NormalizeText(fmt.Sprintf("Title: %s\nAbstract: %s", e.Title, e.Summary))
+			if text == "" {
+				continue
+			}
 			entries = append(entries, DatasetEntry{
-				Text:   fmt.Sprintf("Title: %s\nAbstract: %s", e.Title, e.Summary),
-				Source: "ArXiv",
-				Domain: "Academia/Advanced",
+				Text:        text,
+				Source:      "ArXiv",
+				Domain:      "Academia/Advanced",
+				URL:         arxivURL,
+				RetrievedAt: NowRFC3339(),
 			})
 		}
+		if len(entries) == 0 {
+			return fmt.Errorf("parsed arXiv feed but produced zero valid entries")
+		}
 	} else {
-		log.Printf("Warning: failed to parse ArXiv XML: %v", err)
-		
-		// Fallback static data if API parsing fails
-		entries = append(entries, DatasetEntry{
-			Text: "Theoretical quantum mechanics is a fundamental theory in physics that provides a description of the physical properties of nature at the scale of atoms and subatomic particles.",
-			Source: "ArXivFallback",
-			Domain: "Academia/QuantumTheory",
-		})
+		return fmt.Errorf("failed to parse ArXiv XML response: %w", err)
+	}
+
+	if len(entries) < 10 {
+		return fmt.Errorf("insufficient arXiv records retrieved: %d", len(entries))
+	}
+
+	for i := range entries {
+		entries[i].Text = strings.TrimSpace(entries[i].Text)
 	}
 
 	return WriteJSONL(getPhaseFile("phase4_acad"), entries)

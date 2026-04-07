@@ -197,7 +197,7 @@ public:
         uint32_t avg_latency_us;
         ternary::EnergyTrit avg_energy_per_routing;
         ternary::ProbTrit avg_confidence;
-        double load_balance_score;
+        int32_t load_balance_score_fixed; // 1000 = 1.0
     };
     
     RoutingStats get_routing_stats() const;

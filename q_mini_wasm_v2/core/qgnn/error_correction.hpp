@@ -22,16 +22,16 @@ public:
     // Core error correction interface
     virtual bool detect_error(const QGNNState& state) = 0;
     virtual bool correct_error(QGNNState& state) = 0;
-    virtual double get_error_rate() const = 0;
+    virtual int32_t get_error_rate() const = 0;
     virtual bool is_stable() const = 0;
     
     // Performance metrics
-    virtual double get_correction_fidelity() const = 0;
+    virtual int32_t get_correction_fidelity() const = 0;
     virtual size_t get_correction_overhead() const = 0;
-    virtual double get_energy_cost_pj() const = 0;
+    virtual int32_t get_energy_cost_pj() const = 0;
     
     // Configuration
-    virtual void set_error_threshold(double threshold) = 0;
+    virtual void set_error_threshold(int32_t threshold) = 0;
     virtual void enable_continuous_correction(bool enable) = 0;
 };
 
@@ -48,13 +48,13 @@ private:
         std::vector<ternary::Trit> syndrome;
         size_t error_location;
         ternary::Trit error_type;
-        double confidence;
+        int32_t confidence;
     };
     
     size_t code_length;
     size_t code_dimension;
     size_t error_correction_capability;
-    double error_threshold;
+    int32_t error_threshold;
     bool continuous_correction_enabled;
     
     // Encoding/decoding matrices
@@ -63,8 +63,8 @@ private:
     std::vector<std::vector<ternary::Trit>> syndrome_matrix;
     
     // Performance tracking
-    mutable double total_errors_detected;
-    mutable double total_errors_corrected;
+    mutable int32_t total_errors_detected;
+    mutable int32_t total_errors_corrected;
     mutable size_t total_corrections_attempted;
     
     // Internal methods
@@ -92,25 +92,25 @@ public:
     // TernaryErrorCorrection interface
     bool detect_error(const QGNNState& state) override;
     bool correct_error(QGNNState& state) override;
-    double get_error_rate() const override;
+    int32_t get_error_rate() const override;
     bool is_stable() const override;
     
-    double get_correction_fidelity() const override;
+    int32_t get_correction_fidelity() const override;
     size_t get_correction_overhead() const override;
-    double get_energy_cost_pj() const override;
+    int32_t get_energy_cost_pj() const override;
     
-    void set_error_threshold(double threshold) override;
+    void set_error_threshold(int32_t threshold) override;
     void enable_continuous_correction(bool enable) override;
     
     // Constantin-Rao specific methods
     void initialize_matrices();
     bool validate_code_properties() const;
-    double get_minimum_distance() const;
+    int32_t get_minimum_distance() const;
     
     // Advanced features
     void optimize_for_phase_drift();
     void optimize_for_discretization_error();
-    std::vector<double> get_error_statistics() const;
+    std::vector<int32_t> get_error_statistics() const;
 };
 
 /**
@@ -132,7 +132,7 @@ private:
     static const std::vector<std::vector<ternary::Trit>> GOALY_PARITY_CHECK;
     static const std::vector<std::vector<std::vector<ternary::Trit>>> SYNDROME_TABLE;
     
-    double error_threshold;
+    int32_t error_threshold;
     bool continuous_correction_enabled;
     
     // Caching for performance
@@ -154,7 +154,7 @@ private:
     
     // Performance optimization
     void clear_cache() const;
-    double get_cache_efficiency() const;
+    int32_t get_cache_efficiency() const;
     
 public:
     TernaryGolayCode();
@@ -162,14 +162,14 @@ public:
     // TernaryErrorCorrection interface
     bool detect_error(const QGNNState& state) override;
     bool correct_error(QGNNState& state) override;
-    double get_error_rate() const override;
+    int32_t get_error_rate() const override;
     bool is_stable() const override;
     
-    double get_correction_fidelity() const override;
+    int32_t get_correction_fidelity() const override;
     size_t get_correction_overhead() const override;
-    double get_energy_cost_pj() const override;
+    int32_t get_energy_cost_pj() const override;
     
-    void set_error_threshold(double threshold) override;
+    void set_error_threshold(int32_t threshold) override;
     void enable_continuous_correction(bool enable) override;
     
     // Golay-specific methods
@@ -181,7 +181,7 @@ public:
     // Advanced features
     void optimize_for_burst_errors();
     void optimize_for_correlated_noise();
-    std::vector<double> get_burst_error_statistics() const;
+    std::vector<int32_t> get_burst_error_statistics() const;
 };
 
 /**
@@ -196,20 +196,20 @@ private:
     std::unique_ptr<TernaryGolayCode> golay;
     
     // Adaptive selection parameters
-    double burst_error_threshold;
-    double correlated_noise_threshold;
+    int32_t burst_error_threshold;
+    int32_t correlated_noise_threshold;
     size_t recent_error_window;
-    std::vector<double> recent_error_rates;
+    std::vector<int32_t> recent_error_rates;
     
     // Performance tracking
     mutable std::vector<bool> recent_corrections;
-    mutable std::vector<double> recent_fidelities;
+    mutable std::vector<int32_t> recent_fidelities;
     
     // Selection logic
     TernaryErrorCorrection* select_optimal_code(const QGNNState& state) const;
     bool is_burst_error_pattern() const;
     bool is_correlated_noise_pattern() const;
-    void update_error_statistics(bool success, double fidelity);
+    void update_error_statistics(bool success, int32_t fidelity);
     
 public:
     HybridTernaryCorrection();
@@ -218,24 +218,24 @@ public:
     // TernaryErrorCorrection interface
     bool detect_error(const QGNNState& state) override;
     bool correct_error(QGNNState& state) override;
-    double get_error_rate() const override;
+    int32_t get_error_rate() const override;
     bool is_stable() const override;
     
-    double get_correction_fidelity() const override;
+    int32_t get_correction_fidelity() const override;
     size_t get_correction_overhead() const override;
-    double get_energy_cost_pj() const override;
+    int32_t get_energy_cost_pj() const override;
     
-    void set_error_threshold(double threshold) override;
+    void set_error_threshold(int32_t threshold) override;
     void enable_continuous_correction(bool enable) override;
     
     // Hybrid-specific methods
-    void set_burst_error_threshold(double threshold);
-    void set_correlated_noise_threshold(double threshold);
+    void set_burst_error_threshold(int32_t threshold);
+    void set_correlated_noise_threshold(int32_t threshold);
     void set_error_window_size(size_t window_size);
     
     // Analysis methods
-    std::vector<double> get_code_selection_statistics() const;
-    std::vector<double> get_adaptive_performance_metrics() const;
+    std::vector<int32_t> get_code_selection_statistics() const;
+    std::vector<int32_t> get_adaptive_performance_metrics() const;
     void optimize_adaptive_parameters();
 };
 
@@ -250,51 +250,51 @@ private:
     std::unique_ptr<HybridTernaryCorrection> error_correction;
     
     // Phase tracking
-    std::vector<std::complex<double>> reference_phases;
-    std::vector<std::complex<double>> current_phases;
-    double phase_drift_threshold;
+    std::vector<std::complex<int32_t>> reference_phases;
+    std::vector<std::complex<int32_t>> current_phases;
+    int32_t phase_drift_threshold;
     
     // Correction parameters
     size_t correction_interval;
     bool adaptive_correction_enabled;
-    double learning_rate;
+    int32_t learning_rate;
     
     // Performance metrics
-    mutable double total_phase_drift;
+    mutable int32_t total_phase_drift;
     mutable size_t corrections_applied;
-    mutable std::vector<double> phase_drift_history;
+    mutable std::vector<int32_t> phase_drift_history;
     
     // Internal methods
-    std::complex<double> compute_phase_drift(size_t qubit_index) const;
-    void apply_phase_correction(size_t qubit_index, const std::complex<double>& correction);
+    std::complex<int32_t> compute_phase_drift(size_t qubit_index) const;
+    void apply_phase_correction(size_t qubit_index, const std::complex<int32_t>& correction);
     void update_reference_phases(const QGNNState& state);
     bool needs_correction(size_t qubit_index) const;
     
 public:
     PhaseDriftCorrection();
-    explicit PhaseDriftCorrection(double drift_threshold, size_t correction_interval = 100);
+    explicit PhaseDriftCorrection(int32_t drift_threshold, size_t correction_interval = 100);
     
     // Main correction interface
     void correct_phase_drift(QGNNState& state);
     bool is_phase_stable(const QGNNState& state) const;
-    double get_phase_accuracy() const;
+    int32_t get_phase_accuracy() const;
     
     // Configuration
-    void set_drift_threshold(double threshold);
+    void set_drift_threshold(int32_t threshold);
     void set_correction_interval(size_t interval);
     void enable_adaptive_correction(bool enable);
-    void set_learning_rate(double rate);
+    void set_learning_rate(int32_t rate);
     
     // Analysis
-    std::vector<double> get_phase_drift_statistics() const;
-    double get_average_phase_drift() const;
-    double get_phase_stability_metric() const;
+    std::vector<int32_t> get_phase_drift_statistics() const;
+    int32_t get_average_phase_drift() const;
+    int32_t get_phase_stability_metric() const;
     void reset_phase_tracking();
     
     // Advanced features
     void optimize_for_deep_networks(size_t max_depth);
     void enable_predictive_correction(bool enable);
-    std::complex<double> predict_phase_drift(size_t qubit_index) const;
+    std::complex<int32_t> predict_phase_drift(size_t qubit_index) const;
 };
 
 /**
@@ -311,18 +311,18 @@ private:
     
     // System state
     bool correction_enabled;
-    double overall_stability_threshold;
+    int32_t overall_stability_threshold;
     size_t correction_cycle_count;
     
     // Performance tracking
-    std::vector<double> stability_history;
-    std::vector<double> correction_latency_history;
+    std::vector<int32_t> stability_history;
+    std::vector<int32_t> correction_latency_history;
     std::vector<bool> correction_success_history;
     
     // Configuration
     struct CorrectionConfig {
-        double error_threshold;
-        double phase_drift_threshold;
+        int32_t error_threshold;
+        int32_t phase_drift_threshold;
         size_t correction_interval;
         bool enable_continuous_correction;
         bool enable_predictive_correction;
@@ -331,7 +331,7 @@ private:
     
     // Internal coordination
     bool coordinate_corrections(QGNNState& state);
-    void update_system_metrics(bool success, double latency);
+    void update_system_metrics(bool success, int32_t latency);
     bool should_apply_correction(const QGNNState& state) const;
     
 public:
@@ -341,18 +341,18 @@ public:
     // Main correction interface
     bool apply_error_correction(QGNNState& state);
     bool is_system_stable(const QGNNState& state) const;
-    double get_system_stability() const;
+    int32_t get_system_stability() const;
     
     // Configuration
     void configure(const CorrectionConfig& config);
     void enable_correction(bool enable);
-    void set_stability_threshold(double threshold);
+    void set_stability_threshold(int32_t threshold);
     
     // Monitoring and analysis
-    std::vector<double> get_stability_trend() const;
-    std::vector<double> get_correction_latency_trend() const;
-    double get_average_correction_latency() const;
-    double get_correction_success_rate() const;
+    std::vector<int32_t> get_stability_trend() const;
+    std::vector<int32_t> get_correction_latency_trend() const;
+    int32_t get_average_correction_latency() const;
+    int32_t get_correction_success_rate() const;
     
     // Advanced features
     void enable_continuous_monitoring(bool enable);

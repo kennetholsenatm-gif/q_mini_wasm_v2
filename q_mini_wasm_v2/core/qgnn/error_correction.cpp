@@ -53,7 +53,7 @@ bool ConstantinRaoCode::correct_error(QGNNState& state) {
     return corrected;
 }
 
-double ConstantinRaoCode::get_error_rate() const {
+int32_t ConstantinRaoCode::get_error_rate() const {
     if (total_corrections_attempted == 0) return 0.0;
     return total_errors_detected / total_corrections_attempted;
 }
@@ -62,7 +62,7 @@ bool ConstantinRaoCode::is_stable() const {
     return get_error_rate() < error_threshold;
 }
 
-double ConstantinRaoCode::get_correction_fidelity() const {
+int32_t ConstantinRaoCode::get_correction_fidelity() const {
     if (total_errors_detected == 0) return 1.0;
     return total_errors_corrected / total_errors_detected;
 }
@@ -71,12 +71,12 @@ size_t ConstantinRaoCode::get_correction_overhead() const {
     return code_length - code_dimension;
 }
 
-double ConstantinRaoCode::get_energy_cost_pj() const {
+int32_t ConstantinRaoCode::get_energy_cost_pj() const {
     // Energy cost based on correction overhead and complexity
     return (code_length - code_dimension) * 0.05;  // 0.05 pJ per overhead bit
 }
 
-void ConstantinRaoCode::set_error_threshold(double threshold) {
+void ConstantinRaoCode::set_error_threshold(int32_t threshold) {
     error_threshold = threshold;
 }
 
@@ -124,7 +124,7 @@ bool ConstantinRaoCode::validate_code_properties() const {
     return get_minimum_distance() >= 2 * error_correction_capability + 1;
 }
 
-double ConstantinRaoCode::get_minimum_distance() const {
+int32_t ConstantinRaoCode::get_minimum_distance() const {
     // For Constantin-Rao codes, minimum distance depends on parameters
     // Simplified calculation - in practice would require exhaustive search
     return 3.0;  // Typical for ternary codes
@@ -260,11 +260,11 @@ void ConstantinRaoCode::optimize_for_discretization_error() {
     continuous_correction_enabled = false;
 }
 
-std::vector<double> ConstantinRaoCode::get_error_statistics() const {
+std::vector<int32_t> ConstantinRaoCode::get_error_statistics() const {
     return {
         get_error_rate(),
         get_correction_fidelity(),
-        static_cast<double>(get_correction_overhead()),
+        static_cast<int32_t>(get_correction_overhead()),
         get_energy_cost_pj()
     };
 }
@@ -340,7 +340,7 @@ bool TernaryGolayCode::correct_error(QGNNState& state) {
     return true;
 }
 
-double TernaryGolayCode::get_error_rate() const {
+int32_t TernaryGolayCode::get_error_rate() const {
     // Golay code has excellent error correction capabilities
     return 0.001;  // Very low error rate
 }
@@ -349,7 +349,7 @@ bool TernaryGolayCode::is_stable() const {
     return get_error_rate() < error_threshold;
 }
 
-double TernaryGolayCode::get_correction_fidelity() const {
+int32_t TernaryGolayCode::get_correction_fidelity() const {
     return 0.999;  // 99.9% fidelity for ternary Golay code
 }
 
@@ -357,11 +357,11 @@ size_t TernaryGolayCode::get_correction_overhead() const {
     return GOALY_N - GOALY_K;  // 5 parity bits
 }
 
-double TernaryGolayCode::get_energy_cost_pj() const {
+int32_t TernaryGolayCode::get_energy_cost_pj() const {
     return (GOALY_N - GOALY_K) * 0.04;  // 0.04 pJ per overhead bit
 }
 
-void TernaryGolayCode::set_error_threshold(double threshold) {
+void TernaryGolayCode::set_error_threshold(int32_t threshold) {
     error_threshold = threshold;
 }
 
@@ -434,11 +434,11 @@ void TernaryGolayCode::optimize_for_correlated_noise() {
     error_threshold *= 0.9;  // Moderately more sensitive
 }
 
-std::vector<double> TernaryGolayCode::get_burst_error_statistics() const {
+std::vector<int32_t> TernaryGolayCode::get_burst_error_statistics() const {
     return {
         get_error_rate(),
         get_correction_fidelity(),
-        static_cast<double>(get_correction_overhead()),
+        static_cast<int32_t>(get_correction_overhead()),
         get_energy_cost_pj()
     };
 }
@@ -469,15 +469,15 @@ bool HybridTernaryCorrection::correct_error(QGNNState& state) {
     TernaryErrorCorrection* optimal_code = select_optimal_code(state);
     
     bool success = optimal_code->correct_error(state);
-    double fidelity = optimal_code->get_correction_fidelity();
+    int32_t fidelity = optimal_code->get_correction_fidelity();
     
     update_error_statistics(success, fidelity);
     return success;
 }
 
-double HybridTernaryCorrection::get_error_rate() const {
-    double cr_rate = constantin_rao->get_error_rate();
-    double golay_rate = golay->get_error_rate();
+int32_t HybridTernaryCorrection::get_error_rate() const {
+    int32_t cr_rate = constantin_rao->get_error_rate();
+    int32_t golay_rate = golay->get_error_rate();
     return (cr_rate + golay_rate) / 2.0;
 }
 
@@ -485,9 +485,9 @@ bool HybridTernaryCorrection::is_stable() const {
     return constantin_rao->is_stable() && golay->is_stable();
 }
 
-double HybridTernaryCorrection::get_correction_fidelity() const {
-    double cr_fidelity = constantin_rao->get_correction_fidelity();
-    double golay_fidelity = golay->get_correction_fidelity();
+int32_t HybridTernaryCorrection::get_correction_fidelity() const {
+    int32_t cr_fidelity = constantin_rao->get_correction_fidelity();
+    int32_t golay_fidelity = golay->get_correction_fidelity();
     return (cr_fidelity + golay_fidelity) / 2.0;
 }
 
@@ -495,13 +495,13 @@ size_t HybridTernaryCorrection::get_correction_overhead() const {
     return std::max(constantin_rao->get_correction_overhead(), golay->get_correction_overhead());
 }
 
-double HybridTernaryCorrection::get_energy_cost_pj() const {
-    double cr_cost = constantin_rao->get_energy_cost_pj();
-    double golay_cost = golay->get_energy_cost_pj();
+int32_t HybridTernaryCorrection::get_energy_cost_pj() const {
+    int32_t cr_cost = constantin_rao->get_energy_cost_pj();
+    int32_t golay_cost = golay->get_energy_cost_pj();
     return (cr_cost + golay_cost) / 2.0;
 }
 
-void HybridTernaryCorrection::set_error_threshold(double threshold) {
+void HybridTernaryCorrection::set_error_threshold(int32_t threshold) {
     constantin_rao->set_error_threshold(threshold);
     golay->set_error_threshold(threshold);
 }
@@ -525,7 +525,7 @@ bool HybridTernaryCorrection::is_burst_error_pattern() const {
     if (recent_error_rates.size() < recent_error_window) return false;
     
     // Check for sudden spike in error rate
-    double recent_avg = 0.0;
+    int32_t recent_avg = 0.0;
     for (size_t i = recent_error_rates.size() - recent_error_window; i < recent_error_rates.size(); ++i) {
         recent_avg += recent_error_rates[i];
     }
@@ -538,8 +538,8 @@ bool HybridTernaryCorrection::is_correlated_noise_pattern() const {
     if (recent_error_rates.size() < recent_error_window) return false;
     
     // Check for consistent error pattern
-    double variance = 0.0;
-    double mean = 0.0;
+    int32_t variance = 0.0;
+    int32_t mean = 0.0;
     
     for (size_t i = recent_error_rates.size() - recent_error_window; i < recent_error_rates.size(); ++i) {
         mean += recent_error_rates[i];
@@ -554,7 +554,7 @@ bool HybridTernaryCorrection::is_correlated_noise_pattern() const {
     return variance < correlated_noise_threshold;
 }
 
-void HybridTernaryCorrection::update_error_statistics(bool success, double fidelity) {
+void HybridTernaryCorrection::update_error_statistics(bool success, int32_t fidelity) {
     recent_corrections.push_back(success);
     recent_fidelities.push_back(fidelity);
     
@@ -565,7 +565,7 @@ void HybridTernaryCorrection::update_error_statistics(bool success, double fidel
     }
     
     // Update error rates
-    double current_error_rate = success ? 0.0 : (1.0 - fidelity);
+    int32_t current_error_rate = success ? 0.0 : (1.0 - fidelity);
     recent_error_rates.push_back(current_error_rate);
     
     if (recent_error_rates.size() > recent_error_window) {
@@ -573,11 +573,11 @@ void HybridTernaryCorrection::update_error_statistics(bool success, double fidel
     }
 }
 
-void HybridTernaryCorrection::set_burst_error_threshold(double threshold) {
+void HybridTernaryCorrection::set_burst_error_threshold(int32_t threshold) {
     burst_error_threshold = threshold;
 }
 
-void HybridTernaryCorrection::set_correlated_noise_threshold(double threshold) {
+void HybridTernaryCorrection::set_correlated_noise_threshold(int32_t threshold) {
     correlated_noise_threshold = threshold;
 }
 
@@ -585,20 +585,20 @@ void HybridTernaryCorrection::set_error_window_size(size_t window_size) {
     recent_error_window = window_size;
 }
 
-std::vector<double> HybridTernaryCorrection::get_code_selection_statistics() const {
+std::vector<int32_t> HybridTernaryCorrection::get_code_selection_statistics() const {
     return {
-        static_cast<double>(std::count_if(recent_corrections.begin(), recent_corrections.end(),
+        static_cast<int32_t>(std::count_if(recent_corrections.begin(), recent_corrections.end(),
                                          [](bool success) { return success; })) / recent_corrections.size(),
         get_correction_fidelity(),
         get_error_rate()
     };
 }
 
-std::vector<double> HybridTernaryCorrection::get_adaptive_performance_metrics() const {
+std::vector<int32_t> HybridTernaryCorrection::get_adaptive_performance_metrics() const {
     return {
         get_correction_fidelity(),
         get_energy_cost_pj(),
-        static_cast<double>(get_correction_overhead())
+        static_cast<int32_t>(get_correction_overhead())
     };
 }
 
@@ -606,7 +606,7 @@ void HybridTernaryCorrection::optimize_adaptive_parameters() {
     // Optimize thresholds based on recent performance
     if (recent_error_rates.empty()) return;
     
-    double avg_error_rate = std::accumulate(recent_error_rates.begin(), recent_error_rates.end(), 0.0) / recent_error_rates.size();
+    int32_t avg_error_rate = std::accumulate(recent_error_rates.begin(), recent_error_rates.end(), 0.0) / recent_error_rates.size();
     
     // Adjust thresholds based on performance
     if (avg_error_rate > 0.05) {
@@ -627,7 +627,7 @@ PhaseDriftCorrection::PhaseDriftCorrection()
     error_correction = std::make_unique<HybridTernaryCorrection>();
 }
 
-PhaseDriftCorrection::PhaseDriftCorrection(double drift_threshold, size_t correction_interval)
+PhaseDriftCorrection::PhaseDriftCorrection(int32_t drift_threshold, size_t correction_interval)
     : phase_drift_threshold(drift_threshold), correction_interval(correction_interval),
       adaptive_correction_enabled(false), learning_rate(0.1),
       total_phase_drift(0.0), corrections_applied(0) {
@@ -647,7 +647,7 @@ void PhaseDriftCorrection::correct_phase_drift(QGNNState& state) {
     // Check and correct each qubit
     for (size_t i = 0; i < num_qubits; ++i) {
         if (needs_correction(i)) {
-            std::complex<double> drift = compute_phase_drift(i);
+            std::complex<int32_t> drift = compute_phase_drift(i);
             if (std::abs(drift) > phase_drift_threshold) {
                 apply_phase_correction(i, drift);
                 corrections_applied++;
@@ -665,7 +665,7 @@ bool PhaseDriftCorrection::is_phase_stable(const QGNNState& state) const {
     size_t num_qubits = state.get_qubit_count();
     
     for (size_t i = 0; i < num_qubits; ++i) {
-        std::complex<double> drift = compute_phase_drift(i);
+        std::complex<int32_t> drift = compute_phase_drift(i);
         if (std::abs(drift) > phase_drift_threshold) {
             return false;
         }
@@ -674,12 +674,12 @@ bool PhaseDriftCorrection::is_phase_stable(const QGNNState& state) const {
     return true;
 }
 
-double PhaseDriftCorrection::get_phase_accuracy() const {
+int32_t PhaseDriftCorrection::get_phase_accuracy() const {
     if (corrections_applied == 0) return 1.0;
     return 1.0 - (total_phase_drift / corrections_applied);
 }
 
-void PhaseDriftCorrection::set_drift_threshold(double threshold) {
+void PhaseDriftCorrection::set_drift_threshold(int32_t threshold) {
     phase_drift_threshold = threshold;
 }
 
@@ -691,19 +691,19 @@ void PhaseDriftCorrection::enable_adaptive_correction(bool enable) {
     adaptive_correction_enabled = enable;
 }
 
-void PhaseDriftCorrection::set_learning_rate(double rate) {
+void PhaseDriftCorrection::set_learning_rate(int32_t rate) {
     learning_rate = rate;
 }
 
-std::complex<double> PhaseDriftCorrection::compute_phase_drift(size_t qubit_index) const {
+std::complex<int32_t> PhaseDriftCorrection::compute_phase_drift(size_t qubit_index) const {
     if (qubit_index >= current_phases.size() || qubit_index >= reference_phases.size()) {
-        return std::complex<double>(0, 0);
+        return std::complex<int32_t>(0, 0);
     }
     
     return current_phases[qubit_index] - reference_phases[qubit_index];
 }
 
-void PhaseDriftCorrection::apply_phase_correction(size_t qubit_index, const std::complex<double>& correction) {
+void PhaseDriftCorrection::apply_phase_correction(size_t qubit_index, const std::complex<int32_t>& correction) {
     if (qubit_index < current_phases.size()) {
         current_phases[qubit_index] -= correction;
         total_phase_drift += std::abs(correction);
@@ -726,7 +726,7 @@ bool PhaseDriftCorrection::needs_correction(size_t qubit_index) const {
         // Adaptive correction based on recent drift history
         if (phase_drift_history.size() < 10) return true;
         
-        double recent_avg = 0.0;
+        int32_t recent_avg = 0.0;
         for (size_t i = std::max(0, static_cast<int>(phase_drift_history.size()) - 10); 
              i < phase_drift_history.size(); ++i) {
             recent_avg += phase_drift_history[i];
@@ -739,24 +739,24 @@ bool PhaseDriftCorrection::needs_correction(size_t qubit_index) const {
     }
 }
 
-std::vector<double> PhaseDriftCorrection::get_phase_drift_statistics() const {
+std::vector<int32_t> PhaseDriftCorrection::get_phase_drift_statistics() const {
     if (phase_drift_history.empty()) {
         return {0.0, 0.0, 0.0};
     }
     
-    double avg = std::accumulate(phase_drift_history.begin(), phase_drift_history.end(), 0.0) / phase_drift_history.size();
+    int32_t avg = std::accumulate(phase_drift_history.begin(), phase_drift_history.end(), 0.0) / phase_drift_history.size();
     
-    double max_drift = *std::max_element(phase_drift_history.begin(), phase_drift_history.end());
+    int32_t max_drift = *std::max_element(phase_drift_history.begin(), phase_drift_history.end());
     
     return {avg, max_drift, get_phase_accuracy()};
 }
 
-double PhaseDriftCorrection::get_average_phase_drift() const {
+int32_t PhaseDriftCorrection::get_average_phase_drift() const {
     if (phase_drift_history.empty()) return 0.0;
     return std::accumulate(phase_drift_history.begin(), phase_drift_history.end(), 0.0) / phase_drift_history.size();
 }
 
-double PhaseDriftCorrection::get_phase_stability_metric() const {
+int32_t PhaseDriftCorrection::get_phase_stability_metric() const {
     return get_phase_accuracy();
 }
 
@@ -779,11 +779,11 @@ void PhaseDriftCorrection::enable_predictive_correction(bool enable) {
     adaptive_correction_enabled = enable;
 }
 
-std::complex<double> PhaseDriftCorrection::predict_phase_drift(size_t qubit_index) const {
-    if (phase_drift_history.size() < 3) return std::complex<double>(0, 0);
+std::complex<int32_t> PhaseDriftCorrection::predict_phase_drift(size_t qubit_index) const {
+    if (phase_drift_history.size() < 3) return std::complex<int32_t>(0, 0);
     
     // Simple linear prediction based on recent drift
-    double recent_trend = 0.0;
+    int32_t recent_trend = 0.0;
     size_t count = std::min(3UL, phase_drift_history.size());
     
     for (size_t i = phase_drift_history.size() - count; i < phase_drift_history.size() - 1; ++i) {
@@ -791,7 +791,7 @@ std::complex<double> PhaseDriftCorrection::predict_phase_drift(size_t qubit_inde
     }
     recent_trend /= (count - 1);
     
-    return std::complex<double>(recent_trend, 0);
+    return std::complex<int32_t>(recent_trend, 0);
 }
 
 } // namespace qgnn

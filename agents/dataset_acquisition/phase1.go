@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 )
 
@@ -23,31 +24,64 @@ func RunPhase1NLPMath() error {
 
 	var dict map[string]string
 	if err := json.Unmarshal(body, &dict); err == nil {
-		for word, definition := range dict {
-			if len(definition) > 0 {
-				entries = append(entries, DatasetEntry{
-					Text:   fmt.Sprintf("%s: %s", strings.Title(word), definition),
-					Source: "WebstersEnglishDictionary",
-					Domain: "NLP/Dictionary",
-				})
+		keys := make([]string, 0, len(dict))
+		for k := range dict {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		maxEntries := 50000
+		if maxEntries > len(keys) {
+			maxEntries = len(keys)
+		}
+
+		for i := 0; i < maxEntries; i++ {
+			word := keys[i]
+			definition := dict[word]
+			if len(definition) == 0 {
+				continue
 			}
+			entries = append(entries, DatasetEntry{
+				Text:        fmt.Sprintf("%s: %s", strings.Title(word), definition),
+				Source:      "WebstersEnglishDictionary",
+				Domain:      "NLP/Dictionary",
+				URL:         dictURL,
+				RetrievedAt: NowRFC3339(),
+			})
 		}
 	} else {
-		log.Printf("Warning: unmarshal dictionary failed: %v", err)
+		return fmt.Errorf("failed to parse dictionary response: %w", err)
 	}
 
-	// Add standard math axioms and branches (mock representation of a larger math corpus)
-	mathTexts := []string{
-		"Algebra is the study of mathematical symbols and the rules for manipulating these symbols.",
-		"Calculus is the mathematical study of continuous change.",
-		"Geometry is a branch of mathematics concerned with questions of shape, size, relative position of figures, and the properties of space.",
+	mathTopics := []string{
+		"Algebra",
+		"Calculus",
+		"Geometry",
+		"Number theory",
+		"Linear algebra",
+		"Discrete mathematics",
+		"Graph theory",
+		"Probability theory",
+		"Statistics",
+		"Topology",
 	}
-	for _, text := range mathTexts {
+	for _, topic := range mathTopics {
+		summary, sourceURL, err := FetchWikipediaSummary(topic)
+		if err != nil {
+			log.Printf("math topic fetch failed (%s): %v", topic, err)
+			continue
+		}
 		entries = append(entries, DatasetEntry{
-			Text:   text,
-			Source: "MathFoundations",
-			Domain: "Mathematics",
+			Text:        fmt.Sprintf("%s: %s", topic, summary),
+			Source:      "Wikipedia",
+			Domain:      "Mathematics",
+			URL:         sourceURL,
+			RetrievedAt: NowRFC3339(),
 		})
+	}
+
+	if len(entries) == 0 {
+		return fmt.Errorf("phase1 NLP/Math produced no entries")
 	}
 
 	return WriteJSONL(getPhaseFile("phase1_nlp"), entries)
@@ -57,35 +91,52 @@ func RunPhase1NLPMath() error {
 func RunPhase1Programming() error {
 	var entries []DatasetEntry
 
-	// Go documentation basics
-	goDocs := []string{
-		"Go is an open source programming language that makes it easy to build simple, reliable, and efficient software.",
-		"A goroutine is a lightweight thread managed by the Go runtime.",
-		"Channels are a typed conduit through which you can send and receive values with the channel operator, <-.",
+	goTopics := []string{
+		"Go programming language",
+		"Goroutine",
+		"Go channels",
+		"Go modules",
 	}
-	
-	// C++ basics
-	cppDocs := []string{
-		"C++ is a general-purpose programming language created by Bjarne Stroustrup as an extension of the C programming language.",
-		"Templates are the foundation of generic programming in C++, which involves writing code in a way that is independent of any particular type.",
-		"RAII (Resource Acquisition Is Initialization) is a C++ programming technique which binds the life cycle of a resource to the lifetime of an object.",
+	cppTopics := []string{
+		"C++",
+		"RAII",
+		"Template metaprogramming",
+		"C++ memory management",
 	}
-
-	// R basics
-	rDocs := []string{
-		"R is a programming language for statistical computing and graphics.",
-		"Data frames are fundamental data structures in R, used for storing data tables.",
-		"ggplot2 is a data visualization package for the statistical programming language R.",
+	rTopics := []string{
+		"R (programming language)",
+		"Data frame",
+		"ggplot2",
+		"Statistical computing",
 	}
 
-	for _, text := range goDocs {
-		entries = append(entries, DatasetEntry{Text: text, Source: "GoDocs", Domain: "Programming/Go"})
+	fetchTopic := func(topic, domain string) {
+		summary, sourceURL, err := FetchWikipediaSummary(topic)
+		if err != nil {
+			log.Printf("programming topic fetch failed (%s): %v", topic, err)
+			return
+		}
+		entries = append(entries, DatasetEntry{
+			Text:        fmt.Sprintf("%s: %s", topic, summary),
+			Source:      "Wikipedia",
+			Domain:      domain,
+			URL:         sourceURL,
+			RetrievedAt: NowRFC3339(),
+		})
 	}
-	for _, text := range cppDocs {
-		entries = append(entries, DatasetEntry{Text: text, Source: "CppDocs", Domain: "Programming/C++"})
+
+	for _, topic := range goTopics {
+		fetchTopic(topic, "Programming/Go")
 	}
-	for _, text := range rDocs {
-		entries = append(entries, DatasetEntry{Text: text, Source: "RDocs", Domain: "Programming/R"})
+	for _, topic := range cppTopics {
+		fetchTopic(topic, "Programming/C++")
+	}
+	for _, topic := range rTopics {
+		fetchTopic(topic, "Programming/R")
+	}
+
+	if len(entries) == 0 {
+		return fmt.Errorf("phase1 programming produced no entries")
 	}
 
 	return WriteJSONL(getPhaseFile("phase1_prog"), entries)

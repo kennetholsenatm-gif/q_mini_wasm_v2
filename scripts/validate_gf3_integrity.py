@@ -56,6 +56,13 @@ ALLOWED_FLOAT_LOCATIONS = [
     "flash_cim/",     # Energy calculation
 ]
 
+
+def _strip_line_comment(line: str) -> str:
+    """Remove simple inline comments for contamination scanning."""
+    if "//" in line:
+        return line.split("//", 1)[0]
+    return line
+
 def scan_file_for_floats(file_path: Path) -> list[tuple[int, str]]:
     """Scan a single file for floating point operations"""
     violations = []
@@ -64,9 +71,13 @@ def scan_file_for_floats(file_path: Path) -> list[tuple[int, str]]:
         lines = f.readlines()
     
     for line_num, line in enumerate(lines, 1):
+        scan_line = _strip_line_comment(line)
+        if not scan_line.strip():
+            continue
+
         for pattern in FORBIDDEN_FLOAT_KEYWORDS:
-            if re.search(pattern, line):
-                violations.append((line_num, line.strip()))
+            if re.search(pattern, scan_line):
+                violations.append((line_num, scan_line.strip()))
     
     return violations
 
@@ -103,12 +114,12 @@ def validate_critical_paths() -> bool:
                     continue
                     
                 violations = scan_file_for_floats(file_path)
-    if violations:
-        print(f"\nERROR: VIOLATIONS in {relative_path}:")
-        for line_num, line in violations:
-            print(f"   Line {line_num:4d}: {line}")
-            total_violations += 1
-        all_valid = False
+                if violations:
+                    print(f"\nERROR: VIOLATIONS in {relative_path}:")
+                    for line_num, line in violations:
+                        print(f"   Line {line_num:4d}: {line}")
+                        total_violations += 1
+                    all_valid = False
 
     print("\n" + "="*70)
     if all_valid:

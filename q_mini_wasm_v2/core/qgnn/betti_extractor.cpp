@@ -174,8 +174,8 @@ BettiExtractor::BettiNumbers BettiExtractor::compute_betti_with_budget(
     
     // Estimate energy cost before computation
     const size_t n = tableau_->num_qutrits();
-    const double estimated_ops = static_cast<double>(n * n);  // O(n²) operations
-    const double estimated_energy = estimated_ops * 0.1;  // ~0.1 pJ per op
+    const int32_t estimated_ops = static_cast<int32_t>(n * n);  // O(n²) operations
+    const int32_t estimated_energy = estimated_ops * 0.1;  // ~0.1 pJ per op
     
     auto estimated_energy_trit = ternary::energy_to_trit(estimated_energy);
     

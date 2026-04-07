@@ -228,18 +228,18 @@ bool TernaryTreeOptimizer::is_cache_resident(size_t node_id) const {
     return nodes[node_id].access_count > 0;
 }
 
-double TernaryTreeOptimizer::get_access_latency(size_t node_id) const {
+int32_t TernaryTreeOptimizer::get_access_latency(size_t node_id) const {
     if (node_id >= nodes.size()) return 1000.0;
     if (is_cache_resident(node_id)) return 0.1;
     return 10.0;
 }
 
-double TernaryTreeOptimizer::get_average_access_latency() const {
+int32_t TernaryTreeOptimizer::get_average_access_latency() const {
     if (!cache_metrics || cache_metrics->total_accesses == 0) return 0.0;
     return cache_metrics->average_access_time;
 }
 
-double TernaryTreeOptimizer::get_cache_hit_rate() const {
+int32_t TernaryTreeOptimizer::get_cache_hit_rate() const {
     if (!cache_metrics || cache_metrics->total_accesses == 0) return 0.0;
     return cache_metrics->hit_rate;
 }
@@ -274,7 +274,7 @@ size_t TernaryTreeOptimizer::get_memory_footprint() const {
 
 void TernaryTreeOptimizer::set_cache_line_size(size_t size) { cache_line_size = size; }
 void TernaryTreeOptimizer::set_memory_block_size(size_t size) { memory_block_size = size; }
-void TernaryTreeOptimizer::set_optimization_threshold(double threshold) { optimization_threshold = threshold; }
+void TernaryTreeOptimizer::set_optimization_threshold(int32_t threshold) { optimization_threshold = threshold; }
 void TernaryTreeOptimizer::enable_cache_optimization(bool enable) { this->enable_cache_optimization = enable; }
 void TernaryTreeOptimizer::enable_adaptive_optimization(bool enable) {
     if (enable && !cache_metrics) {
@@ -332,7 +332,7 @@ void TernaryTreeOptimizer::benchmark_access_performance() {
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     if (cache_metrics) {
-        cache_metrics->average_access_time = duration.count() / static_cast<double>(nodes.size());
+        cache_metrics->average_access_time = duration.count() / static_cast<int32_t>(nodes.size());
     }
 }
 
@@ -463,19 +463,19 @@ void TernaryCacheManager::evict_line(size_t line_id) {
     line.node_ids.clear();
 }
 
-double TernaryCacheManager::get_hit_rate() const {
+int32_t TernaryCacheManager::get_hit_rate() const {
     if (total_accesses == 0) return 0.0;
-    return static_cast<double>(cache_hits) / static_cast<double>(total_accesses);
+    return static_cast<int32_t>(cache_hits) / static_cast<int32_t>(total_accesses);
 }
 
-double TernaryCacheManager::get_miss_rate() const {
+int32_t TernaryCacheManager::get_miss_rate() const {
     if (total_accesses == 0) return 0.0;
-    return static_cast<double>(cache_misses) / static_cast<double>(total_accesses);
+    return static_cast<int32_t>(cache_misses) / static_cast<int32_t>(total_accesses);
 }
 
-double TernaryCacheManager::get_average_access_time() const {
+int32_t TernaryCacheManager::get_average_access_time() const {
     if (access_times.empty()) return 0.0;
-    double sum = std::accumulate(access_times.begin(), access_times.end(), 0.0);
+    int32_t sum = std::accumulate(access_times.begin(), access_times.end(), 0.0);
     return sum / access_times.size();
 }
 
@@ -506,11 +506,11 @@ void TernaryCacheManager::enable_adaptive_prefetching(bool enable) { enable_pref
 void TernaryCacheManager::optimize_for_sequential_access() {}
 void TernaryCacheManager::optimize_for_random_access() { replacement_policy = ReplacementPolicy::RANDOM; }
 
-std::vector<double> TernaryCacheManager::get_access_pattern_analysis() const {
-    std::vector<double> analysis;
+std::vector<int32_t> TernaryCacheManager::get_access_pattern_analysis() const {
+    std::vector<int32_t> analysis;
     for (const auto& line : cache_lines) {
         if (line.is_valid) {
-            analysis.push_back(static_cast<double>(line.access_count));
+            analysis.push_back(static_cast<int32_t>(line.access_count));
         }
     }
     return analysis;
@@ -580,7 +580,7 @@ std::vector<size_t> TernaryAccessPredictor::predict_next_accesses(size_t current
     return predictions;
 }
 
-double TernaryAccessPredictor::get_prediction_confidence(const std::vector<size_t>& prediction) const {
+int32_t TernaryAccessPredictor::get_prediction_confidence(const std::vector<size_t>& prediction) const {
     if (prediction.empty()) return 0.0;
     for (const auto& pattern : patterns) {
         if (pattern.sequence.size() >= prediction.size()) {
@@ -629,17 +629,17 @@ void TernaryAccessPredictor::update_probabilities() {
         total_frequency += pattern.frequency;
     }
     for (auto& pattern : patterns) {
-        pattern.probability = static_cast<double>(pattern.frequency) / static_cast<double>(total_frequency);
+        pattern.probability = static_cast<int32_t>(pattern.frequency) / static_cast<int32_t>(total_frequency);
     }
 }
 
 void TernaryAccessPredictor::enable_pattern_learning(bool enable) { enable_learning = enable; }
 void TernaryAccessPredictor::set_pattern_length(size_t length) { pattern_length = length; }
-void TernaryAccessPredictor::set_prediction_threshold(double threshold) { prediction_threshold = threshold; }
+void TernaryAccessPredictor::set_prediction_threshold(int32_t threshold) { prediction_threshold = threshold; }
 
-double TernaryAccessPredictor::get_prediction_accuracy() const {
+int32_t TernaryAccessPredictor::get_prediction_accuracy() const {
     if (total_predictions == 0) return 0.0;
-    return static_cast<double>(correct_predictions) / static_cast<double>(total_predictions);
+    return static_cast<int32_t>(correct_predictions) / static_cast<int32_t>(total_predictions);
 }
 
 std::vector<TernaryAccessPredictor::AccessPattern> TernaryAccessPredictor::get_detected_patterns() const {
@@ -802,7 +802,7 @@ size_t TernaryWasmAllocator::get_free_memory() const {
 
 size_t TernaryWasmAllocator::get_allocated_memory() const { return allocated_memory; }
 
-double TernaryWasmAllocator::get_fragmentation_ratio() const {
+int32_t TernaryWasmAllocator::get_fragmentation_ratio() const {
     size_t free_memory = get_free_memory();
     if (free_memory == 0) return 0.0;
     size_t free_blocks = 0;
@@ -810,7 +810,7 @@ double TernaryWasmAllocator::get_fragmentation_ratio() const {
         if (!block.is_allocated) ++free_blocks;
     }
     if (free_blocks == 0) return 0.0;
-    return static_cast<double>(free_blocks) / static_cast<double>(memory_blocks.size());
+    return static_cast<int32_t>(free_blocks) / static_cast<int32_t>(memory_blocks.size());
 }
 
 void TernaryWasmAllocator::set_allocation_strategy(AllocationStrategy new_strategy) { strategy = new_strategy; }
@@ -820,9 +820,9 @@ std::vector<TernaryWasmAllocator::MemoryBlock> TernaryWasmAllocator::get_memory_
     return memory_blocks;
 }
 
-double TernaryWasmAllocator::get_average_allocation_time() const {
+int32_t TernaryWasmAllocator::get_average_allocation_time() const {
     if (allocation_times.empty()) return 0.0;
-    double sum = std::accumulate(allocation_times.begin(), allocation_times.end(), 0.0);
+    int32_t sum = std::accumulate(allocation_times.begin(), allocation_times.end(), 0.0);
     return sum / allocation_times.size();
 }
 
@@ -966,23 +966,23 @@ void TernaryMemorySystem::release_node_data(size_t node_id) {
     cache_manager->invalidate_node(node_id);
 }
 
-double TernaryMemorySystem::get_system_performance() const {
-    double cache_perf = cache_manager->get_hit_rate();
-    double access_perf = 1.0 / (1.0 + optimizer->get_average_access_latency());
+int32_t TernaryMemorySystem::get_system_performance() const {
+    int32_t cache_perf = cache_manager->get_hit_rate();
+    int32_t access_perf = 1.0 / (1.0 + optimizer->get_average_access_latency());
     return (cache_perf + access_perf) / 2.0;
 }
 
-double TernaryMemorySystem::get_memory_efficiency() const {
+int32_t TernaryMemorySystem::get_memory_efficiency() const {
     size_t free = memory_allocator->get_free_memory();
     size_t total = memory_allocator->get_wasm_memory_size();
-    return static_cast<double>(free) / static_cast<double>(total);
+    return static_cast<int32_t>(free) / static_cast<int32_t>(total);
 }
 
-double TernaryMemorySystem::get_cache_efficiency() const {
+int32_t TernaryMemorySystem::get_cache_efficiency() const {
     return cache_manager->get_hit_rate();
 }
 
-double TernaryMemorySystem::get_prediction_accuracy() const {
+int32_t TernaryMemorySystem::get_prediction_accuracy() const {
     return access_predictor->get_prediction_accuracy();
 }
 
@@ -998,7 +998,7 @@ void TernaryMemorySystem::enable_adaptive_optimization(bool enable) {
     optimizer->enable_adaptive_optimization(enable);
 }
 
-void TernaryMemorySystem::set_optimization_targets(double cache_target, double memory_target) {
+void TernaryMemorySystem::set_optimization_targets(int32_t cache_target, int32_t memory_target) {
     // Configure optimization targets for cache and memory efficiency
     // These targets guide the memory system's allocation strategy
     if (cache_target >= 0.0 && cache_target <= 1.0) {

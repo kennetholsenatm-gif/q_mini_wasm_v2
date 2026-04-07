@@ -159,7 +159,7 @@ public:
     std::vector<Trit> forward(const std::vector<Trit>& node_features);
     
     // Symplectic attention: message importance scoring
-    std::vector<float> compute_attention(const GraphTableau& tableau);
+    std::vector<int32_t> compute_attention_fixed(const GraphTableau& tableau);
 
 private:
     std::vector<Edge> edges_;

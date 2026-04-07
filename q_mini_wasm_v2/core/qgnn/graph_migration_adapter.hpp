@@ -21,7 +21,7 @@ public:
      */
     struct MigrationConfig {
         bool use_graph_routing;        // Enable graph-native routing
-        double migration_ratio;        // Ratio of operations to migrate (0.0-1.0)
+        int32_t migration_ratio_fixed; // Fixed-point ratio (1000 = 1.0)
         bool enable_performance_logging; // Log performance comparisons
         size_t migration_batch_size;   // Batch size for gradual migration
     };
@@ -35,8 +35,8 @@ public:
         ternary::EnergyTrit array_energy;
         ternary::EnergyTrit graph_energy;
         ternary::ProbTrit accuracy_difference;
-        double speedup_factor;
-        double energy_efficiency_factor;
+        int32_t speedup_factor_fixed;           // 1000 = 1.0x
+        int32_t energy_efficiency_factor_fixed; // 1000 = 1.0x
     };
 
 private:
@@ -120,7 +120,7 @@ public:
     /**
      * @brief Get migration progress (0.0-1.0)
      */
-    double get_migration_progress() const;
+    int32_t get_migration_progress_fixed() const;
     
     /**
      * @brief Check if migration is complete

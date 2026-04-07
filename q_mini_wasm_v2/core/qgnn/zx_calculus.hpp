@@ -11,7 +11,7 @@ namespace qgnn {
 /**
  * @brief Fixed-point complex number representation for quantum phases
  * 
- * Replaces std::complex<double> with integer-based fixed-point arithmetic.
+ * Replaces std::complex<int32_t> with integer-based fixed-point arithmetic.
  * Scale factor: 1000 = 1.0 for both real and imaginary parts.
  */
 struct FixedComplex {
@@ -81,7 +81,7 @@ public:
     
     // Analysis methods
     int8_t is_identity_fixed() const;  // Returns 0/1 instead of bool
-    double get_t_count() const;
+    int32_t get_t_count() const;
     /**
      * @brief Get T-gate count in fixed-point (scale 1000 = 1.0)
      * @return Fixed-point T-gate count
@@ -167,7 +167,7 @@ public:
     
     // Advanced features
     void enable_parallel_optimization(bool enable = true);
-    void set_optimization_target(double target_efficiency);
+    void set_optimization_target(int32_t target_efficiency);
     ZXDiagram get_optimized_diagram() const;
     
     // Validation and testing
@@ -218,10 +218,10 @@ private:
     struct OptimizationMetrics {
         size_t original_gates;
         size_t optimized_gates;
-        double original_energy_pj;
-        double optimized_energy_pj;
-        double optimization_time_ms;
-        double memory_usage_mb;
+        int32_t original_energy_pj;
+        int32_t optimized_energy_pj;
+        int32_t optimization_time_ms;
+        int32_t memory_usage_mb;
     };
     
     std::vector<OptimizationMetrics> optimization_history;
@@ -230,13 +230,13 @@ public:
     void record_optimization(const OptimizationMetrics& metrics);
     
     // Analysis methods
-    double get_average_gate_reduction() const;
-    double get_average_energy_savings() const;
-    double get_average_optimization_time() const;
+    int32_t get_average_gate_reduction() const;
+    int32_t get_average_energy_savings() const;
+    int32_t get_average_optimization_time() const;
     
     // Trend analysis
-    std::vector<double> get_gate_reduction_trend() const;
-    std::vector<double> get_energy_savings_trend() const;
+    std::vector<int32_t> get_gate_reduction_trend() const;
+    std::vector<int32_t> get_energy_savings_trend() const;
     
     // Reporting
     void generate_optimization_report() const;

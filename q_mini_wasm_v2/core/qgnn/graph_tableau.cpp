@@ -396,9 +396,9 @@ std::vector<Trit> TropicalGNNLayer::forward(const std::vector<Trit>& node_featur
     return output;
 }
 
-std::vector<float> TropicalGNNLayer::compute_attention(const GraphTableau& tableau) {
+std::vector<int32_t> TropicalGNNLayer::compute_attention_fixed(const GraphTableau& tableau) {
     // Symplectic attention: measure stabilizer weights as importance
-    std::vector<float> attention(num_nodes_, 0.0f);
+    std::vector<int32_t> attention(num_nodes_, 0);
     
     for (size_t node = 0; node < num_nodes_; ++node) {
         // Attention = normalized stabilizer weight
@@ -409,7 +409,9 @@ std::vector<float> TropicalGNNLayer::compute_attention(const GraphTableau& table
                 ++weight;
             }
         }
-        attention[node] = static_cast<float>(weight) / (2 * num_nodes_);
+        // Fixed-point normalization (1000 = 1.0)
+        size_t denom = 2 * num_nodes_;
+        attention[node] = denom > 0 ? static_cast<int32_t>((weight * 1000) / denom) : 0;
     }
     
     return attention;

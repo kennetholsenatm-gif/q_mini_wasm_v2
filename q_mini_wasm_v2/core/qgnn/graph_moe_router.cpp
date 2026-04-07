@@ -18,7 +18,7 @@ GraphMoERouter::GraphMoERouter(const GraphConfig& config)
         .avg_latency_us = 0,
         .avg_energy_per_routing = ternary::EnergyTrit::MEDIUM,
         .avg_confidence = ternary::ProbTrit::MED_PROB,
-        .load_balance_score = 1.0
+        .load_balance_score_fixed = 1000
     };
     
     // Initialize expert graph
@@ -363,7 +363,7 @@ void GraphMoERouter::reset_stats() {
         .avg_latency_us = 0,
         .avg_energy_per_routing = ternary::EnergyTrit::MEDIUM,
         .avg_confidence = ternary::ProbTrit::MED_PROB,
-        .load_balance_score = 1.0
+        .load_balance_score_fixed = 1000
     };
     routing_round_ = 0;
     accumulated_energy_ = ternary::EnergyTrit::LOW;

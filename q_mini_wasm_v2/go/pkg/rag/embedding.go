@@ -1,18 +1,14 @@
 package rag
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"math"
-	"net/http"
 	"strings"
 	"sync"
-	"time"
 )
 
 // EmbeddingService defines the interface for embedding generation
@@ -32,11 +28,8 @@ type EmbeddingService interface {
 // RealEmbeddingService generates embeddings using an external API or local model
 type RealEmbeddingService struct {
 	dimension   int
-	apiEndpoint string
-	apiKey      string
 	mu          sync.RWMutex
 	cache       map[string][]float32
-	client      *http.Client
 }
 
 // NewRealEmbeddingService creates a new real embedding service
@@ -44,12 +37,11 @@ func NewRealEmbeddingService(dimension int, apiEndpoint, apiKey string) *RealEmb
 	if dimension == 0 {
 		dimension = 384
 	}
+	_ = apiEndpoint
+	_ = apiKey
 	return &RealEmbeddingService{
-		dimension:   dimension,
-		apiEndpoint: apiEndpoint,
-		apiKey:      apiKey,
-		cache:       make(map[string][]float32),
-		client:      &http.Client{Timeout: 30 * time.Second},
+		dimension: dimension,
+		cache:     make(map[string][]float32),
 	}
 }
 
@@ -65,8 +57,8 @@ func (s *RealEmbeddingService) Embed(ctx context.Context, text string) ([]float3
 	// Call embedding API
 	embedding, err := s.callEmbeddingAPI(ctx, text)
 	if err != nil {
-		// Fallback to local TF-IDF embedding on API failure
-		fmt.Printf("Embedding API failed, using local TF-IDF fallback: %v\n", err)
+		// Strict MCP-only mode: deterministic local fallback
+		fmt.Printf("Embedding backend unavailable in strict mode, using local TF-IDF fallback: %v\n", err)
 		return s.generateLocalEmbedding(text), nil
 	}
 
@@ -79,55 +71,9 @@ func (s *RealEmbeddingService) Embed(ctx context.Context, text string) ([]float3
 
 // callEmbeddingAPI makes the actual API call to generate embeddings
 func (s *RealEmbeddingService) callEmbeddingAPI(ctx context.Context, text string) ([]float32, error) {
-	if s.apiEndpoint == "" {
-		return nil, fmt.Errorf("no API endpoint configured")
-	}
-
-	requestBody := map[string]interface{}{
-		"input": text,
-		"model": "text-embedding-3-small",
-	}
-
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", s.apiEndpoint, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if s.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.apiKey)
-	}
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var result struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	if len(result.Data) == 0 {
-		return nil, fmt.Errorf("no embedding data in response")
-	}
-
-	return result.Data[0].Embedding, nil
+	_ = ctx
+	_ = text
+	return nil, fmt.Errorf("external embedding API disabled in strict MCP-only profile")
 }
 
 // EmbedBatch generates embeddings for multiple texts

@@ -1,0 +1,11 @@
+{
+  "version": "qmini.desktop.mcp_host.v1",
+  "required_methods": [
+    "callTool"
+  ],
+  "optional_methods": [
+    "describe",
+    "ping"
+  ],
+  "handshake_tool": "wui_desktop_shell_handshake"
+}

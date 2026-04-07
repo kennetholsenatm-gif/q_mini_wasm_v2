@@ -14,40 +14,44 @@ import (
 	"unsafe"
 )
 
+func runtimeCGOEnabled() bool {
+	return true
+}
+
 // TrainingPipelineCGO provides CGO bindings to C++ training pipeline
 type TrainingPipelineCGO struct {
 	handle unsafe.Pointer
 }
 
 // PipelineConfigCGO matches C++ PipelineConfig
- type PipelineConfigCGO struct {
-	AcquisitionThreads      int     `json:"acquisition_threads"`
-	NumExperts             int     `json:"num_experts"`
-	GraphNodes             int     `json:"graph_nodes"`
-	EnableBettiGuidance    bool    `json:"enable_betti_guidance"`
-	EnableKnowledgeEngine  bool    `json:"enable_knowledge_engine"`
-	Epochs                 int     `json:"epochs"`
-	BatchSize              int     `json:"batch_size"`
+type PipelineConfigCGO struct {
+	AcquisitionThreads    int  `json:"acquisition_threads"`
+	NumExperts            int  `json:"num_experts"`
+	GraphNodes            int  `json:"graph_nodes"`
+	EnableBettiGuidance   bool `json:"enable_betti_guidance"`
+	EnableKnowledgeEngine bool `json:"enable_knowledge_engine"`
+	Epochs                int  `json:"epochs"`
+	BatchSize             int  `json:"batch_size"`
 }
 
 // PipelineMetricsCGO matches C++ PipelineMetrics
- type PipelineMetricsCGO struct {
-	FFPositiveGoodness uint32  `json:"ff_positive_goodness"`
-	FFNegativeGoodness uint32  `json:"ff_negative_goodness"`
-	FFGoodnessDelta    int32   `json:"ff_goodness_delta"`
+type PipelineMetricsCGO struct {
+	FFPositiveGoodness  uint32  `json:"ff_positive_goodness"`
+	FFNegativeGoodness  uint32  `json:"ff_negative_goodness"`
+	FFGoodnessDelta     int32   `json:"ff_goodness_delta"`
 	MoELoadBalanceScore float32 `json:"moe_load_balance_score"`
-	BettiBeta0         uint32  `json:"betti_beta_0"`
-	BettiBeta1         uint32  `json:"betti_beta_1"`
-	BettiBeta2         uint32  `json:"betti_beta_2"`
-	GraphNodes         int     `json:"graph_nodes"`
-	GraphEdges         int     `json:"graph_edges"`
-	DSTotalAcquired    int     `json:"ds_total_acquired"`
-	DSTotalPerturbed   int     `json:"ds_total_perturbed"`
-	CurrentEpoch       uint64  `json:"current_epoch"`
-	CurrentBatch       uint64  `json:"current_batch"`
-	TrainingProgress   float32 `json:"training_progress"`
-	IsRunning          bool    `json:"is_running"`
-	StatusMessage      string  `json:"status_message"`
+	BettiBeta0          uint32  `json:"betti_beta_0"`
+	BettiBeta1          uint32  `json:"betti_beta_1"`
+	BettiBeta2          uint32  `json:"betti_beta_2"`
+	GraphNodes          int     `json:"graph_nodes"`
+	GraphEdges          int     `json:"graph_edges"`
+	DSTotalAcquired     int     `json:"ds_total_acquired"`
+	DSTotalPerturbed    int     `json:"ds_total_perturbed"`
+	CurrentEpoch        uint64  `json:"current_epoch"`
+	CurrentBatch        uint64  `json:"current_batch"`
+	TrainingProgress    float32 `json:"training_progress"`
+	IsRunning           bool    `json:"is_running"`
+	StatusMessage       string  `json:"status_message"`
 }
 
 // NewTrainingPipelineCGO creates a new training pipeline via CGO
@@ -56,17 +60,17 @@ func NewTrainingPipelineCGO(numExperts, graphNodes int, enableBettiGuidance bool
 	if enableBettiGuidance {
 		bettiInt = 1
 	}
-	
+
 	handle := C.training_pipeline_create(
 		C.size_t(numExperts),
 		C.size_t(graphNodes),
 		C.int(bettiInt),
 	)
-	
+
 	if handle == nil {
 		return nil, fmt.Errorf("failed to create training pipeline")
 	}
-	
+
 	return &TrainingPipelineCGO{handle: handle}, nil
 }
 
@@ -86,7 +90,7 @@ func (p *TrainingPipelineCGO) Initialize(config PipelineConfigCGO) error {
 		C.size_t(config.Epochs),
 		C.size_t(config.BatchSize),
 	)
-	
+
 	if result != 0 {
 		return fmt.Errorf("failed to initialize pipeline, error code: %d", result)
 	}
@@ -128,22 +132,22 @@ func (p *TrainingPipelineCGO) Resume() error {
 // GetMetrics retrieves training metrics
 func (p *TrainingPipelineCGO) GetMetrics() (*PipelineMetricsCGO, error) {
 	buffer := make([]byte, 4096)
-	
+
 	size := C.training_pipeline_get_metrics(
 		p.handle,
 		(*C.char)(unsafe.Pointer(&buffer[0])),
 		C.size_t(len(buffer)),
 	)
-	
+
 	if size == 0 {
 		return nil, fmt.Errorf("failed to get metrics")
 	}
-	
+
 	var metrics PipelineMetricsCGO
 	if err := json.Unmarshal(buffer[:size], &metrics); err != nil {
 		return nil, fmt.Errorf("failed to parse metrics: %w", err)
 	}
-	
+
 	return &metrics, nil
 }
 
@@ -153,7 +157,7 @@ func (p *TrainingPipelineCGO) ApplyBettiGuidance(force bool) error {
 	if force {
 		forceInt = 1
 	}
-	
+
 	result := C.training_pipeline_apply_betti_guidance(p.handle, C.int(forceInt))
 	if result != 0 {
 		return fmt.Errorf("failed to apply Betti guidance, error code: %d", result)
@@ -165,12 +169,12 @@ func (p *TrainingPipelineCGO) ApplyBettiGuidance(force bool) error {
 func (p *TrainingPipelineCGO) Export(path string, includeTopology bool) error {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
-	
+
 	includeInt := 0
 	if includeTopology {
 		includeInt = 1
 	}
-	
+
 	result := C.training_pipeline_export(p.handle, cPath, C.int(includeInt))
 	if result != 0 {
 		return fmt.Errorf("failed to export model, error code: %d", result)
@@ -182,7 +186,7 @@ func (p *TrainingPipelineCGO) Export(path string, includeTopology bool) error {
 func (p *TrainingPipelineCGO) Import(path string) error {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
-	
+
 	result := C.training_pipeline_import(p.handle, cPath)
 	if result != 0 {
 		return fmt.Errorf("failed to import model, error code: %d", result)

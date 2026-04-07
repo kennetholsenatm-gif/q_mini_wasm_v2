@@ -36,28 +36,37 @@ enum class EnergyTrit : int8_t {
 };
 
 /**
- * @brief Convert energy in picojoules to ternary energy level
- * @param energy_pj Energy in picojoules
+ * @brief Convert energy in fixed-point picojoules to ternary energy level
+ * @param energy_pj_fixed Energy in fixed-point pJ (scale 1000)
  * @return Ternary energy level
  */
-constexpr EnergyTrit energy_to_trit(double energy_pj) noexcept {
-    if (energy_pj < 0.3) return EnergyTrit::LOW;
-    if (energy_pj > 0.7) return EnergyTrit::HIGH;
+constexpr EnergyTrit energy_to_trit_fixed(int32_t energy_pj_fixed) noexcept {
+    if (energy_pj_fixed < 300) return EnergyTrit::LOW;
+    if (energy_pj_fixed > 700) return EnergyTrit::HIGH;
     return EnergyTrit::MEDIUM;
 }
 
 /**
- * @brief Convert ternary energy level to approximate picojoules
+ * @brief Convert ternary energy level to fixed-point picojoules
  * @param energy_trit Ternary energy level
- * @return Approximate energy in picojoules
+ * @return Approximate energy in fixed-point pJ (scale 1000)
  */
-constexpr double trit_to_energy(EnergyTrit energy_trit) noexcept {
+constexpr int32_t trit_to_energy_fixed(EnergyTrit energy_trit) noexcept {
     switch (energy_trit) {
-        case EnergyTrit::LOW: return 0.2;   // 0.2 pJ/op
-        case EnergyTrit::MEDIUM: return 0.5; // 0.5 pJ/op
-        case EnergyTrit::HIGH: return 1.0;   // 1.0 pJ/op
+        case EnergyTrit::LOW: return 200;    // 0.2 pJ/op
+        case EnergyTrit::MEDIUM: return 500; // 0.5 pJ/op
+        case EnergyTrit::HIGH: return 1000;  // 1.0 pJ/op
     }
-    return 0.5; // Default medium
+    return 500; // Default medium
+}
+
+// Backward-compatible aliases for in-flight migration
+constexpr EnergyTrit energy_to_trit(int32_t energy_pj_fixed) noexcept {
+    return energy_to_trit_fixed(energy_pj_fixed);
+}
+
+constexpr int32_t trit_to_energy(EnergyTrit energy_trit) noexcept {
+    return trit_to_energy_fixed(energy_trit);
 }
 
 /**
@@ -228,6 +237,11 @@ struct TritPack5 {
  * @brief Trit arithmetic operations over GF(3)
  */
 namespace trit_ops {
+
+template <typename T>
+constexpr T multiply(T a) noexcept {
+    return a;
+}
 
 constexpr Trit add(Trit a, Trit b) noexcept {
     int sum = to_gf3(a) + to_gf3(b);

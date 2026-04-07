@@ -158,14 +158,14 @@ type PipelineController struct {
 	state     PipelineState
 	config    PipelineConfig
 	metrics   TrainingMetrics
-	wsClient  *WebSocketClient
+	wsClient  *BridgeClient
 	startedAt time.Time
 	pausedAt  *time.Time
 	stopChan  chan bool
 }
 
 // NewPipelineController creates a new pipeline controller
-func NewPipelineController(wsClient *WebSocketClient) *PipelineController {
+func NewPipelineController(wsClient *BridgeClient) *PipelineController {
 	return &PipelineController{
 		state:    StateIdle,
 		config:   DefaultPipelineConfig(),
@@ -199,7 +199,6 @@ func (c *PipelineController) InitializePipeline(config PipelineConfig) error {
 		c.wsClient.Send(initMsg)
 	}
 
-	// Simulate initialization (would be async in production)
 	c.state = StateReady
 	return nil
 }
@@ -222,9 +221,6 @@ func (c *PipelineController) StartTraining(layers []int, epochs int) error {
 		}
 		c.wsClient.Send(startMsg)
 	}
-
-	// Start training goroutine
-	go c.trainingLoop()
 
 	c.state = StateTraining
 	return nil
@@ -339,11 +335,6 @@ func (c *PipelineController) ApplyBettiGuidance(force bool) error {
 		})
 	}
 
-	// Simulate evaluation then optimization
-	c.state = StateOptimizingGraph
-
-	// Would wait for backend response here in production
-
 	c.state = prevState
 	return nil
 }
@@ -383,72 +374,6 @@ func (c *PipelineController) GetState() PipelineState {
 // GetConfig returns current configuration
 func (c *PipelineController) GetConfig() PipelineConfig {
 	return c.config
-}
-
-// trainingLoop simulates the training loop
-func (c *PipelineController) trainingLoop() {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.stopChan:
-			return
-		case <-ticker.C:
-			if c.state == StateTraining {
-				// Simulate metrics updates
-				c.updateSimulatedMetrics()
-			}
-		}
-	}
-}
-
-// updateSimulatedMetrics generates simulated metrics for demonstration
-func (c *PipelineController) updateSimulatedMetrics() {
-	c.metrics.CurrentBatch++
-
-	if c.metrics.CurrentBatch%100 == 0 {
-		c.metrics.CurrentEpoch++
-	}
-
-	// Simulate FF metrics
-	c.metrics.FFMetrics.PositiveGoodness = 45 + uint32(c.metrics.CurrentBatch%10)
-	c.metrics.FFMetrics.NegativeGoodness = 12 + uint32(c.metrics.CurrentBatch%5)
-	c.metrics.FFMetrics.GoodnessDelta = int32(c.metrics.FFMetrics.PositiveGoodness) - int32(c.metrics.FFMetrics.NegativeGoodness)
-	c.metrics.FFMetrics.TotalTrainCalls = c.metrics.CurrentBatch * uint64(c.config.BatchSize)
-
-	// Simulate MoE metrics
-	c.metrics.MoEMetrics.LoadBalanceScore = 0.85
-	c.metrics.MoEMetrics.AvgRoutingLatencyMs = 2.3
-
-	// Simulate Betti numbers (periodically)
-	if c.metrics.CurrentBatch%10 == 0 {
-		c.metrics.BettiNumbers.Beta0 = 1
-		c.metrics.BettiNumbers.Beta1 = 14 + uint32(c.metrics.CurrentBatch%5)
-		c.metrics.BettiNumbers.Beta2 = 0
-		c.metrics.BettiNumbers.EulerCharacteristic = int32(c.metrics.BettiNumbers.Beta0) - int32(c.metrics.BettiNumbers.Beta1) + int32(c.metrics.BettiNumbers.Beta2)
-	}
-
-	// Graph state
-	c.metrics.GraphState.Nodes = c.config.GraphNodes
-	c.metrics.GraphState.Edges = c.config.GraphEdges
-	c.metrics.GraphState.Topology = "scale_free"
-
-	// Progress
-	if c.config.Epochs > 0 {
-		c.metrics.TrainingProgress = float32(c.metrics.CurrentEpoch) / float32(c.config.Epochs) * 100.0
-	}
-	c.metrics.IsRunning = c.state == StateTraining
-	c.metrics.StatusMessage = c.state.String()
-
-	// Stream metrics if enabled
-	if c.config.EnableWUIStreaming && c.wsClient != nil && c.wsClient.IsConnected() {
-		metricsJSON, _ := json.Marshal(c.metrics)
-		c.wsClient.Send(map[string]interface{}{
-			"type":    "training_metrics_update",
-			"metrics": string(metricsJSON),
-		})
-	}
 }
 
 // Pipeline tool handlers for MCP server
@@ -557,9 +482,81 @@ func (s *MCPServer) handleGetTrainingMetrics(params json.RawMessage) (interface{
 			5*time.Second,
 		)
 		if err != nil {
+			if s.pipeline != nil {
+				metrics, mErr := s.pipeline.GetMetrics()
+				if mErr != nil {
+					return nil, fmt.Errorf("failed to get training metrics from pipeline: %w", mErr)
+				}
+
+				return map[string]interface{}{
+					"ff_metrics": map[string]interface{}{
+						"positive_goodness": metrics.FFPositiveGoodness,
+						"negative_goodness": metrics.FFNegativeGoodness,
+						"goodness_delta":    metrics.FFGoodnessDelta,
+					},
+					"moe_metrics": map[string]interface{}{
+						"load_balance_score": metrics.MoELoadBalanceScore,
+					},
+					"betti_numbers": map[string]interface{}{
+						"beta_0": metrics.BettiBeta0,
+						"beta_1": metrics.BettiBeta1,
+						"beta_2": metrics.BettiBeta2,
+					},
+					"graph_state": map[string]interface{}{
+						"nodes": metrics.GraphNodes,
+						"edges": metrics.GraphEdges,
+					},
+					"data_synthesizer": map[string]interface{}{
+						"total_acquired":  metrics.DSTotalAcquired,
+						"total_perturbed": metrics.DSTotalPerturbed,
+					},
+					"current_epoch":     metrics.CurrentEpoch,
+					"current_batch":     metrics.CurrentBatch,
+					"training_progress": metrics.TrainingProgress,
+					"is_running":        metrics.IsRunning,
+					"status_message":    metrics.StatusMessage,
+				}, nil
+			}
+
 			return nil, err
 		}
 		return resp, nil
+	}
+
+	if s.pipeline != nil {
+		metrics, mErr := s.pipeline.GetMetrics()
+		if mErr != nil {
+			return nil, fmt.Errorf("failed to get training metrics from pipeline: %w", mErr)
+		}
+
+		return map[string]interface{}{
+			"ff_metrics": map[string]interface{}{
+				"positive_goodness": metrics.FFPositiveGoodness,
+				"negative_goodness": metrics.FFNegativeGoodness,
+				"goodness_delta":    metrics.FFGoodnessDelta,
+			},
+			"moe_metrics": map[string]interface{}{
+				"load_balance_score": metrics.MoELoadBalanceScore,
+			},
+			"betti_numbers": map[string]interface{}{
+				"beta_0": metrics.BettiBeta0,
+				"beta_1": metrics.BettiBeta1,
+				"beta_2": metrics.BettiBeta2,
+			},
+			"graph_state": map[string]interface{}{
+				"nodes": metrics.GraphNodes,
+				"edges": metrics.GraphEdges,
+			},
+			"data_synthesizer": map[string]interface{}{
+				"total_acquired":  metrics.DSTotalAcquired,
+				"total_perturbed": metrics.DSTotalPerturbed,
+			},
+			"current_epoch":     metrics.CurrentEpoch,
+			"current_batch":     metrics.CurrentBatch,
+			"training_progress": metrics.TrainingProgress,
+			"is_running":        metrics.IsRunning,
+			"status_message":    metrics.StatusMessage,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("not connected to WUI backend")

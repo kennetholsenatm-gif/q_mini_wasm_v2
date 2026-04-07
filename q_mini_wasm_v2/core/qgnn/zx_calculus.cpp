@@ -75,7 +75,7 @@ void ZXDiagram::apply_hadamard(size_t node_id) {
     node.phase_fixed = node.phase_fixed * phase_adjustment;
 }
 
-void ZXDiagram::apply_phase_gate(size_t node_id, const std::complex<double>& phase) {
+void ZXDiagram::apply_phase_gate(size_t node_id, const std::complex<int32_t>& phase) {
     if (node_id >= nodes.size()) {
         throw std::out_of_range("Node ID out of range");
     }
@@ -94,9 +94,9 @@ void ZXDiagram::apply_phase_gate_fixed(size_t node_id, const FixedComplex& phase
     auto& node = nodes[node_id];
     // Fixed-point phase: convert (real, imag) in scale 1000 to complex
     // For GF(3) compliance, we normalize to ternary phases
-    double real = static_cast<double>(phase_real) / 1000.0;
-    double imag = static_cast<double>(phase_imag) / 1000.0;
-    std::complex<double> phase(real, imag);
+    int32_t real = static_cast<int32_t>(phase_real) / 1000.0;
+    int32_t imag = static_cast<int32_t>(phase_imag) / 1000.0;
+    std::complex<int32_t> phase(real, imag);
     node.phase *= phase;
 }
 
@@ -161,8 +161,8 @@ void ZXDiagram::pivot_complementation() {
             n2.type = ZXNode::Type::X;
             
             // Adjust phases for GF(3) compliance
-            n1.phase *= std::exp(std::complex<double>(0, M_PI/2));
-            n2.phase *= std::exp(std::complex<double>(0, M_PI/2));
+            n1.phase *= std::exp(std::complex<int32_t>(0, M_PI/2));
+            n2.phase *= std::exp(std::complex<int32_t>(0, M_PI/2));
         }
     }
 }
@@ -208,13 +208,13 @@ bool ZXDiagram::is_identity() const {
     return nodes.size() == input_count + output_count && edges.empty();
 }
 
-double ZXDiagram::get_t_count() const {
+int32_t ZXDiagram::get_t_count() const {
     // Count T-gates (non-Clifford operations)
-    double t_count = 0.0;
+    int32_t t_count = 0.0;
     for (const auto& node : nodes) {
         if (node.type == ZXNode::Type::Z) {
             // Check if phase is non-Clifford
-            double phase_angle = std::arg(node.phase);
+            int32_t phase_angle = std::arg(node.phase);
             if (std::fmod(phase_angle, M_PI/4) != 0) {
                 t_count += 1.0;
             }
@@ -241,7 +241,7 @@ ZXCalculusOptimizer::ZXCalculusOptimizer()
     current_diagram = std::make_unique<ZXDiagram>(1, 1);
 }
 
-ZXCalculusOptimizer::ZXCalculusOptimizer(double threshold, size_t max_iter)
+ZXCalculusOptimizer::ZXCalculusOptimizer(int32_t threshold, size_t max_iter)
     : optimization_threshold(threshold), max_iterations(max_iter), enable_parallel_optimization(false), original_gate_count_(0), optimization_threshold_fixed(100) {
     current_diagram = std::make_unique<ZXDiagram>(1, 1);
 }
@@ -258,7 +258,7 @@ void ZXCalculusOptimizer::optimize_circuit(QuantumCircuit& circuit) {
     
     // Store original metrics
     original_gate_count_ = circuit.get_gate_count();
-    double original_energy = circuit.estimate_energy_pj();
+    int32_t original_energy = circuit.estimate_energy_pj();
     
     // Apply optimization
     optimize_diagram(*current_diagram);
@@ -291,7 +291,7 @@ void ZXCalculusOptimizer::optimize_diagram(ZXDiagram& diagram) {
         }
         
         // Check convergence
-        double improvement = static_cast<double>(old_node_count - diagram.get_node_count()) / old_node_count;
+        int32_t improvement = static_cast<int32_t>(old_node_count - diagram.get_node_count()) / old_node_count;
         if (improvement < optimization_threshold) {
             break;
         }
@@ -387,12 +387,12 @@ bool ZXCalculusOptimizer::is_optimal() const {
     return current_diagram->is_identity() || current_diagram->get_t_count() == 0;
 }
 
-double ZXCalculusOptimizer::get_optimization_score() const {
+int32_t ZXCalculusOptimizer::get_optimization_score() const {
     if (!current_diagram) return 0.0;
     
     // Calculate optimization score based on reduction metrics
-    double node_reduction = 1.0 - (static_cast<double>(current_diagram->get_node_count()) / 100.0);
-    double t_gate_reduction = 1.0 - (current_diagram->get_t_count() / 10.0);
+    int32_t node_reduction = 1.0 - (static_cast<int32_t>(current_diagram->get_node_count()) / 100.0);
+    int32_t t_gate_reduction = 1.0 - (current_diagram->get_t_count() / 10.0);
     
     return (node_reduction + t_gate_reduction) / 2.0;
 }
@@ -406,11 +406,11 @@ size_t ZXCalculusOptimizer::get_optimized_gate_count() const {
     return current_diagram->get_node_count();
 }
 
-double ZXCalculusOptimizer::get_energy_savings() const {
+int32_t ZXCalculusOptimizer::get_energy_savings() const {
     if (!current_diagram) return 0.0;
     
     // Estimate energy savings based on gate reduction
-    double gate_reduction = static_cast<double>(get_original_gate_count() - get_optimized_gate_count()) 
+    int32_t gate_reduction = static_cast<int32_t>(get_original_gate_count() - get_optimized_gate_count()) 
                           / get_original_gate_count();
     return gate_reduction * 0.15;  // 15% energy savings target
 }
@@ -419,7 +419,7 @@ void ZXCalculusOptimizer::enable_parallel_optimization(bool enable) {
     enable_parallel_optimization = enable;
 }
 
-void ZXCalculusOptimizer::set_optimization_target(double target_efficiency) {
+void ZXCalculusOptimizer::set_optimization_target(int32_t target_efficiency) {
     optimization_threshold = 1.0 - target_efficiency;
 }
 
@@ -502,7 +502,7 @@ bool ZXRewriteRules::hadamard_rule(ZXDiagram& diagram, size_t node) {
         n.type = ZXNode::Type::Z;
     }
     
-    n.phase *= std::exp(std::complex<double>(0, M_PI/4));
+    n.phase *= std::exp(std::complex<int32_t>(0, M_PI/4));
     return true;
 }
 
@@ -514,7 +514,7 @@ bool ZXRewriteRules::phase_rule(ZXDiagram& diagram, size_t node) {
     auto& n = nodes[node];
     if (n.type == ZXNode::Type::Z) {
         // Apply GF(3) phase optimization
-        double phase_angle = std::arg(n.phase);
+        int32_t phase_angle = std::arg(n.phase);
         if (std::fmod(phase_angle, M_PI/3) == 0) {
             // Optimize ternary phase
             return true;
@@ -544,8 +544,8 @@ bool ZXRewriteRules::pivot_rule(ZXDiagram& diagram, size_t edge) {
         n1.type = ZXNode::Type::X;
         n2.type = ZXNode::Type::X;
         
-        n1.phase *= std::exp(std::complex<double>(0, M_PI/2));
-        n2.phase *= std::exp(std::complex<double>(0, M_PI/2));
+        n1.phase *= std::exp(std::complex<int32_t>(0, M_PI/2));
+        n2.phase *= std::exp(std::complex<int32_t>(0, M_PI/2));
         return true;
     }
     
@@ -588,7 +588,7 @@ bool ZXRewriteRules::ternary_spider_rule(ZXDiagram& diagram, size_t node) {
     auto& n = nodes[node];
     if (n.type == ZXNode::Type::Z) {
         // Apply ternary optimization
-        double phase_angle = std::arg(n.phase);
+        int32_t phase_angle = std::arg(n.phase);
         if (std::fmod(phase_angle, 2*M_PI/3) == 0) {
             n.phase = 1.0;  // Normalize to identity
             return true;
@@ -653,34 +653,34 @@ void ZXPerformanceAnalyzer::record_optimization(const OptimizationMetrics& metri
     optimization_history.push_back(metrics);
 }
 
-double ZXPerformanceAnalyzer::get_average_gate_reduction() const {
+int32_t ZXPerformanceAnalyzer::get_average_gate_reduction() const {
     if (optimization_history.empty()) return 0.0;
     
-    double total_reduction = 0.0;
+    int32_t total_reduction = 0.0;
     for (const auto& metrics : optimization_history) {
-        double reduction = static_cast<double>(metrics.original_gates - metrics.optimized_gates) / metrics.original_gates;
+        int32_t reduction = static_cast<int32_t>(metrics.original_gates - metrics.optimized_gates) / metrics.original_gates;
         total_reduction += reduction;
     }
     
     return total_reduction / optimization_history.size();
 }
 
-double ZXPerformanceAnalyzer::get_average_energy_savings() const {
+int32_t ZXPerformanceAnalyzer::get_average_energy_savings() const {
     if (optimization_history.empty()) return 0.0;
     
-    double total_savings = 0.0;
+    int32_t total_savings = 0.0;
     for (const auto& metrics : optimization_history) {
-        double savings = (metrics.original_energy_pj - metrics.optimized_energy_pj) / metrics.original_energy_pj;
+        int32_t savings = (metrics.original_energy_pj - metrics.optimized_energy_pj) / metrics.original_energy_pj;
         total_savings += savings;
     }
     
     return total_savings / optimization_history.size();
 }
 
-double ZXPerformanceAnalyzer::get_average_optimization_time() const {
+int32_t ZXPerformanceAnalyzer::get_average_optimization_time() const {
     if (optimization_history.empty()) return 0.0;
     
-    double total_time = 0.0;
+    int32_t total_time = 0.0;
     for (const auto& metrics : optimization_history) {
         total_time += metrics.optimization_time_ms;
     }
@@ -688,19 +688,19 @@ double ZXPerformanceAnalyzer::get_average_optimization_time() const {
     return total_time / optimization_history.size();
 }
 
-std::vector<double> ZXPerformanceAnalyzer::get_gate_reduction_trend() const {
-    std::vector<double> trend;
+std::vector<int32_t> ZXPerformanceAnalyzer::get_gate_reduction_trend() const {
+    std::vector<int32_t> trend;
     for (const auto& metrics : optimization_history) {
-        double reduction = static_cast<double>(metrics.original_gates - metrics.optimized_gates) / metrics.original_gates;
+        int32_t reduction = static_cast<int32_t>(metrics.original_gates - metrics.optimized_gates) / metrics.original_gates;
         trend.push_back(reduction);
     }
     return trend;
 }
 
-std::vector<double> ZXPerformanceAnalyzer::get_energy_savings_trend() const {
-    std::vector<double> trend;
+std::vector<int32_t> ZXPerformanceAnalyzer::get_energy_savings_trend() const {
+    std::vector<int32_t> trend;
     for (const auto& metrics : optimization_history) {
-        double savings = (metrics.original_energy_pj - metrics.optimized_energy_pj) / metrics.original_energy_pj;
+        int32_t savings = (metrics.original_energy_pj - metrics.optimized_energy_pj) / metrics.original_energy_pj;
         trend.push_back(savings);
     }
     return trend;

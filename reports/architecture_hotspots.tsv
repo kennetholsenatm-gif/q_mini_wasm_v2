@@ -1,0 +1,22 @@
+rule_counts
+FLOAT_CONTAMINATION_STRICT_CORE	252
+NON_MCP_TRANSPORT	22
+top_files
+q_mini_wasm_v2/core/qgnn/error_correction.hpp	62
+q_mini_wasm_v2/core/qgnn/error_correction.cpp	55
+q_mini_wasm_v2/core/qgnn/zx_calculus.cpp	37
+q_mini_wasm_v2/core/qgnn/ternary_tree.cpp	31
+q_mini_wasm_v2/core/qgnn/ternary_tree.hpp	30
+agents/cmd/wui-server/main.go	15
+q_mini_wasm_v2/core/qgnn/zx_calculus.hpp	11
+q_mini_wasm_v2/core/qgnn/graph_migration_adapter.cpp	10
+agents/cmd/wui-cli-bridge/main.go	6
+q_mini_wasm_v2/core/qgnn/graph_migration_adapter.hpp	4
+q_mini_wasm_v2/core/qgnn/graph_tableau.cpp	3
+q_mini_wasm_v2/core/qgnn/betti_extractor.cpp	2
+q_mini_wasm_v2/core/qgnn/graph_native.hpp	2
+q_mini_wasm_v2/core/ternary/trit.hpp	2
+q_mini_wasm_v2/core/qgnn/graph_moe_router.hpp	1
+q_mini_wasm_v2/core/qgnn/graph_tableau.hpp	1
+q_mini_wasm_v2/core/qgnn/qgnn_integration_test.cpp	1
+q_mini_wasm_v2/go/pkg/rag/embedding.go	1

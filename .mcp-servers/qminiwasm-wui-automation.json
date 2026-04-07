@@ -1,22 +1,22 @@
 {
   "name": "qminiwasm-wui-automation",
-  "description": "MCP server for WUI automation - CLI hooks for LLMs and automations to control q_mini_wasm_v2 Web UI via WebSocket bridge",
+  "description": "MCP server for desktop WUI automation - MCP-host bridge control surface for q_mini_wasm_v2",
   "tools": [
     {
       "name": "wui_connect",
-      "description": "Establish WebSocket connection to WUI backend engine",
+      "description": "Initialize MCP bridge session to backend engine",
       "input_schema": {
         "type": "object",
         "properties": {
           "host": {
             "type": "string",
             "default": "localhost",
-            "description": "WebSocket server host"
+            "description": "Bridge host metadata (default localhost)"
           },
           "port": {
             "type": "integer",
             "default": 8080,
-            "description": "WebSocket server port"
+            "description": "Bridge port metadata (default 8080)"
           },
           "timeout_ms": {
             "type": "integer",
@@ -28,10 +28,84 @@
     },
     {
       "name": "wui_disconnect",
-      "description": "Close WebSocket connection to WUI backend",
+      "description": "Close MCP bridge session",
       "input_schema": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "wui_system_self_check",
+      "description": "Run startup readiness checks for desktop WUI and release pipeline",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "expect_artifact": {
+            "type": "string",
+            "description": "Optional artifact path to validate"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_get_system_toml",
+      "description": "Read authoritative config/system.toml payload",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_set_system_toml",
+      "description": "Validate and persist authoritative config/system.toml payload",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "toml": {
+            "type": "string",
+            "description": "Full TOML document to persist"
+          }
+        },
+        "required": ["toml"]
+      }
+    },
+    {
+      "name": "wui_validate_system_toml",
+      "description": "Validate TOML payload and required [system.*] governance sections",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "toml": {
+            "type": "string",
+            "description": "Optional TOML content to validate; defaults to file"
+          },
+          "path": {
+            "type": "string",
+            "description": "Optional path for TOML validation target"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_desktop_shell_handshake",
+      "description": "Return desktop shell contract details and optionally extract embedded asset bundle",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "artifact_path": {
+            "type": "string",
+            "description": "Optional desktop artifact path"
+          },
+          "extract_dir": {
+            "type": "string",
+            "description": "Optional extraction directory for embedded assets"
+          },
+          "extract_assets": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, extract and verify embedded assets"
+          }
+        }
       }
     },
     {
@@ -560,18 +634,131 @@
         },
         "required": ["offset", "data"]
       }
+    },
+    {
+      "name": "wui_build_release",
+      "description": "Build single-executable desktop artifact and embed deterministic WUI asset bundle",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "output": {
+            "type": "string",
+            "default": "qminiwasm_wui.exe",
+            "description": "Output executable path"
+          },
+          "go_binary": {
+            "type": "string",
+            "default": "go",
+            "description": "Go binary path"
+          },
+          "build_bridge": {
+            "type": "boolean",
+            "default": true,
+            "description": "Build bridge binary before desktop artifact"
+          },
+          "require_native_runtime": {
+            "type": "boolean",
+            "default": true,
+            "description": "Require compiled native runtime artifacts to be embedded in release bundle"
+          },
+          "require_cgo": {
+            "type": "boolean",
+            "default": true,
+            "description": "Require CGO-enabled desktop build (fails when C toolchain is unavailable)"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_deploy_release",
+      "description": "Deploy desktop artifact and verify/extract embedded asset bundle",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "artifact_path": {
+            "type": "string",
+            "description": "Artifact path to deploy"
+          },
+          "target": {
+            "type": "string",
+            "default": "local",
+            "description": "Deployment target identifier"
+          },
+          "deploy_dir": {
+            "type": "string",
+            "description": "Deployment directory"
+          },
+          "extract_dir": {
+            "type": "string",
+            "description": "Optional asset extraction directory"
+          },
+          "extract_assets": {
+            "type": "boolean",
+            "default": true,
+            "description": "Extract embedded assets after deploy"
+          },
+          "require_native_runtime": {
+            "type": "boolean",
+            "default": true,
+            "description": "Fail deploy verification if embedded native runtime assets are absent"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_rollback_release",
+      "description": "Rollback deployed desktop artifact from backup",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "deploy_dir": {
+            "type": "string",
+            "description": "Deployment directory containing backup"
+          },
+          "artifact_name": {
+            "type": "string",
+            "description": "Artifact filename to restore"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_get_release_status",
+      "description": "Return release state + readiness diagnostics",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_get_ops_snapshot",
+      "description": "Return consolidated train/deploy/runtime operations snapshot",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
   "resources": [
     {
-      "uri": "file://q_mini_wasm_v2/wui/js/websocket-bridge.js",
-      "name": "websocket_bridge",
-      "description": "WebSocket bridge implementation for WUI communication"
+      "uri": "file://q_mini_wasm_v2/wui/js/mcp-host-bridge.js",
+      "name": "mcp_host_bridge",
+      "description": "Host-side MCP bridge implementation for desktop WUI control"
     },
     {
-      "uri": "file://q_mini_wasm_v2/wui/js/wui-mcp-bridge.js",
-      "name": "wui_mcp_bridge",
-      "description": "MCP protocol bridge for WUI automation"
+      "uri": "file://q_mini_wasm_v2/runtime/desktop_shell_contract.json",
+      "name": "desktop_shell_contract",
+      "description": "Deterministic desktop shell contract for window.qMiniMcpHost.callTool"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/runtime/desktop_shell_bootstrap.js",
+      "name": "desktop_shell_bootstrap",
+      "description": "Desktop shell bootstrap bridge for WebView2 postMessage adapter"
+    },
+    {
+      "uri": "file://q_mini_wasm_v2/runtime/embedded_asset_manifest.json",
+      "name": "embedded_asset_manifest",
+      "description": "Embedded WUI asset manifest generated during release build"
     },
     {
       "uri": "file://q_mini_wasm_v2/q_mini_wasm_v2/dll/q_mini_wasm_v2_api.hpp",
@@ -594,11 +781,11 @@
       "type": "stdio",
       "description": "Standard input/output transport for MCP protocol"
     },
-    "websocket": {
+    "bridge": {
       "default_host": "localhost",
       "default_port": 8080,
-      "reconnect_attempts": 5,
-      "reconnect_delay_ms": 1000
+      "session_retry_attempts": 5,
+      "session_retry_delay_ms": 1000
     }
   }
 }

@@ -315,7 +315,7 @@ public:
         size_t edge_count;
         uint32_t global_load;
         ternary::EnergyTrit total_energy;
-        double avg_degree;
+        uint32_t avg_degree_fixed; // 1000 = 1.0
     };
     
     GraphStats get_stats() const {
@@ -324,8 +324,8 @@ public:
         stats.edge_count = adjacency_.edge_count();
         stats.global_load = global_load_;
         stats.total_energy = total_energy_;
-        stats.avg_degree = stats.node_count > 0 ? 
-            static_cast<double>(stats.edge_count) / stats.node_count : 0.0;
+        stats.avg_degree_fixed = stats.node_count > 0 ? 
+            static_cast<uint32_t>((static_cast<uint64_t>(stats.edge_count) * 1000) / stats.node_count) : 0;
         
         return stats;
     }

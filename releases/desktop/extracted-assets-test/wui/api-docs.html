@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>q_mini_wasm_v2 API Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Consolas', 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .api-sidebar {
+            width: 250px;
+            background: #252526;
+            border-right: 1px solid #3e3e42;
+            overflow-y: auto;
+            padding: 16px 0;
+        }
+        
+        .api-section {
+            margin-bottom: 20px;
+        }
+        
+        .api-section-title {
+            color: #569cd6;
+            font-weight: bold;
+            margin-bottom: 8px;
+            padding: 0 16px;
+            cursor: pointer;
+        }
+        
+        .api-section-title:hover {
+            background: #2a2d2e;
+        }
+        
+        .api-item {
+            padding: 4px 16px 4px 24px;
+            cursor: pointer;
+            color: #d4d4d4;
+            font-size: 12px;
+        }
+        
+        .api-item:hover {
+            background: #2a2d2e;
+        }
+        
+        .api-item.active {
+            background: #094771;
+            color: #ffffff;
+        }
+        
+        .api-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 32px;
+        }
+        
+        .api-header {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .api-title {
+            color: #569cd6;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .api-description {
+            color: #9cdcfe;
+            margin-bottom: 16px;
+        }
+        
+        .api-signature {
+            background: #2d2d30;
+            border: 1px solid #3e3e42;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+        
+        .api-params {
+            margin: 16px 0;
+        }
+        
+        .api-param {
+            margin-bottom: 12px;
+            padding-left: 16px;
+        }
+        
+        .param-name {
+            color: #9cdcfe;
+            font-weight: bold;
+        }
+        
+        .param-type {
+            color: #4ec9b0;
+            margin-left: 8px;
+        }
+        
+        .param-desc {
+            color: #d4d4d4;
+            margin-top: 4px;
+            padding-left: 16px;
+        }
+        
+        .api-returns {
+            margin: 16px 0;
+            padding: 12px;
+            background: #2d2d30;
+            border-left: 3px solid #4ec9b0;
+        }
+        
+        .returns-title {
+            color: #4ec9b0;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .returns-desc {
+            color: #d4d4d4;
+        }
+        
+        .api-example {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        .example-title {
+            color: #ce917f;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .code-comment {
+            color: #6a9955;
+        }
+        
+        .code-keyword {
+            color: #569cd6;
+        }
+        
+        .code-string {
+            color: #ce917f;
+        }
+        
+        .code-number {
+            color: #b5cea8;
+        }
+        
+        .code-function {
+            color: #dcdcaa;
+        }
+        
+        .api-notes {
+            background: #2d2d30;
+            border: 1px solid #3e3e42;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 4px;
+        }
+        
+        .notes-title {
+            color: #ce917f;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .notes-content {
+            color: #d4d4d4;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .search-box {
+            padding: 8px 16px;
+            margin-bottom: 16px;
+        }
+        
+        .search-input {
+            width: 100%;
+            background: #3c3c3c;
+            border: 1px solid #5a5a5a;
+            color: #d4d4d4;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+    </style>
+</head>
+<body>
+    <div class="api-sidebar">
+        <div class="search-box">
+            <input type="text" class="search-input" placeholder="Search API..." onkeyup="searchAPI(this.value)">
+        </div>
+        
+        <div class="api-section">
+            <div class="api-section-title" onclick="toggleSection('core')">Core Classes</div>
+            <div id="core-section">
+                <div class="api-item active" onclick="showAPI('graph')">Graph</div>
+                <div class="api-item" onclick="showAPI('router')">MoERouter</div>
+                <div class="api-item" onclick="showAPI('expert')">ExpertNode</div>
+                <div class="api-item" onclick="showAPI('trit')">Trit</div>
+                <div class="api-item" onclick="showAPI('energy')">EnergyTrit</div>
+            </div>
+        </div>
+        
+        <div class="api-section">
+            <div class="api-section-title" onclick="toggleSection('algorithms')">Algorithms</div>
+            <div id="algorithms-section">
+                <div class="api-item" onclick="showAPI('routing')">Routing</div>
+                <div class="api-item" onclick="showAPI('entanglement')">Entanglement</div>
+                <div class="api-item" onclick="showAPI('message')">Message Passing</div>
+                <div class="api-item" onclick="showAPI('attention')">Graph Attention</div>
+            </div>
+        </div>
+        
+        <div class="api-section">
+            <div class="api-section-title" onclick="toggleSection('utilities')">Utilities</div>
+            <div id="utilities-section">
+                <div class="api-item" onclick="showAPI('factory')">Factory</div>
+                <div class="api-item" onclick="showAPI('metrics')">Metrics</div>
+                <div class="api-item" onclick="showAPI('validation')">Validation</div>
+                <div class="api-item" onclick="showAPI('migration')">Migration</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="api-content" id="api-content">
+        <!-- Graph API -->
+        <div id="graph-api" class="api-section-content">
+            <div class="api-header">
+                <h1 class="api-title">Graph</h1>
+                <p class="api-description">Core QGNN graph-native data structure for quantum-inspired neural networks.</p>
+            </div>
+            
+            <div class="api-signature">
+<span class="code-keyword">class</span> <span class="code-function">Graph</span> {
+<span class="code-keyword">public</span>:
+    <span class="code-function">Graph</span>(<span class="code-keyword">size_t</span> nodes, <span class="code-keyword">size_t</span> experts);
+    <span class="code-keyword">void</span> <span class="code-function">add_expert</span>(<span class="code-keyword">size_t</span> id, <span class="code-keyword">size_t</span> spec_dim);
+    <span class="code-keyword">void</span> <span class="code-function">create_entanglement_pattern</span>();
+    <span class="code-function">RouteResult</span> <span class="code-function">route</span>(<span class="code-keyword">const</span> std::vector&lt;Trit&gt;&amp; input);
+    <span class="code-keyword">void</span> <span class="code-function">set_energy_target</span>(<span class="code-keyword">double</span> target_pj);
+    <span class="code-function">PerformanceMetrics</span> <span class="code-function">get_metrics</span>() <span class="code-keyword">const</span>;
+};
+            </div>
+            
+            <div class="api-params">
+                <h3 style="color: #569cd6; margin-bottom: 12px;">Constructors</h3>
+                <div class="api-param">
+                    <span class="param-name">Graph(size_t nodes, size_t experts)</span>
+                    <div class="param-desc">Create a new QGNN graph with specified number of nodes and experts.</div>
+                </div>
+            </div>
+            
+            <div class="api-params">
+                <h3 style="color: #569cd6; margin-bottom: 12px;">Methods</h3>
+                <div class="api-param">
+                    <span class="param-name">add_expert</span>
+                    <span class="param-type">(size_t id, size_t spec_dim) -> void</span>
+                    <div class="param-desc">Add an expert node with specified ID and specialization dimension.</div>
+                </div>
+                <div class="api-param">
+                    <span class="param-name">create_entanglement_pattern</span>
+                    <span class="param-type">() -> void</span>
+                    <div class="param-desc">Create quantum entanglement patterns between expert nodes.</div>
+                </div>
+                <div class="api-param">
+                    <span class="param-name">route</span>
+                    <span class="param-type">(const std::vector&lt;Trit&gt;&amp; input) -> RouteResult</span>
+                    <div class="param-desc">Route input through the QGNN graph and return results.</div>
+                </div>
+                <div class="api-param">
+                    <span class="param-name">set_energy_target</span>
+                    <span class="param-type">(double target_pj) -> void</span>
+                    <div class="param-desc">Set energy efficiency target in pJ/op.</div>
+                </div>
+                <div class="api-param">
+                    <span class="param-name">get_metrics</span>
+                    <span class="param-type">() -> PerformanceMetrics</span>
+                    <div class="param-desc">Get current performance metrics.</div>
+                </div>
+            </div>
+            
+            <div class="api-returns">
+                <div class="returns-title">Returns</div>
+                <div class="returns-desc">RouteResult contains output vector, latency (μs), energy (pJ/op), and accuracy (0-1).</div>
+            </div>
+            
+            <div class="api-example">
+                <div class="example-title">Example Usage</div>
+<pre><span class="code-comment">// Create QGNN graph</span>
+<span class="code-keyword">auto</span> graph = Graph(<span class="code-number">1000</span>, <span class="code-number">64</span>);
+
+<span class="code-comment">// Add expert nodes</span>
+<span class="code-keyword">for</span> (<span class="code-keyword">size_t</span> i = <span class="code-number">0</span>; i &lt; <span class="code-number">64</span>; i++) {
+    graph.add_expert(i, <span class="code-number">16</span>);
+}
+
+<span class="code-comment">// Create entanglement</span>
+graph.create_entanglement_pattern();
+
+<span class="code-comment">// Route input</span>
+std::vector&lt;Trit&gt; input = {<span class="code-number">1</span>, <span class="code-number">0</span>, -<span class="code-number">1</span>, <span class="code-number">1</span>, <span class="code-number">0</span>};
+<span class="code-keyword">auto</span> result = graph.route(input);
+
+std::cout &lt;&lt; <span class="code-string">"Latency: "</span> &lt;&lt; result.latency_us &lt;&lt; <span class="code-string">" μs"</span> &lt;&lt; std::endl;
+std::cout &lt;&lt; <span class="code-string">"Energy: "</span> &lt;&lt; result.energy_pj &lt;&lt; <span class="code-string">" pJ/op"</span> &lt;&lt; std::endl;</pre>
+            </div>
+            
+            <div class="api-notes">
+                <div class="notes-title">Notes</div>
+                <div class="notes-content">
+                    - Graph complexity is O(E) where E is number of edges, not O(N²)<br>
+                    - Energy targets are enforced through ternary operations<br>
+                    - All operations maintain GF(3) compliance<br>
+                    - Thread-safe for concurrent routing operations
+                </div>
+            </div>
+        </div>
+        
+        <!-- Other API sections would be similar but hidden by default -->
+        <div id="router-api" class="api-section-content hidden">
+            <div class="api-header">
+                <h1 class="api-title">MoERouter</h1>
+                <p class="api-description">Mixture-of-Experts router with quantum-inspired selection mechanisms.</p>
+            </div>
+            
+            <div class="api-signature">
+<span class="code-keyword">class</span> <span class="code-function">MoERouter</span> {
+<span class="code-keyword">public</span>:
+    <span class="code-function">MoERouter</span>(<span class="code-keyword">size_t</span> experts, <span class="code-keyword">size_t</span> top_k);
+    <span class="code-keyword">size_t</span> <span class="code-function">select_expert</span>(<span class="code-keyword">const</span> std::vector&lt;Trit&gt;&amp; input);
+    <span class="code-keyword">void</span> <span class="code-function">update_load_balancing</span>();
+    <span class="code-function">RoutingMetrics</span> <span class="code-function">get_metrics</span>() <span class="code-keyword">const</span>;
+};
+            </div>
+            
+            <div class="api-example">
+                <div class="example-title">Example Usage</div>
+<pre><span class="code-keyword">auto</span> router = MoERouter(<span class="code-number">64</span>, <span class="code-number">2</span>);
+<span class="code-keyword">auto</span> expert_id = router.select_expert(input);</pre>
+            </div>
+        </div>
+        
+        <div id="expert-api" class="api-section-content hidden">
+            <div class="api-header">
+                <h1 class="api-title">ExpertNode</h1>
+                <p class="api-description">Individual expert node with ternary specialization.</p>
+            </div>
+            
+            <div class="api-signature">
+<span class="code-keyword">class</span> <span class="code-function">ExpertNode</span> {
+<span class="code-keyword">public</span>:
+    <span class="code-function">ExpertNode</span>(<span class="code-keyword">size_t</span> id, <span class="code-keyword">size_t</span> spec_dim);
+    <span class="code-keyword">double</span> <span class="code-function">calculate_score</span>(<span class="code-keyword">const</span> std::vector&lt;Trit&gt;&amp; input);
+    <span class="code-keyword">void</span> <span class="code-function">process</span>(<span class="code-keyword">const</span> std::vector&lt;Trit&gt;&amp; input);
+};
+            </div>
+        </div>
+        
+        <div id="trit-api" class="api-section-content hidden">
+            <div class="api-header">
+                <h1 class="api-title">Trit</h1>
+                <p class="api-description">GF(3) ternary value type (-1, 0, +1).</p>
+            </div>
+            
+            <div class="api-signature">
+<span class="code-keyword">class</span> <span class="code-function">Trit</span> {
+<span class="code-keyword">public</span>:
+    <span class="code-function">Trit</span>(<span class="code-keyword">int</span> value = <span class="code-number">0</span>);
+    <span class="code-function">Trit</span> <span class="code-keyword">operator</span>+(<span class="code-keyword">const</span> Trit&amp; other) <span class="code-keyword">const</span>;
+    <span class="code-function">Trit</span> <span class="code-keyword">operator</span>*(<span class="code-keyword">const</span> Trit&amp; other) <span class="code-keyword">const</span>;
+    <span class="code-function">Trit</span> <span class="code-keyword">operator</span>-() <span class="code-keyword">const</span>;
+    <span class="code-keyword">int</span> <span class="code-function">value</span>() <span class="code-keyword">const</span>;
+};
+            </div>
+        </div>
+        
+        <div id="energy-api" class="api-section-content hidden">
+            <div class="api-header">
+                <h1 class="api-title">EnergyTrit</h1>
+                <p class="api-description">Trit with associated energy tracking.</p>
+            </div>
+            
+            <div class="api-signature">
+<span class="code-keyword">class</span> <span class="code-function">EnergyTrit</span> : <span class="code-keyword">public</span> Trit {
+<span class="code-keyword">public</span>:
+    <span class="code-function">EnergyTrit</span>(Trit value, <span class="code-keyword">double</span> energy_pj);
+    <span class="code-keyword">double</span> <span class="code-function">get_energy</span>() <span class="code-keyword">const</span>;
+    <span class="code-keyword">void</span> <span class="code-function">set_energy</span>(<span class="code-keyword">double</span> energy_pj);
+};
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showAPI(apiName) {
+            // Hide all API sections
+            document.querySelectorAll('.api-section-content').forEach(section => {
+                section.classList.add('hidden');
+            });
+            
+            // Show selected API
+            const selectedAPI = document.getElementById(`${apiName}-api`);
+            if (selectedAPI) {
+                selectedAPI.classList.remove('hidden');
+            }
+            
+            // Update active item
+            document.querySelectorAll('.api-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+        
+        function toggleSection(sectionName) {
+            const section = document.getElementById(`${sectionName}-section`);
+            if (section) {
+                section.style.display = section.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+        
+        function searchAPI(query) {
+            const items = document.querySelectorAll('.api-item');
+            const lowerQuery = query.toLowerCase();
+            
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                if (text.includes(lowerQuery) || query === '') {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Show first section by default
+            const firstSection = document.getElementById('core-section');
+            if (firstSection) {
+                firstSection.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

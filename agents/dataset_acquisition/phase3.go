@@ -1,25 +1,60 @@
 package main
 
+import (
+	"fmt"
+	"log"
+)
+
 // RunPhase3CorporateWiki handles Corporate Documentation and Wikipedia Extracts
 func RunPhase3CorporateWiki() error {
 	var entries []DatasetEntry
 
-	wikiTexts := []string{
-		"STEM is a broad term used to group together these academic disciplines: science, technology, engineering, and mathematics.",
-		"Scientific method is an empirical method of acquiring knowledge that has characterized the development of science since at least the 17th century.",
-		"An encyclopedia or encyclopaedia is a reference work or compendium providing summaries of knowledge either from all branches or from a particular field or discipline.",
+	wikiTopics := []string{
+		"STEM",
+		"Scientific method",
+		"Encyclopedia",
+		"Knowledge representation and reasoning",
+		"Machine learning",
 	}
-	for _, text := range wikiTexts {
-		entries = append(entries, DatasetEntry{Text: text, Source: "WikipediaExtracts", Domain: "Wikipedia/STEM"})
+	for _, topic := range wikiTopics {
+		summary, sourceURL, err := FetchWikipediaSummary(topic)
+		if err != nil {
+			log.Printf("wiki topic fetch failed (%s): %v", topic, err)
+			continue
+		}
+		entries = append(entries, DatasetEntry{
+			Text:        fmt.Sprintf("%s: %s", topic, summary),
+			Source:      "Wikipedia",
+			Domain:      "Wikipedia/STEM",
+			URL:         sourceURL,
+			RetrievedAt: NowRFC3339(),
+		})
 	}
 
-	corpDocs := []string{
-		"AWS (Amazon Web Services) offers a broad set of global cloud-based products including compute, storage, databases, analytics, networking, mobile, developer tools, management tools, IoT, security, and enterprise applications.",
-		"Google Cloud Platform (GCP) is a suite of cloud computing services offered by Google. It runs on the same infrastructure that Google uses internally for its end-user products.",
-		"Microsoft Azure, often referred to as Azure, is a cloud computing platform operated by Microsoft for application management via Microsoft-managed data centers.",
+	corpTopics := []string{
+		"Amazon Web Services",
+		"Google Cloud Platform",
+		"Microsoft Azure",
+		"Cloud computing",
+		"Kubernetes",
 	}
-	for _, text := range corpDocs {
-		entries = append(entries, DatasetEntry{Text: text, Source: "CorporateDocs", Domain: "Corporate/Cloud"})
+	for _, topic := range corpTopics {
+		summary, sourceURL, err := FetchWikipediaSummary(topic)
+		if err != nil {
+			log.Printf("corporate topic fetch failed (%s): %v", topic, err)
+			continue
+		}
+		entries = append(entries, DatasetEntry{
+			Text:        fmt.Sprintf("%s: %s", topic, summary),
+			Source:      "Wikipedia",
+			Domain:      "Corporate/Cloud",
+			URL:         sourceURL,
+			RetrievedAt: NowRFC3339(),
+		})
+	}
+
+	if len(entries) == 0 {
+		return fmt.Errorf("phase3 corporate/wiki produced no entries")
 	}
 
 	return WriteJSONL(getPhaseFile("phase3_wiki"), entries)

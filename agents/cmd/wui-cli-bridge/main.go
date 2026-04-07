@@ -1,15 +1,28 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"io"
+	"io/fs"
+	"net/http"
 	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 // MCPRequest represents a JSON-RPC request from MCP client
@@ -35,181 +48,866 @@ type MCPError struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// WebSocketClient manages connection to WUI backend
-type WebSocketClient struct {
-	conn      *websocket.Conn
-	url       string
-	mu        sync.RWMutex
-	connected bool
-	responses map[string]chan interface{}
-	muResp    sync.RWMutex
+// BridgeClient is an MCP-safe local bridge shim.
+// It intentionally avoids direct network transport surfaces.
+type BridgeClient struct {
+	mu          sync.RWMutex
+	connected   bool
+	endpoint    string
+	lastPayload map[string]interface{}
+	strictMode  bool
 }
 
-// NewWebSocketClient creates a new WebSocket client
-func NewWebSocketClient(host string, port int) *WebSocketClient {
-	url := fmt.Sprintf("ws://%s:%d/ws", host, port)
-	return &WebSocketClient{
-		url:       url,
-		responses: make(map[string]chan interface{}),
+// NewBridgeClient creates a new local bridge client.
+func NewBridgeClient(host string, port int) *BridgeClient {
+	return &BridgeClient{
+		endpoint:   fmt.Sprintf("mcp://%s:%d", host, port),
+		strictMode: true,
 	}
 }
 
-// Connect establishes WebSocket connection
-func (c *WebSocketClient) Connect(timeout time.Duration) error {
-	dialer := websocket.Dialer{
-		HandshakeTimeout: timeout,
-	}
-
-	conn, _, err := dialer.Dial(c.url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", c.url, err)
-	}
-
+// Connect marks bridge as active.
+func (c *BridgeClient) Connect(_ time.Duration) error {
 	c.mu.Lock()
-	c.conn = conn
+	defer c.mu.Unlock()
 	c.connected = true
-	c.mu.Unlock()
-
-	// Start message handler
-	go c.handleMessages()
-
-	// Send registration
-	c.Send(map[string]interface{}{
-		"type":         "register",
-		"client":       "mcp-bridge",
-		"capabilities": []string{"control", "metrics", "automation"},
-	})
-
 	return nil
 }
 
-// handleMessages processes incoming WebSocket messages
-func (c *WebSocketClient) handleMessages() {
-	for {
-		c.mu.RLock()
-		conn := c.conn
-		c.mu.RUnlock()
-
-		if conn == nil {
-			return
-		}
-
-		var msg map[string]interface{}
-		if err := conn.ReadJSON(&msg); err != nil {
-			log.Printf("WebSocket read error: %v", err)
-			c.mu.Lock()
-			c.connected = false
-			c.mu.Unlock()
-			return
-		}
-
-		// Handle response for awaited operations
-		if msgType, ok := msg["type"].(string); ok {
-			c.muResp.RLock()
-			if ch, exists := c.responses[msgType]; exists {
-				ch <- msg
-			}
-			c.muResp.RUnlock()
-		}
+// Send stores the most recent command payload.
+func (c *BridgeClient) Send(msg map[string]interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.connected {
+		return fmt.Errorf("bridge client not connected")
 	}
+	c.lastPayload = msg
+	return nil
 }
 
-// Send transmits a message to the WUI backend
-func (c *WebSocketClient) Send(msg map[string]interface{}) error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if !c.connected || c.conn == nil {
-		return fmt.Errorf("not connected to WUI backend")
-	}
-
-	return c.conn.WriteJSON(msg)
-}
-
-// SendAndWait sends a message and waits for response
-func (c *WebSocketClient) SendAndWait(msg map[string]interface{}, responseType string, timeout time.Duration) (map[string]interface{}, error) {
-	// Create response channel
-	ch := make(chan interface{}, 1)
-
-	c.muResp.Lock()
-	c.responses[responseType] = ch
-	c.muResp.Unlock()
-
-	defer func() {
-		c.muResp.Lock()
-		delete(c.responses, responseType)
-		c.muResp.Unlock()
-	}()
-
-	// Send message
+// SendAndWait returns deterministic local acknowledgements.
+func (c *BridgeClient) SendAndWait(msg map[string]interface{}, responseType string, _ time.Duration) (map[string]interface{}, error) {
 	if err := c.Send(msg); err != nil {
 		return nil, err
 	}
 
-	// Wait for response
-	select {
-	case resp := <-ch:
-		if m, ok := resp.(map[string]interface{}); ok {
-			return m, nil
-		}
-		return nil, fmt.Errorf("unexpected response type")
-	case <-time.After(timeout):
-		return nil, fmt.Errorf("timeout waiting for response")
+	if c.strictMode {
+		return nil, fmt.Errorf("strict mode: backend response '%s' requires compiled engine integration", responseType)
 	}
+
+	return nil, fmt.Errorf("backend response '%s' not available", responseType)
 }
 
-// Disconnect closes the WebSocket connection
-func (c *WebSocketClient) Disconnect() {
+// Disconnect deactivates the bridge.
+func (c *BridgeClient) Disconnect() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	if c.conn != nil {
-		c.conn.Close()
-		c.conn = nil
-	}
 	c.connected = false
+	c.lastPayload = nil
 }
 
-// IsConnected returns connection status
-func (c *WebSocketClient) IsConnected() bool {
+// IsConnected reports bridge state.
+func (c *BridgeClient) IsConnected() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.connected
 }
 
-// MCPServer handles MCP protocol
+// MCPServer handles MCP protocol.
 type MCPServer struct {
-	wsClient *WebSocketClient
-	pipeline *TrainingPipelineCGO
-	scanner  *bufio.Scanner
-	writer   *bufio.Writer
-	tools    map[string]ToolHandler
+	wsClient    *BridgeClient
+	pipeline    *TrainingPipelineCGO
+	scanner     *bufio.Scanner
+	tools       map[string]ToolHandler
+	projectRoot string
+
+	releaseMu sync.RWMutex
+	release   ReleaseState
 }
 
-// ToolHandler is a function that handles an MCP tool call
+// ReleaseState tracks desktop build/deploy lifecycle.
+type ReleaseState struct {
+	Status               string   `json:"status"`
+	ArtifactPath         string   `json:"artifact_path,omitempty"`
+	ArtifactSHA256       string   `json:"artifact_sha256,omitempty"`
+	EmbeddedBundleSHA256 string   `json:"embedded_bundle_sha256,omitempty"`
+	EmbeddedBundleBytes  int64    `json:"embedded_bundle_bytes,omitempty"`
+	EmbeddedNativeRuntimeAssets int `json:"embedded_native_runtime_assets,omitempty"`
+	AssetDir             string   `json:"asset_dir,omitempty"`
+	AssetManifestPath    string   `json:"asset_manifest_path,omitempty"`
+	AssetCount           int      `json:"asset_count,omitempty"`
+	ShellContractVersion string   `json:"shell_contract_version,omitempty"`
+	Target               string   `json:"target,omitempty"`
+	LastAction           string   `json:"last_action,omitempty"`
+	LastError            string   `json:"last_error,omitempty"`
+	UpdatedAt            string   `json:"updated_at"`
+	LastLogLines         []string `json:"last_log_lines,omitempty"`
+}
+
+// TOMLValidationResult reports syntax and governance checks for config/system.toml.
+type TOMLValidationResult struct {
+	Valid           bool     `json:"valid"`
+	Errors          []string `json:"errors"`
+	Warnings        []string `json:"warnings"`
+	MissingSections []string `json:"missing_sections"`
+}
+
+const (
+	desktopShellContractVersion     = "qmini.desktop.mcp_host.v1"
+	embeddedAssetBundleFormat       = "qmini.desktop.asset_bundle.v1"
+	embeddedAssetManifestPath       = "runtime/embedded_asset_manifest.json"
+	embeddedAssetFooterMagic        = "QMINIWASM_WUI_ASSET_FOOTER_V1"
+	desktopShellContractAssetPath   = "runtime/desktop_shell_contract.json"
+	desktopShellBootstrapAssetPath  = "runtime/desktop_shell_bootstrap.js"
+	defaultEmbeddedAssetExtractPath = "releases/desktop/extracted-assets"
+)
+
+var zipEpochTime = time.Unix(0, 0).UTC()
+
+type EmbeddedAssetEntry struct {
+	Path   string `json:"path"`
+	Size   int    `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+
+type EmbeddedAssetManifest struct {
+	FormatVersion        string               `json:"format_version"`
+	BundleSchema         string               `json:"bundle_schema"`
+	ShellContractVersion string               `json:"shell_contract_version"`
+	NativeRuntimeAssets  []string             `json:"native_runtime_assets,omitempty"`
+	Entries              []EmbeddedAssetEntry `json:"entries"`
+}
+
+type EmbeddedAssetPayload struct {
+	Manifest   EmbeddedAssetManifest
+	Bundle     []byte
+	BundleHash string
+	NativeAssets []string
+}
+
+type DesktopShellContract struct {
+	Version         string   `json:"version"`
+	RequiredMethods []string `json:"required_methods"`
+	OptionalMethods []string `json:"optional_methods"`
+	HandshakeTool   string   `json:"handshake_tool"`
+}
+
+func hashBytesHex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func hashFileHex(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func writeDeterministicFile(path string, content []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, content, 0o644)
+}
+
+func desktopShellContractDocument() DesktopShellContract {
+	return DesktopShellContract{
+		Version:         desktopShellContractVersion,
+		RequiredMethods: []string{"callTool"},
+		OptionalMethods: []string{"describe", "ping"},
+		HandshakeTool:   "wui_desktop_shell_handshake",
+	}
+}
+
+func desktopShellBootstrapSource() string {
+	return strings.TrimSpace(fmt.Sprintf(`(function (globalScope) {
+    'use strict';
+    const CONTRACT_VERSION = %q;
+    if (globalScope.qMiniMcpHost && typeof globalScope.qMiniMcpHost.callTool === 'function') {
+        return;
+    }
+
+    const webview = globalScope.chrome && globalScope.chrome.webview;
+    if (!webview || typeof webview.postMessage !== 'function') {
+        return;
+    }
+
+    let nextId = 1;
+    const pending = new Map();
+
+    if (typeof webview.addEventListener === 'function') {
+        webview.addEventListener('message', (event) => {
+            const payload = event && event.data ? event.data : {};
+            if (!payload || payload.channel !== 'qmini-mcp-response') {
+                return;
+            }
+
+            const wait = pending.get(payload.id);
+            if (!wait) {
+                return;
+            }
+            pending.delete(payload.id);
+
+            if (payload.error) {
+                wait.reject(new Error(payload.error.message || String(payload.error)));
+            } else {
+                wait.resolve(payload.result);
+            }
+        });
+    }
+
+    function callTool(name, args) {
+        const id = nextId++;
+        const payload = {
+            channel: 'qmini-mcp-request',
+            id,
+            name,
+            arguments: args || {},
+        };
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                pending.delete(id);
+                reject(new Error('MCP request timeout: ' + name));
+            }, 15000);
+
+            pending.set(id, {
+                resolve(value) {
+                    clearTimeout(timer);
+                    resolve(value);
+                },
+                reject(error) {
+                    clearTimeout(timer);
+                    reject(error);
+                }
+            });
+
+            webview.postMessage(payload);
+        });
+    }
+
+    globalScope.qMiniMcpHost = {
+        contractVersion: CONTRACT_VERSION,
+        callTool,
+        describe() {
+            return {
+                contract_version: CONTRACT_VERSION,
+                adapter: 'webview2-message-channel',
+                channel: 'qmini-mcp-request',
+            };
+        },
+        ping() {
+            return callTool('ping', {});
+        }
+    };
+
+    globalScope.dispatchEvent(new CustomEvent('qminiDesktopHostReady', {
+        detail: {
+            contract_version: CONTRACT_VERSION,
+            adapter: 'webview2-message-channel',
+        }
+    }));
+})(typeof window !== 'undefined' ? window : globalThis);
+`, desktopShellContractVersion)) + "\n"
+}
+
+func ensureDesktopRuntimeContractAssets(projectRoot string) (string, string, error) {
+	contract := desktopShellContractDocument()
+	contractJSON, err := json.MarshalIndent(contract, "", "  ")
+	if err != nil {
+		return "", "", err
+	}
+	contractJSON = append(contractJSON, '\n')
+
+	contractPath := joinProjectPath(projectRoot, desktopShellContractAssetPath)
+	if err := writeDeterministicFile(contractPath, contractJSON); err != nil {
+		return "", "", err
+	}
+
+	bootstrapPath := joinProjectPath(projectRoot, desktopShellBootstrapAssetPath)
+	if err := writeDeterministicFile(bootstrapPath, []byte(desktopShellBootstrapSource())); err != nil {
+		return "", "", err
+	}
+
+	return contractPath, bootstrapPath, nil
+}
+
+func shouldPackageWUIAsset(rel string) bool {
+	normalized := path.Clean(strings.TrimPrefix(filepath.ToSlash(rel), "./"))
+	if strings.HasPrefix(normalized, "../") {
+		return false
+	}
+
+	if normalized == "wui/js/websocket-bridge.js" || normalized == "wui/js/wui-mcp-bridge.js" {
+		return false
+	}
+
+	if strings.Contains(normalized, "/.") {
+		return false
+	}
+
+	return strings.HasPrefix(normalized, "wui/")
+}
+
+func nativeRuntimeArtifactCandidates(projectRoot string) []string {
+	return []string{
+		joinProjectPath(projectRoot, "q_mini_wasm_v2.exe"),
+		joinProjectPath(projectRoot, filepath.Join("q_mini_wasm_v2", "build", "bin", "q_mini_wasm_v2.exe")),
+		joinProjectPath(projectRoot, filepath.Join("q_mini_wasm_v2", "build", "bin", "q_gf3_wasm.dll")),
+	}
+}
+
+func findNativeRuntimeArtifactPaths(projectRoot string) []string {
+	paths := []string{}
+	seen := map[string]struct{}{}
+	for _, candidate := range nativeRuntimeArtifactCandidates(projectRoot) {
+		if !fileExists(candidate) {
+			continue
+		}
+
+		cleaned := filepath.Clean(candidate)
+		if _, ok := seen[cleaned]; ok {
+			continue
+		}
+		seen[cleaned] = struct{}{}
+		paths = append(paths, cleaned)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func collectNativeRuntimeAssets(projectRoot string) (map[string][]byte, []string, error) {
+	assets := map[string][]byte{}
+	included := []string{}
+
+	seen := map[string]struct{}{}
+	for _, abs := range findNativeRuntimeArtifactPaths(projectRoot) {
+		if !fileExists(abs) {
+			continue
+		}
+
+		base := filepath.Base(abs)
+		if _, ok := seen[base]; ok {
+			continue
+		}
+		seen[base] = struct{}{}
+
+		content, err := os.ReadFile(abs)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		rel := path.Clean(path.Join("runtime", "native", base))
+		assets[rel] = content
+		included = append(included, rel)
+	}
+
+	sort.Strings(included)
+	return assets, included, nil
+}
+
+func collectPackagedAssetFiles(projectRoot string, includeNativeRuntime bool) (map[string][]byte, []string, error) {
+	assets := map[string][]byte{}
+	nativeAssets := []string{}
+	wuiRoot := joinProjectPath(projectRoot, "wui")
+
+	err := filepath.WalkDir(wuiRoot, func(current string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		rel, err := filepath.Rel(projectRoot, current)
+		if err != nil {
+			return err
+		}
+
+		normalized := path.Clean(filepath.ToSlash(rel))
+		if !shouldPackageWUIAsset(normalized) {
+			return nil
+		}
+
+		content, err := os.ReadFile(current)
+		if err != nil {
+			return err
+		}
+		assets[normalized] = content
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	extraFiles := []string{
+		desktopShellContractAssetPath,
+		desktopShellBootstrapAssetPath,
+		"config/system.toml",
+	}
+
+	for _, rel := range extraFiles {
+		abs := joinProjectPath(projectRoot, rel)
+		if !fileExists(abs) {
+			continue
+		}
+		content, err := os.ReadFile(abs)
+		if err != nil {
+			return nil, nil, err
+		}
+		assets[path.Clean(filepath.ToSlash(rel))] = content
+	}
+
+	if includeNativeRuntime {
+		nativeMap, included, err := collectNativeRuntimeAssets(projectRoot)
+		if err != nil {
+			return nil, nil, err
+		}
+		for rel, content := range nativeMap {
+			assets[rel] = content
+		}
+		nativeAssets = append(nativeAssets, included...)
+	}
+
+	return assets, nativeAssets, nil
+}
+
+func buildEmbeddedAssetPayload(projectRoot string, requireNativeRuntime bool) (EmbeddedAssetPayload, error) {
+	if _, _, err := ensureDesktopRuntimeContractAssets(projectRoot); err != nil {
+		return EmbeddedAssetPayload{}, err
+	}
+
+	assets, nativeAssets, err := collectPackagedAssetFiles(projectRoot, true)
+	if err != nil {
+		return EmbeddedAssetPayload{}, err
+	}
+
+	if requireNativeRuntime && len(nativeAssets) == 0 {
+		return EmbeddedAssetPayload{}, fmt.Errorf("no compiled native runtime artifacts found (expected q_mini_wasm_v2.exe and/or q_gf3_wasm.dll)")
+	}
+
+	keys := make([]string, 0, len(assets))
+	for k := range assets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	entries := make([]EmbeddedAssetEntry, 0, len(keys))
+	for _, k := range keys {
+		content := assets[k]
+		entries = append(entries, EmbeddedAssetEntry{
+			Path:   k,
+			Size:   len(content),
+			SHA256: hashBytesHex(content),
+		})
+	}
+
+	manifest := EmbeddedAssetManifest{
+		FormatVersion:        "1",
+		BundleSchema:         embeddedAssetBundleFormat,
+		ShellContractVersion: desktopShellContractVersion,
+		NativeRuntimeAssets:  nativeAssets,
+		Entries:              entries,
+	}
+
+	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return EmbeddedAssetPayload{}, err
+	}
+	manifestJSON = append(manifestJSON, '\n')
+	assets[path.Clean(embeddedAssetManifestPath)] = manifestJSON
+
+	manifestAbsPath := joinProjectPath(projectRoot, embeddedAssetManifestPath)
+	if err := writeDeterministicFile(manifestAbsPath, manifestJSON); err != nil {
+		return EmbeddedAssetPayload{}, err
+	}
+
+	keys = keys[:0]
+	for k := range assets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	bundleBuf := bytes.NewBuffer(nil)
+	zipWriter := zip.NewWriter(bundleBuf)
+	for _, k := range keys {
+		hdr := &zip.FileHeader{
+			Name:   k,
+			Method: zip.Deflate,
+		}
+		hdr.SetMode(0o644)
+		hdr.Modified = zipEpochTime
+
+		w, err := zipWriter.CreateHeader(hdr)
+		if err != nil {
+			_ = zipWriter.Close()
+			return EmbeddedAssetPayload{}, err
+		}
+		if _, err := w.Write(assets[k]); err != nil {
+			_ = zipWriter.Close()
+			return EmbeddedAssetPayload{}, err
+		}
+	}
+
+	if err := zipWriter.Close(); err != nil {
+		return EmbeddedAssetPayload{}, err
+	}
+
+	bundle := bundleBuf.Bytes()
+	return EmbeddedAssetPayload{
+		Manifest:   manifest,
+		Bundle:     bundle,
+		BundleHash: hashBytesHex(bundle),
+		NativeAssets: nativeAssets,
+	}, nil
+}
+
+func countManifestNativeRuntimeAssets(manifestPath string) int {
+	if strings.TrimSpace(manifestPath) == "" || !fileExists(manifestPath) {
+		return 0
+	}
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return 0
+	}
+
+	var manifest EmbeddedAssetManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return 0
+	}
+
+	if len(manifest.NativeRuntimeAssets) > 0 {
+		return len(manifest.NativeRuntimeAssets)
+	}
+
+	count := 0
+	for _, entry := range manifest.Entries {
+		if strings.HasPrefix(path.Clean(entry.Path), "runtime/native/") {
+			count++
+		}
+	}
+	return count
+}
+
+func appendEmbeddedAssetBundle(exePath string, payload EmbeddedAssetPayload) error {
+	f, err := os.OpenFile(exePath, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := f.Write(payload.Bundle); err != nil {
+		return err
+	}
+
+	footer := bytes.NewBuffer(nil)
+	footer.WriteString(embeddedAssetFooterMagic)
+	sizeBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(sizeBytes, uint64(len(payload.Bundle)))
+	footer.Write(sizeBytes)
+
+	hashRaw, err := hex.DecodeString(payload.BundleHash)
+	if err != nil {
+		return err
+	}
+	if len(hashRaw) != sha256.Size {
+		return fmt.Errorf("invalid bundle hash size: %d", len(hashRaw))
+	}
+	footer.Write(hashRaw)
+
+	_, err = f.Write(footer.Bytes())
+	return err
+}
+
+func stripEmbeddedAssetBundleIfPresent(exePath string) error {
+	found, offset, _, _, err := probeEmbeddedAssetFooter(exePath)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+
+	trimSize := offset
+	if trimSize <= 0 {
+		return fmt.Errorf("invalid trim offset for embedded asset bundle")
+	}
+
+	if err := os.Truncate(exePath, trimSize); err != nil {
+		return err
+	}
+	return nil
+}
+
+func probeEmbeddedAssetFooter(exePath string) (bool, int64, int64, string, error) {
+	const footerHashSize = sha256.Size
+	footerLen := int64(len(embeddedAssetFooterMagic) + 8 + footerHashSize)
+
+	stat, err := os.Stat(exePath)
+	if err != nil {
+		return false, 0, 0, "", err
+	}
+	if stat.Size() < footerLen {
+		return false, 0, 0, "", nil
+	}
+
+	f, err := os.Open(exePath)
+	if err != nil {
+		return false, 0, 0, "", err
+	}
+	defer f.Close()
+
+	footer := make([]byte, footerLen)
+	if _, err := f.ReadAt(footer, stat.Size()-footerLen); err != nil {
+		return false, 0, 0, "", err
+	}
+
+	if string(footer[:len(embeddedAssetFooterMagic)]) != embeddedAssetFooterMagic {
+		return false, 0, 0, "", nil
+	}
+
+	size := int64(binary.LittleEndian.Uint64(footer[len(embeddedAssetFooterMagic) : len(embeddedAssetFooterMagic)+8]))
+	if size <= 0 || size > (stat.Size()-footerLen) {
+		return false, 0, 0, "", fmt.Errorf("invalid embedded asset bundle size: %d", size)
+	}
+
+	hashHex := hex.EncodeToString(footer[len(embeddedAssetFooterMagic)+8:])
+	offset := stat.Size() - footerLen - size
+	return true, offset, size, hashHex, nil
+}
+
+func readEmbeddedAssetBundle(exePath string) ([]byte, string, error) {
+	found, offset, size, expectedHash, err := probeEmbeddedAssetFooter(exePath)
+	if err != nil {
+		return nil, "", err
+	}
+	if !found {
+		return nil, "", fmt.Errorf("embedded asset bundle footer not found in %s", exePath)
+	}
+
+	f, err := os.Open(exePath)
+	if err != nil {
+		return nil, "", err
+	}
+	defer f.Close()
+
+	bundle := make([]byte, size)
+	if _, err := f.ReadAt(bundle, offset); err != nil {
+		return nil, "", err
+	}
+
+	actualHash := hashBytesHex(bundle)
+	if !strings.EqualFold(actualHash, expectedHash) {
+		return nil, "", fmt.Errorf("embedded asset bundle hash mismatch: expected %s got %s", expectedHash, actualHash)
+	}
+
+	return bundle, actualHash, nil
+}
+
+func extractEmbeddedAssetBundle(exePath, outDir string) (string, int, string, error) {
+	bundle, bundleHash, err := readEmbeddedAssetBundle(exePath)
+	if err != nil {
+		return "", 0, "", err
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
+	if err != nil {
+		return "", 0, "", err
+	}
+
+	if err := os.RemoveAll(outDir); err != nil {
+		return "", 0, "", err
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return "", 0, "", err
+	}
+
+	files := make([]*zip.File, 0, len(reader.File))
+	files = append(files, reader.File...)
+	sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+
+	extractedCount := 0
+	rootClean := filepath.Clean(outDir)
+	for _, zf := range files {
+		name := path.Clean(strings.TrimPrefix(zf.Name, "/"))
+		if name == "." || strings.HasPrefix(name, "../") {
+			return "", 0, "", fmt.Errorf("unsafe asset entry path: %s", zf.Name)
+		}
+
+		dstPath := filepath.Join(outDir, filepath.FromSlash(name))
+		dstClean := filepath.Clean(dstPath)
+		if !strings.HasPrefix(dstClean, rootClean) {
+			return "", 0, "", fmt.Errorf("asset extraction path escapes root: %s", dstPath)
+		}
+
+		if zf.FileInfo().IsDir() {
+			if err := os.MkdirAll(dstPath, 0o755); err != nil {
+				return "", 0, "", err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+			return "", 0, "", err
+		}
+
+		src, err := zf.Open()
+		if err != nil {
+			return "", 0, "", err
+		}
+		content, err := io.ReadAll(src)
+		_ = src.Close()
+		if err != nil {
+			return "", 0, "", err
+		}
+
+		if err := os.WriteFile(dstPath, content, 0o644); err != nil {
+			return "", 0, "", err
+		}
+		extractedCount++
+	}
+
+	manifestPath := filepath.Join(outDir, filepath.FromSlash(path.Clean(embeddedAssetManifestPath)))
+	if !fileExists(manifestPath) {
+		return "", 0, "", fmt.Errorf("embedded asset manifest missing after extraction: %s", manifestPath)
+	}
+
+	manifestRaw, err := os.ReadFile(manifestPath)
+	if err == nil {
+		var manifest EmbeddedAssetManifest
+		if json.Unmarshal(manifestRaw, &manifest) == nil && len(manifest.Entries) > 0 {
+			extractedCount = len(manifest.Entries)
+		}
+	}
+
+	return manifestPath, extractedCount, bundleHash, nil
+}
+
+func normalizeExtractRoot(projectRoot, extractDir string) string {
+	if strings.TrimSpace(extractDir) == "" {
+		extractDir = defaultEmbeddedAssetExtractPath
+	}
+	return joinProjectPath(projectRoot, extractDir)
+}
+
+func (s *MCPServer) handleDesktopShellHandshake(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		ArtifactPath  string `json:"artifact_path"`
+		ExtractDir    string `json:"extract_dir"`
+		ExtractAssets bool   `json:"extract_assets"`
+	}
+	_ = json.Unmarshal(params, &args)
+
+	runtimeContractPath, runtimeBootstrapPath, err := ensureDesktopRuntimeContractAssets(s.projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize desktop shell runtime assets: %w", err)
+	}
+
+	release := s.snapshotReleaseState()
+	artifactPath := strings.TrimSpace(args.ArtifactPath)
+	if artifactPath == "" {
+		artifactPath = release.ArtifactPath
+	}
+	if artifactPath == "" {
+		artifactPath = "qminiwasm_wui.exe"
+	}
+	artifactPath = joinProjectPath(s.projectRoot, artifactPath)
+
+	selfCheck := s.buildSystemSelfCheck(artifactPath)
+	result := map[string]interface{}{
+		"contract_version":     desktopShellContractVersion,
+		"required_method":      "window.qMiniMcpHost.callTool(name, arguments)",
+		"request_channel":      "qmini-mcp-request",
+		"response_channel":     "qmini-mcp-response",
+		"handshake_tool":       "wui_desktop_shell_handshake",
+		"runtime_contract_path": runtimeContractPath,
+		"runtime_bootstrap_path": runtimeBootstrapPath,
+		"artifact_path":        artifactPath,
+		"artifact_exists":      fileExists(artifactPath),
+		"self_check":           selfCheck,
+	}
+
+	if args.ExtractAssets && fileExists(artifactPath) {
+		extractRoot := normalizeExtractRoot(s.projectRoot, args.ExtractDir)
+		manifestPath, assetCount, bundleHash, err := extractEmbeddedAssetBundle(artifactPath, extractRoot)
+		if err != nil {
+			return nil, fmt.Errorf("desktop shell handshake extraction failed: %w", err)
+		}
+
+		bundleBytes := int64(0)
+		if found, _, size, _, probeErr := probeEmbeddedAssetFooter(artifactPath); probeErr == nil && found {
+			bundleBytes = size
+		}
+
+		artifactHash, _ := hashFileHex(artifactPath)
+		nativeRuntimeAssets := countManifestNativeRuntimeAssets(manifestPath)
+		s.setReleaseBundleMetadata(artifactHash, bundleHash, bundleBytes, extractRoot, manifestPath, assetCount, nativeRuntimeAssets)
+
+		result["extracted_assets"] = true
+		result["asset_manifest_path"] = manifestPath
+		result["asset_count"] = assetCount
+		result["asset_dir"] = extractRoot
+		result["embedded_asset_sha256"] = bundleHash
+		result["embedded_native_runtime_assets"] = nativeRuntimeAssets
+	}
+
+	return result, nil
+}
+
+// ToolHandler is a function that handles an MCP tool call.
 type ToolHandler func(params json.RawMessage) (interface{}, error)
 
-// NewMCPServer creates a new MCP server instance
+// NewMCPServer creates a new MCP server instance.
 func NewMCPServer() *MCPServer {
 	s := &MCPServer{
-		scanner: bufio.NewScanner(os.Stdin),
-		writer:  bufio.NewWriter(os.Stdout),
-		tools:   make(map[string]ToolHandler),
+		scanner:     bufio.NewScanner(os.Stdin),
+		tools:       make(map[string]ToolHandler),
+		projectRoot: detectProjectRoot(),
+		release: ReleaseState{
+			Status:               "idle",
+			ShellContractVersion: desktopShellContractVersion,
+			UpdatedAt:            time.Now().Format(time.RFC3339),
+		},
+	}
+	if s.projectRoot == "" {
+		s.projectRoot = "."
+	}
+	if _, _, err := ensureDesktopRuntimeContractAssets(s.projectRoot); err != nil {
+		s.updateReleaseState("error", "runtime_contract_init", "local", "", []string{"failed to initialize runtime desktop shell assets"}, err)
 	}
 	s.registerTools()
 	return s
 }
 
-// registerTools registers all available tool handlers
+// registerTools registers all available tool handlers.
 func (s *MCPServer) registerTools() {
+	// Bridge lifecycle
 	s.tools["wui_connect"] = s.handleWUIConnect
 	s.tools["wui_disconnect"] = s.handleWUIDisconnect
+	s.tools["wui_fetch_url"] = s.handleFetchURL
+	s.tools["wui_system_self_check"] = s.handleSystemSelfCheck
+	s.tools["wui_get_system_toml"] = s.handleGetSystemTOML
+	s.tools["wui_set_system_toml"] = s.handleSetSystemTOML
+	s.tools["wui_validate_system_toml"] = s.handleValidateSystemTOML
+	s.tools["wui_desktop_shell_handshake"] = s.handleDesktopShellHandshake
+
+	// Quantum operation tools
 	s.tools["wui_apply_hadamard"] = s.handleApplyHadamard
 	s.tools["wui_apply_phase"] = s.handleApplyPhase
 	s.tools["wui_apply_csum"] = s.handleApplyCSUM
 	s.tools["wui_apply_pauli_x"] = s.handleApplyPauliX
 	s.tools["wui_apply_pauli_z"] = s.handleApplyPauliZ
 	s.tools["wui_measure"] = s.handleMeasure
+
+	// Runtime control tools
 	s.tools["wui_set_config"] = s.handleSetConfig
 	s.tools["wui_set_num_qutrits"] = s.handleSetNumQutrits
 	s.tools["wui_set_entanglement_graph"] = s.handleSetEntanglementGraph
@@ -225,6 +923,8 @@ func (s *MCPServer) registerTools() {
 	s.tools["wui_add_graph_edge"] = s.handleAddGraphEdge
 	s.tools["wui_read_memory"] = s.handleReadMemory
 	s.tools["wui_write_memory"] = s.handleWriteMemory
+
+	// Training pipeline handlers defined in pipeline_handlers.go
 	s.tools["wui_init_training_pipeline"] = s.handleInitTrainingPipeline
 	s.tools["wui_set_pipeline_config"] = s.handleSetPipelineConfig
 	s.tools["wui_get_training_metrics"] = s.handleGetTrainingMetrics
@@ -233,9 +933,918 @@ func (s *MCPServer) registerTools() {
 	s.tools["wui_resume_training"] = s.handleResumeTraining
 	s.tools["wui_export_model"] = s.handleExportModel
 	s.tools["wui_import_model"] = s.handleImportModel
+
+	// Desktop release lifecycle
+	s.tools["wui_build_release"] = s.handleBuildRelease
+	s.tools["wui_deploy_release"] = s.handleDeployRelease
+	s.tools["wui_rollback_release"] = s.handleRollbackRelease
+	s.tools["wui_get_release_status"] = s.handleGetReleaseStatus
+	s.tools["wui_get_ops_snapshot"] = s.handleGetOpsSnapshot
 }
 
-// Run starts the MCP server loop
+func detectProjectRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+
+	current := wd
+	for i := 0; i < 8; i++ {
+		if fileExists(filepath.Join(current, "config", "system.toml")) && fileExists(filepath.Join(current, "wui", "index.html")) {
+			return current
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+
+	return wd
+}
+
+func joinProjectPath(projectRoot, p string) string {
+	pathValue := strings.TrimSpace(p)
+	if pathValue == "" {
+		pathValue = "."
+	}
+
+	if filepath.IsAbs(pathValue) {
+		return filepath.Clean(pathValue)
+	}
+
+	root := strings.TrimSpace(projectRoot)
+	if root == "" {
+		root = "."
+	}
+
+	return filepath.Clean(filepath.Join(root, pathValue))
+}
+
+func systemTomlPath(projectRoot string) string {
+	return joinProjectPath(projectRoot, filepath.Join("config", "system.toml"))
+}
+
+func requiredSystemSections() []string {
+	return []string{
+		"memory",
+		"sycl",
+		"qgnn",
+		"moe",
+		"learning",
+		"wui",
+		"pipelines",
+		"logging",
+	}
+}
+
+func validateSystemTOMLDocument(content string) TOMLValidationResult {
+	result := TOMLValidationResult{
+		Valid:           true,
+		Errors:          []string{},
+		Warnings:        []string{},
+		MissingSections: []string{},
+	}
+
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		result.Valid = false
+		result.Errors = append(result.Errors, "system TOML content is empty")
+		return result
+	}
+
+	var doc map[string]interface{}
+	if err := toml.Unmarshal([]byte(content), &doc); err != nil {
+		result.Valid = false
+		result.Errors = append(result.Errors, fmt.Sprintf("TOML syntax error: %v", err))
+		return result
+	}
+
+	systemRaw, ok := doc["system"]
+	if !ok {
+		result.Valid = false
+		result.Errors = append(result.Errors, "missing [system] root table")
+		result.MissingSections = append(result.MissingSections, requiredSystemSections()...)
+		return result
+	}
+
+	systemTable, ok := systemRaw.(map[string]interface{})
+	if !ok {
+		result.Valid = false
+		result.Errors = append(result.Errors, "invalid [system] table structure")
+		result.MissingSections = append(result.MissingSections, requiredSystemSections()...)
+		return result
+	}
+
+	for _, key := range requiredSystemSections() {
+		if _, exists := systemTable[key]; !exists {
+			result.Valid = false
+			result.MissingSections = append(result.MissingSections, key)
+		}
+	}
+
+	if len(result.MissingSections) > 0 {
+		result.Errors = append(result.Errors, fmt.Sprintf("missing required [system.*] sections: %s", strings.Join(result.MissingSections, ", ")))
+	}
+
+	if wuiRaw, ok := systemTable["wui"].(map[string]interface{}); ok {
+		if _, ok := wuiRaw["activity_log_size"]; !ok {
+			result.Warnings = append(result.Warnings, "[system.wui].activity_log_size not set; cognitive log chunking may drift")
+		}
+	}
+
+	return result
+}
+
+func tryTouchWritable(path string) bool {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	if err == nil {
+		_ = f.Close()
+		return true
+	}
+
+	if os.IsNotExist(err) {
+		if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
+			return false
+		}
+		f2, createErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o644)
+		if createErr != nil {
+			return false
+		}
+		_ = f2.Close()
+		return true
+	}
+
+	return false
+}
+
+func tailLines(content string, maxLines int) []string {
+	if maxLines <= 0 {
+		maxLines = 8
+	}
+
+	parts := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	out := make([]string, 0, maxLines)
+	for _, line := range parts {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+
+	if len(out) <= maxLines {
+		return out
+	}
+	return out[len(out)-maxLines:]
+}
+
+func runCommandWithTimeoutEnv(timeout time.Duration, dir string, extraEnv map[string]string, name string, args ...string) (string, error) {
+	if timeout <= 0 {
+		timeout = 2 * time.Minute
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	if len(extraEnv) > 0 {
+		mergedEnv := append([]string{}, os.Environ()...)
+		keys := make([]string, 0, len(extraEnv))
+		for key := range extraEnv {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			mergedEnv = append(mergedEnv, fmt.Sprintf("%s=%s", key, extraEnv[key]))
+		}
+		cmd.Env = mergedEnv
+	}
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return string(output), fmt.Errorf("command timeout after %s", timeout)
+	}
+	return string(output), err
+}
+
+func runCommandWithTimeout(timeout time.Duration, dir string, name string, args ...string) (string, error) {
+	return runCommandWithTimeoutEnv(timeout, dir, nil, name, args...)
+}
+
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := out.ReadFrom(in); err != nil {
+		return err
+	}
+
+	return out.Sync()
+}
+
+func findFirstExisting(paths []string) string {
+	for _, p := range paths {
+		if fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+func (s *MCPServer) updateReleaseState(status, action, target, artifact string, logs []string, opErr error) {
+	s.releaseMu.Lock()
+	defer s.releaseMu.Unlock()
+
+	if status != "" {
+		s.release.Status = status
+	}
+	if action != "" {
+		s.release.LastAction = action
+	}
+	if target != "" {
+		s.release.Target = target
+	}
+	if artifact != "" {
+		s.release.ArtifactPath = artifact
+	}
+	if logs != nil {
+		s.release.LastLogLines = logs
+	}
+	if opErr != nil {
+		s.release.LastError = opErr.Error()
+	} else {
+		s.release.LastError = ""
+	}
+	s.release.ShellContractVersion = desktopShellContractVersion
+	s.release.UpdatedAt = time.Now().Format(time.RFC3339)
+}
+
+func (s *MCPServer) snapshotReleaseState() ReleaseState {
+	s.releaseMu.RLock()
+	defer s.releaseMu.RUnlock()
+	copyState := s.release
+	if copyState.LastLogLines == nil {
+		copyState.LastLogLines = []string{}
+	}
+	return copyState
+}
+
+func (s *MCPServer) setReleaseBundleMetadata(artifactSHA, bundleSHA string, bundleBytes int64, assetDir, manifestPath string, assetCount, embeddedNativeRuntimeAssets int) {
+	s.releaseMu.Lock()
+	defer s.releaseMu.Unlock()
+
+	if artifactSHA != "" {
+		s.release.ArtifactSHA256 = artifactSHA
+	}
+	if bundleSHA != "" {
+		s.release.EmbeddedBundleSHA256 = bundleSHA
+	}
+	if bundleBytes >= 0 {
+		s.release.EmbeddedBundleBytes = bundleBytes
+	}
+	if strings.TrimSpace(assetDir) != "" {
+		s.release.AssetDir = assetDir
+	}
+	if strings.TrimSpace(manifestPath) != "" {
+		s.release.AssetManifestPath = manifestPath
+	}
+	if assetCount >= 0 {
+		s.release.AssetCount = assetCount
+	}
+	if embeddedNativeRuntimeAssets >= 0 {
+		s.release.EmbeddedNativeRuntimeAssets = embeddedNativeRuntimeAssets
+	}
+	s.release.ShellContractVersion = desktopShellContractVersion
+	s.release.UpdatedAt = time.Now().Format(time.RFC3339)
+}
+
+func (s *MCPServer) buildSystemSelfCheck(expectArtifact string) map[string]interface{} {
+	tomlPath := systemTomlPath(s.projectRoot)
+	tomlExists := fileExists(tomlPath)
+	tomlWritable := tryTouchWritable(tomlPath)
+
+	validation := TOMLValidationResult{Valid: false, Errors: []string{"system TOML missing"}}
+	if tomlExists {
+		if content, err := os.ReadFile(tomlPath); err == nil {
+			validation = validateSystemTOMLDocument(string(content))
+		} else {
+			validation = TOMLValidationResult{
+				Valid:    false,
+				Errors:   []string{fmt.Sprintf("failed to read TOML: %v", err)},
+				Warnings: []string{},
+			}
+		}
+	}
+
+	release := s.snapshotReleaseState()
+	artifactCandidate := strings.TrimSpace(expectArtifact)
+	if artifactCandidate == "" {
+		if release.ArtifactPath != "" {
+			artifactCandidate = release.ArtifactPath
+		} else {
+			artifactCandidate = "qminiwasm_wui.exe"
+		}
+	}
+	artifactCandidate = joinProjectPath(s.projectRoot, artifactCandidate)
+	artifactExists := fileExists(artifactCandidate)
+
+	artifactSHA := ""
+	if artifactExists {
+		hash, err := hashFileHex(artifactCandidate)
+		if err == nil {
+			artifactSHA = hash
+		}
+	}
+
+	bundleFound := false
+	bundleBytes := int64(0)
+	bundleHash := ""
+	bundleErr := ""
+	if artifactExists {
+		found, _, size, hash, err := probeEmbeddedAssetFooter(artifactCandidate)
+		if err != nil {
+			bundleErr = err.Error()
+		} else {
+			bundleFound = found
+			bundleBytes = size
+			bundleHash = hash
+		}
+	}
+
+	runtimeContractPath := joinProjectPath(s.projectRoot, desktopShellContractAssetPath)
+	runtimeBootstrapPath := joinProjectPath(s.projectRoot, desktopShellBootstrapAssetPath)
+	runtimeAssetInitErr := ""
+	runtimeExecutionAvailable := runtimeCGOEnabled() || s.canPassthroughToBackend()
+	if ensuredContract, ensuredBootstrap, err := ensureDesktopRuntimeContractAssets(s.projectRoot); err != nil {
+		runtimeAssetInitErr = err.Error()
+	} else {
+		runtimeContractPath = ensuredContract
+		runtimeBootstrapPath = ensuredBootstrap
+	}
+
+	manifestPath := strings.TrimSpace(release.AssetManifestPath)
+	if manifestPath == "" {
+		manifestPath = joinProjectPath(s.projectRoot, embeddedAssetManifestPath)
+	} else {
+		manifestPath = joinProjectPath(s.projectRoot, manifestPath)
+	}
+	embeddedNativeRuntimeAssets := countManifestNativeRuntimeAssets(manifestPath)
+	if embeddedNativeRuntimeAssets <= 0 {
+		embeddedNativeRuntimeAssets = release.EmbeddedNativeRuntimeAssets
+	}
+
+	nativeRuntimePaths := findNativeRuntimeArtifactPaths(s.projectRoot)
+	nativeRuntimeAvailable := len(nativeRuntimePaths) > 0
+
+	enginePath := findFirstExisting([]string{
+		joinProjectPath(s.projectRoot, "q_mini_wasm_v2.exe"),
+		joinProjectPath(s.projectRoot, filepath.Join("q_mini_wasm_v2", "build", "bin", "q_mini_wasm_v2.exe")),
+		joinProjectPath(s.projectRoot, filepath.Join("q_mini_wasm_v2", "build", "bin", "q_gf3_wasm.dll")),
+	})
+
+	bridgePath := findFirstExisting([]string{
+		joinProjectPath(s.projectRoot, filepath.Join("agents", "cmd", "wui-cli-bridge", "wui-cli-bridge.exe")),
+		joinProjectPath(s.projectRoot, filepath.Join("agents", "cmd", "wui-cli-bridge", "wui-mcp.exe")),
+	})
+
+	mcpConnected := s.wsClient != nil && s.wsClient.IsConnected()
+	strictMode := s.wsClient == nil || s.wsClient.strictMode
+
+	checks := map[string]interface{}{
+		"mcp_bridge_connected":      mcpConnected,
+		"strict_mode":               strictMode,
+		"backend_passthrough":       s.canPassthroughToBackend(),
+		"pipeline_initialized":      s.pipeline != nil,
+		"cgo_enabled":               runtimeCGOEnabled(),
+		"system_toml_path":          tomlPath,
+		"system_toml_exists":        tomlExists,
+		"system_toml_writable":      tomlWritable,
+		"system_toml_validation":    validation,
+		"desktop_artifact_path":     artifactCandidate,
+		"desktop_artifact_exists":   artifactExists,
+		"desktop_artifact_sha256":   artifactSHA,
+		"embedded_asset_bundle":     bundleFound,
+		"embedded_asset_bytes":      bundleBytes,
+		"embedded_asset_sha256":     bundleHash,
+		"runtime_contract_path":     runtimeContractPath,
+		"runtime_contract_exists":   fileExists(runtimeContractPath),
+		"runtime_bootstrap_path":    runtimeBootstrapPath,
+		"runtime_bootstrap_exists":  fileExists(runtimeBootstrapPath),
+		"runtime_execution_available": runtimeExecutionAvailable,
+		"asset_manifest_path":       manifestPath,
+		"asset_manifest_exists":     fileExists(manifestPath),
+		"asset_count":               release.AssetCount,
+		"embedded_native_runtime_assets": embeddedNativeRuntimeAssets,
+		"native_runtime_artifact_paths":  nativeRuntimePaths,
+		"native_runtime_artifacts_available": nativeRuntimeAvailable,
+		"shell_contract_version":    desktopShellContractVersion,
+		"engine_artifact_path":      enginePath,
+		"engine_artifact_available": enginePath != "",
+		"bridge_binary_path":        bridgePath,
+		"bridge_binary_available":   bridgePath != "",
+		"timestamp":                 time.Now().Format(time.RFC3339),
+	}
+	if bundleErr != "" {
+		checks["embedded_asset_error"] = bundleErr
+	}
+	if runtimeAssetInitErr != "" {
+		checks["runtime_asset_error"] = runtimeAssetInitErr
+	}
+
+	ready := tomlWritable && validation.Valid && runtimeExecutionAvailable && fileExists(runtimeContractPath) && fileExists(runtimeBootstrapPath) && artifactExists && bundleFound && embeddedNativeRuntimeAssets > 0
+	checks["ready_for_operator_pipeline"] = ready
+
+	return checks
+}
+
+func (s *MCPServer) handleGetSystemTOML(_ json.RawMessage) (interface{}, error) {
+	path := systemTomlPath(s.projectRoot)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read TOML config '%s': %w", path, err)
+	}
+
+	return map[string]interface{}{
+		"path": path,
+		"toml": string(content),
+	}, nil
+}
+
+func (s *MCPServer) handleSetSystemTOML(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Toml string `json:"toml"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+	if args.Toml == "" {
+		return nil, fmt.Errorf("empty TOML payload")
+	}
+
+	validation := validateSystemTOMLDocument(args.Toml)
+	if !validation.Valid {
+		return nil, fmt.Errorf("refusing invalid TOML: %s", strings.Join(validation.Errors, "; "))
+	}
+
+	path := systemTomlPath(s.projectRoot)
+	backup := ""
+	if _, err := os.Stat(path); err == nil {
+		backup = path + ".bak"
+		prev, readErr := os.ReadFile(path)
+		if readErr == nil {
+			_ = os.WriteFile(backup, prev, 0o644)
+		}
+	}
+
+	if err := os.WriteFile(path, []byte(args.Toml), 0o644); err != nil {
+		return nil, fmt.Errorf("failed to write TOML config '%s': %w", path, err)
+	}
+
+	return map[string]interface{}{
+		"updated":     true,
+		"path":        path,
+		"backup_path": backup,
+		"validation":  validation,
+	}, nil
+}
+
+func (s *MCPServer) handleValidateSystemTOML(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Toml string `json:"toml"`
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	path := strings.TrimSpace(args.Path)
+	if path == "" {
+		path = systemTomlPath(s.projectRoot)
+	} else {
+		path = joinProjectPath(s.projectRoot, path)
+	}
+
+	tomlContent := args.Toml
+	if strings.TrimSpace(tomlContent) == "" {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read TOML for validation: %w", err)
+		}
+		tomlContent = string(content)
+	}
+
+	validation := validateSystemTOMLDocument(tomlContent)
+	return map[string]interface{}{
+		"path":       path,
+		"validation": validation,
+	}, nil
+}
+
+func (s *MCPServer) handleSystemSelfCheck(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		ExpectArtifact string `json:"expect_artifact"`
+	}
+	_ = json.Unmarshal(params, &args)
+
+	return s.buildSystemSelfCheck(args.ExpectArtifact), nil
+}
+
+func (s *MCPServer) handleBuildRelease(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Output               string `json:"output"`
+		GoBinary             string `json:"go_binary"`
+		BuildBridge          bool   `json:"build_bridge"`
+		RequireNativeRuntime *bool  `json:"require_native_runtime"`
+		RequireCGO           *bool  `json:"require_cgo"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(args.Output) == "" {
+		args.Output = "qminiwasm_wui.exe"
+	}
+	if strings.TrimSpace(args.GoBinary) == "" {
+		args.GoBinary = "go"
+	}
+
+	requireNativeRuntime := true
+	if args.RequireNativeRuntime != nil {
+		requireNativeRuntime = *args.RequireNativeRuntime
+	}
+	requireCGO := true
+	if args.RequireCGO != nil {
+		requireCGO = *args.RequireCGO
+	}
+
+	buildEnv := map[string]string{}
+	if requireCGO {
+		buildEnv["CGO_ENABLED"] = "1"
+	} else {
+		buildEnv["CGO_ENABLED"] = "0"
+	}
+
+	payload, err := buildEmbeddedAssetPayload(s.projectRoot, requireNativeRuntime)
+	if err != nil {
+		s.updateReleaseState("error", "build_release", "local", args.Output, []string{"embedded asset payload generation failed"}, err)
+		return nil, fmt.Errorf("failed to build embedded asset payload: %w", err)
+	}
+
+	outputPath := joinProjectPath(s.projectRoot, args.Output)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil && filepath.Dir(outputPath) != "." {
+		return nil, fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	s.updateReleaseState("building", "build_release", "local", outputPath, nil, nil)
+	bridgeModuleDir := joinProjectPath(s.projectRoot, filepath.Join("agents", "cmd", "wui-cli-bridge"))
+
+	combinedLogs := []string{}
+	if args.BuildBridge {
+		bridgeOutput, bridgeErr := runCommandWithTimeoutEnv(
+			5*time.Minute,
+			bridgeModuleDir,
+			buildEnv,
+			args.GoBinary,
+			"build", "-o", "wui-cli-bridge.exe", ".",
+		)
+		combinedLogs = append(combinedLogs, tailLines(bridgeOutput, 8)...)
+		if bridgeErr != nil {
+			s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, bridgeErr)
+			return nil, fmt.Errorf("failed to build wui-cli-bridge: %w | output: %s", bridgeErr, bridgeOutput)
+		}
+	}
+
+	desktopOutput, desktopErr := runCommandWithTimeoutEnv(
+		10*time.Minute,
+		bridgeModuleDir,
+		buildEnv,
+		args.GoBinary,
+		"build", "-o", outputPath, ".",
+	)
+	combinedLogs = append(combinedLogs, tailLines(desktopOutput, 10)...)
+	if desktopErr != nil {
+		s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, desktopErr)
+		return nil, fmt.Errorf("failed to build desktop executable: %w | output: %s", desktopErr, desktopOutput)
+	}
+
+	artifactExists := fileExists(outputPath)
+	if !artifactExists {
+		err := fmt.Errorf("build completed but artifact not found at %s", outputPath)
+		s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, err)
+		return nil, err
+	}
+
+	if err := stripEmbeddedAssetBundleIfPresent(outputPath); err != nil {
+		s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, err)
+		return nil, fmt.Errorf("failed to normalize executable before asset append: %w", err)
+	}
+
+	if err := appendEmbeddedAssetBundle(outputPath, payload); err != nil {
+		s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, err)
+		return nil, fmt.Errorf("failed to append embedded asset bundle: %w", err)
+	}
+
+	artifactSHA, err := hashFileHex(outputPath)
+	if err != nil {
+		s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, err)
+		return nil, fmt.Errorf("failed to hash desktop artifact: %w", err)
+	}
+
+	extractRoot := normalizeExtractRoot(s.projectRoot, "")
+	manifestPath, assetCount, bundleHash, err := extractEmbeddedAssetBundle(outputPath, extractRoot)
+	if err != nil {
+		s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, err)
+		return nil, fmt.Errorf("failed to verify embedded bundle extraction: %w", err)
+	}
+
+	bundleBytes := int64(len(payload.Bundle))
+	if found, _, size, _, probeErr := probeEmbeddedAssetFooter(outputPath); probeErr == nil && found {
+		bundleBytes = size
+	}
+
+	nativeRuntimeAssets := countManifestNativeRuntimeAssets(manifestPath)
+	if nativeRuntimeAssets <= 0 {
+		nativeRuntimeAssets = len(payload.NativeAssets)
+	}
+	if requireNativeRuntime && nativeRuntimeAssets <= 0 {
+		err := fmt.Errorf("embedded bundle missing native runtime assets while require_native_runtime=true")
+		s.updateReleaseState("error", "build_release", "local", outputPath, combinedLogs, err)
+		return nil, err
+	}
+
+	s.setReleaseBundleMetadata(artifactSHA, bundleHash, bundleBytes, extractRoot, manifestPath, assetCount, nativeRuntimeAssets)
+	combinedLogs = append(combinedLogs,
+		fmt.Sprintf("embedded_assets=%d", assetCount),
+		fmt.Sprintf("embedded_native_runtime_assets=%d", nativeRuntimeAssets),
+		fmt.Sprintf("embedded_bundle_sha256=%s", bundleHash),
+	)
+
+	s.updateReleaseState("built", "build_release", "local", outputPath, combinedLogs, nil)
+
+	return map[string]interface{}{
+		"built":                  true,
+		"artifact_path":          outputPath,
+		"artifact_sha256":        artifactSHA,
+		"embedded_asset_sha256":  bundleHash,
+		"embedded_asset_bytes":   bundleBytes,
+		"asset_manifest_path":    manifestPath,
+		"asset_count":            assetCount,
+		"embedded_native_runtime_assets": nativeRuntimeAssets,
+		"native_runtime_assets":  payload.NativeAssets,
+		"require_native_runtime": requireNativeRuntime,
+		"require_cgo":           requireCGO,
+		"build_env":             map[string]interface{}{"CGO_ENABLED": buildEnv["CGO_ENABLED"]},
+		"asset_dir":              extractRoot,
+		"shell_contract_version": desktopShellContractVersion,
+		"log_tail":               combinedLogs,
+	}, nil
+}
+
+func (s *MCPServer) handleDeployRelease(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		ArtifactPath string `json:"artifact_path"`
+		Target       string `json:"target"`
+		DeployDir    string `json:"deploy_dir"`
+		ExtractDir   string `json:"extract_dir"`
+		ExtractAssets *bool `json:"extract_assets"`
+		RequireNativeRuntime *bool `json:"require_native_runtime"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	release := s.snapshotReleaseState()
+	artifactPath := strings.TrimSpace(args.ArtifactPath)
+	if artifactPath == "" {
+		artifactPath = release.ArtifactPath
+	}
+	if artifactPath == "" {
+		artifactPath = "qminiwasm_wui.exe"
+	}
+	artifactPath = joinProjectPath(s.projectRoot, artifactPath)
+
+	target := strings.TrimSpace(args.Target)
+	if target == "" {
+		target = "local"
+	}
+
+	deployDir := strings.TrimSpace(args.DeployDir)
+	if deployDir == "" {
+		deployDir = filepath.Join("releases", "desktop", "current")
+	}
+	deployDir = joinProjectPath(s.projectRoot, deployDir)
+
+	if !fileExists(artifactPath) {
+		err := fmt.Errorf("artifact not found: %s", artifactPath)
+		s.updateReleaseState("error", "deploy_release", target, artifactPath, nil, err)
+		return nil, err
+	}
+
+	dstPath := filepath.Join(deployDir, filepath.Base(artifactPath))
+	backupPath := dstPath + ".bak"
+	if fileExists(dstPath) {
+		_ = copyFile(dstPath, backupPath)
+	}
+
+	if err := copyFile(artifactPath, dstPath); err != nil {
+		s.updateReleaseState("error", "deploy_release", target, artifactPath, nil, err)
+		return nil, fmt.Errorf("failed to deploy artifact: %w", err)
+	}
+
+	artifactSHA, _ := hashFileHex(dstPath)
+	bundleFound, _, bundleBytes, bundleHash, probeErr := probeEmbeddedAssetFooter(dstPath)
+	if probeErr != nil {
+		s.updateReleaseState("error", "deploy_release", target, artifactPath, nil, probeErr)
+		return nil, fmt.Errorf("failed to probe deployed embedded bundle: %w", probeErr)
+	}
+
+	extractAssets := true
+	if args.ExtractAssets != nil {
+		extractAssets = *args.ExtractAssets
+	}
+	requireNativeRuntime := true
+	if args.RequireNativeRuntime != nil {
+		requireNativeRuntime = *args.RequireNativeRuntime
+	}
+
+	assetDir := ""
+	manifestPath := ""
+	assetCount := -1
+	nativeRuntimeAssets := -1
+	if bundleFound && extractAssets {
+		extractRoot := normalizeExtractRoot(s.projectRoot, args.ExtractDir)
+		extractedManifest, extractedCount, extractedHash, extractErr := extractEmbeddedAssetBundle(dstPath, extractRoot)
+		if extractErr != nil {
+			s.updateReleaseState("error", "deploy_release", target, artifactPath, nil, extractErr)
+			return nil, fmt.Errorf("failed to extract deployed embedded assets: %w", extractErr)
+		}
+
+		assetDir = extractRoot
+		manifestPath = extractedManifest
+		assetCount = extractedCount
+		nativeRuntimeAssets = countManifestNativeRuntimeAssets(extractedManifest)
+		if extractedHash != "" {
+			bundleHash = extractedHash
+		}
+	}
+
+	if requireNativeRuntime && bundleFound {
+		checkNativeAssets := nativeRuntimeAssets
+		if checkNativeAssets < 0 {
+			checkNativeAssets = countManifestNativeRuntimeAssets(manifestPath)
+		}
+		if checkNativeAssets <= 0 {
+			err := fmt.Errorf("deployed artifact missing embedded native runtime assets while require_native_runtime=true")
+			s.updateReleaseState("error", "deploy_release", target, artifactPath, nil, err)
+			return nil, err
+		}
+		nativeRuntimeAssets = checkNativeAssets
+	}
+
+	s.setReleaseBundleMetadata(artifactSHA, bundleHash, bundleBytes, assetDir, manifestPath, assetCount, nativeRuntimeAssets)
+
+	logs := []string{fmt.Sprintf("deployed %s -> %s", artifactPath, dstPath)}
+	s.updateReleaseState("deployed", "deploy_release", target, artifactPath, logs, nil)
+
+	return map[string]interface{}{
+		"deployed":                true,
+		"target":                  target,
+		"artifact_path":           artifactPath,
+		"deploy_path":             dstPath,
+		"backup_path":             backupPath,
+		"artifact_sha256":         artifactSHA,
+		"embedded_asset_bundle":   bundleFound,
+		"embedded_asset_sha256":   bundleHash,
+		"embedded_asset_bytes":    bundleBytes,
+		"asset_manifest_path":     manifestPath,
+		"asset_count":             assetCount,
+		"embedded_native_runtime_assets": nativeRuntimeAssets,
+		"require_native_runtime":  requireNativeRuntime,
+		"asset_dir":               assetDir,
+		"shell_contract_version":  desktopShellContractVersion,
+	}, nil
+}
+
+func (s *MCPServer) handleRollbackRelease(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		DeployDir    string `json:"deploy_dir"`
+		ArtifactName string `json:"artifact_name"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	release := s.snapshotReleaseState()
+	deployDir := strings.TrimSpace(args.DeployDir)
+	if deployDir == "" {
+		deployDir = filepath.Join("releases", "desktop", "current")
+	}
+	deployDir = joinProjectPath(s.projectRoot, deployDir)
+
+	artifactName := strings.TrimSpace(args.ArtifactName)
+	if artifactName == "" {
+		if release.ArtifactPath != "" {
+			artifactName = filepath.Base(release.ArtifactPath)
+		} else {
+			artifactName = "qminiwasm_wui.exe"
+		}
+	}
+
+	dstPath := filepath.Join(deployDir, artifactName)
+	backupPath := dstPath + ".bak"
+	if !fileExists(backupPath) {
+		err := fmt.Errorf("rollback backup not found: %s", backupPath)
+		s.updateReleaseState("error", "rollback_release", release.Target, release.ArtifactPath, nil, err)
+		return nil, err
+	}
+
+	if err := copyFile(backupPath, dstPath); err != nil {
+		s.updateReleaseState("error", "rollback_release", release.Target, release.ArtifactPath, nil, err)
+		return nil, fmt.Errorf("failed to restore rollback backup: %w", err)
+	}
+
+	logs := []string{fmt.Sprintf("rollback restored %s from %s", dstPath, backupPath)}
+	s.updateReleaseState("rolled_back", "rollback_release", release.Target, release.ArtifactPath, logs, nil)
+
+	return map[string]interface{}{
+		"rolled_back": true,
+		"deploy_path": dstPath,
+		"backup_path": backupPath,
+	}, nil
+}
+
+func (s *MCPServer) handleGetReleaseStatus(_ json.RawMessage) (interface{}, error) {
+	release := s.snapshotReleaseState()
+	releaseCheck := s.buildSystemSelfCheck(release.ArtifactPath)
+
+	return map[string]interface{}{
+		"release":     release,
+		"self_check":  releaseCheck,
+		"artifact_ok": fileExists(release.ArtifactPath),
+	}, nil
+}
+
+func (s *MCPServer) handleGetOpsSnapshot(_ json.RawMessage) (interface{}, error) {
+	snapshot := map[string]interface{}{
+		"timestamp":   time.Now().Format(time.RFC3339),
+		"self_check":  s.buildSystemSelfCheck(""),
+		"release":     s.snapshotReleaseState(),
+		"connected":   s.wsClient != nil && s.wsClient.IsConnected(),
+		"strict_mode": s.wsClient == nil || s.wsClient.strictMode,
+	}
+
+	if s.pipeline != nil {
+		metrics, err := s.pipeline.GetMetrics()
+		if err == nil {
+			snapshot["training"] = map[string]interface{}{
+				"state":             s.pipeline.GetState(),
+				"current_epoch":     metrics.CurrentEpoch,
+				"current_batch":     metrics.CurrentBatch,
+				"training_progress": metrics.TrainingProgress,
+				"is_running":        metrics.IsRunning,
+				"status_message":    metrics.StatusMessage,
+			}
+		} else {
+			snapshot["training"] = map[string]interface{}{
+				"state":         s.pipeline.GetState(),
+				"metrics_error": err.Error(),
+			}
+		}
+	} else {
+		snapshot["training"] = map[string]interface{}{
+			"state": "not_initialized",
+		}
+	}
+
+	return snapshot, nil
+}
+
+// Run starts the MCP server loop.
 func (s *MCPServer) Run() {
 	for s.scanner.Scan() {
 		line := s.scanner.Text()
@@ -253,9 +1862,7 @@ func (s *MCPServer) Run() {
 	}
 }
 
-// handleRequest processes a single MCP request
 func (s *MCPServer) handleRequest(req *MCPRequest) {
-	// Handle JSON-RPC 2.0 methods
 	switch req.Method {
 	case "initialize":
 		s.handleInitialize(req)
@@ -274,7 +1881,6 @@ func (s *MCPServer) handleRequest(req *MCPRequest) {
 	}
 }
 
-// handleInitialize handles MCP initialization
 func (s *MCPServer) handleInitialize(req *MCPRequest) {
 	result := map[string]interface{}{
 		"protocolVersion": "2024-11-05",
@@ -286,104 +1892,68 @@ func (s *MCPServer) handleInitialize(req *MCPRequest) {
 		},
 		"serverInfo": map[string]interface{}{
 			"name":    "qminiwasm-wui-automation",
-			"version": "1.0.0",
+			"version": "1.2.0",
 		},
 	}
 	s.sendResult(req.ID, result)
 }
 
-// handleInitialized handles MCP initialized notification
-func (s *MCPServer) handleInitialized(req *MCPRequest) {
-	// No response needed for notifications
+func (s *MCPServer) handleInitialized(_ *MCPRequest) {
+	// Notification: no response required.
 }
 
-// handleToolsList returns list of available tools
 func (s *MCPServer) handleToolsList(req *MCPRequest) {
-	// Load tools from JSON definition
-	tools := []map[string]interface{}{
-		{
-			"name":        "wui_connect",
-			"description": "Establish WebSocket connection to WUI backend engine",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"host":       map[string]interface{}{"type": "string", "default": "localhost"},
-					"port":       map[string]interface{}{"type": "integer", "default": 8080},
-					"timeout_ms": map[string]interface{}{"type": "integer", "default": 5000},
-				},
-			},
-		},
-		{
-			"name":        "wui_disconnect",
-			"description": "Close WebSocket connection to WUI backend",
-			"inputSchema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
-		},
-		{
-			"name":        "wui_apply_hadamard",
-			"description": "Apply Hadamard gate to specified qutrit",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"qutrit_index": map[string]interface{}{"type": "integer", "minimum": 0},
-					"await_result": map[string]interface{}{"type": "boolean", "default": true},
-				},
-				"required": []string{"qutrit_index"},
-			},
-		},
-		{
-			"name":        "wui_apply_phase",
-			"description": "Apply Phase gate to specified qutrit",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"qutrit_index": map[string]interface{}{"type": "integer", "minimum": 0},
-					"await_result": map[string]interface{}{"type": "boolean", "default": true},
-				},
-				"required": []string{"qutrit_index"},
-			},
-		},
-		{
-			"name":        "wui_apply_csum",
-			"description": "Apply Controlled-SUM gate between two qutrits",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"control":      map[string]interface{}{"type": "integer", "minimum": 0},
-					"target":       map[string]interface{}{"type": "integer", "minimum": 0},
-					"await_result": map[string]interface{}{"type": "boolean", "default": true},
-				},
-				"required": []string{"control", "target"},
-			},
-		},
-		{
-			"name":        "wui_measure",
-			"description": "Measure qutrit in computational basis",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"qutrit_index": map[string]interface{}{"type": "integer", "minimum": 0},
-					"await_result": map[string]interface{}{"type": "boolean", "default": true},
-				},
-				"required": []string{"qutrit_index"},
-			},
-		},
-		{
-			"name":        "wui_get_metrics",
-			"description": "Retrieve current system metrics and status",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"subscribe":   map[string]interface{}{"type": "boolean", "default": false},
-					"interval_ms": map[string]interface{}{"type": "integer", "default": 5000},
-				},
-			},
-		},
+	toolSpecs := []map[string]interface{}{
+		{"name": "wui_connect", "description": "Initialize bridge session to backend engine", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_disconnect", "description": "Close bridge session", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_fetch_url", "description": "Fetch URL content via MCP host transport", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_system_self_check", "description": "Run startup readiness checks for desktop WUI pipeline", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_get_system_toml", "description": "Read authoritative system TOML configuration", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_set_system_toml", "description": "Write authoritative system TOML configuration", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_validate_system_toml", "description": "Validate system TOML syntax and required section governance", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_desktop_shell_handshake", "description": "Return deterministic desktop shell contract and optional embedded asset extraction details", "inputSchema": map[string]interface{}{"type": "object"}},
+
+		{"name": "wui_apply_hadamard", "description": "Apply Hadamard gate", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_apply_phase", "description": "Apply Phase gate", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_apply_csum", "description": "Apply Controlled-SUM gate", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_apply_pauli_x", "description": "Apply Pauli-X operation", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_apply_pauli_z", "description": "Apply Pauli-Z operation", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_measure", "description": "Measure qutrit state", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_set_config", "description": "Set runtime config value", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_set_num_qutrits", "description": "Set qutrit count", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_set_entanglement_graph", "description": "Set entanglement graph type", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_run_inference", "description": "Run inference", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_get_metrics", "description": "Retrieve runtime metrics", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_get_pipeline_status", "description": "Retrieve pipeline status", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_trigger_pipeline", "description": "Trigger named pipeline", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_compute_betti", "description": "Compute Betti numbers", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_start_ff_training", "description": "Start FF training", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_stop_ff_training", "description": "Stop FF training", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_init_graph", "description": "Initialize graph", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_add_graph_node", "description": "Add graph node", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_add_graph_edge", "description": "Add graph edge", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_read_memory", "description": "Read memory region", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_write_memory", "description": "Write memory region", "inputSchema": map[string]interface{}{"type": "object"}},
+
+		{"name": "wui_init_training_pipeline", "description": "Initialize training pipeline", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_set_pipeline_config", "description": "Set training pipeline configuration", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_get_training_metrics", "description": "Get training metrics", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_apply_betti_guidance", "description": "Apply Betti-guided topology optimization", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_pause_training", "description": "Pause training", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_resume_training", "description": "Resume training", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_export_model", "description": "Export model", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_import_model", "description": "Import model", "inputSchema": map[string]interface{}{"type": "object"}},
+
+		{"name": "wui_build_release", "description": "Build single-executable desktop release artifact", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_deploy_release", "description": "Deploy a built desktop release artifact", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_rollback_release", "description": "Rollback deployed desktop artifact to backup", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_get_release_status", "description": "Get desktop release status and readiness details", "inputSchema": map[string]interface{}{"type": "object"}},
+		{"name": "wui_get_ops_snapshot", "description": "Get operations snapshot for train/deploy/runtime visibility", "inputSchema": map[string]interface{}{"type": "object"}},
 	}
 
-	s.sendResult(req.ID, map[string]interface{}{"tools": tools})
+	s.sendResult(req.ID, map[string]interface{}{"tools": toolSpecs})
 }
 
-// handleToolCall executes a tool handler
 func (s *MCPServer) handleToolCall(req *MCPRequest) {
 	var params struct {
 		Name      string          `json:"name"`
@@ -410,13 +1980,27 @@ func (s *MCPServer) handleToolCall(req *MCPRequest) {
 	s.sendResult(req.ID, result)
 }
 
-// handleResourcesList returns available resources
 func (s *MCPServer) handleResourcesList(req *MCPRequest) {
 	resources := []map[string]interface{}{
 		{
-			"uri":      "file://q_mini_wasm_v2/wui/js/websocket-bridge.js",
-			"name":     "websocket_bridge",
+			"uri":      "file://q_mini_wasm_v2/wui/js/mcp-host-bridge.js",
+			"name":     "mcp_host_bridge_asset",
 			"mimeType": "text/javascript",
+		},
+		{
+			"uri":      "file://q_mini_wasm_v2/runtime/desktop_shell_contract.json",
+			"name":     "desktop_shell_contract",
+			"mimeType": "application/json",
+		},
+		{
+			"uri":      "file://q_mini_wasm_v2/runtime/desktop_shell_bootstrap.js",
+			"name":     "desktop_shell_bootstrap",
+			"mimeType": "text/javascript",
+		},
+		{
+			"uri":      "file://q_mini_wasm_v2/runtime/embedded_asset_manifest.json",
+			"name":     "embedded_asset_manifest",
+			"mimeType": "application/json",
 		},
 		{
 			"uri":      "file://q_mini_wasm_v2/q_mini_wasm_v2/dll/q_mini_wasm_v2_api.hpp",
@@ -427,7 +2011,16 @@ func (s *MCPServer) handleResourcesList(req *MCPRequest) {
 	s.sendResult(req.ID, map[string]interface{}{"resources": resources})
 }
 
-// Tool Handlers
+func (s *MCPServer) ensureConnected() error {
+	if s.wsClient == nil || !s.wsClient.IsConnected() {
+		return fmt.Errorf("bridge client not connected")
+	}
+	return nil
+}
+
+func (s *MCPServer) canPassthroughToBackend() bool {
+	return s.wsClient != nil && s.wsClient.IsConnected() && !s.wsClient.strictMode
+}
 
 func (s *MCPServer) handleWUIConnect(params json.RawMessage) (interface{}, error) {
 	var args struct {
@@ -450,27 +2043,112 @@ func (s *MCPServer) handleWUIConnect(params json.RawMessage) (interface{}, error
 	}
 
 	if s.wsClient != nil && s.wsClient.IsConnected() {
-		return map[string]interface{}{"connected": true, "message": "Already connected"}, nil
+		return map[string]interface{}{
+			"connected":                true,
+			"message":                  "Already connected",
+			"endpoint":                 s.wsClient.endpoint,
+			"strict_mode":              s.wsClient.strictMode,
+			"shell_contract_version":   desktopShellContractVersion,
+			"handshake_tool":           "wui_desktop_shell_handshake",
+			"backend_passthrough":      s.canPassthroughToBackend(),
+			"pipeline_initialized":     s.pipeline != nil,
+			"requires_compiled_engine": !s.canPassthroughToBackend() && s.pipeline == nil,
+		}, nil
 	}
 
-	s.wsClient = NewWebSocketClient(args.Host, args.Port)
-	timeout := time.Duration(args.TimeoutMs) * time.Millisecond
-
-	if err := s.wsClient.Connect(timeout); err != nil {
+	s.wsClient = NewBridgeClient(args.Host, args.Port)
+	if err := s.wsClient.Connect(time.Duration(args.TimeoutMs) * time.Millisecond); err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
-		"connected": true,
-		"url":       fmt.Sprintf("ws://%s:%d/ws", args.Host, args.Port),
+		"connected":                true,
+		"endpoint":                 fmt.Sprintf("mcp://%s:%d", args.Host, args.Port),
+		"strict_mode":              s.wsClient.strictMode,
+		"shell_contract_version":   desktopShellContractVersion,
+		"handshake_tool":           "wui_desktop_shell_handshake",
+		"backend_passthrough":      s.canPassthroughToBackend(),
+		"pipeline_initialized":     s.pipeline != nil,
+		"requires_compiled_engine": !s.canPassthroughToBackend() && s.pipeline == nil,
 	}, nil
 }
 
-func (s *MCPServer) handleWUIDisconnect(params json.RawMessage) (interface{}, error) {
+func (s *MCPServer) handleWUIDisconnect(_ json.RawMessage) (interface{}, error) {
 	if s.wsClient != nil {
 		s.wsClient.Disconnect()
 	}
 	return map[string]interface{}{"connected": false}, nil
+}
+
+func (s *MCPServer) handleFetchURL(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		URL       string `json:"url"`
+		TimeoutMs int    `json:"timeout_ms"`
+		MaxBytes  int64  `json:"max_bytes"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(args.URL) == "" {
+		return nil, fmt.Errorf("url is required")
+	}
+	if args.TimeoutMs <= 0 {
+		args.TimeoutMs = 30000
+	}
+	if args.TimeoutMs > 180000 {
+		args.TimeoutMs = 180000
+	}
+	if args.MaxBytes <= 0 {
+		args.MaxBytes = 5 * 1024 * 1024
+	}
+	if args.MaxBytes > 25*1024*1024 {
+		args.MaxBytes = 25 * 1024 * 1024
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(args.TimeoutMs)*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, args.URL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	req.Header.Set("User-Agent", "qminiwasm-mcp-host/1.0")
+
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, args.MaxBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	truncated := false
+	if int64(len(body)) >= args.MaxBytes {
+		probe := make([]byte, 1)
+		n, _ := resp.Body.Read(probe)
+		if n > 0 {
+			truncated = true
+		}
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("non-success status code %d for %s", resp.StatusCode, args.URL)
+	}
+	if truncated {
+		return nil, fmt.Errorf("response for %s exceeded max_bytes=%d and was truncated", args.URL, args.MaxBytes)
+	}
+
+	return map[string]interface{}{
+		"url":         args.URL,
+		"status_code": resp.StatusCode,
+		"bytes":       len(body),
+		"max_bytes":   args.MaxBytes,
+		"body":        string(body),
+	}, nil
 }
 
 func (s *MCPServer) handleApplyHadamard(params json.RawMessage) (interface{}, error) {
@@ -481,27 +2159,15 @@ func (s *MCPServer) handleApplyHadamard(params json.RawMessage) (interface{}, er
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
 
-	msg := map[string]interface{}{
-		"type":      "quantum_operation",
-		"operation": "hadamard",
-		"target":    args.QutritIndex,
-	}
-
+	msg := map[string]interface{}{"type": "quantum_operation", "operation": "hadamard", "target": args.QutritIndex}
 	if args.AwaitResult {
-		resp, err := s.wsClient.SendAndWait(msg, "quantum_operation_complete", 5*time.Second)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
+		return s.wsClient.SendAndWait(msg, "quantum_operation_complete", 5*time.Second)
 	}
-
-	s.wsClient.Send(msg)
-	return map[string]interface{}{"status": "sent"}, nil
+	return map[string]interface{}{"status": "sent", "operation": "hadamard"}, s.wsClient.Send(msg)
 }
 
 func (s *MCPServer) handleApplyPhase(params json.RawMessage) (interface{}, error) {
@@ -512,27 +2178,15 @@ func (s *MCPServer) handleApplyPhase(params json.RawMessage) (interface{}, error
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
 
-	msg := map[string]interface{}{
-		"type":      "quantum_operation",
-		"operation": "phase",
-		"target":    args.QutritIndex,
-	}
-
+	msg := map[string]interface{}{"type": "quantum_operation", "operation": "phase", "target": args.QutritIndex}
 	if args.AwaitResult {
-		resp, err := s.wsClient.SendAndWait(msg, "quantum_operation_complete", 5*time.Second)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
+		return s.wsClient.SendAndWait(msg, "quantum_operation_complete", 5*time.Second)
 	}
-
-	s.wsClient.Send(msg)
-	return map[string]interface{}{"status": "sent"}, nil
+	return map[string]interface{}{"status": "sent", "operation": "phase"}, s.wsClient.Send(msg)
 }
 
 func (s *MCPServer) handleApplyCSUM(params json.RawMessage) (interface{}, error) {
@@ -544,28 +2198,15 @@ func (s *MCPServer) handleApplyCSUM(params json.RawMessage) (interface{}, error)
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
 
-	msg := map[string]interface{}{
-		"type":      "quantum_operation",
-		"operation": "csum",
-		"control":   args.Control,
-		"target":    args.Target,
-	}
-
+	msg := map[string]interface{}{"type": "quantum_operation", "operation": "csum", "control": args.Control, "target": args.Target}
 	if args.AwaitResult {
-		resp, err := s.wsClient.SendAndWait(msg, "quantum_operation_complete", 5*time.Second)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
+		return s.wsClient.SendAndWait(msg, "quantum_operation_complete", 5*time.Second)
 	}
-
-	s.wsClient.Send(msg)
-	return map[string]interface{}{"status": "sent"}, nil
+	return map[string]interface{}{"status": "sent", "operation": "csum"}, s.wsClient.Send(msg)
 }
 
 func (s *MCPServer) handleApplyPauliX(params json.RawMessage) (interface{}, error) {
@@ -575,17 +2216,11 @@ func (s *MCPServer) handleApplyPauliX(params json.RawMessage) (interface{}, erro
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":      "quantum_operation",
-		"operation": "pauli_x",
-		"target":    args.QutritIndex,
-	})
-	return map[string]interface{}{"status": "sent"}, nil
+	msg := map[string]interface{}{"type": "quantum_operation", "operation": "pauli_x", "target": args.QutritIndex}
+	return map[string]interface{}{"status": "sent", "operation": "pauli_x"}, s.wsClient.Send(msg)
 }
 
 func (s *MCPServer) handleApplyPauliZ(params json.RawMessage) (interface{}, error) {
@@ -595,17 +2230,11 @@ func (s *MCPServer) handleApplyPauliZ(params json.RawMessage) (interface{}, erro
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":      "quantum_operation",
-		"operation": "pauli_z",
-		"target":    args.QutritIndex,
-	})
-	return map[string]interface{}{"status": "sent"}, nil
+	msg := map[string]interface{}{"type": "quantum_operation", "operation": "pauli_z", "target": args.QutritIndex}
+	return map[string]interface{}{"status": "sent", "operation": "pauli_z"}, s.wsClient.Send(msg)
 }
 
 func (s *MCPServer) handleMeasure(params json.RawMessage) (interface{}, error) {
@@ -616,27 +2245,14 @@ func (s *MCPServer) handleMeasure(params json.RawMessage) (interface{}, error) {
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	msg := map[string]interface{}{
-		"type":      "quantum_operation",
-		"operation": "measure",
-		"target":    args.QutritIndex,
-	}
-
+	msg := map[string]interface{}{"type": "quantum_operation", "operation": "measure", "target": args.QutritIndex}
 	if args.AwaitResult {
-		resp, err := s.wsClient.SendAndWait(msg, "measurement_result", 5*time.Second)
-		if err != nil {
-			return nil, err
-		}
-		return resp, nil
+		return s.wsClient.SendAndWait(msg, "measurement_result", 5*time.Second)
 	}
-
-	s.wsClient.Send(msg)
-	return map[string]interface{}{"status": "sent"}, nil
+	return map[string]interface{}{"status": "sent", "operation": "measure"}, s.wsClient.Send(msg)
 }
 
 func (s *MCPServer) handleSetConfig(params json.RawMessage) (interface{}, error) {
@@ -648,18 +2264,14 @@ func (s *MCPServer) handleSetConfig(params json.RawMessage) (interface{}, error)
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":    "config_update",
-		"section": args.Section,
-		"key":     args.Key,
-		"value":   args.Value,
-	})
-	return map[string]interface{}{"status": "config_updated"}, nil
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("runtime config passthrough unavailable in strict MCP mode")
+	}
+	return map[string]interface{}{"status": "config_updated", "section": args.Section, "key": args.Key},
+		s.wsClient.Send(map[string]interface{}{"type": "config_update", "section": args.Section, "key": args.Key, "value": args.Value})
 }
 
 func (s *MCPServer) handleSetNumQutrits(params json.RawMessage) (interface{}, error) {
@@ -669,18 +2281,14 @@ func (s *MCPServer) handleSetNumQutrits(params json.RawMessage) (interface{}, er
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":    "config_update",
-		"section": "system.qgnn",
-		"key":     "default_num_qutrits",
-		"value":   args.Count,
-	})
-	return map[string]interface{}{"num_qutrits": args.Count}, nil
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("qutrit config passthrough unavailable in strict MCP mode")
+	}
+	return map[string]interface{}{"num_qutrits": args.Count},
+		s.wsClient.Send(map[string]interface{}{"type": "config_update", "section": "system.qgnn", "key": "default_num_qutrits", "value": args.Count})
 }
 
 func (s *MCPServer) handleSetEntanglementGraph(params json.RawMessage) (interface{}, error) {
@@ -690,18 +2298,14 @@ func (s *MCPServer) handleSetEntanglementGraph(params json.RawMessage) (interfac
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":    "config_update",
-		"section": "system.qgnn",
-		"key":     "entanglement_graph",
-		"value":   args.GraphType,
-	})
-	return map[string]interface{}{"graph_type": args.GraphType}, nil
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("entanglement config passthrough unavailable in strict MCP mode")
+	}
+	return map[string]interface{}{"graph_type": args.GraphType},
+		s.wsClient.Send(map[string]interface{}{"type": "config_update", "section": "system.qgnn", "key": "entanglement_graph", "value": args.GraphType})
 }
 
 func (s *MCPServer) handleRunInference(params json.RawMessage) (interface{}, error) {
@@ -712,71 +2316,73 @@ func (s *MCPServer) handleRunInference(params json.RawMessage) (interface{}, err
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
-	}
-
-	if args.TimeoutMs == 0 {
-		args.TimeoutMs = 5000
-	}
-
-	msg := map[string]interface{}{
-		"type":  "inference",
-		"input": args.Input,
-	}
-
-	resp, err := s.wsClient.SendAndWait(msg, "inference_result", time.Duration(args.TimeoutMs)*time.Millisecond)
-	if err != nil {
+	if err := s.ensureConnected(); err != nil {
 		return nil, err
 	}
-	return resp, nil
+	if args.TimeoutMs <= 0 {
+		args.TimeoutMs = 5000
+	}
+	return s.wsClient.SendAndWait(map[string]interface{}{"type": "inference", "input": args.Input}, "inference_result", time.Duration(args.TimeoutMs)*time.Millisecond)
 }
 
 func (s *MCPServer) handleGetMetrics(params json.RawMessage) (interface{}, error) {
 	var args struct {
-		Subscribe  bool `json:"subscribe"`
-		IntervalMs int  `json:"interval_ms"`
+		IntervalMs int `json:"interval_ms"`
 	}
-	if err := json.Unmarshal(params, &args); err != nil {
-		return nil, err
-	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	_ = json.Unmarshal(params, &args)
+	if args.IntervalMs <= 0 {
+		args.IntervalMs = 5000
 	}
 
-	s.wsClient.Send(map[string]interface{}{
-		"type":     "subscribe_metrics",
-		"interval": args.IntervalMs,
-	})
+	if s.wsClient != nil && s.wsClient.IsConnected() {
+		if err := s.wsClient.Send(map[string]interface{}{"type": "subscribe_metrics", "interval": args.IntervalMs}); err != nil {
+			return nil, err
+		}
 
-	// Request immediate metrics
-	resp, err := s.wsClient.SendAndWait(
-		map[string]interface{}{"type": "get_metrics"},
-		"metrics",
-		5*time.Second,
-	)
-	if err != nil {
-		return nil, err
+		resp, err := s.wsClient.SendAndWait(map[string]interface{}{"type": "get_metrics"}, "metrics", 5*time.Second)
+		if err == nil {
+			return resp, nil
+		}
+
+		if s.pipeline == nil {
+			return nil, err
+		}
 	}
-	return resp, nil
+
+	if s.pipeline != nil {
+		metrics, err := s.pipeline.GetMetrics()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get runtime metrics from pipeline: %w", err)
+		}
+
+		return map[string]interface{}{
+			"stabilizer_rate": metrics.CurrentBatch,
+			"quantum_status":  metrics.StatusMessage,
+			"ternary_status":  metrics.StatusMessage,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("not connected to WUI backend")
 }
 
-func (s *MCPServer) handleGetPipelineStatus(params json.RawMessage) (interface{}, error) {
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+func (s *MCPServer) handleGetPipelineStatus(_ json.RawMessage) (interface{}, error) {
+	if s.wsClient != nil && s.wsClient.IsConnected() {
+		resp, err := s.wsClient.SendAndWait(map[string]interface{}{"type": "get_pipeline_status"}, "pipeline_status", 5*time.Second)
+		if err == nil {
+			return resp, nil
+		}
+		if s.pipeline == nil {
+			return nil, err
+		}
 	}
 
-	resp, err := s.wsClient.SendAndWait(
-		map[string]interface{}{"type": "get_pipeline_status"},
-		"pipeline_status",
-		5*time.Second,
-	)
-	if err != nil {
-		return nil, err
+	if s.pipeline != nil {
+		return map[string]interface{}{
+			"state": s.pipeline.GetState(),
+		}, nil
 	}
-	return resp, nil
+
+	return nil, fmt.Errorf("not connected to WUI backend")
 }
 
 func (s *MCPServer) handleTriggerPipeline(params json.RawMessage) (interface{}, error) {
@@ -787,21 +2393,16 @@ func (s *MCPServer) handleTriggerPipeline(params json.RawMessage) (interface{}, 
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":     "trigger_pipeline",
-		"pipeline": args.PipelineType,
-		"branch":   args.Branch,
-	})
-	return map[string]interface{}{
-		"triggered":     true,
-		"pipeline_type": args.PipelineType,
-		"branch":        args.Branch,
-	}, nil
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("pipeline trigger passthrough unavailable in strict MCP mode")
+	}
+	if err := s.wsClient.Send(map[string]interface{}{"type": "trigger_pipeline", "pipeline": args.PipelineType, "branch": args.Branch}); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"triggered": true, "pipeline_type": args.PipelineType, "branch": args.Branch}, nil
 }
 
 func (s *MCPServer) handleComputeBetti(params json.RawMessage) (interface{}, error) {
@@ -812,24 +2413,29 @@ func (s *MCPServer) handleComputeBetti(params json.RawMessage) (interface{}, err
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if s.wsClient != nil && s.wsClient.IsConnected() {
+		resp, err := s.wsClient.SendAndWait(map[string]interface{}{"type": "compute_betti", "nodes": args.Nodes, "edges": args.Edges}, "betti_result", 5*time.Second)
+		if err == nil {
+			return resp, nil
+		}
+		if s.pipeline == nil {
+			return nil, err
+		}
 	}
 
-	resp, err := s.wsClient.SendAndWait(
-		map[string]interface{}{
-			"type":  "compute_betti",
-			"nodes": args.Nodes,
-			"edges": args.Edges,
-		},
-		"betti_result",
-		5*time.Second,
-	)
-	if err != nil {
-		return nil, err
+	if s.pipeline != nil {
+		metrics, err := s.pipeline.GetMetrics()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get Betti values from pipeline: %w", err)
+		}
+		return map[string]interface{}{
+			"beta_0": metrics.BettiBeta0,
+			"beta_1": metrics.BettiBeta1,
+			"beta_2": metrics.BettiBeta2,
+		}, nil
 	}
-	return resp, nil
+
+	return nil, fmt.Errorf("not connected to WUI backend")
 }
 
 func (s *MCPServer) handleStartFFTraining(params json.RawMessage) (interface{}, error) {
@@ -840,26 +2446,36 @@ func (s *MCPServer) handleStartFFTraining(params json.RawMessage) (interface{}, 
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if s.pipeline != nil {
+		if err := s.pipeline.Start(); err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"training_started": true, "engine": "cgo"}, nil
 	}
 
-	s.wsClient.Send(map[string]interface{}{
-		"type":   "start_ff_training",
-		"layers": args.Layers,
-		"epochs": args.Epochs,
-	})
-	return map[string]interface{}{"training_started": true}, nil
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
+	}
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("training pipeline not initialized; call wui_init_training_pipeline first")
+	}
+
+	return map[string]interface{}{"training_started": true},
+		s.wsClient.Send(map[string]interface{}{"type": "start_ff_training", "layers": args.Layers, "epochs": args.Epochs})
 }
 
-func (s *MCPServer) handleStopFFTraining(params json.RawMessage) (interface{}, error) {
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+func (s *MCPServer) handleStopFFTraining(_ json.RawMessage) (interface{}, error) {
+	if s.pipeline != nil {
+		s.pipeline.Stop()
+		return map[string]interface{}{"training_stopped": true, "engine": "cgo"}, nil
 	}
-
-	s.wsClient.Send(map[string]interface{}{"type": "stop_ff_training"})
-	return map[string]interface{}{"training_stopped": true}, nil
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
+	}
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("training pipeline not initialized; nothing to stop")
+	}
+	return map[string]interface{}{"training_stopped": true}, s.wsClient.Send(map[string]interface{}{"type": "stop_ff_training"})
 }
 
 func (s *MCPServer) handleInitGraph(params json.RawMessage) (interface{}, error) {
@@ -870,39 +2486,36 @@ func (s *MCPServer) handleInitGraph(params json.RawMessage) (interface{}, error)
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":  "init_graph",
-		"nodes": args.Nodes,
-		"edges": args.Edges,
-	})
-	return map[string]interface{}{
-		"initialized": true,
-		"nodes":       args.Nodes,
-		"edges":       args.Edges,
-	}, nil
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("graph control backend unavailable in strict MCP mode")
+	}
+	if err := s.wsClient.Send(map[string]interface{}{"type": "init_graph", "nodes": args.Nodes, "edges": args.Edges}); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"initialized": true, "nodes": args.Nodes, "edges": args.Edges}, nil
 }
 
-func (s *MCPServer) handleAddGraphNode(params json.RawMessage) (interface{}, error) {
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+func (s *MCPServer) handleAddGraphNode(_ json.RawMessage) (interface{}, error) {
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{"type": "add_graph_node"})
-	return map[string]interface{}{"node_added": true}, nil
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("graph control backend unavailable in strict MCP mode")
+	}
+	return map[string]interface{}{"node_added": true}, s.wsClient.Send(map[string]interface{}{"type": "add_graph_node"})
 }
 
-func (s *MCPServer) handleAddGraphEdge(params json.RawMessage) (interface{}, error) {
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+func (s *MCPServer) handleAddGraphEdge(_ json.RawMessage) (interface{}, error) {
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{"type": "add_graph_edge"})
-	return map[string]interface{}{"edge_added": true}, nil
+	if !s.canPassthroughToBackend() {
+		return nil, fmt.Errorf("graph control backend unavailable in strict MCP mode")
+	}
+	return map[string]interface{}{"edge_added": true}, s.wsClient.Send(map[string]interface{}{"type": "add_graph_edge"})
 }
 
 func (s *MCPServer) handleReadMemory(params json.RawMessage) (interface{}, error) {
@@ -913,24 +2526,10 @@ func (s *MCPServer) handleReadMemory(params json.RawMessage) (interface{}, error
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
-	}
-
-	resp, err := s.wsClient.SendAndWait(
-		map[string]interface{}{
-			"type":   "read_memory",
-			"offset": args.Offset,
-			"length": args.Length,
-		},
-		"memory_data",
-		5*time.Second,
-	)
-	if err != nil {
+	if err := s.ensureConnected(); err != nil {
 		return nil, err
 	}
-	return resp, nil
+	return s.wsClient.SendAndWait(map[string]interface{}{"type": "read_memory", "offset": args.Offset, "length": args.Length}, "memory_data", 5*time.Second)
 }
 
 func (s *MCPServer) handleWriteMemory(params json.RawMessage) (interface{}, error) {
@@ -941,31 +2540,17 @@ func (s *MCPServer) handleWriteMemory(params json.RawMessage) (interface{}, erro
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
 	}
-
-	if s.wsClient == nil || !s.wsClient.IsConnected() {
-		return nil, fmt.Errorf("not connected to WUI backend")
+	if err := s.ensureConnected(); err != nil {
+		return nil, err
 	}
-
-	s.wsClient.Send(map[string]interface{}{
-		"type":   "write_memory",
-		"offset": args.Offset,
-		"data":   args.Data,
-	})
-	return map[string]interface{}{
-		"written": true,
-		"offset":  args.Offset,
-		"length":  len(args.Data),
-	}, nil
+	if err := s.wsClient.Send(map[string]interface{}{"type": "write_memory", "offset": args.Offset, "data": args.Data}); err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"written": true, "offset": args.Offset, "length": len(args.Data)}, nil
 }
 
-// Response helpers
-
 func (s *MCPServer) sendResult(id interface{}, result interface{}) {
-	resp := MCPResponse{
-		JSONRPC: "2.0",
-		ID:      id,
-		Result:  result,
-	}
+	resp := MCPResponse{JSONRPC: "2.0", ID: id, Result: result}
 	s.writeResponse(resp)
 }
 
@@ -985,10 +2570,8 @@ func (s *MCPServer) sendError(id interface{}, code int, message string, data int
 func (s *MCPServer) writeResponse(resp MCPResponse) {
 	data, err := json.Marshal(resp)
 	if err != nil {
-		log.Printf("Failed to marshal response: %v", err)
 		return
 	}
-
 	fmt.Fprintln(os.Stdout, string(data))
 }
 

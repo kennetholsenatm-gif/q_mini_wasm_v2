@@ -1,0 +1,584 @@
+
+Running Quantum Audit Validation Suite
+
+======================================================================
+GF(3) INTEGRITY VALIDATION
+======================================================================
+
+======================================================================
+SUCCESS: ALL CRITICAL PATHS ARE GF(3) COMPLIANT
+   No floating point operations found in stabilizer loops
+======================================================================
+
+======================================================================
+AGENT LAYER SEMANTIC VALIDATION
+======================================================================
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\base_agent.go:
+   Line   28: Success   bool                   `json:"success"`
+   Line   38: Success:   true,
+   Line  251: func (a *BaseAgent) CheckRateLimit(estimatedTokens int) bool {
+   Line  273: return false
+   Line  282: return false
+   Line  285: return true
+   Line  310: result.Success = true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\base_agent.py:
+   Line   54: success: bool = True
+   Line   54: success: bool = True
+   Line  180: memory_path.parent.mkdir(parents=True, exist_ok=True)
+   Line  190: def check_rate_limit(self, estimated_tokens: int = 1000) -> bool:
+   Line  198: True if request is allowed, False otherwise
+   Line  198: True if request is allowed, False otherwise
+   Line  214: return False
+   Line  221: return False
+   Line  223: return True
+   Line  286: success=False,
+   Line  400: async def check_rag_health(self) -> bool:
+   Line  406: return False
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cleanup_agent.py:
+   Line  102: success=False,
+   Line  107: return TaskResult(success=True, data=result)
+   Line  112: return TaskResult(success=False, errors=[str(e)])
+   Line  142: "scan_complete": True,
+   Line  170: dry_run = parameters.get('dry_run', False)
+   Line  185: return {'cleanup_complete': True, 'files_cleaned': len(files_cleaned), 'bytes_freed': bytes_freed}
+   Line  188: return {'archive_complete': True, 'logs_archived': 0}
+   Line  194: return {'full_cleanup_complete': True, 'results': results}
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cli.py:
+   Line   33: @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+   Line   34: def status(config: Optional[str], verbose: bool):
+   Line   69: @click.option('--async', '-a', is_flag=True, help='Run asynchronously')
+   Line   70: def run_cycle(config: Optional[str], async_: bool):
+   Line  135: while True:
+   Line  169: @click.option('--prompt', '-p', required=True, help='Test prompt')
+   Line  223: @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+   Line  224: def kanban_review(action: str, card_id: Optional[str], config: Optional[str], verbose: bool):
+   Line  385: "risk_assessment_completed": true
+   Line  402: "all_tests_pass": True,
+   Line  411: "deployment_success": True,
+   Line  412: "rollback_plan_exists": true
+   Line  441: "output_sanitization": true,
+   Line  442: "audit_logging": true
+   Line  447: output_path.parent.mkdir(parents=True, exist_ok=True)
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cognitive_ergonomics_linter.go:
+   Line  109: hasCritical := false
+   Line  110: hasTrivial := false
+   Line  116: hasCritical = true
+   Line  120: hasTrivial = true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\documentation_agent.py:
+   Line   87: success=False,
+   Line   92: return TaskResult(success=True, data=result)
+   Line   97: return TaskResult(success=False, errors=[str(e)])
+   Line  152: "scan_complete": True,
+   Line  172: output_dir.mkdir(parents=True, exist_ok=True)
+   Line  557: "architecture_updated": False,
+   Line  558: "api_updated": False,
+   Line  559: "diagrams_updated": False,
+   Line  560: "cognitive_validated": False
+   Line  566: updates["architecture_updated"] = True
+   Line  571: updates["api_updated"] = True
+   Line  575: updates["diagrams_updated"] = True
+   Line  579: updates["cognitive_validated"] = validation_result.get("valid", False)
+   Line  586: arch_dir.mkdir(parents=True, exist_ok=True)
+   Line  632: api_dir.mkdir(parents=True, exist_ok=True)
+   Line  782: capture_output=True,
+   Line  783: text=True
+   Line  825: "full_update_complete": True,
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\improvement_cycle.go:
+   Line   60: RiskAssessment         bool    `json:"risk_assessment,omitempty"`
+   Line   63: AllTestsPass           bool    `json:"all_tests_pass,omitempty"`
+   Line   65: DeploymentSuccess      bool    `json:"deployment_success,omitempty"`
+   Line   66: RollbackPlan           bool    `json:"rollback_plan,omitempty"`
+   Line   79: running bool
+   Line   95: RiskAssessment:   true,
+   Line  102: AllTestsPass:           true,
+   Line  106: DeploymentSuccess: true,
+   Line  107: RollbackPlan:      true,
+   Line  142: c.running = true
+   Line  147: c.running = false
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\improvement_cycle.py:
+   Line   87: self._running = False
+   Line   97: "risk_assessment": True,
+   Line  104: "all_tests_pass": True,
+   Line  108: "deployment_success": True,
+   Line  109: "rollback_plan": True,
+   Line  190: self._running = True
+   Line  242: self._running = False
+   Line  437: history_path.parent.mkdir(parents=True, exist_ok=True)
+   Line  482: self._running = False
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\kanban_review_fix_agent.py:
+   Line   68: def is_stuck(self) -> bool:
+   Line   73: def has_blocking_issues(self) -> bool:
+   Line   89: def is_done(self) -> bool:
+   Line   97: def no_further_action_needed(self) -> bool:
+   Line  101: return True
+   Line  105: return True
+   Line  108: return True
+   Line  109: return False
+   Line  112: def is_ready_to_move_to_done(self) -> bool:
+   Line  125: success: bool
+   Line  146: self.auto_fix_enabled = True
+   Line  192: success=False,
+   Line  201: success=False,
+   Line  244: success=True,
+   Line  324: success=False,
+   Line  340: success=True,
+   Line  362: success=True,
+   Line  436: def _are_issues_fixable(self, issues: List[str]) -> bool:
+   Line  451: return True
+   Line  452: return False
+   Line  471: success=True,
+   Line  478: success=False,
+   Line  518: json.dumps(rejected, indent=2, ensure_ascii=False),
+   Line  530: json.dumps(rejected, indent=2, ensure_ascii=False),
+   Line  537: success=True,
+   Line  546: success=False,
+   Line  568: success=True,
+   Line  577: success=False,
+   Line  615: json.dumps(rejected, indent=2, ensure_ascii=False),
+   Line  624: success=True,
+   Line  633: success=False,
+   Line  665: success=True,
+   Line  674: success=False,
+   Line  697: success=False,
+   Line  714: success=True,
+   Line  723: success=False,
+   Line  727: def _is_issue_auto_fixable(self, issue: str) -> bool:
+   Line  811: report_path.parent.mkdir(parents=True, exist_ok=True)
+   Line  813: json.dumps(report, indent=2, ensure_ascii=False),
+   Line  818: success=True,
+   Line  936: success=True,
+   Line  946: success=False,
+   Line  955: success=False,
+   Line  959: def validate_llm_messages(self, messages: List[Dict[str, Any]]) -> Tuple[bool, List[Dict[str, Any]]]:
+   Line  983: return False, messages
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\rag_client.py:
+   Line   95: def _is_cache_valid(self, timestamp: float) -> bool:
+   Line  105: enable_quantum_scoring: bool = True,
+   Line  105: enable_quantum_scoring: bool = True,
+   Line  106: enable_llep: bool = True
+   Line  106: enable_llep: bool = True
+   Line  207: async def index_document(self, file_path: str) -> bool:
+   Line  217: return True
+   Line  220: return False
+   Line  222: async def health_check(self) -> bool:
+   Line  229: return False
+   Line  256: scored_chunks.sort(key=lambda x: x.score, reverse=True)
+   Line  284: scored_chunks.sort(key=lambda x: x.score, reverse=True)
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\research_agent.py:
+   Line   65: success=False,
+   Line   77: return TaskResult(success=True, data=result)
+   Line   82: return TaskResult(success=False, errors=[str(e)])
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\test_basic.py:
+   Line  100: success=True,
+   Line  106: assert result.success is True
+   Line  113: success=False,
+   Line  117: assert error_result.success is False
+   Line  167: return True
+   Line  171: return False
+   Line  174: return False
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\test_llm_message_validator.py:
+   Line   79: # But validate_and_fix_messages will fix it and return True
+   Line  129: error_message = '''Failed to create stream: inference request failed: failed to invoke model 'xiaomi/mimo-v2-pro' with streaming from OpenRouter: request failed with status 400: {"error":{"message":"Provider returned error","code":400,"metadata":{"raw":"{\\"error\\":{\\"code\\":\\"400\\",\\"message\\":\\"Param Incorrect\\",\\"param\\":\\"messages[32] assistant must provide content or tool_calls\\",\\"type\\":\\"\\"}}","provider_name":"Xiaomi","is_byok":false}},"user_id":"org_2ue3sRj4x3tXiJ1Dy2aaiheiHnm"}'''
+   Line  136: assert error_info["is_fixable"] == True, "Error should be fixable"
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\analysis_agent.go:
+   Line  272: func (a *AnalysisAgent) isCodeFile(path string) bool {
+   Line  274: codeExts := map[string]bool{
+   Line  275: ".cpp": true, ".cc": true, ".cxx": true, ".h": true, ".hpp": true,
+   Line  276: ".go": true, ".r": true, ".R": true, ".py": true,
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\code_agent.go:
+   Line   60: supported := false
+   Line   63: supported = true
+   Line  143: * @return true if valid
+   Line  145: bool validate(const std::vector<double>& input) {
+   Line  180: bool validate(const std::vector<double>& input);
+   Line  225: func (gc *GeneratedComponent) Validate(input []float64) bool {
+   Line  494: if strings.Contains(line, "== true") || strings.Contains(line, "== false") {
+   Line  494: if strings.Contains(line, "== true") || strings.Contains(line, "== false") {
+   Line  499: NewCode:     strings.Replace(strings.Replace(line, "== true", "", -1), "== false", "!", -1),
+   Line  499: NewCode:     strings.Replace(strings.Replace(line, "== true", "", -1), "== false", "!", -1),
+   Line  500: Description: "Remove redundant boolean comparison",
+   Line  519: inFunction := false
+   Line  530: inFunction = true
+   Line  570: inFunction = false
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\deploy_analysis_agent.go:
+   Line   32: Success       bool              `json:"success"`
+   Line   56: Success:      false,
+   Line  125: func initializeFlashCIM(path string) bool {
+   Line  132: "enable_ecc": true,
+   Line  133: "enable_wear_leveling": true,
+   Line  140: return false
+   Line  154: return true
+   Line  158: func deployAgent(config *DeploymentConfig) bool {
+   Line  181: return false
+   Line  185: return true
+   Line  213: bool validate(const std::vector<double>& input) {
+   Line  279: func validateDeployment(config *DeploymentConfig) bool {
+   Line  280: valid := true
+   Line  293: valid = false
+   Line  306: valid = false
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\git_helper.go:
+   Line   21: IsClean       bool     `json:"is_clean"`
+   Line   53: IsNewFile   bool   `json:"is_new_file"`
+   Line   54: IsDeleted   bool   `json:"is_deleted"`
+   Line   55: IsRenamed   bool   `json:"is_renamed"`
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\main.go:
+   Line   25: verboseFlag bool
+   Line   26: asyncFlag   bool
+   Line   32: rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Enable verbose output")
+   Line   41: runCycleCmd.Flags().BoolVarP(&asyncFlag, "async", "a", false, "Run asynchronously")
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\test_agent.go:
+   Line  128: REQUIRE(true); // Module loaded without crashing
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\research-alignment\research_alignment_agent.go:
+   Line  337: found := false
+   Line  341: found = true
+   Line  417: supported := false
+   Line  420: supported = true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\wui-cli-bridge\main.go:
+   Line   39: connected   bool
+   Line   55: c.connected = true
+   Line   78: return map[string]interface{}{"type": responseType, "operation_complete": true}, nil
+   Line  114: c.connected = false
+   Line  119: func (c *BridgeClient) IsConnected() bool {
+   Line  219: s.sendResult(req.ID, map[string]interface{}{"pong": true})
+   Line  231: "listChanged": true,
+   Line  332: return map[string]interface{}{"connected": true, "message": "Already connected"}, nil
+   Line  341: "connected": true,
+   Line  350: return map[string]interface{}{"connected": false}, nil
+   Line  356: AwaitResult bool `json:"await_result"`
+   Line  375: AwaitResult bool `json:"await_result"`
+   Line  395: AwaitResult bool `json:"await_result"`
+   Line  438: AwaitResult bool `json:"await_result"`
+   Line  546: return map[string]interface{}{"triggered": true, "pipeline_type": args.PipelineType, "branch": args.Branch}, nil
+   Line  574: return map[string]interface{}{"training_started": true},
+   Line  582: return map[string]interface{}{"training_stopped": true}, s.wsClient.Send(map[string]interface{}{"type": "stop_ff_training"})
+   Line  599: return map[string]interface{}{"initialized": true, "nodes": args.Nodes, "edges": args.Edges}, nil
+   Line  606: return map[string]interface{}{"node_added": true}, s.wsClient.Send(map[string]interface{}{"type": "add_graph_node"})
+   Line  613: return map[string]interface{}{"edge_added": true}, s.wsClient.Send(map[string]interface{}{"type": "add_graph_edge"})
+   Line  644: return map[string]interface{}{"written": true, "offset": args.Offset, "length": len(args.Data)}, nil
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\wui-cli-bridge\pipeline_handlers.go:
+   Line   64: EnableBettiGuidance    bool    `json:"enable_betti_guidance"`
+   Line   65: EnableKnowledgeEngine  bool    `json:"enable_knowledge_engine"`
+   Line   66: EnableWUIStreaming     bool    `json:"enable_wui_streaming"`
+   Line   86: EnableBettiGuidance:    true,
+   Line   87: EnableKnowledgeEngine:  true,
+   Line   88: EnableWUIStreaming:     true,
+   Line  152: IsRunning        bool                 `json:"is_running"`
+   Line  164: stopChan  chan bool
+   Line  173: stopChan: make(chan bool),
+   Line  287: func (c *PipelineController) GetComprehensiveMetrics(includeBetti, includeGraph, includeExpertStats bool) TrainingMetrics {
+   Line  326: func (c *PipelineController) ApplyBettiGuidance(force bool) error {
+   Line  352: func (c *PipelineController) ExportModel(path string, includeTopology bool) error {
+   Line  461: EnableBettiGuidance   bool `json:"enable_betti_guidance"`
+   Line  462: EnableKnowledgeEngine bool `json:"enable_knowledge_engine"`
+   Line  499: "initialized":             true,
+   Line  512: EnableWUIStreaming     bool    `json:"enable_wui_streaming"`
+   Line  529: "config_updated": true,
+   Line  537: IncludeBetti       bool `json:"include_betti"`
+   Line  538: IncludeGraphState  bool `json:"include_graph_state"`
+   Line  539: IncludeExpertStats bool `json:"include_expert_stats"`
+   Line  543: args.IncludeBetti = true
+   Line  544: args.IncludeGraphState = true
+   Line  545: args.IncludeExpertStats = true
+   Line  570: Force bool `json:"force"`
+   Line  573: args.Force = false
+   Line  582: "guidance_applied": true,
+   Line  593: return map[string]interface{}{"paused": true}, nil
+   Line  601: return map[string]interface{}{"resumed": true}, nil
+   Line  609: IncludeTopology bool   `json:"include_topology"`
+   Line  622: "exported":         true,
+   Line  645: "imported": true,
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\wui-cli-bridge\training_cgo.go:
+   Line   27: EnableBettiGuidance    bool    `json:"enable_betti_guidance"`
+   Line   28: EnableKnowledgeEngine  bool    `json:"enable_knowledge_engine"`
+   Line   49: IsRunning          bool    `json:"is_running"`
+   Line   54: func NewTrainingPipelineCGO(numExperts, graphNodes int, enableBettiGuidance bool) (*TrainingPipelineCGO, error) {
+   Line  151: func (p *TrainingPipelineCGO) ApplyBettiGuidance(force bool) error {
+   Line  165: func (p *TrainingPipelineCGO) Export(path string, includeTopology bool) error {
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\cmd\wui-cli-bridge\training_stub.go:
+   Line    9: initialized bool
+   Line   18: EnableBettiGuidance   bool
+   Line   19: EnableKnowledgeEngine bool
+   Line   24: func NewTrainingPipelineCGO(numExperts, graphNodes int, enableBettiGuidance bool) (*TrainingPipelineCGO, error) {
+   Line   26: initialized: true,
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\config\env_loader.py:
+   Line   19: DOTENV_AVAILABLE = True
+   Line   21: DOTENV_AVAILABLE = False
+   Line   28: def __init__(self, env_file: Optional[Union[str, Path]] = None, auto_load: bool = True):
+   Line   28: def __init__(self, env_file: Optional[Union[str, Path]] = None, auto_load: bool = True):
+   Line   37: self._loaded = False
+   Line   42: def load(self, env_file: Optional[Union[str, Path]] = None) -> bool:
+   Line   50: True if successful, False otherwise.
+   Line   50: True if successful, False otherwise.
+   Line   54: return False
+   Line   64: load_dotenv(dotenv_path=target_file, override=False)
+   Line   66: self._loaded = True
+   Line   68: return True
+   Line   71: return False
+   Line   74: return False
+   Line  119: def get_bool(self, key: str, default: bool = False) -> bool:
+   Line  119: def get_bool(self, key: str, default: bool = False) -> bool:
+   Line  121: Get boolean environment variable.
+   Line  134: return value.lower() in ("true", "1", "yes", "on")
+   Line  236: def is_loaded(self) -> bool:
+   Line  259: def load_env_from_path(path: Union[str, Path]) -> bool:
+   Line  267: True if successful, False otherwise.
+   Line  267: True if successful, False otherwise.
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\llm\gemini_service.py:
+   Line   76: self._initialized = False
+   Line   80: cache_path.mkdir(parents=True, exist_ok=True)
+   Line  112: self._initialized = True
+   Line  122: def _check_rate_limit(self, estimated_tokens: int = 1000) -> bool:
+   Line  130: True if request is allowed
+   Line  142: return False
+   Line  149: return False
+   Line  158: return False
+   Line  160: return True
+   Line  176: return json.dumps(key_data, sort_keys=True)
+   Line  383: self._initialized = False
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\llm\message_validator.py:
+   Line   20: is_valid: bool
+   Line   87: "is_fixable": False
+   Line   96: error_info["is_fixable"] = True
+   Line  104: ) -> Tuple[bool, List[Dict[str, Any]], List[str]]:
+   Line  114: return True, messages, []
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\base_agent.go:
+   Line   26: Success   bool                   `json:"success"`
+   Line   36: Success:   true,
+   Line  242: func (a *BaseAgent) CheckRateLimit(estimatedTokens int) bool {
+   Line  260: return false
+   Line  265: return false
+   Line  268: return true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\cleanup_agent.go:
+   Line   88: Success: false,
+   Line   96: Success: false,
+   Line  104: Success: true,
+   Line  140: "scan_complete":      true,
+   Line  196: dryRun, ok := parameters["dry_run"].(bool)
+   Line  198: dryRun = false
+   Line  243: "cleanup_complete": true,
+   Line  252: "archive_complete": true,
+   Line  274: "full_cleanup_complete": true,
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\cognitive_ergonomics.go:
+   Line   55: sort.Slice(chunks, func(i, j int) bool {
+   Line   66: sort.Slice(chunks, func(i, j int) bool {
+   Line  112: Signs   []bool
+   Line  119: func (p *CognitiveErgonomicsProcessor) CalculateBettiNumbers(adjacencyMatrix [][]bool) [3]int {
+   Line  126: visited := make([]bool, n)
+   Line  133: visited[i] = true
+   Line  139: visited[neighbor] = true
+   Line  198: adjacency := make([][]bool, n)
+   Line  200: adjacency[i] = make([]bool, n)
+   Line  211: adjacency[i][j] = true
+   Line  212: adjacency[j][i] = true
+   Line  226: func (p *CognitiveErgonomicsProcessor) GroupByTopology(items []interface{}, adjacencyMatrix [][]bool) [][]interface{} {
+   Line  235: visited := make([]bool, n)
+   Line  242: visited[i] = true
+   Line  251: visited[neighbor] = true
+   Line  304: func (p *CognitiveErgonomicsProcessor) ValidateChunkSize(count int) bool {
+   Line  331: sort.Slice(chunks, func(i, j int) bool {
+   Line  342: sort.Slice(chunks, func(i, j int) bool {
+   Line  348: adjacency := make([][]bool, n)
+   Line  350: adjacency[i] = make([]bool, n)
+   Line  358: adjacency[i][j] = true
+   Line  359: adjacency[j][i] = true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\documentation_agent.go:
+   Line   17: changedFiles   map[string]bool
+   Line   33: changedFiles:           make(map[string]bool),
+   Line   72: Success: false,
+   Line   80: Success: false,
+   Line   88: Success: true,
+   Line  171: "scan_complete": true,
+   Line  573: "architecture_updated": false,
+   Line  574: "api_updated":        false,
+   Line  575: "diagrams_updated":  false,
+   Line  576: "cognitive_validated": false,
+   Line  583: updates["architecture_updated"] = true
+   Line  588: updates["api_updated"] = true
+   Line  594: updates["diagrams_updated"] = true
+   Line  599: if valid, ok := validation["valid"].(bool); ok {
+   Line  828: "sync_complete": true,
+   Line  873: "full_update_complete": true,
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\improvement_cycle.go:
+   Line   56: RiskAssessment        bool    `json:"risk_assessment"`
+   Line   59: AllTestsPass          bool    `json:"all_tests_pass"`
+   Line   61: DeploymentSuccess     bool    `json:"deployment_success"`
+   Line   62: RollbackPlan          bool    `json:"rollback_plan"`
+   Line   72: running       bool
+   Line   89: RiskAssessment:   true,
+   Line   96: AllTestsPass:          true,
+   Line  100: DeploymentSuccess: true,
+   Line  101: RollbackPlan:      true,
+   Line  163: c.running = true
+   Line  168: c.running = false
+   Line  429: c.running = false
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\kanban_review_fix_agent.go:
+   Line   57: func (c *ReviewCard) IsStuck() bool {
+   Line   62: func (c *ReviewCard) HasBlockingIssues() bool {
+   Line   81: func (c *ReviewCard) IsDone() bool {
+   Line   90: func (c *ReviewCard) NoFurtherActionNeeded() bool {
+   Line   92: return true
+   Line   96: return true
+   Line  103: func (c *ReviewCard) IsReadyToMoveToDone() bool {
+   Line  111: Success     bool       `json:"success"`
+   Line  125: autoFixEnabled    bool
+   Line  141: autoFixEnabled:   true,
+   Line  191: Success: false,
+   Line  198: Success: false,
+   Line  204: Success: true,
+   Line  424: func (a *KanbanReviewFixAgent) areIssuesFixable(issues []string) bool {
+   Line  434: return true
+   Line  438: return false
+   Line  461: result.Success = true
+   Line  465: result.Success = false
+   Line  482: result.Success = false
+   Line  489: result.Success = false
+   Line  513: result.Success = false
+   Line  518: result.Success = true
+   Line  530: Success:     true,
+   Line  542: Success:     true,
+   Line  554: Success:     true,
+   Line  566: Success:     true,
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\llm_message_validator.go:
+   Line   11: IsValid        bool                   `json:"is_valid"`
+   Line  103: "is_fixable":     false,
+   Line  117: errorInfo["is_fixable"] = true
+   Line  126: func ValidateAndFixMessages(messages []map[string]interface{}, provider string) (bool, []map[string]interface{}, []string) {
+   Line  136: return true, messages, []string{}
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\research_agent.go:
+   Line   53: Success: false,
+   Line   61: Success: false,
+   Line   76: Success: true,
+   Line  207: patternTypes := make(map[string]bool)
+   Line  210: patternTypes[typ] = true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\pkg\shadow_agent_wrapper.go:
+   Line   56: MatchInt         int8                   `json:"match"` // 0/1 instead of bool
+   Line   60: FixedInt         int8                   `json:"fixed"` // 0/1 instead of bool
+   Line   73: FixedInt        int8           `json:"fixed"`      // 0/1 instead of bool
+   Line   86: LearningEnabledInt   int8 // 0/1 instead of bool
+   Line   88: AutoFixEnabledInt    int8  // 0/1 instead of bool
+   Line  112: LearningEnabledInt:   1, // true = 1
+   Line  114: AutoFixEnabledInt:    0,   // false = 0
+   Line  133: MatchInt:    0, // false = 0
+   Line  230: func (w *ShadowAgentWrapper) ShouldBlockCanary() bool {
+   Line  295: func (w *ShadowAgentWrapper) ShouldRouteToGo() bool {
+   Line  297: return true
+   Line  306: return false
+   Line  341: func compareOutputs(python, goOutput map[string]interface{}) (float64, bool, []string) {
+   Line  343: match := true
+   Line  346: return 0.0, false, []string{"Go output is nil"}
+   Line  356: match = false
+   Line  362: match = false
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\training\train_all_agents.go:
+   Line   43: SuccessInt         int8   `json:"success"`        // 0/1 instead of bool
+   Line  136: Success: false,
+   Line  195: result.Success = true
+   Line  198: result.Success = false
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\training\train_cline_kanban_agent.go:
+   Line   35: Success        bool                   `json:"success"`
+   Line   77: Success: false,
+   Line  197: result.Success = true
+   Line  200: result.Success = true // Still deployable even if slightly below 99%
+   Line  205: result.Metrics["knowledge_distillation"] = true
+   Line  220: func InstallClineKanbanModel(config *ClineKanbanConfig, result *ClineKanbanResult) bool {
+   Line  230: "enabled":       true,
+   Line  231: "auto_deploy":   true,
+   Line  233: "enabled":        true,
+   Line  238: "kanban_board": true,
+   Line  239: "task_queue":   true,
+   Line  240: "agent_orchestration": true,
+   Line  241: "auto_prioritization": true,
+   Line  263: "installed":   true,
+   Line  275: return true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\training\train_general_ai_model.go:
+   Line   20: Success                                           bool
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\training\train_general_model.go:
+   Line   29: QualityFocusInt   int8   `json:"quality_focus"`   // 0/1 instead of bool
+   Line   30: StemAwarenessInt  int8   `json:"stem_awareness"`  // 0/1 instead of bool
+   Line   31: ModelAwarenessInt int8   `json:"model_awareness"` // 0/1 instead of bool
+   Line   48: SuccessInt        int8                   `json:"success"` // 0/1 instead of bool
+   Line   80: QualityFocusInt:   1,    // true = 1
+   Line   81: StemAwarenessInt:  1,    // true = 1
+   Line   82: ModelAwarenessInt: 1,    // true = 1
+   Line   90: SuccessInt:      0, // false = 0
+   Line  171: func initializeTrainingEnv(config *TrainingConfig) bool {
+   Line  191: return false
+   Line  204: return true
+   Line  289: func saveTrainingResults(config *TrainingConfig, epochs int, finalLoss float64, accuracy float64, qualityScore float64, totalTokens int) bool {
+   Line  313: return false
+   Line  317: return true
+
+WARNING: SEMANTIC VIOLATIONS in q_mini_wasm_v2\core\..\..\agents\training\train_test_agent.go:
+   Line   44: Success         int8                   `json:"success"` // 0/1 instead of bool
+   Line   83: Success:         false,
+   Line  159: func initializeTrainingEnv(config *TrainingConfig) bool {
+   Line  177: return false
+   Line  190: return true
+   Line  228: REQUIRE(true);
+   Line  235: REQUIRE(true);
+   Line  265: if true != true {
+   Line  266: t.Error("Expected true to be true")
+   Line  324: assert True
+   Line  331: assert True
+   Line  353: assert.strictEqual(true, true);
+   Line  360: assert.strictEqual(true, true);
+   Line  375: expect(true).toBe(true);
+   Line  382: expect(true).toBe(true);
+   Line  404: assertTrue(true);
+   Line  412: assertTrue(true);
+   Line  439: Assert.IsTrue(true);
+   Line  448: Assert.IsTrue(true);
+   Line  528: func saveTrainingResults(config *TrainingConfig, epochs int, finalLoss float64, accuracy float64, totalTokens int) bool {
+   Line  549: return false
+   Line  553: return true
+
+WARNING: FOUND 475 BOOLEAN SEMANTIC VIOLATIONS
+
+======================================================================
+WASM BINARY INSTRUCTION AUDIT
+======================================================================
+WARNING: WASM binary not found, skipping instruction audit
+
+======================================================================
+FAILURE: VALIDATION FAILED
+   Contamination detected in critical paths or agent layer
+======================================================================
