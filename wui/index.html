@@ -260,27 +260,61 @@
 
         let ffRunning = false;
         let ffEpoch = 0;
+        let ffGoodnessPos = 0;
+        let ffGoodnessNeg = 0;
         
         function startFFTraining() {
             if (ffRunning) return;
             ffRunning = true;
             document.getElementById('ff-status').textContent = 'Running';
-            log('Forward-Forward training started');
+            log('Forward-Forward training started - connecting to backend...');
             
-            const interval = setInterval(() => {
-                if (!ffRunning) { clearInterval(interval); return; }
-                ffEpoch++;
-                document.getElementById('ff-epoch').textContent = ffEpoch;
-                document.getElementById('ff-good-pos').textContent = (2 + Math.random()).toFixed(2);
-                document.getElementById('ff-good-neg').textContent = (0.2 + Math.random() * 0.3).toFixed(2);
-                if (useBridge()) window.wsBridge.send({ type: 'ff_step' });
-            }, 1000);
+            // Start training via WebSocket bridge
+            if (useBridge()) {
+                window.wsBridge.send({ 
+                    type: 'start_ff_training',
+                    epochs: 100,
+                    learning_rate: 1
+                });
+                
+                // Listen for real metrics from backend
+                window.wsBridge.onMessage = (msg) => {
+                    if (msg.type === 'ff_metrics') {
+                        ffEpoch = msg.epoch || ffEpoch;
+                        ffGoodnessPos = msg.positive_goodness || 0;
+                        ffGoodnessNeg = msg.negative_goodness || 0;
+                        
+                        document.getElementById('ff-epoch').textContent = ffEpoch;
+                        document.getElementById('ff-good-pos').textContent = ffGoodnessPos.toFixed(2);
+                        document.getElementById('ff-good-neg').textContent = ffGoodnessNeg.toFixed(2);
+                    } else if (msg.type === 'ff_complete') {
+                        stopFFTraining();
+                        log('Training complete: ' + msg.message);
+                    }
+                };
+            } else {
+                // No bridge - show offline mode with zeros (no fake data)
+                document.getElementById('ff-good-pos').textContent = '0.00';
+                document.getElementById('ff-good-neg').textContent = '0.00';
+                log('Backend not connected - training metrics unavailable in offline mode');
+                
+                // Just increment epoch counter without fake metrics
+                const interval = setInterval(() => {
+                    if (!ffRunning) { clearInterval(interval); return; }
+                    ffEpoch++;
+                    document.getElementById('ff-epoch').textContent = ffEpoch;
+                }, 1000);
+            }
         }
 
         function stopFFTraining() {
             ffRunning = false;
             document.getElementById('ff-status').textContent = 'Stopped';
-            log('Training stopped');
+            log('Training stopped at epoch ' + ffEpoch);
+            
+            if (useBridge()) {
+                window.wsBridge.send({ type: 'stop_ff_training' });
+            }
         }
 
         let graph = { nodes: 0, edges: 0 };

@@ -11,7 +11,7 @@ InferencePipeline::InferencePipeline(const InferencePipelineConfig& config)
     token_manager_ = create_token_manager(config.token_config);
     context_window_ = create_geometric_context(config.context_config);
     synthesizer_ = create_householder_synthesizer(config.synthesis_config);
-    profiler_ = std::make_unique<LatencyProfiler>(config.target_latency_ms);
+    profiler_ = std::make_unique<LatencyProfiler>(config.target_latency_ms_fixed);
     moe_router_ = moe::create_moe_router(config.moe_config);
     shared_tableau_ = stabilizer::create_tableau(
         config.token_config.embedding_dim * config.token_config.max_sequence_length
@@ -30,7 +30,7 @@ InferenceOutput InferencePipeline::tokenize_stage(const InferenceInput& input) {
     
     for (const auto& token : sequence.tokens) {
         output.output_tokens.push_back(token.token_id);
-        output.token_probabilities.push_back(token.coherence);
+        output.token_probabilities_fixed.push_back(static_cast<int32_t>(token.coherence * 1000));  // Convert to fixed-point
     }
     
     profiler_->checkpoint("tokenize_end");
@@ -64,7 +64,7 @@ InferenceOutput InferencePipeline::synthesis_stage(InferenceOutput& intermediate
     
     auto result = synthesizer_->synthesize_target_state(target_state, *shared_tableau_);
     
-    intermediate.tokenization_latency_ms = result.synthesis_time_ms;
+    intermediate.tokenization_latency_ms_fixed = result.synthesis_time_ms_fixed;
     
     profiler_->checkpoint("synthesis_end");
     return intermediate;
@@ -88,10 +88,10 @@ InferenceOutput InferencePipeline::routing_stage(InferenceOutput& intermediate) 
 InferenceOutput InferencePipeline::decode_stage(InferenceOutput& intermediate) {
     profiler_->checkpoint("decode_start");
     
-    std::vector<double> probabilities(intermediate.token_probabilities.size());
+    std::vector<double> probabilities(intermediate.token_probabilities_fixed.size());
     double sum = 0.0;
     for (size_t i = 0; i < probabilities.size(); ++i) {
-        probabilities[i] = std::exp(intermediate.token_probabilities[i]);
+        probabilities[i] = std::exp(intermediate.token_probabilities_fixed[i] / 1000.0);  // Convert from fixed-point
         sum += probabilities[i];
     }
     
@@ -101,7 +101,11 @@ InferenceOutput InferencePipeline::decode_stage(InferenceOutput& intermediate) {
         }
     }
     
-    intermediate.token_probabilities = probabilities;
+    // Convert back to fixed-point
+    intermediate.token_probabilities_fixed.clear();
+    for (auto p : probabilities) {
+        intermediate.token_probabilities_fixed.push_back(static_cast<int32_t>(p * 1000));
+    }
     
     profiler_->checkpoint("decode_end");
     return intermediate;
@@ -125,8 +129,8 @@ InferenceOutput InferencePipeline::infer(const InferenceInput& input) {
     profiler_->end_run();
     
     auto stats = profiler_->get_stats();
-    output.total_latency_ms = stats.avg_ms;
-    output.meets_latency_target = profiler_->meets_target();
+    output.total_latency_ms_fixed = stats.avg_ms_fixed;
+    output.meets_latency_target = profiler_->meets_target() ? 1 : 0;
     
     return output;
 }
@@ -135,9 +139,9 @@ void InferencePipeline::warmup(size_t num_iterations) {
     InferenceInput warmup_input;
     warmup_input.token_ids = {0, 1, 2, 3, 4};
     warmup_input.max_output_length = 5;
-    warmup_input.temperature = 1.0;
-    warmup_input.use_entanglement = true;
-    warmup_input.use_geometric_context = true;
+    warmup_input.temperature_fixed = 1000;  // 1.0 in fixed-point
+    warmup_input.use_entanglement = 1;  // true = 1
+    warmup_input.use_geometric_context = 1;  // true = 1
     
     for (size_t i = 0; i < num_iterations; ++i) {
         infer(warmup_input);

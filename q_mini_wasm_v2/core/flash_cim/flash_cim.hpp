@@ -205,6 +205,18 @@ public:
     std::vector<std::pair<std::string, ternary::EnergyTrit>> get_energy_metrics() const;
     
     /**
+     * @brief Get energy consumption statistics (fixed-point version)
+     * @return Total energy consumed in fixed-point pJ (1000 = 1.0 pJ)
+     */
+    int32_t get_total_energy_fixed() const;
+    
+    /**
+     * @brief Get performance metrics (fixed-point version)
+     * @return Map of metric names to fixed-point integer values
+     */
+    std::vector<std::pair<std::string, int32_t>> get_metrics_fixed() const;
+    
+    /**
      * @brief Reset energy and performance counters
      */
     void reset_metrics();
@@ -260,7 +272,7 @@ public:
     enum class HardwareBackend : uint8_t {
         SOFTWARE_SIMULATION = 0,
         NVME_SSD = 1,
-        3D_XPOINT = 2,
+        _3D_XPOINT = 2,
         FPGA_ACCELERATOR = 3
     };
     
@@ -279,6 +291,12 @@ public:
      * @brief Check if backend is hardware-accelerated
      */
     bool is_hardware_accelerated() const;
+    
+    /**
+     * @brief Check if backend is hardware-accelerated
+     * @return Hardware acceleration status as ternary trit (-1: unknown, 0: software, 1: hardware)
+     */
+    ternary::Trit is_hardware_accelerated_trit() const;
 
     // ========================================================================
     // Configuration

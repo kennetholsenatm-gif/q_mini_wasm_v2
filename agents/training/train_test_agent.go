@@ -11,85 +11,86 @@ import (
 
 /**
  * TestAgent Training for q_mini_wasm_v2 Framework
- * 
+ *
  * This training system trains the TestAgent using D:\ drive storage
  * with Flash-CIM integration for efficient ternary data storage.
  */
 
 // TrainingConfig represents the training configuration
 type TrainingConfig struct {
-	Name           string   `json:"name"`
-	Version        string   `json:"version"`
-	StoragePath    string   `json:"storage_path"`
-	FlashCIMPath   string   `json:"flash_cim_path"`
-	Epochs         int      `json:"epochs"`
-	BatchSize      int      `json:"batch_size"`
-	LearningRate   float64  `json:"learning_rate"`
-	SupportedLangs []string `json:"supported_languages"`
-	Timestamp      string   `json:"timestamp"`
+	Name              string   `json:"name"`
+	Version           string   `json:"version"`
+	StoragePath       string   `json:"storage_path"`
+	FlashCIMPath      string   `json:"flash_cim_path"`
+	Epochs            int      `json:"epochs"`
+	BatchSize         int      `json:"batch_size"`
+	LearningRateFixed int64    `json:"learning_rate"` // Fixed-point: 10000 = 1.0
+	SupportedLangs    []string `json:"supported_languages"`
+	Timestamp         string   `json:"timestamp"`
 }
 
 // TokenGenerationMetrics tracks token generation during training
 type TokenGenerationMetrics struct {
-	TokensGenerated  int     `json:"tokens_generated"`
-	TokensPerSecond  float64 `json:"tokens_per_second"`
-	AvgTokenLength   float64 `json:"avg_token_length"`
-	TestTokens       int     `json:"test_tokens"`
-	AssertionTokens  int     `json:"assertion_tokens"`
-	CodeTokens       int     `json:"code_tokens"`
+	TokensGenerated      int   `json:"tokens_generated"`
+	TokensPerSecondFixed int64 `json:"tokens_per_second"` // Fixed-point: 1000 = 1.0
+	AvgTokenLengthFixed  int64 `json:"avg_token_length"`  // Fixed-point: 1000 = 1.0
+	TestTokens           int   `json:"test_tokens"`
+	AssertionTokens      int   `json:"assertion_tokens"`
+	CodeTokens           int   `json:"code_tokens"`
 }
 
 // TrainingResult represents the result of training
 type TrainingResult struct {
-	Success        bool                   `json:"success"`
-	Config         TrainingConfig         `json:"config"`
-	EpochsCompleted int                   `json:"epochs_completed"`
-	FinalLoss      float64                `json:"final_loss"`
-	Accuracy       float64                `json:"accuracy"`
-	Metrics        map[string]interface{} `json:"metrics"`
-	Message        string                 `json:"message"`
+	Success         int8                   `json:"success"` // 0/1 instead of bool
+	Config          TrainingConfig         `json:"config"`
+	EpochsCompleted int                    `json:"epochs_completed"`
+	FinalLossFixed  int64                  `json:"final_loss"` // Fixed-point: 10000 = 1.0
+	AccuracyFixed   int64                  `json:"accuracy"`   // Fixed-point: 1000 = 1.0
+	Metrics         map[string]interface{} `json:"metrics"`
+	Message         string                 `json:"message"`
 }
 
 // TrainingEpoch represents a single training epoch
 type TrainingEpoch struct {
-	Epoch       int                    `json:"epoch"`
-	Loss        float64                `json:"loss"`
-	Accuracy    float64                `json:"accuracy"`
-	TestsGen    int                    `json:"tests_generated"`
-	Duration    float64                `json:"duration_seconds"`
-	Improvement float64                `json:"improvement"`
-	TokenMetrics TokenGenerationMetrics `json:"token_metrics"`
+	Epoch            int                    `json:"epoch"`
+	LossFixed        int64                  `json:"loss"`     // Fixed-point: 10000 = 1.0
+	AccuracyFixed    int64                  `json:"accuracy"` // Fixed-point: 1000 = 1.0
+	TestsGen         int                    `json:"tests_generated"`
+	DurationFixed    int64                  `json:"duration_seconds"` // Fixed-point: 1000 = 1.0
+	ImprovementFixed int64                  `json:"improvement"`      // Fixed-point: 1000 = 1.0
+	TokenMetrics     TokenGenerationMetrics `json:"token_metrics"`
 }
 
 // NewTrainingConfig creates a new training configuration
 func NewTrainingConfig() *TrainingConfig {
 	return &TrainingConfig{
-		Name:         "TestAgent-Training-Production",
-		Version:      "2.0.0",
-		StoragePath:  "D:\\test_agent\\training",
-		FlashCIMPath: "D:\\flash_cim",
-		Epochs:       100,
-		BatchSize:    64,
-		LearningRate: 0.005,
-		SupportedLangs: []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
-		Timestamp:    time.Now().Format(time.RFC3339),
+		Name:              "TestAgent-Training-Production",
+		Version:           "2.0.0",
+		StoragePath:       "D:\\test_agent\\training",
+		FlashCIMPath:      "D:\\flash_cim",
+		Epochs:            100,
+		BatchSize:         64,
+		LearningRateFixed: 50, // 0.005 in fixed-point (10000 = 1.0)
+		SupportedLangs:    []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
+		Timestamp:         time.Now().Format(time.RFC3339),
 	}
 }
 
 // TrainTestAgent trains the TestAgent with D:\ storage
 func TrainTestAgent(config *TrainingConfig) (*TrainingResult, error) {
 	result := &TrainingResult{
-		Success:        false,
-		Config:         *config,
+		Success:         0,
+		Success:         false,
+		Config:          *config,
 		EpochsCompleted: 0,
-		Metrics:        make(map[string]interface{}),
+		Metrics:         make(map[string]interface{}),
 	}
 
 	fmt.Println("=== TestAgent Training ===")
 	fmt.Printf("Training %s v%s\n", config.Name, config.Version)
 	fmt.Printf("Storage: %s\n", config.StoragePath)
 	fmt.Printf("Flash-CIM: %s\n", config.FlashCIMPath)
-	fmt.Printf("Epochs: %d, Batch Size: %d, Learning Rate: %.4f\n", 
+	fmt.Printf("Epochs: %d, Batch Size: %d, Learning Rate: %.4f\n",
 		config.Epochs, config.BatchSize, config.LearningRate)
 
 	// Step 1: Create directory structure
@@ -482,10 +483,10 @@ func runTrainingEpochs(config *TrainingConfig) (int, float64, float64, int) {
 
 		// Calculate token generation metrics
 		tokensGenerated := config.BatchSize * epoch * 150 // ~150 tokens per test
-		testTokens := tokensGenerated * 60 / 100   // 60% test code tokens
-		assertionTokens := tokensGenerated * 25 / 100 // 25% assertion tokens
-		codeTokens := tokensGenerated * 15 / 100   // 15% setup/teardown tokens
-		avgTokenLength := 4.5 + (float64(epoch) * 0.1) // Tokens get slightly longer as training progresses
+		testTokens := tokensGenerated * 60 / 100          // 60% test code tokens
+		assertionTokens := tokensGenerated * 25 / 100     // 25% assertion tokens
+		codeTokens := tokensGenerated * 15 / 100          // 15% setup/teardown tokens
+		avgTokenLength := 4.5 + (float64(epoch) * 0.1)    // Tokens get slightly longer as training progresses
 		tokensPerSecond := float64(tokensGenerated) / (time.Since(epochStart).Seconds() + 0.001)
 
 		totalTokens += tokensGenerated
@@ -527,17 +528,17 @@ func runTrainingEpochs(config *TrainingConfig) (int, float64, float64, int) {
 func saveTrainingResults(config *TrainingConfig, epochs int, finalLoss float64, accuracy float64, totalTokens int) bool {
 	// Create training summary
 	summary := map[string]interface{}{
-		"training_name":      config.Name,
-		"version":            config.Version,
-		"epochs_completed":   epochs,
-		"final_loss":         finalLoss,
-		"final_accuracy":     accuracy,
-		"batch_size":         config.BatchSize,
-		"learning_rate":      config.LearningRate,
-		"supported_langs":    config.SupportedLangs,
-		"completion_time":    time.Now().Format(time.RFC3339),
-		"storage_path":       config.StoragePath,
-		"flash_cim_path":     config.FlashCIMPath,
+		"training_name":          config.Name,
+		"version":                config.Version,
+		"epochs_completed":       epochs,
+		"final_loss":             finalLoss,
+		"final_accuracy":         accuracy,
+		"batch_size":             config.BatchSize,
+		"learning_rate":          config.LearningRate,
+		"supported_langs":        config.SupportedLangs,
+		"completion_time":        time.Now().Format(time.RFC3339),
+		"storage_path":           config.StoragePath,
+		"flash_cim_path":         config.FlashCIMPath,
 		"total_tokens_generated": totalTokens,
 	}
 

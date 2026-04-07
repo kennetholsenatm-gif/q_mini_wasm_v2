@@ -139,23 +139,30 @@ public:
     // ========================================================================
     
     /**
-     * @brief Compute load balancing loss
+     * @brief Compute load balancing loss (fixed-point version)
+     * @return Loss value in fixed-point (scale 1000 = 1.0)
      */
-    float ComputeLoadBalanceLoss(const LoadStats& stats);
+    int32_t ComputeLoadBalanceLossFixed(const LoadStats& stats);
     
     /**
-     * @brief Apply load balancing penalty to logits
+     * @brief Apply load balancing penalty to logits (fixed-point version)
+     * @param logits Fixed-point logits (scale 1000)
+     * @param stats Load statistics
+     * @return Fixed-point penalized logits
      */
-    std::vector<float> ApplyLoadBalancing(
-        const std::vector<float>& logits,
+    std::vector<int32_t> ApplyLoadBalancingFixed(
+        const std::vector<int32_t>& logits,
         const LoadStats& stats
     );
     
     /**
-     * @brief Least-Loaded Expert Parallelism (LLEP)
+     * @brief Least-Loaded Expert Parallelism (LLEP) - fixed-point version
+     * @param logits Fixed-point logits (scale 1000)
+     * @param k Number of experts to select
+     * @return Selected expert indices
      */
-    std::vector<size_t> LLEPRoute(
-        const std::vector<float>& logits,
+    std::vector<size_t> LLEPRouteFixed(
+        const std::vector<int32_t>& logits,
         size_t k
     );
     
@@ -211,8 +218,8 @@ public:
     struct RouterStats {
         uint64_t total_routings;
         uint64_t total_tokens_routed;
-        float avg_routing_latency_ms;
-        float avg_load_balance_score;
+        int32_t avg_routing_latency_ms_fixed;  // Fixed-point (was float)
+        int32_t avg_load_balance_score_fixed;  // Fixed-point: 1000 = 1.0 (was float)
         ternary::EnergyTrit total_energy_consumed;
     };
     
@@ -232,6 +239,11 @@ public:
      * @brief Estimate memory usage for 243 experts
      */
     size_t EstimateMemoryUsage() const;
+
+    /**
+     * @brief Dynamically adjust active expert count based on load
+     */
+    size_t AdjustExpertScale(uint32_t current_load);
 
 private:
     UnifiedMoEConfig config_;
@@ -256,7 +268,7 @@ private:
     struct EntanglementEdge {
         size_t from;
         size_t to;
-        float strength;
+        int32_t strength_fixed;  // Fixed-point: 1000 = 1.0 (was float)
     };
     std::vector<EntanglementEdge> entanglement_edges_;
     
@@ -265,7 +277,7 @@ private:
     
     // Internal methods
     void InitializeExperts();
-    std::vector<size_t> SelectTopK(const std::vector<float>& logits, size_t k);
+    std::vector<size_t> SelectTopK(const std::vector<int32_t>& logits_fixed, size_t k);
     std::vector<size_t> HierarchicalSelect(
         const std::vector<ternary::Trit>& input,
         size_t k

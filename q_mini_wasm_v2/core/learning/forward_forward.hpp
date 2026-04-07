@@ -58,6 +58,28 @@ public:
     void update_weights_hebbian(size_t layer_idx, const std::vector<ternary::Trit>& activations, int32_t delta);
     void reset_weights();
 
+    // Serialization
+    /**
+     * @brief Serialize all layer weights and biases to binary format
+     * @return Byte vector containing serialized model weights
+     * 
+     * Format: [num_layers][layer1_weights...][layer1_biases...][layer2...]
+     * All weights stored as int8_t representing ternary values {-1, 0, 1}
+     */
+    std::vector<uint8_t> serialize_weights() const;
+    
+    /**
+     * @brief Deserialize and load model weights from binary data
+     * @param data Serialized weight data
+     * @return true if successful
+     */
+    bool deserialize_weights(const std::vector<uint8_t>& data);
+    
+    /**
+     * @brief Get number of trainable parameters
+     */
+    size_t parameter_count() const;
+
 private:
     FFConfig config_;
     std::vector<std::vector<std::vector<ternary::Trit>>> layer_weights_;

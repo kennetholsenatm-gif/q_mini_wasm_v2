@@ -458,8 +458,110 @@ size_t MoERouter::adjust_expert_scale(uint32_t current_load) {
     return current_active_experts_;
 }
 
-float MoERouter::get_scaling_factor() const {
-    return static_cast<float>(current_active_experts_) / config_.active_experts;
+int32_t MoERouter::get_scaling_factor_fixed() const {
+    // Return scaling factor as fixed-point (1000 = 1.0)
+    // Formula: (current_active / config.active) * 1000
+    return static_cast<int32_t>((current_active_experts_ * 1000) / config_.active_experts);
+}
+
+int32_t MoERouter::compute_energy_cost_fixed(size_t expert_count) const {
+    // Fixed-point energy cost calculation (scale 1000 = 1.0 pJ per operation)
+    // Using integer arithmetic only
+    
+    // Base cost: energy_per_expert * expert_count
+    // trit_to_energy returns fixed-point value (e.g., 500 for MEDIUM = 0.5 pJ)
+    int32_t base_energy = trit_to_energy(energy_per_expert_);
+    int32_t base_cost = base_energy * static_cast<int32_t>(expert_count);
+    
+    // Overhead: quadratic scaling for coordination
+    // (expert_count * expert_count * 10) / 1000 = 0.01 pJ per expert pair
+    int32_t overhead = (static_cast<int32_t>(expert_count * expert_count) * 10) / 1000;
+    
+    // Thermal penalty: increased cost at high temperatures
+    int32_t thermal_penalty = 0;
+    if (thermal_current_ > 70) {
+        // Penalty = base_cost * (thermal - 70) / 100
+        thermal_penalty = (base_cost * static_cast<int32_t>(thermal_current_ - 70)) / 100;
+    }
+    
+    // Total in fixed-point (pJ per operation)
+    return base_cost + overhead + thermal_penalty;
+}
+
+// Energy-aware scaling using fixed-point
+size_t MoERouter::energy_aware_scaling(
+    uint32_t current_load,
+    int32_t energy_budget_fixed,  // Fixed-point: budget in pJ * 1000
+    uint32_t thermal_limit
+) {
+    // Update thermal tracking
+    thermal_current_ = std::min(thermal_current_ + (current_load / 10), thermal_limit);
+    
+    // Compute energy cost for different expert counts using fixed-point
+    size_t optimal_experts = current_active_experts_;
+    int32_t best_efficiency = 0;  // Fixed-point efficiency score
+    
+    const size_t MIN_EXPERTS = std::max(config_.active_experts * 50 / 100, size_t(1));
+    const size_t MAX_EXPERTS = std::min(config_.active_experts * 130 / 100, config_.total_experts);
+    
+    for (size_t e = MIN_EXPERTS; e <= MAX_EXPERTS; ++e) {
+        int32_t energy_cost = compute_energy_cost_fixed(e);
+        uint32_t estimated_latency = estimate_latency(e, current_load);
+        
+        // Fixed-point efficiency: (experts * 1000000) / (energy_cost + latency * 10)
+        // Higher is better, avoid division by zero
+        int32_t denominator = energy_cost + static_cast<int32_t>(estimated_latency / 10);
+        if (denominator <= 0) denominator = 1;
+        
+        int32_t efficiency = (static_cast<int32_t>(e) * 1000000) / denominator;
+        
+        // Check constraints: energy_cost <= budget AND thermal <= limit
+        if (energy_cost <= energy_budget_fixed && thermal_current_ <= thermal_limit) {
+            if (efficiency > best_efficiency) {
+                best_efficiency = efficiency;
+                optimal_experts = e;
+            }
+        }
+    }
+    
+    // If no configuration meets constraints, choose least energy cost
+    if (optimal_experts == current_active_experts_ && best_efficiency == 0) {
+        int32_t min_cost = compute_energy_cost_fixed(optimal_experts);
+        for (size_t e = MIN_EXPERTS; e <= MAX_EXPERTS; ++e) {
+            int32_t cost = compute_energy_cost_fixed(e);
+            if (cost < min_cost) {
+                min_cost = cost;
+                optimal_experts = e;
+            }
+        }
+    }
+    
+    current_active_experts_ = optimal_experts;
+    scaling_decision_count_++;
+    
+    return current_active_experts_;
+}
+
+int32_t MoERouter::compute_priority_fairness_fixed() const {
+    // Jain's fairness index in fixed-point (1000 = 1.0 = perfect fairness)
+    // Formula: (sum(x)^2) / (n * sum(x^2))
+    
+    int64_t numerator = 0;    // Use int64_t to prevent overflow
+    int64_t denominator = 0;
+    
+    for (uint32_t queue_size : priority_queue_sizes_) {
+        numerator += static_cast<int64_t>(queue_size);
+        denominator += static_cast<int64_t>(queue_size) * queue_size;
+    }
+    
+    if (denominator == 0) return 1000; // Perfect fairness when empty
+    
+    // (numerator^2 * 1000) / (n * denominator)
+    int64_t num_sq = numerator * numerator;
+    int64_t n = static_cast<int64_t>(priority_queue_sizes_.size());
+    int64_t result = (num_sq * 1000) / (n * denominator);
+    
+    return static_cast<int32_t>(result);
 }
 
 // ============================================================================
@@ -520,23 +622,13 @@ std::unique_ptr<MoERouter> create_moe_router(const ExpertConfig& config) {
 // ============================================================================
 
 void MoERouter::initialize_advanced_selection() {
-    // Initialize expert performance history
-    expert_performance_history_.resize(config_.total_experts, std::vector<int32_t>(100, 50)); // 100 time steps, default 50%
-    
-    // Initialize expert specialization scores with ternary deterministic values
-    expert_specialization_scores_.resize(config_.total_experts, std::vector<int32_t>(10, 33)); // 10 categories
-    for (auto& scores : expert_specialization_scores_) {
-        for (auto& score : scores) {
-            score = static_cast<int32_t>(ternary_random()) * 33 + 33; // Map -1,0,1 to 0,33,66
-        }
-    }
-    
-    // Initialize Q-learning table (state_size x action_size)
+    // Initialize tropical selection state (replaces RL)
     const size_t STATE_SIZE = 100;  // Discretized state space
-    q_learning_table_.resize(STATE_SIZE, std::vector<ternary::ProbTrit>(config_.total_experts, ternary::ProbTrit::LOW_PROB)); // Small initial values
+    state_action_scores_.resize(STATE_SIZE, std::vector<int32_t>(config_.total_experts, 50)); // Initial score 50/100
     
     last_system_state_.resize(4, 50); // [load, latency, energy, accuracy]
-    learning_episode_ = 0;
+    selection_episode_ = 0;
+    tropical_initialized_ = true;
     
     // Initialize dynamic scaling state
     load_history_.resize(100, 50);    // 100 historical load measurements
@@ -699,43 +791,41 @@ std::vector<size_t> MoERouter::multi_objective_selection(
     return select_topk(final_scores, current_active_experts_);
 }
 
-std::vector<size_t> MoERouter::rl_expert_selection(
+std::vector<size_t> MoERouter::tropical_expert_selection(
     const std::vector<ternary::Trit>& /* input */,
     const std::vector<int32_t>& system_state
 ) {
-    // Discretize system state for Q-learning
+    // Discretize system state for tropical selection
     size_t state_index = 0;
     for (size_t i = 0; i < system_state.size() && i < 4; ++i) {
         state_index = (state_index * 10) + (system_state[i] / 10); // Each dimension: 0-9
     }
-    state_index = state_index % q_learning_table_.size();
+    state_index = state_index % state_action_scores_.size();
     
-    // Epsilon-greedy action selection
-    const double EPSILON = 0.1; // 10% exploration
-    std::vector<size_t> selected_experts;
+    // Tropical selection: deterministic max (no random exploration)
+    // Uses tropical argmax - select experts with highest tropical scores
+    auto& scores = state_action_scores_[state_index];
+    std::vector<std::pair<int32_t, size_t>> scored_experts;
     
-    if (static_cast<double>(rand()) / RAND_MAX < EPSILON) {
-        // Exploration: random selection
-        std::vector<size_t> all_experts(config_.total_experts);
-        std::iota(all_experts.begin(), all_experts.end(), 0);
-        std::shuffle(all_experts.begin(), all_experts.end(), rng_);
-        selected_experts.assign(all_experts.begin(), all_experts.begin() + current_active_experts_);
-    } else {
-        // Exploitation: best Q-values
-        auto& q_values = q_learning_table_[state_index];
-        std::vector<std::pair<uint32_t, size_t>> scored_experts;
-        for (size_t e = 0; e < config_.total_experts; ++e) {
-            scored_experts.emplace_back(trit_to_prob(q_values[e]), e);
-        }
-        std::sort(scored_experts.begin(), scored_experts.end(), std::greater<>());
-        
-        for (size_t i = 0; i < current_active_experts_; ++i) {
-            selected_experts.push_back(scored_experts[i].second);
-        }
+    for (size_t e = 0; e < config_.total_experts; ++e) {
+        scored_experts.emplace_back(scores[e], e);
     }
     
-    // Store current state for learning
+    // Tropical sort: descending order (max first)
+    std::sort(scored_experts.begin(), scored_experts.end(), 
+        [](const auto& a, const auto& b) { return a.first > b.first; });
+    
+    // Select top-K experts using tropical selection
+    std::vector<size_t> selected_experts;
+    selected_experts.reserve(current_active_experts_);
+    
+    for (size_t i = 0; i < current_active_experts_ && i < scored_experts.size(); ++i) {
+        selected_experts.push_back(scored_experts[i].second);
+    }
+    
+    // Store current state for tropical update
     last_system_state_ = system_state;
+    selection_episode_++;
     
     return selected_experts;
 }
@@ -761,69 +851,61 @@ int32_t MoERouter::compute_pattern_similarity(
     return static_cast<int32_t>((matches * 100) / min_size);
 }
 
-void MoERouter::update_q_learning(
+void MoERouter::update_tropical_scores(
     const std::vector<int32_t>& state,
     size_t action,
-    double reward,
-    const std::vector<int32_t>& next_state
+    int32_t performance_score,
+    const std::vector<int32_t>& /* next_state */
 ) {
-    const double ALPHA = 0.1;  // Learning rate
-    const double GAMMA = 0.9;  // Discount factor
-    
-    // Discretize states
-    size_t state_idx = 0, next_state_idx = 0;
+    // Discretize state
+    size_t state_idx = 0;
     for (size_t i = 0; i < std::min(state.size(), size_t(4)); ++i) {
         state_idx = (state_idx * 10) + (state[i] / 10);
     }
-    for (size_t i = 0; i < std::min(next_state.size(), size_t(4)); ++i) {
-        next_state_idx = (next_state_idx * 10) + (next_state[i] / 10);
+    state_idx %= state_action_scores_.size();
+    
+    // Tropical update: score = max(score, new_score)
+    // This is the tropical (max-plus) algebra update rule
+    int32_t current_score = state_action_scores_[state_idx][action];
+    int32_t new_score = performance_score; // Fixed-point: already scaled 0-100
+    
+    // Tropical max: take the maximum
+    if (new_score > current_score) {
+        state_action_scores_[state_idx][action] = new_score;
     }
-    state_idx %= q_learning_table_.size();
-    next_state_idx %= q_learning_table_.size();
+    // If current_score >= new_score, keep current (no learning needed)
     
-    // Find max Q-value for next state
-    auto max_it = std::max_element(q_learning_table_[next_state_idx].begin(), 
-                                   q_learning_table_[next_state_idx].end(),
-                                   [](ternary::ProbTrit a, ternary::ProbTrit b) {
-                                       return trit_to_prob(a) < trit_to_prob(b);
-                                   });
-    double max_next_q = trit_to_prob(*max_it);
-    
-    // Q-learning update: Q(s,a) = Q(s,a) + α[r + γ*max(Q(s',a')) - Q(s,a)]
-    double old_q = trit_to_prob(q_learning_table_[state_idx][action]);
-    double new_q = old_q + ALPHA * (reward + GAMMA * max_next_q - old_q);
-    q_learning_table_[state_idx][action] = prob_to_trit(static_cast<uint32_t>(std::clamp(new_q, 0.0, 100.0)));
-    
-    learning_episode_++;
+    selection_episode_++;
 }
 
 std::vector<size_t> MoERouter::compute_pareto_frontier(
-    const std::vector<std::vector<double>>& objective_scores
+    const std::vector<std::vector<int32_t>>& objective_scores
 ) const {
     std::vector<size_t> pareto_front;
     
     for (size_t i = 0; i < objective_scores.size(); ++i) {
-        bool is_dominated = false;
+        int8_t is_dominated = 0;  // 0 = not dominated, 1 = dominated (replaces bool)
         
         for (size_t j = 0; j < objective_scores.size(); ++j) {
             if (i == j) continue;
             
             // Check if j dominates i (better in all objectives)
-            bool dominates = true;
+            // dominates = 1 if j is better in all objectives, 0 otherwise
+            int8_t dominates = 1;  // Assume j dominates until proven otherwise
             for (size_t o = 0; o < objective_scores[i].size(); ++o) {
                 if (objective_scores[j][o] < objective_scores[i][o]) {
-                    dominates = false;
+                    dominates = 0;  // j is worse in objective o, so j does not dominate i
                     break;
                 }
             }
             
             if (dominates) {
-                is_dominated = true;
+                is_dominated = 1;
                 break;
             }
         }
         
-        if (!is_dominated) {
+        if (is_dominated == 0) {  // Not dominated = on Pareto frontier
             pareto_front.push_back(i);
         }
     }
@@ -978,22 +1060,41 @@ size_t MoERouter::latency_critical_scaling(
 uint32_t MoERouter::predict_load(const std::vector<uint32_t>& load_history) const {
     if (load_history.size() < 3) return load_history.empty() ? 50 : load_history.back();
     
-    // Exponential smoothing with trend adjustment
-    const double ALPHA = 0.3;  // Smoothing factor
-    const double BETA = 0.2;   // Trend factor
+    // Tropical smoothing (replaces exponential smoothing with doubles)
+    // Uses tropical (max-plus) algebra: new_value = max(alpha * current, (1-alpha) * previous)
+    // With fixed-point: scale by 100, so 30 = 0.3, 70 = 0.7
+    const int32_t ALPHA_FIXED = 30;    // 0.3 in fixed-point (scale 100)
+    const int32_t BETA_FIXED = 20;     // 0.2 in fixed-point (scale 100)
+    const int32_t SCALE = 100;
     
-    double smoothed = load_history[0];
-    double trend = 0;
+    // Use integer arithmetic only
+    int32_t smoothed = static_cast<int32_t>(load_history[0]) * SCALE;
+    int32_t trend = 0;
     
     for (size_t i = 1; i < load_history.size(); ++i) {
-        double prev_smoothed = smoothed;
-        smoothed = ALPHA * load_history[i] + (1 - ALPHA) * (smoothed + trend);
-        trend = BETA * (smoothed - prev_smoothed) + (1 - BETA) * trend;
+        int32_t current = static_cast<int32_t>(load_history[i]) * SCALE;
+        int32_t prev_smoothed = smoothed;
+        
+        // Tropical-like smoothing: weighted combination using fixed-point
+        // smoothed = alpha * current + (1-alpha) * (smoothed + trend)
+        int32_t trend_adjusted = smoothed + trend;
+        int32_t weighted_current = (ALPHA_FIXED * current) / SCALE;
+        int32_t weighted_prev = ((SCALE - ALPHA_FIXED) * trend_adjusted) / SCALE;
+        smoothed = weighted_current + weighted_prev;
+        
+        // trend = beta * (smoothed - prev) + (1-beta) * trend
+        int32_t diff = smoothed - prev_smoothed;
+        int32_t weighted_diff = (BETA_FIXED * diff) / SCALE;
+        int32_t weighted_trend = ((SCALE - BETA_FIXED) * trend) / SCALE;
+        trend = weighted_diff + weighted_trend;
     }
     
-    // Predict next value with trend
-    uint32_t prediction = static_cast<uint32_t>(std::clamp(smoothed + trend, 0.0, 100.0));
-    return prediction;
+    // Predict next value with trend, clamp to valid range
+    int32_t prediction = (smoothed + trend) / SCALE;
+    if (prediction < 0) prediction = 0;
+    if (prediction > 100) prediction = 100;
+    
+    return static_cast<uint32_t>(prediction);
 }
 
 double MoERouter::compute_energy_cost(size_t expert_count) const {
@@ -1014,18 +1115,27 @@ uint32_t MoERouter::estimate_latency(size_t expert_count, uint32_t current_load)
     if (expert_count == 0) return 1000; // Very high latency with no experts
     
     // Base latency decreases with more experts (inverse relationship)
-    uint32_t base_latency = static_cast<uint32_t>(10000 / expert_count); // 10ms base / expert_count
+    // Using integer arithmetic: base = 10000 / expert_count (in μs)
+    uint32_t base_latency = 10000 / static_cast<uint32_t>(expert_count);
     
     // Load factor: latency increases with load
-    double load_factor = 1.0 + (current_load / 100.0) * 2.0; // 2x latency at 100% load
+    // Fixed-point: load_factor = 1000 + (current_load * 20) = 1000 to 3000 (1.0 to 3.0)
+    // This represents 1.0 + (load/100) * 2.0 in fixed-point
+    int32_t load_factor = 1000 + (static_cast<int32_t>(current_load) * 20);
     
     // Saturation factor: diminishing returns at high expert counts
-    double saturation_factor = 1.0;
+    // Fixed-point: starts at 1000, increases by 100 per expert over active threshold
+    int32_t saturation_factor = 1000;
     if (expert_count > config_.active_experts) {
-        saturation_factor = 1.0 + ((expert_count - config_.active_experts) * 0.1);
+        saturation_factor += static_cast<int32_t>(expert_count - config_.active_experts) * 100;
     }
     
-    uint32_t estimated = static_cast<uint32_t>(base_latency * load_factor * saturation_factor);
+    // Calculate: base * load_factor * saturation_factor / (1000 * 1000)
+    // Step 1: base * load_factor / 1000
+    uint32_t step1 = (base_latency * static_cast<uint32_t>(load_factor)) / 1000;
+    // Step 2: step1 * saturation_factor / 1000
+    uint32_t estimated = (step1 * static_cast<uint32_t>(saturation_factor)) / 1000;
+    
     return std::clamp(estimated, 1u, 10000u); // Clamp between 1μs and 10ms
 }
 
@@ -1227,10 +1337,11 @@ std::vector<int32_t> MoERouter::advanced_priority_bias(const std::vector<int32_t
     
     int32_t bias = ENHANCED_BIAS_TABLE[static_cast<uint8_t>(priority)];
     
-    // Apply bias with fairness consideration
-    double fairness = compute_priority_fairness();
-    if (fairness < 0.8 && priority != PriorityLevel::CRITICAL) {
+    // Apply bias with fairness consideration (fixed-point: 1000 = 1.0)
+    int32_t fairness = compute_priority_fairness_fixed();
+    if (fairness < 800 && priority != PriorityLevel::CRITICAL) {
         // Reduce bias if fairness is poor (except for critical)
+        // fairness < 0.8 in floating point = fairness < 800 in fixed-point
         bias = bias * 80 / 100;
     }
     

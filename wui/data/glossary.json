@@ -49,7 +49,7 @@
     "type": "acronym",
     "source": "docs\\research\\Autonomous Forward-Forward Training Plan.md",
     "category": "abbreviation",
-    "definition": "Acronym for AAAI. See full definition in related terms.",
+    "definition": "Association for the Advancement of Artificial Intelligence - leading scientific society for AI research",
     "related_terms": []
   },
   "ABI": {
@@ -57,7 +57,7 @@
     "type": "acronym",
     "source": "docs\\research\\Autonomous Forward-Forward Training Plan.md",
     "category": "abbreviation",
-    "definition": "Acronym for ABI. See full definition in related terms.",
+    "definition": "Application Binary Interface - specifies how software components interact at the binary level",
     "related_terms": [
       "McpCapability",
       "StabilizerRag",
@@ -71,7 +71,7 @@
     "type": "acronym",
     "source": "docs\\research\\Quantum-Classical System Architectural Review.md",
     "category": "abbreviation",
-    "definition": "Acronym for ABOT. See full definition in related terms.",
+    "definition": "AI Bot Orchestration Tool - system component for managing AI agent workflows",
     "related_terms": []
   },
   "AbsmeanQuantizer": {
@@ -79,7 +79,7 @@
     "type": "concept",
     "source": "docs\\architecture\\overview.md",
     "category": "general",
-    "definition": "Technical term related to absmean quantizer.",
+    "definition": "Data ingestion component that quantizes continuous values using absolute mean scaling to ternary {-1, 0, +1} representation",
     "related_terms": [
       "StabilizerRag",
       "HouseholderSynthesizer",
@@ -93,7 +93,7 @@
     "type": "class",
     "source": "q_mini_wasm_v2\\core\\qgnn\\ternary_tree.hpp",
     "category": "general",
-    "definition": "A C++ class representing the access pattern component in the system architecture.",
+    "definition": "C++ class managing memory access patterns for quantum graph neural network operations, optimizing data locality for ternary tree traversal",
     "related_terms": [
       "CognitiveErgonomicsLinter",
       "TernaryNeuralNetwork",
@@ -107,7 +107,7 @@
     "type": "acronym",
     "source": "docs\\research\\Autonomous Forward-Forward Training Plan.md",
     "category": "abbreviation",
-    "definition": "Acronym for ACL. See full definition in related terms.",
+    "definition": "Access Control List - mechanism for specifying which users or processes have access to specific resources",
     "related_terms": []
   },
   "ACP": {
@@ -115,7 +115,7 @@
     "type": "acronym",
     "source": "docs\\research\\Quantum-Classical System Architectural Review.md",
     "category": "abbreviation",
-    "definition": "Acronym for ACP. See full definition in related terms.",
+    "definition": "Asynchronous Compute Pipeline - mechanism for parallel task execution in quantum-classical hybrid systems",
     "related_terms": []
   },
   "ACS": {
@@ -123,7 +123,7 @@
     "type": "acronym",
     "source": "docs\\research\\Autonomous Forward-Forward Training Plan.md",
     "category": "abbreviation",
-    "definition": "Acronym for ACS. See full definition in related terms.",
+    "definition": "Autonomous Computing System - self-managing system capable of independent decision-making",
     "related_terms": []
   },
   "ACT": {

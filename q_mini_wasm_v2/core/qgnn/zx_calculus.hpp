@@ -9,6 +9,32 @@
 namespace qgnn {
 
 /**
+ * @brief Fixed-point complex number representation for quantum phases
+ * 
+ * Replaces std::complex<double> with integer-based fixed-point arithmetic.
+ * Scale factor: 1000 = 1.0 for both real and imaginary parts.
+ */
+struct FixedComplex {
+    int32_t real;  // Fixed-point: 1000 = 1.0
+    int32_t imag;  // Fixed-point: 1000 = 1.0
+    
+    FixedComplex(int32_t r = 1000, int32_t i = 0) : real(r), imag(i) {}
+    
+    // Fixed-point multiplication: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+    FixedComplex operator*(const FixedComplex& other) const {
+        return FixedComplex(
+            (real * other.real - imag * other.imag) / 1000,
+            (real * other.imag + imag * other.real) / 1000
+        );
+    }
+    
+    // Get magnitude squared in fixed-point
+    int32_t magnitude_squared() const {
+        return (real * real + imag * imag) / 1000;
+    }
+};
+
+/**
  * @brief ZX-diagram representation for quantum circuit optimization
  * 
  * Implements ZX-calculus for odd prime dimensions (GF(3)) to enable
@@ -21,11 +47,11 @@ private:
         enum class Type { Z, X, H, INPUT, OUTPUT };
         Type type;
         size_t id;
-        std::complex<double> phase;  // Phase in GF(3) space
+        FixedComplex phase_fixed;  // Fixed-point phase (1000 = 1.0)
         std::vector<size_t> neighbors;
         
-        ZXNode(Type t, size_t i, std::complex<double> p = 1.0) 
-            : type(t), id(i), phase(p) {}
+        ZXNode(Type t, size_t i, const FixedComplex& p = FixedComplex()) 
+            : type(t), id(i), phase_fixed(p) {}
     };
     
     std::vector<ZXNode> nodes;
@@ -40,18 +66,27 @@ public:
     void compose(const ZXDiagram& other);
     void tensor_product(const ZXDiagram& other);
     void apply_hadamard(size_t node_id);
-    void apply_phase_gate(size_t node_id, const std::complex<double>& phase);
+    void apply_phase_gate_fixed(size_t node_id, const FixedComplex& phase_fixed);
     void apply_cnot(size_t control, size_t target);
     
     // Optimization operations
     void spider_fusion();
     void pivot_complementation();
-    void local_complementation();
-    void identity_removal();
+    /**
+     * @brief Apply a phase gate using fixed-point arithmetic
+     * @param node_id Target node
+     * @param phase_fixed Fixed-point phase (real, imag) with scale 1000
+     */
+    void apply_phase_gate_fixed(size_t node_id, const FixedComplex& phase_fixed);
     
     // Analysis methods
-    bool is_identity() const;
+    int8_t is_identity_fixed() const;  // Returns 0/1 instead of bool
     double get_t_count() const;
+    /**
+     * @brief Get T-gate count in fixed-point (scale 1000 = 1.0)
+     * @return Fixed-point T-gate count
+     */
+    int32_t get_t_count_fixed() const;
     size_t get_node_count() const;
     std::vector<size_t> get_boundary_nodes() const;
     
@@ -74,9 +109,14 @@ private:
     size_t original_gate_count_;
     
     // Optimization parameters
-    double optimization_threshold;
+    int32_t optimization_threshold_fixed;  // Fixed-point: 1000 = 1.0
     size_t max_iterations;
-    bool enable_parallel_optimization;
+    int8_t enable_parallel_optimization;   // 0/1 instead of bool
+    
+    // Fixed-point phase table for common rotations (GF(3) compliant)
+    static constexpr int32_t PHASE_0 = 1000;     // 1.0 (identity)
+    static constexpr int32_t PHASE_PI_4 = 707;   // sqrt(2)/2 ≈ 0.707
+    static constexpr int32_t PHASE_PI_2 = 0;   // i (pure imaginary)
     
     // Internal optimization methods
     bool apply_rewrite_rules(ZXDiagram& diagram);
@@ -90,10 +130,18 @@ private:
     
 public:
     ZXCalculusOptimizer();
-    explicit ZXCalculusOptimizer(double threshold, size_t max_iter = 1000);
+    /**
+     * @brief Constructor with fixed-point threshold
+     * @param threshold_fixed Threshold in fixed-point (scale 1000 = 1.0)
+     * @param max_iter Maximum iterations
+     */
+    explicit ZXCalculusOptimizer(int32_t threshold_fixed, size_t max_iter = 1000);
     
-    // Main optimization interface
-    void optimize_circuit(QuantumCircuit& circuit);
+    /**
+     * @brief Set optimization threshold (fixed-point version)
+     * @param target_efficiency_fixed Target efficiency in fixed-point (scale 1000)
+     */
+    void set_optimization_target_fixed(int32_t target_efficiency_fixed);
     void optimize_diagram(ZXDiagram& diagram);
     
     // Batch optimization for multiple circuits
@@ -101,10 +149,21 @@ public:
     
     // Analysis and metrics
     bool is_optimal() const;
-    double get_optimization_score() const;
+    /**
+     * @brief Get optimization score in fixed-point (scale 1000 = 1.0)
+     * @return Score as fixed-point integer
+     */
+    int32_t get_optimization_score_fixed() const;
+    
+    /**
+     * @brief Get energy savings in fixed-point (scale 1000 = 1.0)
+     * @return Energy savings as fixed-point integer
+     */
+    int32_t get_energy_savings_fixed() const;
+    
     size_t get_original_gate_count() const;
     size_t get_optimized_gate_count() const;
-    double get_energy_savings() const;
+    int32_t get_energy_savings_fixed() const;  // Duplicate removed in implementation
     
     // Advanced features
     void enable_parallel_optimization(bool enable = true);

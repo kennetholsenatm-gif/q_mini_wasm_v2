@@ -272,7 +272,11 @@ public:
     /**
      * @brief Get current scaling factor
      */
-    float get_scaling_factor() const;
+    /**
+     * @brief Get scaling factor as fixed-point (1000 = 1.0)
+     * @return Scaling factor in fixed-point format
+     */
+    int32_t get_scaling_factor_fixed() const;
     
     /**
      * @brief Predictive expert scaling based on load patterns
@@ -304,9 +308,17 @@ public:
      * @param thermal_limit Thermal constraint limit
      * @return Energy-optimized expert count
      */
+    /**
+     * @brief Energy-aware expert scaling with fixed-point budget
+     * 
+     * @param current_load Current system load (0-100)
+     * @param energy_budget_fixed Energy budget in fixed-point (pJ * 1000)
+     * @param thermal_limit Thermal constraint limit
+     * @return Energy-optimized expert count
+     */
     size_t energy_aware_scaling(
         uint32_t current_load,
-        double energy_budget,
+        int32_t energy_budget_fixed,
         uint32_t thermal_limit
     );
     
@@ -473,18 +485,18 @@ public:
     );
     
     /**
-     * @brief Reinforcement Learning-based Expert Selection
+     * @brief Tropical geometry-based expert selection (replaces RL)
      * 
-     * Uses Q-learning for adaptive expert selection:
-     * - State: current system load and input pattern
-     * - Action: expert selection
-     * - Reward: performance and load balance improvement
+     * Uses tropical (max-plus) selection without reinforcement learning:
+     * - Tropical inner product for state-action scoring
+     * - Deterministic selection via tropical argmax
+     * - No exploration/exploitation tradeoff (pure tropical)
      * 
      * @param input Input features
-     * @param system_state Current system state
-     * @return RL-optimized expert selection
+     * @param system_state Current system state [load, latency, energy, accuracy]
+     * @return Tropical-optimized expert selection
      */
-    std::vector<size_t> rl_expert_selection(
+    std::vector<size_t> tropical_expert_selection(
         const std::vector<ternary::Trit>& input,
         const std::vector<int32_t>& system_state
     );
@@ -507,13 +519,11 @@ private:
     // Entanglement coupling matrix for correlated routing (scaled integer)
     std::vector<std::vector<int32_t>> entanglement_coupling_;
     
-    // Advanced selection algorithm state
-    std::vector<std::vector<int32_t>> expert_performance_history_;
-    std::vector<std::vector<int32_t>> expert_specialization_scores_;
-    std::vector<std::vector<ternary::ProbTrit>> q_learning_table_;  // Ternary Q-table for RL
-    std::vector<int32_t> last_system_state_;
-    uint32_t learning_episode_;
-    bool rl_initialized_;
+    // Tropical selection state (replaces RL)
+    std::vector<std::vector<int32_t>> state_action_scores_;  // Tropical scores [state][action]
+    std::vector<int32_t> last_system_state_;  // Last observed state
+    uint32_t selection_episode_;  // Selection iteration counter
+    bool tropical_initialized_;
     
     // Dynamic scaling state
     std::vector<uint32_t> load_history_;
@@ -586,12 +596,19 @@ private:
     ) const;
     
     /**
-     * @brief Update Q-learning table
+     * @brief Update tropical selection scores (replaces Q-learning)
+     * 
+     * Uses tropical update: score = max(score, new_score)
+     * 
+     * @param state Current system state
+     * @param action Selected expert
+     * @param performance_score Performance metric (fixed-point, higher = better)
+     * @param next_state Next system state
      */
-    void update_q_learning(
+    void update_tropical_scores(
         const std::vector<int32_t>& state,
         size_t action,
-        double reward,
+        int32_t performance_score,
         const std::vector<int32_t>& next_state
     );
     
@@ -610,7 +627,12 @@ private:
     /**
      * @brief Compute energy cost for expert count
      */
-    double compute_energy_cost(size_t expert_count) const;
+    /**
+     * @brief Compute energy cost using fixed-point arithmetic (scale 1000 = 1.0)
+     * @param expert_count Number of experts
+     * @return Energy cost in fixed-point (pJ per operation)
+     */
+    int32_t compute_energy_cost_fixed(size_t expert_count) const;
     
     /**
      * @brief Estimate latency for expert count
@@ -630,7 +652,11 @@ private:
     /**
      * @brief Compute priority fairness metrics
      */
-    double compute_priority_fairness() const;
+    /**
+     * @brief Compute priority fairness as fixed-point (1000 = 1.0 = perfect fairness)
+     * @return Jain's fairness index in fixed-point format
+     */
+    int32_t compute_priority_fairness_fixed() const;
     
     /**
      * @brief Reserve experts for high priority

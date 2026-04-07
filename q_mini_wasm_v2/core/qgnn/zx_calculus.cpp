@@ -69,8 +69,10 @@ void ZXDiagram::apply_hadamard(size_t node_id) {
         node.type = ZXNode::Type::Z;
     }
     
-    // Add phase adjustment for GF(3) compliance
-    node.phase *= std::exp(std::complex<double>(0, M_PI/4));
+    // Add phase adjustment for GF(3) compliance using fixed-point
+    // e^(i*pi/4) in fixed-point: real = cos(pi/4) ≈ 707, imag = sin(pi/4) ≈ 707
+    FixedComplex phase_adjustment(707, 707);
+    node.phase_fixed = node.phase_fixed * phase_adjustment;
 }
 
 void ZXDiagram::apply_phase_gate(size_t node_id, const std::complex<double>& phase) {
@@ -82,6 +84,20 @@ void ZXDiagram::apply_phase_gate(size_t node_id, const std::complex<double>& pha
     if (node.type == ZXNode::Type::Z) {
         node.phase *= phase;
     }
+}
+
+void ZXDiagram::apply_phase_gate_fixed(size_t node_id, const FixedComplex& phase_fixed) {
+    if (node_id >= nodes.size()) {
+        throw std::out_of_range("Node ID out of range");
+    }
+    
+    auto& node = nodes[node_id];
+    // Fixed-point phase: convert (real, imag) in scale 1000 to complex
+    // For GF(3) compliance, we normalize to ternary phases
+    double real = static_cast<double>(phase_real) / 1000.0;
+    double imag = static_cast<double>(phase_imag) / 1000.0;
+    std::complex<double> phase(real, imag);
+    node.phase *= phase;
 }
 
 void ZXDiagram::apply_cnot(size_t control, size_t target) {
@@ -221,12 +237,17 @@ std::vector<size_t> ZXDiagram::get_boundary_nodes() const {
 
 // ZXCalculusOptimizer Implementation
 ZXCalculusOptimizer::ZXCalculusOptimizer()
-    : optimization_threshold(0.1), max_iterations(1000), enable_parallel_optimization(false), original_gate_count_(0) {
+    : optimization_threshold(0.1), max_iterations(1000), enable_parallel_optimization(false), original_gate_count_(0), optimization_threshold_fixed(100) {
     current_diagram = std::make_unique<ZXDiagram>(1, 1);
 }
 
 ZXCalculusOptimizer::ZXCalculusOptimizer(double threshold, size_t max_iter)
-    : optimization_threshold(threshold), max_iterations(max_iter), enable_parallel_optimization(false), original_gate_count_(0) {
+    : optimization_threshold(threshold), max_iterations(max_iter), enable_parallel_optimization(false), original_gate_count_(0), optimization_threshold_fixed(100) {
+    current_diagram = std::make_unique<ZXDiagram>(1, 1);
+}
+
+ZXCalculusOptimizer::ZXCalculusOptimizer(int32_t threshold_fixed, size_t max_iter)
+    : optimization_threshold(0.1), max_iterations(max_iter), enable_parallel_optimization(false), original_gate_count_(0), optimization_threshold_fixed(threshold_fixed) {
     current_diagram = std::make_unique<ZXDiagram>(1, 1);
 }
 

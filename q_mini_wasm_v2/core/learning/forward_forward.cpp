@@ -341,6 +341,127 @@ ternary::Trit ForwardForwardLearner::clip_to_ternary(int value) {
     return static_cast<ternary::Trit>(value);
 }
 
+// ============================================================================
+// Serialization
+// ============================================================================
+
+std::vector<uint8_t> ForwardForwardLearner::serialize_weights() const {
+    std::vector<uint8_t> data;
+    
+    // Header: num_layers (1 byte)
+    data.push_back(static_cast<uint8_t>(config_.num_layers));
+    
+    // For each layer: [output_size][input_size][weights...][biases...]
+    for (size_t layer = 0; layer < config_.num_layers; ++layer) {
+        const auto& weights = layer_weights_[layer];
+        const auto& biases = layer_biases_[layer];
+        
+        if (weights.empty()) continue;
+        
+        size_t output_size = weights.size();
+        size_t input_size = weights[0].size();
+        
+        // Layer dimensions (2 bytes each, little-endian)
+        data.push_back(static_cast<uint8_t>(output_size & 0xFF));
+        data.push_back(static_cast<uint8_t>((output_size >> 8) & 0xFF));
+        data.push_back(static_cast<uint8_t>(input_size & 0xFF));
+        data.push_back(static_cast<uint8_t>((input_size >> 8) & 0xFF));
+        
+        // Weights: each stored as int8_t {-1, 0, 1}
+        for (const auto& row : weights) {
+            for (const auto& w : row) {
+                data.push_back(static_cast<int8_t>(w));
+            }
+        }
+        
+        // Biases: each stored as int8_t {-1, 0, 1}
+        for (const auto& b : biases) {
+            data.push_back(static_cast<int8_t>(b));
+        }
+    }
+    
+    return data;
+}
+
+bool ForwardForwardLearner::deserialize_weights(const std::vector<uint8_t>& data) {
+    if (data.empty()) return false;
+    
+    size_t pos = 0;
+    
+    // Read num_layers
+    if (pos >= data.size()) return false;
+    uint8_t num_layers = data[pos++];
+    
+    if (num_layers != config_.num_layers) {
+        // Layer count mismatch - still try to load if compatible
+        if (num_layers > config_.num_layers) {
+            return false; // Can't load more layers than configured
+        }
+    }
+    
+    // Resize weight structures
+    layer_weights_.resize(config_.num_layers);
+    layer_biases_.resize(config_.num_layers);
+    
+    for (size_t layer = 0; layer < num_layers; ++layer) {
+        // Read dimensions
+        if (pos + 4 > data.size()) return false;
+        
+        uint16_t output_size = data[pos] | (data[pos + 1] << 8);
+        uint16_t input_size = data[pos + 2] | (data[pos + 3] << 8);
+        pos += 4;
+        
+        // Validate dimensions match config
+        if (output_size != config_.neurons_per_layer) {
+            return false;
+        }
+        
+        // Resize weights and biases for this layer
+        layer_weights_[layer].resize(output_size, std::vector<ternary::Trit>(input_size));
+        layer_biases_[layer].resize(output_size);
+        
+        // Read weights
+        size_t num_weights = output_size * input_size;
+        if (pos + num_weights > data.size()) return false;
+        
+        for (size_t o = 0; o < output_size; ++o) {
+            for (size_t i = 0; i < input_size; ++i) {
+                int8_t val = static_cast<int8_t>(data[pos++]);
+                // Validate ternary value
+                if (val < -1 || val > 1) val = 0;
+                layer_weights_[layer][o][i] = static_cast<ternary::Trit>(val);
+            }
+        }
+        
+        // Read biases
+        if (pos + output_size > data.size()) return false;
+        
+        for (size_t o = 0; o < output_size; ++o) {
+            int8_t val = static_cast<int8_t>(data[pos++]);
+            // Validate ternary value
+            if (val < -1 || val > 1) val = 0;
+            layer_biases_[layer][o] = static_cast<ternary::Trit>(val);
+        }
+    }
+    
+    return true;
+}
+
+size_t ForwardForwardLearner::parameter_count() const {
+    size_t count = 0;
+    
+    for (size_t layer = 0; layer < config_.num_layers; ++layer) {
+        // Weights: output_size * input_size
+        if (!layer_weights_[layer].empty()) {
+            count += layer_weights_[layer].size() * layer_weights_[layer][0].size();
+        }
+        // Biases: output_size
+        count += layer_biases_[layer].size();
+    }
+    
+    return count;
+}
+
 std::unique_ptr<ForwardForwardLearner> create_ff_learner(const FFConfig& config) {
     return std::make_unique<ForwardForwardLearner>(config);
 }

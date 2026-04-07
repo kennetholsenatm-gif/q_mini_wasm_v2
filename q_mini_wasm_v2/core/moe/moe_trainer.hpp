@@ -253,7 +253,14 @@ private:
     
     void UpdateMetrics(const std::vector<MoETrainingMetrics>& batch_results);
     
-    float ComputeExpertDiversity() const;
+    /**
+     * @brief Compute expert diversity using tropical (max-plus) arithmetic
+     * @return Diversity score as fixed-point integer (1000 = 1.0, higher = more diverse)
+     * 
+     * Uses GF(3) compliant tropical inner product instead of floating point cosine similarity.
+     * Returns fixed-point representation to avoid float return type.
+     */
+    int32_t ComputeExpertDiversity() const;
 };
 
 /**

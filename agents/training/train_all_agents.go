@@ -11,100 +11,102 @@ import (
 
 /**
  * Unified Agent Training Framework for q_mini_wasm_v2
- * 
+ *
  * Trains all agents to production status using D:\ drive storage
  * with Flash-CIM integration.
  */
 
 // AgentConfig represents configuration for a single agent
 type AgentConfig struct {
-	Name           string   `json:"name"`
-	Type           string   `json:"type"`
-	Epochs         int      `json:"epochs"`
-	BatchSize      int      `json:"batch_size"`
-	LearningRate   float64  `json:"learning_rate"`
-	TargetAccuracy float64  `json:"target_accuracy"`
-	SupportedLangs []string `json:"supported_languages"`
+	Name                string   `json:"name"`
+	Type                string   `json:"type"`
+	Epochs              int      `json:"epochs"`
+	BatchSize           int      `json:"batch_size"`
+	LearningRateFixed   int64    `json:"learning_rate"`   // Fixed-point: 10000 = 1.0
+	TargetAccuracyFixed int64    `json:"target_accuracy"` // Fixed-point: 1000 = 1.0
+	SupportedLangs      []string `json:"supported_languages"`
 }
 
 // TrainingSummary represents overall training summary
 type TrainingSummary struct {
-	StartTime       string                   `json:"start_time"`
-	EndTime         string                   `json:"end_time"`
-	TotalAgents     int                      `json:"total_agents"`
+	StartTime        string                  `json:"start_time"`
+	EndTime          string                  `json:"end_time"`
+	TotalAgents      int                     `json:"total_agents"`
 	SuccessfulAgents int                     `json:"successful_agents"`
-	FailedAgents    int                      `json:"failed_agents"`
-	Agents          map[string]*AgentResult  `json:"agents"`
+	FailedAgents     int                     `json:"failed_agents"`
+	Agents           map[string]*AgentResult `json:"agents"`
 }
 
 // AgentResult represents training result for a single agent
 type AgentResult struct {
-	Name           string                 `json:"name"`
-	Success        bool                   `json:"success"`
-	FinalLoss      float64                `json:"final_loss"`
-	FinalAccuracy  float64                `json:"final_accuracy"`
-	Epochs         int                    `json:"epochs"`
-	TotalTokens    int                    `json:"total_tokens"`
-	Duration       float64                `json:"duration_seconds"`
-	Message        string                 `json:"message"`
+	Name               string `json:"name"`
+	SuccessInt         int8   `json:"success"`        // 0/1 instead of bool
+	FinalLossFixed     int64  `json:"final_loss"`     // Fixed-point: 10000 = 1.0
+	FinalAccuracyFixed int64  `json:"final_accuracy"` // Fixed-point: 1000 = 1.0
+	Epochs             int    `json:"epochs"`
+	TotalTokens        int    `json:"total_tokens"`
+	DurationFixed      int64  `json:"duration_seconds"` // Fixed-point: 1000 = 1.0
+	Message            string `json:"message"`
 }
 
 // GetProductionAgentConfigs returns production configurations for all agents
 func GetProductionAgentConfigs() []*AgentConfig {
 	return []*AgentConfig{
 		{
-			Name:           "AnalysisAgent",
-			Type:           "code_analysis",
-			Epochs:         100,
-			BatchSize:      64,
-			LearningRate:   0.005,
-			TargetAccuracy: 0.95,
-			SupportedLangs: []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
+			Name:                "AnalysisAgent",
+			Type:                "code_analysis",
+			Epochs:              100,
+			BatchSize:           64,
+			LearningRateFixed:   50,  // 0.005 in fixed-point (10000 = 1.0)
+			TargetAccuracyFixed: 950, // 0.95 in fixed-point (1000 = 1.0)
+			SupportedLangs:      []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
 		},
 		{
-			Name:           "CodeAgent",
-			Type:           "code_generation",
-			Epochs:         100,
-			BatchSize:      64,
-			LearningRate:   0.005,
-			TargetAccuracy: 0.95,
-			SupportedLangs: []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
+			Name:                "CodeAgent",
+			Type:                "code_generation",
+			Epochs:              100,
+			BatchSize:           64,
+			LearningRateFixed:   50,  // 0.005 in fixed-point
+			TargetAccuracyFixed: 950, // 0.95 in fixed-point
+			SupportedLangs:      []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
 		},
 		{
-			Name:           "TestAgent",
-			Type:           "test_generation",
-			Epochs:         100,
-			BatchSize:      64,
-			LearningRate:   0.005,
-			TargetAccuracy: 0.98,
-			SupportedLangs: []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
+			Name:                "TestAgent",
+			Type:                "test_generation",
+			Epochs:              100,
+			BatchSize:           64,
+			LearningRateFixed:   50,  // 0.005 in fixed-point
+			TargetAccuracyFixed: 980, // 0.98 in fixed-point
+			SupportedLangs:      []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
 		},
 		{
-			Name:           "DocumentationAgent",
-			Type:           "documentation",
-			Epochs:         80,
-			BatchSize:      32,
-			LearningRate:   0.01,
-			TargetAccuracy: 0.90,
-			SupportedLangs: []string{"Markdown", "GoDoc", "JSDoc", "Python", "C++"},
+			Name:                "DocumentationAgent",
+			Type:                "documentation",
+			Epochs:              80,
+			BatchSize:           32,
+			LearningRateFixed:   100, // 0.01 in fixed-point
+			TargetAccuracyFixed: 900, // 0.90 in fixed-point
+			SupportedLangs:      []string{"Markdown", "GoDoc", "JSDoc", "Python", "C++"},
 		},
 		{
-			Name:           "ResearchAgent",
-			Type:           "research",
-			Epochs:         90,
-			BatchSize:      48,
-			LearningRate:   0.008,
-			TargetAccuracy: 0.92,
-			SupportedLangs: []string{"English", "Technical", "Academic"},
+			Name:                "ResearchAgent",
+			Type:                "research",
+			Epochs:              90,
+			BatchSize:           48,
+			LearningRateFixed:   80,  // 0.008 in fixed-point
+			TargetAccuracyFixed: 920, // 0.92 in fixed-point
+			SupportedLangs:      []string{"English", "Technical", "Academic"},
 		},
 		{
-			Name:           "CleanupAgent",
-			Type:           "code_cleanup",
-			Epochs:         80,
-			BatchSize:      64,
-			LearningRate:   0.005,
-			TargetAccuracy: 0.95,
-			SupportedLangs: []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
+			Name:                "CleanupAgent",
+			Type:                "code_cleanup",
+			Epochs:              80,
+			BatchSize:           64,
+			LearningRateFixed:   50,  // 0.005 in fixed-point
+			TargetAccuracyFixed: 950, // 0.95 in fixed-point
+			LearningRate:        0.005,
+			TargetAccuracy:      0.95,
+			SupportedLangs:      []string{"C++", "Go", "R", "Python", "JavaScript", "TypeScript", "Java", "C#"},
 		},
 		{
 			Name:           "KanbanReviewFixAgent",
@@ -170,10 +172,10 @@ func TrainAgent(config *AgentConfig, storagePath string) *AgentResult {
 
 		// Save epoch metrics
 		epochData := map[string]interface{}{
-			"epoch":         epoch,
-			"loss":          loss,
-			"accuracy":      accuracy,
-			"tokens":        tokensGenerated,
+			"epoch":          epoch,
+			"loss":           loss,
+			"accuracy":       accuracy,
+			"tokens":         tokensGenerated,
 			"tokens_per_sec": tokensPerSecond,
 		}
 		epochFile := filepath.Join(agentDir, "metrics", fmt.Sprintf("epoch_%d.json", epoch))
@@ -207,11 +209,11 @@ func TrainAgent(config *AgentConfig, storagePath string) *AgentResult {
 // TrainAllAgents trains all agents to production status
 func TrainAllAgents() *TrainingSummary {
 	summary := &TrainingSummary{
-		StartTime:       time.Now().Format(time.RFC3339),
-		TotalAgents:     0,
+		StartTime:        time.Now().Format(time.RFC3339),
+		TotalAgents:      0,
 		SuccessfulAgents: 0,
-		FailedAgents:    0,
-		Agents:          make(map[string]*AgentResult),
+		FailedAgents:     0,
+		Agents:           make(map[string]*AgentResult),
 	}
 
 	storagePath := "D:\\agents\\production"

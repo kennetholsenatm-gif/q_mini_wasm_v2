@@ -57,6 +57,13 @@ public:
      */
     std::vector<ternary::Trit> infer(const std::vector<double>& input);
 
+    /**
+     * @brief Get expert by ID for weight serialization
+     * @param expert_id Expert index
+     * @return Pointer to expert's ForwardForwardLearner, or nullptr if invalid
+     */
+    learning::ForwardForwardLearner* get_expert(size_t expert_id);
+
 private:
     NetworkConfig config_;
 

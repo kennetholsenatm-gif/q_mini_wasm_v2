@@ -19,23 +19,23 @@ class HouseholderSynthesizer {
 public:
     struct SynthesisConfig {
         size_t max_qutrits;
-        double target_precision;
+        int32_t target_precision_fixed;  // Fixed-point: 1000 = 1.0 (was double)
         size_t max_reflection_depth;
-        bool enable_parallel_synthesis;
+        int8_t enable_parallel_synthesis;  // 0/1 instead of bool
     };
 
     struct SynthesisResult {
         std::vector<stabilizer::SynthesizedGate> gate_sequence;
-        double synthesis_time_ms;
+        int32_t synthesis_time_ms_fixed;  // Fixed-point: 1000 = 1.0 ms (was double)
         size_t gate_count;
-        double approximation_error;
-        bool meets_latency_target;
+        int32_t approximation_error_fixed;  // Fixed-point: 1000 = 1.0 (was double)
+        int8_t meets_latency_target;  // 0/1 instead of bool
     };
 
     struct HouseholderReflection {
         std::vector<int8_t> reflection_vector;
         size_t target_qutrit;
-        double phase_angle;
+        int32_t phase_angle_fixed;  // Fixed-point: 1000 = 1.0 rad (was double)
     };
 
     explicit HouseholderSynthesizer(const SynthesisConfig& config);
@@ -64,7 +64,12 @@ public:
         const SynthesisResult& result
     );
 
-    double estimate_synthesis_time(size_t num_qutrits) const;
+    /**
+     * @brief Estimate synthesis time in fixed-point
+     * @param num_qutrits Number of qutrits
+     * @return Estimated time in fixed-point (1000 = 1.0 ms)
+     */
+    int32_t estimate_synthesis_time_fixed(size_t num_qutrits) const;
     const SynthesisConfig& config() const { return config_; }
 
 private:
@@ -80,7 +85,11 @@ private:
         size_t qutrit_offset
     );
 
-    double compute_reflection_error(
+    /**
+     * @brief Compute reflection error in fixed-point
+     * @return Error metric in fixed-point (scale 1000)
+     */
+    int32_t compute_reflection_error_fixed(
         const std::vector<int8_t>& achieved,
         const std::vector<int8_t>& target
     );

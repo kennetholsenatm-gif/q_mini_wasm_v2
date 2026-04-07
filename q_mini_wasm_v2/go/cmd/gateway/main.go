@@ -70,7 +70,7 @@ func main() {
 		},
 		ProjectRoot:   config.ProjectRoot,
 		AutoIndex:     true,
-		EmbeddingType: "placeholder", // Can be changed to "tfidf" or "composite"
+		EmbeddingType: "tfidf", // Uses real TF-IDF embeddings (was "placeholder")
 	}
 
 	ragService, err := rag.NewService(ragConfig)

@@ -406,23 +406,69 @@ void MoETrainer::UpdateMetrics(const std::vector<MoETrainingMetrics>& batch_metr
     current_metrics_.expert_request_counts = batch_metrics.back().expert_request_counts;
 }
 
-float MoETrainer::ComputeExpertDiversity() const {
-    // Compute pairwise similarity between expert specializations
+int32_t MoETrainer::ComputeExpertDiversity() const {
+    // Compute pairwise dissimilarity between expert specializations using GF(3) arithmetic
     // Lower similarity = higher diversity = better
+    // 
+    // Uses tropical (max-plus) inner product instead of floating point dot product
+    // to maintain constitutional GF(3) purity
     
-    // Placeholder: return diversity score based on utilization variance
-    auto stats = router_.GetLoadStats();
-    float mean_util = 1.0f / router_.GetConfig().total_experts;
+    const auto& utilization = current_metrics_.expert_utilization;
+    const auto& request_counts = current_metrics_.expert_request_counts;
+    const auto& goodness_deltas = current_metrics_.expert_goodness_deltas;
     
-    float variance = 0.0f;
-    for (float util : stats.utilization_rates) {
-        variance += (util - mean_util) * (util - mean_util);
+    size_t num_experts = router_.GetConfig().total_experts;
+    if (num_experts < 2) return 1000;  // Single expert is trivially diverse (max)
+    
+    // Build expert specialization vectors
+    // Each expert is represented by: [utilization, request_count, goodness_delta]
+    // All values scaled to ternary-compatible integers (fixed-point: 1000 = 1.0)
+    std::vector<std::vector<int32_t>> expert_vectors(num_experts);
+    for (size_t i = 0; i < num_experts; ++i) {
+        // Convert to fixed-point integers (scale by 1000)
+        int32_t util = (i < utilization.size()) ? static_cast<int32_t>(utilization[i] * 1000.0f) : 0;
+        int32_t req = (i < request_counts.size()) ? static_cast<int32_t>(request_counts[i]) : 0;
+        int32_t delta = (i < goodness_deltas.size()) ? static_cast<int32_t>(goodness_deltas[i] * 1000.0f) : 0;
+        
+        expert_vectors[i] = {util, req, delta};
     }
     
-    variance /= router_.GetConfig().total_experts;
+    // Compute pairwise tropical dissimilarity
+    // Uses max-plus algebra: dissimilarity = max(|a-b|) across all dimensions
+    // This is GF(3) compliant - uses only integer subtraction and max operations
+    int32_t total_dissimilarity = 0;
+    size_t pair_count = 0;
     
-    // Higher variance = lower diversity (experts not evenly used)
-    return 1.0f - (variance * router_.GetConfig().total_experts);
+    for (size_t i = 0; i < num_experts; ++i) {
+        for (size_t j = i + 1; j < num_experts; ++j) {
+            const auto& v1 = expert_vectors[i];
+            const auto& v2 = expert_vectors[j];
+            
+            // Tropical dissimilarity: max of absolute differences
+            int32_t max_diff = 0;
+            for (size_t k = 0; k < v1.size(); ++k) {
+                int32_t diff = v1[k] - v2[k];
+                if (diff < 0) diff = -diff;  // Absolute value
+                if (diff > max_diff) max_diff = diff;
+            }
+            
+            total_dissimilarity += max_diff;
+            pair_count++;
+        }
+    }
+    
+    // Return fixed-point diversity score (1000 = 1.0 = maximum diversity)
+    // Max possible dissimilarity per pair is ~2000 (scaled values)
+    int32_t max_possible = 2000;  // Maximum expected dissimilarity
+    int32_t diversity = 0;
+    if (pair_count > 0) {
+        int32_t avg_dissimilarity = total_dissimilarity / static_cast<int32_t>(pair_count);
+        // Scale to 0-1000 range
+        diversity = (avg_dissimilarity * 1000) / max_possible;
+        if (diversity > 1000) diversity = 1000;
+    }
+    
+    return diversity;
 }
 
 // ============================================================================

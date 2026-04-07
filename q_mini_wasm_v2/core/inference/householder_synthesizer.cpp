@@ -16,7 +16,7 @@ HouseholderSynthesizer::HouseholderReflection HouseholderSynthesizer::compute_re
 ) {
     HouseholderReflection reflection;
     reflection.target_qutrit = 0;
-    reflection.phase_angle = 0.0;
+    reflection.phase_angle_fixed = 0;  // Fixed-point: 0 radians
     
     size_t dim = std::min(current.size(), target.size());
     reflection.reflection_vector.resize(dim);
@@ -70,8 +70,8 @@ HouseholderSynthesizer::SynthesisResult HouseholderSynthesizer::synthesize_targe
     auto start_time = std::chrono::high_resolution_clock::now();
     
     SynthesisResult result;
-    result.approximation_error = 1.0;
-    result.meets_latency_target = true;
+    result.approximation_error_fixed = 1000;  // Fixed-point: 1.0 = 1000
+    result.meets_latency_target = 1;  // true = 1
     
     std::vector<int8_t> current_state(config_.max_qutrits, 0);
     
@@ -87,9 +87,11 @@ HouseholderSynthesizer::SynthesisResult HouseholderSynthesizer::synthesize_targe
             current_state[i] = (current_state[i] + reflection.reflection_vector[i]) % 3;
         }
         
-        result.approximation_error = compute_reflection_error(current_state, target_state);
+        result.approximation_error_fixed = static_cast<int32_t>(
+            compute_reflection_error(current_state, target_state) * 1000);
         
-        if (result.approximation_error <= config_.target_precision) {
+        // Fixed-point comparison: 1000 = 1.0
+        if (result.approximation_error_fixed <= config_.target_precision_fixed) {
             break;
         }
     }
@@ -102,9 +104,9 @@ HouseholderSynthesizer::SynthesisResult HouseholderSynthesizer::synthesize_targe
     
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-    result.synthesis_time_ms = duration.count() / 1000.0;
+    result.synthesis_time_ms_fixed = static_cast<int32_t>(duration.count());
     
-    result.meets_latency_target = (result.synthesis_time_ms < 1.0);
+    result.meets_latency_target = (result.synthesis_time_ms_fixed < 1000) ? 1 : 0;
     
     return result;
 }
@@ -117,9 +119,9 @@ HouseholderSynthesizer::SynthesisResult HouseholderSynthesizer::synthesize_unita
     
     if (target_matrix.empty()) {
         result.gate_count = 0;
-        result.synthesis_time_ms = 0.0;
-        result.approximation_error = 0.0;
-        result.meets_latency_target = true;
+        result.synthesis_time_ms_fixed = 0;
+        result.approximation_error_fixed = 0;
+        result.meets_latency_target = 1;
         return result;
     }
     
@@ -141,10 +143,10 @@ std::vector<HouseholderSynthesizer::HouseholderReflection> HouseholderSynthesize
     while (true) {
         auto reflection = compute_reflection(current_state, target_state);
         
-        bool all_zero = true;
+        int8_t all_zero = 1;
         for (auto val : reflection.reflection_vector) {
             if (val != 0) {
-                all_zero = false;
+                all_zero = 0;
                 break;
             }
         }
@@ -180,8 +182,8 @@ void HouseholderSynthesizer::apply_synthesis_result(
     stabilizer::CliffordSynthesizer::apply_sequence(tableau, result.gate_sequence);
 }
 
-double HouseholderSynthesizer::estimate_synthesis_time(size_t num_qutrits) const {
-    return static_cast<double>(num_qutrits * num_qutrits) * 0.001;
+int32_t HouseholderSynthesizer::estimate_synthesis_time_fixed(size_t num_qutrits) const {
+    return static_cast<int32_t>(num_qutrits * num_qutrits);
 }
 
 std::unique_ptr<HouseholderSynthesizer> create_householder_synthesizer(

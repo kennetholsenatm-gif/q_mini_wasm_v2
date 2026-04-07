@@ -1,3 +1,17 @@
+// ============================================================================
+// CONSTITUTIONAL NOTICE: OPTIONAL PERIPHERAL COMPONENT
+// ============================================================================
+//
+// This file contains an HTTP server implementation which VIOLATES the
+// project architecture constitution (HTTP_SERVER_CONTAMINATION).
+//
+// STATUS: Isolated to agents/ directory - NOT part of core GF(3) system
+// PURPOSE: Web UI for development/monitoring only
+// PRODUCTION: Should be disabled or moved to separate repository
+//
+// Core GF(3) computation modules MUST NOT import or depend on this package.
+// ============================================================================
+
 package main
 
 import (
@@ -21,22 +35,22 @@ type TrainingPipelineServer struct {
 
 // Client represents a connected WUI client
 type Client struct {
-	conn     *websocket.Conn
-	send     chan []byte
-	server   *TrainingPipelineServer
+	conn   *websocket.Conn
+	send   chan []byte
+	server *TrainingPipelineServer
 }
 
 // PipelineState tracks the actual training state
 type PipelineState struct {
-	IsRunning        bool    `json:"is_running"`
-	State            string  `json:"state"`
-	CurrentEpoch     uint64  `json:"current_epoch"`
-	CurrentBatch     uint64  `json:"current_batch"`
-	TrainingProgress float32 `json:"training_progress"`
-	NumExperts       int     `json:"num_experts"`
-	GraphNodes       int     `json:"graph_nodes"`
-	GraphEdges       int     `json:"graph_edges"`
-	EnableBettiGuidance bool `json:"enable_betti_guidance"`
+	IsRunning           bool    `json:"is_running"`
+	State               string  `json:"state"`
+	CurrentEpoch        uint64  `json:"current_epoch"`
+	CurrentBatch        uint64  `json:"current_batch"`
+	TrainingProgress    float32 `json:"training_progress"`
+	NumExperts          int     `json:"num_experts"`
+	GraphNodes          int     `json:"graph_nodes"`
+	GraphEdges          int     `json:"graph_edges"`
+	EnableBettiGuidance bool    `json:"enable_betti_guidance"`
 }
 
 // Message types for WebSocket protocol
@@ -155,13 +169,13 @@ func (s *TrainingPipelineServer) handleMessage(client *Client, msg *WUIMessage) 
 
 	case "init_training_pipeline":
 		var params struct {
-			AcquisitionThreads      int  `json:"acquisition_threads"`
-			NumExperts             int  `json:"num_experts"`
-			GraphNodes             int  `json:"graph_nodes"`
-			EnableBettiGuidance    bool `json:"enable_betti_guidance"`
-			EnableKnowledgeEngine  bool `json:"enable_knowledge_engine"`
-			Epochs                 int  `json:"epochs"`
-			BatchSize              int  `json:"batch_size"`
+			AcquisitionThreads    int  `json:"acquisition_threads"`
+			NumExperts            int  `json:"num_experts"`
+			GraphNodes            int  `json:"graph_nodes"`
+			EnableBettiGuidance   bool `json:"enable_betti_guidance"`
+			EnableKnowledgeEngine bool `json:"enable_knowledge_engine"`
+			Epochs                int  `json:"epochs"`
+			BatchSize             int  `json:"batch_size"`
 		}
 		json.Unmarshal(msg.Data, &params)
 
@@ -224,28 +238,28 @@ func (s *TrainingPipelineServer) handleMessage(client *Client, msg *WUIMessage) 
 
 	case "apply_betti_guidance":
 		response, _ := json.Marshal(map[string]interface{}{
-			"type":               "betti_guidance_applied",
-			"guidance_applied":   true,
-			"topology_changes":   3,
-			"routing_quality":    0.88,
+			"type":             "betti_guidance_applied",
+			"guidance_applied": true,
+			"topology_changes": 3,
+			"routing_quality":  0.88,
 		})
 		s.broadcast(response)
 
 	case "compute_betti":
 		response, _ := json.Marshal(map[string]interface{}{
-			"type":          "betti_result",
-			"beta_0":        1,
-			"beta_1":        14,
-			"beta_2":        0,
-			"euler_char":    -13,
+			"type":       "betti_result",
+			"beta_0":     1,
+			"beta_1":     14,
+			"beta_2":     0,
+			"euler_char": -13,
 		})
 		client.send <- response
 
 	case "quantum_operation":
 		// Handle quantum operations
 		response, _ := json.Marshal(map[string]interface{}{
-			"type":                  "quantum_operation_complete",
-			"operation_complete":    true,
+			"type":               "quantum_operation_complete",
+			"operation_complete": true,
 		})
 		client.send <- response
 
@@ -274,12 +288,12 @@ func (s *TrainingPipelineServer) sendState(client *Client) {
 	s.mu.RUnlock()
 
 	data, _ := json.Marshal(map[string]interface{}{
-		"type":               "state_update",
-		"pipeline_state":     state.State,
-		"is_running":         state.IsRunning,
-		"current_epoch":      state.CurrentEpoch,
-		"current_batch":      state.CurrentBatch,
-		"training_progress":  state.TrainingProgress,
+		"type":              "state_update",
+		"pipeline_state":    state.State,
+		"is_running":        state.IsRunning,
+		"current_epoch":     state.CurrentEpoch,
+		"current_batch":     state.CurrentBatch,
+		"training_progress": state.TrainingProgress,
 	})
 	client.send <- data
 }
@@ -299,10 +313,10 @@ func (s *TrainingPipelineServer) sendTrainingMetrics(client *Client) {
 				"total_train_calls": pipeline.CurrentBatch * 32,
 			},
 			"moe_metrics": map[string]interface{}{
-				"load_balance_score":    0.85,
+				"load_balance_score":     0.85,
 				"avg_routing_latency_ms": 2.3,
-				"expert_utilization":    make([]float32, pipeline.NumExperts),
-				"expert_deltas":         make([]int32, pipeline.NumExperts),
+				"expert_utilization":     make([]float32, pipeline.NumExperts),
+				"expert_deltas":          make([]int32, pipeline.NumExperts),
 			},
 			"betti_numbers": map[string]interface{}{
 				"beta_0":               1,
@@ -321,11 +335,11 @@ func (s *TrainingPipelineServer) sendTrainingMetrics(client *Client) {
 				"api_failures":    23,
 				"queue_depth":     156,
 			},
-			"current_epoch":      pipeline.CurrentEpoch,
-			"current_batch":      pipeline.CurrentBatch,
-			"training_progress":  pipeline.TrainingProgress,
-			"is_running":         pipeline.IsRunning,
-			"status_message":     pipeline.State,
+			"current_epoch":     pipeline.CurrentEpoch,
+			"current_batch":     pipeline.CurrentBatch,
+			"training_progress": pipeline.TrainingProgress,
+			"is_running":        pipeline.IsRunning,
+			"status_message":    pipeline.State,
 		},
 	}
 	data, _ := json.Marshal(metrics)

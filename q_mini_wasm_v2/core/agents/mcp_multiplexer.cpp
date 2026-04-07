@@ -1,6 +1,7 @@
 #include "mcp_multiplexer.hpp"
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 
 namespace q_mini_wasm_v2::core::agents {
 
@@ -45,8 +46,19 @@ std::span<const uint8_t> McpMultiplexer::dispatch(std::string_view method, std::
         return it->second(params);
     }
     
-    // Return empty response for unimplemented methods
-    return {};
+    // Log unimplemented method call for debugging
+    std::cerr << "[MCP] Unimplemented method called: " << method << std::endl;
+    
+    // Return error response indicating method not implemented
+    // Format: 1 byte status (0xFF = not implemented) + method name
+    static thread_local std::vector<uint8_t> error_response;
+    error_response.clear();
+    error_response.push_back(0xFF);  // Error status
+    error_response.insert(error_response.end(), 
+                          reinterpret_cast<const uint8_t*>(method.data()),
+                          reinterpret_cast<const uint8_t*>(method.data()) + method.size());
+    
+    return std::span<const uint8_t>(error_response.data(), error_response.size());
 }
 
 uint32_t McpMultiplexer::get_capabilities() const noexcept

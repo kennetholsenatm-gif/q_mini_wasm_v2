@@ -180,7 +180,7 @@ int main(int argc, char* argv[]) {
             // Save trained model weights to file
             std::ofstream out_file(output_path, std::ios::binary);
             if (out_file.is_open()) {
-                // Write model metadata
+                // Write model metadata header
                 out_file << "QMINI_TNN_MODEL v1.0\n";
                 out_file << "experts: " << moe_experts << "\n";
                 out_file << "top_k: " << moe_top_k << "\n";
@@ -189,15 +189,31 @@ int main(int argc, char* argv[]) {
                 out_file << "training_time_s: " << elapsed.count() << "\n";
                 out_file << "---WEIGHTS---\n";
                 
-                // Model weights would be serialized here from TNN state
-                // For now, write a placeholder checksum
-                uint32_t checksum = 0;
-                for (const auto& row : dataset) {
-                    for (const auto& trit : row) {
-                        checksum = (checksum * 31 + static_cast<int>(trit)) % 0xFFFFFFFF;
+                // Serialize actual model weights from all experts
+                // Each expert is a ForwardForwardLearner with ternary weights
+                size_t total_params = 0;
+                for (size_t expert_id = 0; expert_id < moe_experts; ++expert_id) {
+                    // Get expert weights from TNN
+                    auto& expert = tnn.get_expert(expert_id);
+                    if (expert) {
+                        auto weights_data = expert->serialize_weights();
+                        
+                        // Write expert header
+                        out_file << "EXPERT_" << expert_id << "\n";
+                        out_file << "params: " << expert->parameter_count() << "\n";
+                        out_file << "bytes: " << weights_data.size() << "\n";
+                        
+                        // Write binary weight data
+                        out_file.write(reinterpret_cast<const char*>(weights_data.data()), 
+                                     weights_data.size());
+                        out_file << "\n";
+                        
+                        total_params += expert->parameter_count();
                     }
                 }
-                out_file << "checksum: " << checksum << "\n";
+                
+                out_file << "---END---\n";
+                out_file << "total_params: " << total_params << "\n";
                 out_file.close();
                 
                 std::cout << "{\"status\": \"progress\", \"step\": \"Saved trained MoE model to " << output_path << "\"}\n";

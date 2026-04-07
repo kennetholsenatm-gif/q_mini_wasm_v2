@@ -406,8 +406,102 @@ void UnifiedMoERouter::CreateHierarchicalTopology(size_t cluster_size) {
 }
 
 // ============================================================================
-// Load Balancing
+// Load Balancing (Fixed-Point Versions)
 // ============================================================================
+
+int32_t UnifiedMoERouter::ComputeLoadBalanceLossFixed(const LoadStats& stats) {
+    if (stats.total_requests == 0) {
+        return 0;
+    }
+    
+    // Fixed-point: expected_rate = 1000 / total_experts (scale 1000)
+    int32_t expected_rate_fixed = 1000 / static_cast<int32_t>(config_.total_experts);
+    int32_t loss = 0;
+    
+    for (float rate : stats.utilization_rates) {
+        // Convert rate to fixed-point (rate is already 0-1, so scale by 1000)
+        int32_t rate_fixed = static_cast<int32_t>(rate * 1000);
+        int32_t diff = rate_fixed - expected_rate_fixed;
+        // Accumulate squared difference, divide by 1000 to prevent overflow
+        loss += (diff * diff) / 1000;
+    }
+    
+    // Apply load_balance_alpha (assume it's already in appropriate scale)
+    return loss * config_.load_balance_alpha / 1000;
+}
+
+std::vector<int32_t> UnifiedMoERouter::ApplyLoadBalancingFixed(
+    const std::vector<int32_t>& logits,
+    const LoadStats& stats
+) {
+    std::vector<int32_t> balanced = logits;
+    
+    for (size_t i = 0; i < balanced.size(); ++i) {
+        // Penalize over-utilized experts
+        // Fixed-point: expected_rate = 1000 / total_experts
+        int32_t expected_rate_fixed = 1000 / static_cast<int32_t>(config_.total_experts);
+        int32_t rate_fixed = static_cast<int32_t>(stats.utilization_rates[i] * 1000);
+        int32_t penalty = (rate_fixed - expected_rate_fixed) * 10; // 10.0f in fixed-point
+        balanced[i] -= penalty;
+    }
+    
+    return balanced;
+}
+
+std::vector<size_t> UnifiedMoERouter::LLEPRouteFixed(
+    const std::vector<int32_t>& logits,
+    size_t k
+) {
+    // Least-Loaded Expert Parallelism - fixed-point version
+    std::vector<std::pair<int32_t, size_t>> scored;
+    scored.reserve(config_.total_experts);
+    
+    for (size_t i = 0; i < config_.total_experts; ++i) {
+        // Score = logit - load_penalty (fixed-point: 0.01f = 10/1000)
+        int32_t load_penalty = static_cast<int32_t>(expert_request_counts_[i]) * 10 / 1000;
+        scored.emplace_back(logits[i] - load_penalty, i);
+    }
+    
+    std::sort(scored.begin(), scored.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first; });
+    
+    std::vector<size_t> selected;
+    selected.reserve(k);
+    
+    for (size_t i = 0; i < k && i < scored.size(); ++i) {
+        selected.push_back(scored[i].second);
+    }
+    
+    return selected;
+}
+
+std::vector<size_t> UnifiedMoERouter::SelectTopK(const std::vector<int32_t>& logits_fixed, size_t k) {
+    // Fixed-point version of SelectTopK
+    std::vector<std::pair<int32_t, size_t>> indexed;
+    indexed.reserve(logits_fixed.size());
+    
+    for (size_t i = 0; i < logits_fixed.size(); ++i) {
+        indexed.emplace_back(logits_fixed[i], i);
+    }
+    
+    // Partial sort to find top k
+    if (k < indexed.size()) {
+        std::partial_sort(indexed.begin(), indexed.begin() + k, indexed.end(),
+            [](const auto& a, const auto& b) { return a.first > b.first; });
+    } else {
+        std::sort(indexed.begin(), indexed.end(),
+            [](const auto& a, const auto& b) { return a.first > b.first; });
+        k = indexed.size();
+    }
+    
+    std::vector<size_t> result;
+    result.reserve(k);
+    for (size_t i = 0; i < k; ++i) {
+        result.push_back(indexed[i].second);
+    }
+    
+    return result;
+}
 
 float UnifiedMoERouter::ComputeLoadBalanceLoss(const LoadStats& stats) {
     if (stats.total_requests == 0) {
@@ -503,6 +597,130 @@ void UnifiedMoERouter::RebalanceLoads() {
     for (auto& count : expert_request_counts_) {
         count = count / 2;  // Decay by half
     }
+}
+
+std::vector<size_t> UnifiedMoERouter::HierarchicalSelect(
+    const std::vector<ternary::Trit>& input,
+    size_t k
+) {
+    if (clusters_.empty()) {
+        BuildClusters();
+    }
+    
+    // Level 1: Select best cluster using tropical inner product with centroids
+    std::vector<int32_t> cluster_scores(clusters_.size(), 0);
+    
+    for (size_t c = 0; c < clusters_.size(); ++c) {
+        // Compute tropical inner product between input and cluster centroid
+        int32_t score = TropicalInnerProduct(
+            std::vector<int32_t>(input.begin(), input.end()),
+            std::vector<int32_t>(clusters_[c].centroid.begin(), clusters_[c].centroid.end())
+        );
+        cluster_scores[c] = score;
+    }
+    
+    // Select top cluster
+    size_t best_cluster = 0;
+    int32_t best_score = cluster_scores[0];
+    for (size_t c = 1; c < clusters_.size(); ++c) {
+        if (cluster_scores[c] > best_score) {
+            best_score = cluster_scores[c];
+            best_cluster = c;
+        }
+    }
+    
+    // Level 2: Select top-K experts within best cluster using entanglement-aware scoring
+    const auto& cluster = clusters_[best_cluster];
+    std::vector<std::pair<float, size_t>> expert_scores;
+    
+    for (size_t expert_id : cluster.expert_ids) {
+        // Base score from tropical logits
+        int32_t base_score = 0;
+        size_t min_dim = std::min(input.size(), specializations_[expert_id].size());
+        for (size_t i = 0; i < min_dim; ++i) {
+            base_score += static_cast<int32_t>(input[i]) * 
+                         static_cast<int32_t>(specializations_[expert_id][i]);
+        }
+        
+        // Add entanglement bonus from entanglement topology
+        float entanglement_bonus = 0.0f;
+        for (const auto& edge : entanglement_edges_) {
+            if (edge.from == expert_id || edge.to == expert_id) {
+                entanglement_bonus += edge.strength * 0.1f; // Small boost from entangled neighbors
+            }
+        }
+        
+        // Performance-optimized: penalize heavily loaded experts
+        float load_penalty = static_cast<float>(expert_request_counts_[expert_id]) * 0.01f;
+        
+        float final_score = static_cast<float>(base_score) + entanglement_bonus - load_penalty;
+        expert_scores.emplace_back(final_score, expert_id);
+    }
+    
+    // Sort by score and select top-K
+    std::sort(expert_scores.begin(), expert_scores.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first; });
+    
+    std::vector<size_t> selected;
+    selected.reserve(k);
+    
+    for (size_t i = 0; i < k && i < expert_scores.size(); ++i) {
+        selected.push_back(expert_scores[i].second);
+    }
+    
+    return selected;
+}
+
+void UnifiedMoERouter::RecomputeClusterCentroids() {
+    for (auto& cluster : clusters_) {
+        // Reset centroid
+        cluster.centroid.assign(config_.specialization_dim, ternary::Trit::ZERO);
+        
+        // Sum all member specializations
+        for (size_t expert_id : cluster.expert_ids) {
+            for (size_t j = 0; j < config_.specialization_dim; ++j) {
+                cluster.centroid[j] = static_cast<ternary::Trit>(
+                    static_cast<int8_t>(cluster.centroid[j]) +
+                    static_cast<int8_t>(specializations_[expert_id][j])
+                );
+            }
+        }
+        
+        // Average by dividing by member count
+        if (!cluster.expert_ids.empty()) {
+            for (auto& val : cluster.centroid) {
+                val = static_cast<ternary::Trit>(
+                    static_cast<int8_t>(val) / static_cast<int8_t>(cluster.expert_ids.size())
+                );
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Dynamic Expert Scaling
+// ============================================================================
+
+size_t UnifiedMoERouter::AdjustExpertScale(uint32_t current_load) {
+    // Dynamic scaling based on system load (0-100)
+    const size_t MIN_EXPERTS = std::max(size_t(1), config_.active_experts / 2);
+    const size_t MAX_EXPERTS = std::min(config_.total_experts, config_.active_experts * 2);
+    
+    size_t target_experts = config_.active_experts;
+    
+    if (current_load > 80) {
+        // High load: scale up
+        target_experts = std::min(config_.active_experts + 4, MAX_EXPERTS);
+    } else if (current_load > 60) {
+        // Medium-high load: moderate scale up
+        target_experts = std::min(config_.active_experts + 2, MAX_EXPERTS);
+    } else if (current_load < 20) {
+        // Low load: scale down for efficiency
+        target_experts = std::max(config_.active_experts - 2, MIN_EXPERTS);
+    }
+    
+    config_.active_experts = target_experts;
+    return target_experts;
 }
 
 // ============================================================================

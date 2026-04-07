@@ -5,8 +5,8 @@
 
 namespace q_mini_wasm_v2::core::inference {
 
-LatencyProfiler::LatencyProfiler(double target_ms)
-    : target_ms_(target_ms), total_runs_(0) {}
+LatencyProfiler::LatencyProfiler(int32_t target_ms_fixed)
+    : target_ms_fixed_(target_ms_fixed), total_runs_(0) {}
 
 void LatencyProfiler::start_run() {
     current_checkpoints_.clear();
@@ -32,39 +32,46 @@ void LatencyProfiler::end_run() {
         now - run_start_
     ).count();
     
-    double total_ms = static_cast<double>(total_ns) / 1000000.0;
-    run_durations_ms_.push_back(total_ms);
+    // Convert to fixed-point: 1 ms = 1000 units
+    // total_ns / 1,000,000.0 = ms, then * 1000 for fixed-point
+    int32_t total_ms_fixed = static_cast<int32_t>(total_ns / 1000);
+    run_durations_ms_fixed_.push_back(total_ms_fixed);
     total_runs_++;
 }
 
 LatencyProfiler::LatencyStats LatencyProfiler::get_stats() const {
-    LatencyStats stats;
+    LatencyStats stats{};
     
-    if (run_durations_ms_.empty()) {
-        stats.total_ms = 0;
-        stats.min_ms = 0;
-        stats.max_ms = 0;
-        stats.avg_ms = 0;
-        stats.p50_ms = 0;
-        stats.p95_ms = 0;
-        stats.p99_ms = 0;
+    if (run_durations_ms_fixed_.empty()) {
+        stats.total_ms_fixed = 0;
+        stats.min_ms_fixed = 0;
+        stats.max_ms_fixed = 0;
+        stats.avg_ms_fixed = 0;
+        stats.p50_ms_fixed = 0;
+        stats.p95_ms_fixed = 0;
+        stats.p99_ms_fixed = 0;
         stats.sample_count = 0;
-        stats.meets_sub_millisecond_target = true;
+        stats.meets_sub_millisecond_target = 1;
         return stats;
     }
     
-    std::vector<double> sorted = run_durations_ms_;
+    std::vector<int32_t> sorted = run_durations_ms_fixed_;
     std::sort(sorted.begin(), sorted.end());
     
-    stats.total_ms = std::accumulate(sorted.begin(), sorted.end(), 0.0);
-    stats.min_ms = sorted.front();
-    stats.max_ms = sorted.back();
-    stats.avg_ms = stats.total_ms / sorted.size();
-    stats.p50_ms = calculate_percentile(sorted, 50.0);
-    stats.p95_ms = calculate_percentile(sorted, 95.0);
-    stats.p99_ms = calculate_percentile(sorted, 99.0);
+    // Calculate total using int64_t to prevent overflow
+    int64_t total = 0;
+    for (auto val : sorted) {
+        total += val;
+    }
+    stats.total_ms_fixed = static_cast<int32_t>(total);
+    stats.min_ms_fixed = sorted.front();
+    stats.max_ms_fixed = sorted.back();
+    stats.avg_ms_fixed = static_cast<int32_t>(total / static_cast<int64_t>(sorted.size()));
+    stats.p50_ms_fixed = calculate_percentile_fixed(sorted, 50);
+    stats.p95_ms_fixed = calculate_percentile_fixed(sorted, 95);
+    stats.p99_ms_fixed = calculate_percentile_fixed(sorted, 99);
     stats.sample_count = sorted.size();
-    stats.meets_sub_millisecond_target = (stats.p95_ms <= target_ms_);
+    stats.meets_sub_millisecond_target = (stats.p95_ms_fixed <= target_ms_fixed_) ? 1 : 0;
     
     return stats;
 }
@@ -75,31 +82,38 @@ const std::vector<LatencyProfiler::Checkpoint>& LatencyProfiler::get_last_run_ch
 
 void LatencyProfiler::reset() {
     current_checkpoints_.clear();
-    run_durations_ms_.clear();
+    run_durations_ms_fixed_.clear();
     total_runs_ = 0;
 }
 
 bool LatencyProfiler::meets_target() const {
-    if (run_durations_ms_.empty()) return true;
-    return run_durations_ms_.back() <= target_ms_;
+    if (run_durations_ms_fixed_.empty()) return true;
+    return run_durations_ms_fixed_.back() <= target_ms_fixed_;
 }
 
-double LatencyProfiler::calculate_percentile(
-    std::vector<double> sorted_values,
-    double percentile
+int32_t LatencyProfiler::calculate_percentile_fixed(
+    std::vector<int32_t> sorted_values_fixed,
+    int32_t percentile
 ) {
-    if (sorted_values.empty()) return 0.0;
+    if (sorted_values_fixed.empty()) return 0;
     
-    double index = (percentile / 100.0) * (sorted_values.size() - 1);
-    size_t lower = static_cast<size_t>(std::floor(index));
-    size_t upper = static_cast<size_t>(std::ceil(index));
+    // Calculate index: (percentile / 100) * (size - 1)
+    // Using fixed-point arithmetic
+    int64_t index_num = static_cast<int64_t>(percentile) * (sorted_values_fixed.size() - 1);
+    size_t lower = static_cast<size_t>((index_num / 100));
+    size_t upper = static_cast<size_t>((index_num + 99) / 100);  // ceil equivalent
     
-    if (lower == upper) {
-        return sorted_values[lower];
+    if (lower == upper || upper >= sorted_values_fixed.size()) {
+        return sorted_values_fixed[lower];
     }
     
-    double fraction = index - lower;
-    return sorted_values[lower] * (1.0 - fraction) + sorted_values[upper] * fraction;
+    // Linear interpolation in fixed-point
+    int64_t fraction_num = index_num - static_cast<int64_t>(lower) * 100;
+    // value = lower_val * (1 - fraction) + upper_val * fraction
+    // = lower_val + (upper_val - lower_val) * fraction
+    int64_t diff = static_cast<int64_t>(sorted_values_fixed[upper]) - sorted_values_fixed[lower];
+    int64_t interpolated = static_cast<int64_t>(sorted_values_fixed[lower]) + (diff * fraction_num) / 100;
+    return static_cast<int32_t>(interpolated);
 }
 
 } // namespace q_mini_wasm_v2::core::inference

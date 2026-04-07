@@ -19,21 +19,21 @@ public:
     struct ContextConfig {
         size_t max_context_length;
         size_t multivector_dim;
-        double manifold_tolerance;
-        bool enable_manifold_normalization;
+        int32_t manifold_tolerance_fixed;  // Fixed-point: 1000 = 1.0 (was double)
+        int8_t enable_manifold_normalization;  // 0/1 instead of bool
     };
 
     struct Multivector {
-        std::vector<double> scalar;
-        std::vector<double> vector;
-        std::vector<double> bivector;
-        double norm;
+        std::vector<int32_t> scalar_fixed;  // Fixed-point components (was double)
+        std::vector<int32_t> vector_fixed;
+        std::vector<int32_t> bivector_fixed;
+        int32_t norm_fixed;  // Fixed-point: 1000 = 1.0 (was double)
     };
 
     struct GeometricState {
         std::vector<Multivector> sequence;
         size_t current_length;
-        double total_geometric_norm;
+        int32_t total_geometric_norm_fixed;  // Fixed-point (was double)
     };
 
     explicit GeometricContextWindow(const ContextConfig& config);
@@ -51,8 +51,18 @@ public:
     );
 
     GeometricState apply_manifold_normalization(const GeometricState& state);
-    double compute_context_similarity(const GeometricState& state, size_t i, size_t j);
-    std::vector<double> extract_context_vector(const GeometricState& state, size_t position);
+    
+    /**
+     * @brief Compute context similarity in fixed-point
+     * @return Similarity score in fixed-point (scale 1000)
+     */
+    int32_t compute_context_similarity_fixed(const GeometricState& state, size_t i, size_t j);
+    
+    /**
+     * @brief Extract context vector as fixed-point values
+     * @return Fixed-point vector components (scale 1000)
+     */
+    std::vector<int32_t> extract_context_vector_fixed(const GeometricState& state, size_t position);
 
     std::vector<Multivector> tokens_to_multivectors(
         const std::vector<std::vector<ternary::Trit>>& tokens
@@ -65,7 +75,12 @@ private:
 
     Multivector create_multivector(const std::vector<ternary::Trit>& trits);
     void normalize_multivector(Multivector& mv);
-    double compute_norm(const Multivector& mv);
+    
+    /**
+     * @brief Compute norm in fixed-point
+     * @return Norm in fixed-point (scale 1000)
+     */
+    int32_t compute_norm_fixed(const Multivector& mv);
 };
 
 std::unique_ptr<GeometricContextWindow> create_geometric_context(

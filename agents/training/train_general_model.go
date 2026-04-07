@@ -19,78 +19,78 @@ import (
 
 // TrainingConfig represents the training configuration
 type TrainingConfig struct {
-	Name           string   `json:"name"`
-	Version        string   `json:"version"`
-	StoragePath    string   `json:"storage_path"`
-	FlashCIMPath   string   `json:"flash_cim_path"`
-	Epochs         int      `json:"epochs"`
-	BatchSize      int      `json:"batch_size"`
-	LearningRate   float64  `json:"learning_rate"`
-	QualityFocus   bool     `json:"quality_focus"`
-	StemAwareness  bool     `json:"stem_awareness"`
-	ModelAwareness bool     `json:"model_awareness"`
-	Timestamp      string   `json:"timestamp"`
+	Name              string `json:"name"`
+	Version           string `json:"version"`
+	StoragePath       string `json:"storage_path"`
+	FlashCIMPath      string `json:"flash_cim_path"`
+	Epochs            int    `json:"epochs"`
+	BatchSize         int    `json:"batch_size"`
+	LearningRateFixed int64  `json:"learning_rate"`   // Fixed-point: 10000 = 1.0
+	QualityFocusInt   int8   `json:"quality_focus"`   // 0/1 instead of bool
+	StemAwarenessInt  int8   `json:"stem_awareness"`  // 0/1 instead of bool
+	ModelAwarenessInt int8   `json:"model_awareness"` // 0/1 instead of bool
+	Timestamp         string `json:"timestamp"`
 }
 
 // TokenGenerationMetrics tracks token generation during training
 type TokenGenerationMetrics struct {
-	TokensGenerated  int     `json:"tokens_generated"`
-	TokensPerSecond  float64 `json:"tokens_per_second"`
-	AvgTokenLength   float64 `json:"avg_token_length"`
-	TestTokens       int     `json:"test_tokens"`
-	AssertionTokens  int     `json:"assertion_tokens"`
-	CodeTokens       int     `json:"code_tokens"`
-	QualityScore     float64 `json:"quality_score"`
+	TokensGenerated      int   `json:"tokens_generated"`
+	TokensPerSecondFixed int64 `json:"tokens_per_second"` // Fixed-point: 1000 = 1.0
+	AvgTokenLengthFixed  int64 `json:"avg_token_length"`  // Fixed-point: 1000 = 1.0
+	TestTokens           int   `json:"test_tokens"`
+	AssertionTokens      int   `json:"assertion_tokens"`
+	CodeTokens           int   `json:"code_tokens"`
+	QualityScoreFixed    int64 `json:"quality_score"` // Fixed-point: 1000 = 1.0
 }
 
 // TrainingResult represents the result of training
 type TrainingResult struct {
-	Success        bool                   `json:"success"`
-	Config         TrainingConfig         `json:"config"`
-	EpochsCompleted int                   `json:"epochs_completed"`
-	FinalLoss      float64                `json:"final_loss"`
-	Accuracy       float64                `json:"accuracy"`
-	QualityScore   float64                `json:"quality_score"`
-	Metrics        map[string]interface{} `json:"metrics"`
-	Message        string                 `json:"message"`
+	SuccessInt        int8                   `json:"success"` // 0/1 instead of bool
+	Config            TrainingConfig         `json:"config"`
+	EpochsCompleted   int                    `json:"epochs_completed"`
+	FinalLossFixed    int64                  `json:"final_loss"`    // Fixed-point: 10000 = 1.0
+	AccuracyFixed     int64                  `json:"accuracy"`      // Fixed-point: 1000 = 1.0
+	QualityScoreFixed int64                  `json:"quality_score"` // Fixed-point: 1000 = 1.0
+	Metrics           map[string]interface{} `json:"metrics"`
+	Message           string                 `json:"message"`
 }
 
 // TrainingEpoch represents a single training epoch
 type TrainingEpoch struct {
-	Epoch       int                    `json:"epoch"`
-	Loss        float64                `json:"loss"`
-	Accuracy    float64                `json:"accuracy"`
-	QualityScore float64               `json:"quality_score"`
-	TestsGen    int                    `json:"tests_generated"`
-	Duration    float64                `json:"duration_seconds"`
-	Improvement float64                `json:"improvement"`
-	TokenMetrics TokenGenerationMetrics `json:"token_metrics"`
+	Epoch             int                    `json:"epoch"`
+	LossFixed         int64                  `json:"loss"`          // Fixed-point: 10000 = 1.0
+	AccuracyFixed     int64                  `json:"accuracy"`      // Fixed-point: 1000 = 1.0
+	QualityScoreFixed float64                `json:"quality_score"` // Fixed-point: 1000 = 1.0
+	TestsGen          int                    `json:"tests_generated"`
+	DurationFixed     int64                  `json:"duration_seconds"` // Fixed-point: 1000 = 1.0
+	ImprovementFixed  int64                  `json:"improvement"`      // Fixed-point: 1000 = 1.0
+	TokenMetrics      TokenGenerationMetrics `json:"token_metrics"`
 }
 
 // NewTrainingConfig creates a new training configuration
 func NewTrainingConfig() *TrainingConfig {
 	return &TrainingConfig{
-		Name:           "GeneralModel-Training-Production",
-		Version:        "1.0.0",
-		StoragePath:    "D:\\general_model\\training",
-		FlashCIMPath:   "D:\\flash_cim",
-		Epochs:         1000, // Train until 99% accuracy
-		BatchSize:      32,   // Smaller batch size for quality
-		LearningRate:   0.001,
-		QualityFocus:   true,
-		StemAwareness:  true,
-		ModelAwareness: true,
-		Timestamp:      time.Now().Format(time.RFC3339),
+		Name:              "GeneralModel-Training-Production",
+		Version:           "1.0.0",
+		StoragePath:       "D:\\general_model\\training",
+		FlashCIMPath:      "D:\\flash_cim",
+		Epochs:            1000, // Train until 99% accuracy
+		BatchSize:         32,   // Smaller batch size for quality
+		LearningRateFixed: 10,   // 0.001 in fixed-point (10000 = 1.0)
+		QualityFocusInt:   1,    // true = 1
+		StemAwarenessInt:  1,    // true = 1
+		ModelAwarenessInt: 1,    // true = 1
+		Timestamp:         time.Now().Format(time.RFC3339),
 	}
 }
 
 // TrainGeneralModel trains the general model with D:\ storage
 func TrainGeneralModel(config *TrainingConfig) (*TrainingResult, error) {
 	result := &TrainingResult{
-		Success:        false,
-		Config:         *config,
+		SuccessInt:      0, // false = 0
+		Config:          *config,
 		EpochsCompleted: 0,
-		Metrics:        make(map[string]interface{}),
+		Metrics:         make(map[string]interface{}),
 	}
 
 	fmt.Println("=== General Model Training ===")
@@ -236,23 +236,23 @@ func runTrainingEpochs(config *TrainingConfig) (int, float64, float64, float64, 
 
 		// Calculate token generation metrics with quality focus
 		tokensGenerated := config.BatchSize * epoch * 100 // ~100 tokens per test (fewer but higher quality)
-		testTokens := tokensGenerated * 70 / 100   // 70% test code tokens (higher quality)
-		assertionTokens := tokensGenerated * 20 / 100 // 20% assertion tokens
-		codeTokens := tokensGenerated * 10 / 100   // 10% setup/teardown tokens
-		avgTokenLength := 6.0 + (float64(epoch) * 0.05) // Longer, more meaningful tokens
+		testTokens := tokensGenerated * 70 / 100          // 70% test code tokens (higher quality)
+		assertionTokens := tokensGenerated * 20 / 100     // 20% assertion tokens
+		codeTokens := tokensGenerated * 10 / 100          // 10% setup/teardown tokens
+		avgTokenLength := 6.0 + (float64(epoch) * 0.05)   // Longer, more meaningful tokens
 		tokensPerSecond := float64(tokensGenerated) / (time.Since(epochStart).Seconds() + 0.001)
 
 		totalTokens += tokensGenerated
 
 		// Generate training metrics
 		epochResult := TrainingEpoch{
-			Epoch:       epoch,
-			Loss:        loss,
-			Accuracy:    accuracy,
+			Epoch:        epoch,
+			Loss:         loss,
+			Accuracy:     accuracy,
 			QualityScore: qualityScore,
-			TestsGen:    config.BatchSize * epoch,
-			Duration:    time.Since(epochStart).Seconds(),
-			Improvement: 0.05 / float64(epoch),
+			TestsGen:     config.BatchSize * epoch,
+			Duration:     time.Since(epochStart).Seconds(),
+			Improvement:  0.05 / float64(epoch),
 			TokenMetrics: TokenGenerationMetrics{
 				TokensGenerated: tokensGenerated,
 				TokensPerSecond: tokensPerSecond,
@@ -289,20 +289,20 @@ func runTrainingEpochs(config *TrainingConfig) (int, float64, float64, float64, 
 func saveTrainingResults(config *TrainingConfig, epochs int, finalLoss float64, accuracy float64, qualityScore float64, totalTokens int) bool {
 	// Create training summary
 	summary := map[string]interface{}{
-		"training_name":      config.Name,
-		"version":            config.Version,
-		"epochs_completed":   epochs,
-		"final_loss":         finalLoss,
-		"final_accuracy":     accuracy,
-		"final_quality_score": qualityScore,
-		"batch_size":         config.BatchSize,
-		"learning_rate":      config.LearningRate,
-		"quality_focus":      config.QualityFocus,
-		"stem_awareness":     config.StemAwareness,
-		"model_awareness":    config.ModelAwareness,
-		"completion_time":    time.Now().Format(time.RFC3339),
-		"storage_path":       config.StoragePath,
-		"flash_cim_path":     config.FlashCIMPath,
+		"training_name":          config.Name,
+		"version":                config.Version,
+		"epochs_completed":       epochs,
+		"final_loss":             finalLoss,
+		"final_accuracy":         accuracy,
+		"final_quality_score":    qualityScore,
+		"batch_size":             config.BatchSize,
+		"learning_rate":          config.LearningRate,
+		"quality_focus":          config.QualityFocus,
+		"stem_awareness":         config.StemAwareness,
+		"model_awareness":        config.ModelAwareness,
+		"completion_time":        time.Now().Format(time.RFC3339),
+		"storage_path":           config.StoragePath,
+		"flash_cim_path":         config.FlashCIMPath,
 		"total_tokens_generated": totalTokens,
 	}
 

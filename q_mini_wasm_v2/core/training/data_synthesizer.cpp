@@ -112,25 +112,11 @@ public:
         
         curl_easy_cleanup(curl);
 #else
-        // Fallback: return mock data with warning
+        // Production builds require libcurl - no mock data fallback
         response.error = "HTTP client not available - compile with -DHAS_LIBCURL and link with libcurl";
         response.success = false;
-        
-        // Generate deterministic mock data based on URL hash
-        size_t url_hash = std::hash<std::string>{}(url);
-        std::mt19937 rng(url_hash);
-        std::uniform_real_distribution<float> dist(-10.0f, 10.0f);
-        
-        std::stringstream ss;
-        ss << "[";
-        for (size_t i = 0; i < 10; ++i) {
-            if (i > 0) ss << ",";
-            ss << std::fixed << std::setprecision(4) << dist(rng);
-        }
-        ss << "]";
-        response.body = ss.str();
-        response.status_code = 200;
-        response.success = true;  // Mock success for development
+        // No mock data generation - fail explicitly in production
+        throw std::runtime_error("Data acquisition requires libcurl. Install libcurl and rebuild with -DHAS_LIBCURL");
 #endif
         
         return response;
@@ -214,19 +200,10 @@ std::optional<ApiPayload> WolframClient::query(std::string_view endpoint,
     auto response = SimpleHttpClient::get(url, 10000);
     
     if (!response.success) {
-        // Fallback to deterministic mock data
-        size_t query_hash = std::hash<std::string>{}(std::string(params));
-        std::mt19937 rng(query_hash);
-        std::uniform_real_distribution<float> dist(-10.0f, 10.0f);
-        
-        std::vector<float> result;
-        result.reserve(10);
-        for (size_t i = 0; i < 10; ++i) {
-            result.push_back(dist(rng));
-        }
-        
+        // No fallback to mock data - fail explicitly
+        std::cerr << "[DataSynthesizer] API query failed: " << response.error << std::endl;
         last_query_time_ = std::chrono::steady_clock::now();
-        return result;
+        return std::nullopt;
     }
     
     // Parse response - extract numerical values
@@ -300,16 +277,11 @@ std::optional<ApiPayload> PubChemClient::query(std::string_view endpoint,
         }
     }
     
-    // Fallback to deterministic data if HTTP fails or returns empty
+    // No fallback to mock data - return empty if HTTP fails
     if (molecular_data.empty()) {
-        size_t query_hash = std::hash<std::string>{}(std::string(params));
-        std::mt19937 rng(query_hash);
-        std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-        
-        molecular_data.reserve(64);
-        for (size_t i = 0; i < 64; ++i) {
-            molecular_data.push_back(dist(rng));
-        }
+        std::cerr << "[DataSynthesizer] PubChem API failed, no data retrieved" << std::endl;
+        last_query_time_ = std::chrono::steady_clock::now();
+        return std::nullopt;
     }
     
     last_query_time_ = std::chrono::steady_clock::now();
@@ -369,25 +341,11 @@ std::optional<ApiPayload> OeisClient::query(std::string_view endpoint,
         }
     }
     
-    // Fallback to generated sequence if HTTP fails
+    // No fallback to generated sequence if HTTP fails
     if (sequence.empty()) {
-        size_t query_hash = std::hash<std::string>{}(std::string(params));
-        std::mt19937 rng(query_hash);
-        
-        sequence.reserve(16);
-        
-        // Generate Fibonacci-like sequence with variations
-        float a = 1.0f, b = 1.0f;
-        sequence.push_back(a);
-        sequence.push_back(b);
-        
-        std::uniform_real_distribution<float> variation(0.8f, 1.2f);
-        for (size_t i = 2; i < 16; ++i) {
-            float next = (a + b) * variation(rng);
-            sequence.push_back(next);
-            a = b;
-            b = next;
-        }
+        std::cerr << "[DataSynthesizer] OEIS API failed, no sequence retrieved" << std::endl;
+        last_query_time_ = std::chrono::steady_clock::now();
+        return std::nullopt;
     }
     
     last_query_time_ = std::chrono::steady_clock::now();

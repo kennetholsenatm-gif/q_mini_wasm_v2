@@ -16,43 +16,56 @@ GeometricContextWindow::Multivector GeometricContextWindow::create_multivector(
     Multivector mv;
     size_t dim = trits.size();
     
-    mv.scalar.resize(dim);
-    mv.vector.resize(dim);
-    mv.bivector.resize(dim * (dim - 1) / 2);
+    mv.scalar_fixed.resize(dim);
+    mv.vector_fixed.resize(dim);
+    mv.bivector_fixed.resize(dim * (dim - 1) / 2);
     
+    // Fixed-point: trit value * 1000 (scale factor)
     for (size_t i = 0; i < dim; ++i) {
-        double val = static_cast<double>(trits[i]);
-        mv.scalar[i] = val;
-        mv.vector[i] = val * 0.5;
+        int32_t val = static_cast<int32_t>(trits[i]) * 1000;  // Scale by 1000
+        mv.scalar_fixed[i] = val;
+        mv.vector_fixed[i] = val / 2;  // 0.5 in fixed-point = 500
     }
     
     size_t idx = 0;
     for (size_t i = 0; i < dim; ++i) {
         for (size_t j = i + 1; j < dim; ++j) {
-            mv.bivector[idx++] = mv.vector[i] * mv.vector[j];
+            // Fixed-point multiplication: (a * b) / 1000
+            mv.bivector_fixed[idx++] = (mv.vector_fixed[i] * mv.vector_fixed[j]) / 1000;
         }
     }
     
     normalize_multivector(mv);
-    mv.norm = compute_norm(mv);
+    mv.norm_fixed = compute_norm_fixed(mv);
     return mv;
 }
 
 void GeometricContextWindow::normalize_multivector(Multivector& mv) {
-    double norm = compute_norm(mv);
-    if (norm < 1e-10) return;
+    int32_t norm = compute_norm_fixed(mv);
+    if (norm == 0) return;  // Fixed-point: check for zero
     
-    for (auto& v : mv.scalar) v /= norm;
-    for (auto& v : mv.vector) v /= norm;
-    for (auto& v : mv.bivector) v /= norm;
+    // Fixed-point division: (a * 1000) / b to maintain scale
+    for (auto& v : mv.scalar_fixed) v = (v * 1000) / norm;
+    for (auto& v : mv.vector_fixed) v = (v * 1000) / norm;
+    for (auto& v : mv.bivector_fixed) v = (v * 1000) / norm;
 }
 
-double GeometricContextWindow::compute_norm(const Multivector& mv) {
-    double sum = 0.0;
-    for (auto v : mv.scalar) sum += v * v;
-    for (auto v : mv.vector) sum += v * v;
-    for (auto v : mv.bivector) sum += v * v;
-    return std::sqrt(sum);
+int32_t GeometricContextWindow::compute_norm_fixed(const Multivector& mv) {
+    // Fixed-point: sum of squares, then integer square root approximation
+    int64_t sum = 0;
+    for (auto v : mv.scalar_fixed) sum += static_cast<int64_t>(v) * v;
+    for (auto v : mv.vector_fixed) sum += static_cast<int64_t>(v) * v;
+    for (auto v : mv.bivector_fixed) sum += static_cast<int64_t>(v) * v;
+    
+    // Integer square root using Newton's method
+    if (sum == 0) return 0;
+    int64_t x = sum;
+    int64_t y = (x + 1) / 2;
+    while (y < x) {
+        x = y;
+        y = (x + sum / x) / 2;
+    }
+    return static_cast<int32_t>(x);
 }
 
 GeometricContextWindow::GeometricState GeometricContextWindow::initialize_state(
@@ -61,7 +74,7 @@ GeometricContextWindow::GeometricState GeometricContextWindow::initialize_state(
     GeometricState state;
     state.sequence.reserve(sequence_length);
     state.current_length = 0;
-    state.total_geometric_norm = 0.0;
+    state.total_geometric_norm_fixed = 0;
     return state;
 }
 

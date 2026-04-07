@@ -21,7 +21,7 @@ struct InferencePipelineConfig {
     GeometricContextWindow::ContextConfig context_config;
     HouseholderSynthesizer::SynthesisConfig synthesis_config;
     moe::ExpertConfig moe_config;
-    double target_latency_ms;
+    int32_t target_latency_ms_fixed;  // Fixed-point: 1000 = 1.0 ms (was double)
     size_t num_experts_to_activate;
 };
 
@@ -31,9 +31,9 @@ struct InferencePipelineConfig {
 struct InferenceInput {
     std::vector<size_t> token_ids;
     size_t max_output_length;
-    double temperature;
-    bool use_entanglement;
-    bool use_geometric_context;
+    int32_t temperature_fixed;  // Fixed-point: 1000 = 1.0 (was double)
+    int8_t use_entanglement;    // 0/1 instead of bool
+    int8_t use_geometric_context;  // 0/1 instead of bool
 };
 
 /**
@@ -41,13 +41,13 @@ struct InferenceInput {
  */
 struct InferenceOutput {
     std::vector<size_t> output_tokens;
-    std::vector<double> token_probabilities;
-    double total_latency_ms;
-    double tokenization_latency_ms;
-    double context_latency_ms;
-    double synthesis_latency_ms;
-    double routing_latency_ms;
-    bool meets_latency_target;
+    std::vector<int32_t> token_probabilities_fixed;  // Fixed-point (was double)
+    int32_t total_latency_ms_fixed;      // Fixed-point: 1000 = 1.0 ms (was double)
+    int32_t tokenization_latency_ms_fixed;
+    int32_t context_latency_ms_fixed;
+    int32_t synthesis_latency_ms_fixed;
+    int32_t routing_latency_ms_fixed;
+    int8_t meets_latency_target;  // 0/1 instead of bool
     size_t tokens_generated;
 };
 
@@ -89,8 +89,8 @@ private:
     InferenceOutput decode_stage(InferenceOutput& intermediate);
     
     std::vector<int8_t> sample_next_token(
-        const std::vector<double>& probabilities,
-        double temperature
+        const std::vector<int32_t>& probabilities_fixed,
+        int32_t temperature_fixed
     );
 };
 

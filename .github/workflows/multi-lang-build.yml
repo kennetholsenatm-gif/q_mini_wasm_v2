@@ -29,7 +29,12 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Build Rust
-        run: cd q_mini_wasm_v2/rust && cargo build --release 2>/dev/null || echo Rust build skipped
+        run: |
+          if [ -d "q_mini_wasm_v2/rust" ]; then
+            cd q_mini_wasm_v2/rust && cargo build --release
+          else
+            echo "Rust directory not found - skipping Rust build"
+          fi
         shell: bash
 
   build-go:
@@ -42,7 +47,12 @@ jobs:
         with:
           go-version: 1.22
       - name: Build Go
-        run: cd q_mini_wasm_v2/go && go build ./cmd/gateway 2>/dev/null || echo Go build skipped
+        run: |
+          if [ -d "q_mini_wasm_v2/go" ]; then
+            cd q_mini_wasm_v2/go && go build ./cmd/gateway
+          else
+            echo "Go directory not found - skipping Go build"
+          fi
         shell: bash
 
   build-r:
@@ -55,7 +65,12 @@ jobs:
         with:
           r-version: 4.3.0
       - name: Build R
-        run: cd q_mini_wasm_v2/r && R CMD build . 2>/dev/null || echo R build skipped
+        run: |
+          if [ -d "q_mini_wasm_v2/r" ]; then
+            cd q_mini_wasm_v2/r && R CMD build .
+          else
+            echo "R directory not found - skipping R build"
+          fi
         shell: bash
 
   build-dll:

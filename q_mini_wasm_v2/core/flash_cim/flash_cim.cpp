@@ -414,58 +414,61 @@ CIMResult FlashCIMController::cim_ternary_add(
 }
 
 // ============================================================================
-// Energy and Performance Metrics
+// Energy and Performance Metrics (Fixed-Point)
 // ============================================================================
 
-double FlashCIMController::get_total_energy_pj() const {
-    return total_energy_pj_;
+int32_t FlashCIMController::get_total_energy_fixed() const {
+    // Return energy in fixed-point: 1000 = 1.0 pJ
+    return static_cast<int32_t>(total_energy_pj_ * 1000);
 }
 
-std::vector<std::pair<std::string, double>> FlashCIMController::get_metrics() const {
+std::vector<std::pair<std::string, int32_t>> FlashCIMController::get_metrics_fixed() const {
+    // All metrics returned as fixed-point integers
+    int32_t avg_energy = 0;
+    if (total_operations_ > 0) {
+        // (total_energy_pj_ / total_operations_) * 1000
+        avg_energy = static_cast<int32_t>((total_energy_pj_ * 1000) / total_operations_);
+    }
+    
     return {
-        {"total_energy_pj", total_energy_pj_},
-        {"total_operations", static_cast<double>(total_operations_)},
-        {"total_cycles", static_cast<double>(total_cycles_)},
-        {"avg_energy_per_op_pj", total_operations_ > 0 ? total_energy_pj_ / total_operations_ : 0.0},
-        {"blocks_total", static_cast<double>(block_status_.size())},
-        {"cells_per_block", static_cast<double>(config_.cells_per_page * 8)},
+        {"total_energy_pj_fixed", static_cast<int32_t>(total_energy_pj_ * 1000)},
+        {"total_operations", static_cast<int32_t>(total_operations_)},
+        {"total_cycles", static_cast<int32_t>(total_cycles_)},
+        {"avg_energy_per_op_fixed", avg_energy},
+        {"blocks_total", static_cast<int32_t>(block_status_.size())},
+        {"cells_per_block", static_cast<int32_t>(config_.cells_per_page * 8)},
     };
 }
 
-void FlashCIMController::reset_metrics() {
-    total_energy_pj_ = 0.0;
-    total_operations_ = 0;
-    total_cycles_ = 0;
-}
-
 // ============================================================================
-// Energy Calculation Helpers
+// Energy Calculation Helpers (Fixed-Point)
 // ============================================================================
 
-double FlashCIMController::calculate_write_energy(size_t num_cells) const {
+int32_t FlashCIMController::calculate_write_energy_fixed(size_t num_cells) const {
     // MLC flash write energy: ~10 pJ per cell
-    return num_cells * 10.0;
+    // Fixed-point: 10 pJ * 1000 = 10000
+    return static_cast<int32_t>(num_cells) * 10000;
 }
 
-double FlashCIMController::calculate_read_energy(size_t num_cells) const {
+int32_t FlashCIMController::calculate_read_energy_fixed(size_t num_cells) const {
     // MLC flash read energy: ~1 pJ per cell
-    return num_cells * 1.0;
+    // Fixed-point: 1 pJ * 1000 = 1000
+    return static_cast<int32_t>(num_cells) * 1000;
 }
 
-double FlashCIMController::calculate_erase_energy(size_t num_blocks) const {
+int32_t FlashCIMController::calculate_erase_energy_fixed(size_t num_blocks) const {
     // Block erase energy: ~1000 pJ per block
-    return num_blocks * 1000.0;
+    // Fixed-point: 1000 pJ * 1000 = 1000000
+    return static_cast<int32_t>(num_blocks) * 1000000;
 }
 
-double FlashCIMController::calculate_cim_energy(size_t operations) const {
-    // CIM operation energy: ~0.1 pJ per operation (much more efficient than data transfer)
-    return operations * 0.1;
+int32_t FlashCIMController::calculate_cim_energy_fixed(size_t operations) const {
+    // CIM operation energy: ~0.1 pJ per operation
+    // Fixed-point: 0.1 pJ * 1000 = 100
+    return static_cast<int32_t>(operations) * 100;
 }
 
 // ============================================================================
-// Factory Function
-// ============================================================================
-
 // ============================================================================
 // Multi-Wordline Sensing Implementation
 // ============================================================================
@@ -484,7 +487,10 @@ std::vector<std::vector<CellState>> FlashCIMController::multi_wordline_sense(con
     }
     
     // Energy cost: parallel sensing reduces per-wordline cost by 70%
-    total_energy_pj_ += wordlines.size() * calculate_read_energy(config_.cells_per_page) * 0.3;
+    // Fixed-point: 0.3 = 300/1000, use integer arithmetic
+    int32_t read_energy = calculate_read_energy_fixed(config_.cells_per_page);
+    int32_t parallel_cost = (static_cast<int32_t>(wordlines.size()) * read_energy * 300) / 1000;
+    total_energy_pj_ += parallel_cost / 1000.0; // Convert back to double for member variable
     total_operations_++;
     
     return results;
@@ -532,7 +538,9 @@ std::vector<FlashCIMController::ThresholdLevel> FlashCIMController::measure_thre
         }
     }
     
-    total_energy_pj_ += cells.size() * 0.5; // Threshold measurement cost
+    // Energy cost in fixed-point: 0.5 pJ per cell = 500 in fixed-point
+    // (cells.size() * 500) / 1000 = cells.size() / 2
+    total_energy_pj_ += static_cast<double>(cells.size()) * 0.5; // Threshold measurement cost
     total_operations_++;
     
     return levels;
@@ -568,6 +576,16 @@ void FlashCIMController::set_backend(HardwareBackend backend) {
 
 bool FlashCIMController::is_hardware_accelerated() const {
     return current_backend_ != HardwareBackend::SOFTWARE_SIMULATION;
+}
+
+ternary::Trit FlashCIMController::is_hardware_accelerated_trit() const {
+    // Return ternary status: POSITIVE (1) = hardware, ZERO (0) = software, NEGATIVE (-1) = unknown
+    if (!operational_) {
+        return ternary::Trit::NEGATIVE;  // Unknown when not operational
+    }
+    return (current_backend_ != HardwareBackend::SOFTWARE_SIMULATION) 
+        ? ternary::Trit::POSITIVE 
+        : ternary::Trit::ZERO;
 }
 
 std::unique_ptr<FlashCIMController> create_flash_cim_controller(const FlashCIMConfig& config) {

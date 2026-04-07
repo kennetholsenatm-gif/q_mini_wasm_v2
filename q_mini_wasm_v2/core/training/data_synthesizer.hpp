@@ -30,11 +30,13 @@ namespace q_mini_wasm_v2::core::training {
 
 using Trit = int8_t;  // {-1, 0, +1}
 
-// API response types (C++17 variant)
+// API response types (C++17 variant) - Fixed-point versions added
 using ApiPayload = std::variant<
     std::string_view,                    // Raw JSON/text
-    std::vector<float>,                  // Numeric vector
-    std::vector<std::vector<float>>,     // Matrix data
+    std::vector<float>,                  // Numeric vector (legacy - use fixed below)
+    std::vector<std::vector<float>>,     // Matrix data (legacy - use fixed below)
+    std::vector<int32_t>,                // Fixed-point numeric vector (scale 1000)
+    std::vector<std::vector<int32_t>>,   // Fixed-point matrix (scale 1000)
     std::vector<Trit>                    // Ternary encoded
 >;
 
@@ -47,8 +49,8 @@ struct TrainingSample {
     std::string_view source_api;         // "wolfram", "pubchem", "oeis", etc.
     std::string_view domain;             // "math", "chemistry", "biology", "physics"
     
-    bool is_positive() const { return label == 1; }
-    bool is_negative() const { return label == -1; }
+    int8_t is_positive() const { return label == 1 ? 1 : 0; }
+    int8_t is_negative() const { return label == -1 ? 1 : 0; }
 };
 
 /**
