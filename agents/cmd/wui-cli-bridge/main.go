@@ -3075,7 +3075,7 @@ func (s *MCPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interface{}) {
 	method, _ := msg["method"].(string)
 	id := msg["id"]
-	_ = msg["params"] // Available if needed for specific handlers
+	params, _ := msg["params"].(map[string]interface{})
 
 	// Route to appropriate handler
 	var result interface{}
@@ -3108,44 +3108,22 @@ func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interfa
 		result = map[string]interface{}{"paused": true}
 	case "wui_stop_training_sse":
 		result = map[string]interface{}{"stopped": true}
-	// Dashboard compatibility methods
+	// Dashboard compatibility methods - REAL implementation
 	case "get_release_status":
-		result = map[string]interface{}{
-			"status":        "ready",
-			"last_action":   "build",
-			"target":        "local",
-			"artifact_path": "qminiwasm.exe",
-		}
+		result = s.snapshotReleaseState()
 	case "run_self_check":
-		result = map[string]interface{}{
-			"system_toml_path":            "config/system.toml",
-			"desktop_artifact_path":       "qminiwasm.exe",
-			"engine_artifact_path":        "",
-			"bridge_binary_path":          "mcp-host.exe",
-			"mcp_bridge_connected":        true,
-			"strict_mode":                 true,
-			"cgo_enabled":                 false,
-			"desktop_artifact_exists":     true,
-			"ready_for_operator_pipeline": true,
-			"system_toml_validation": map[string]interface{}{
-				"valid":            true,
-				"missing_sections": []string{},
-				"errors":           []string{},
-				"warnings":         []string{},
-			},
+		expectArtifact := ""
+		if p, ok := params["artifact_path"].(string); ok {
+			expectArtifact = p
 		}
+		result = s.buildSystemSelfCheck(expectArtifact)
 	case "get_ops_snapshot":
 		result = map[string]interface{}{
-			"self_check": map[string]interface{}{
-				"mcp_bridge_connected":        true,
-				"ready_for_operator_pipeline": true,
-			},
-			"release": map[string]interface{}{
-				"status": "ready",
-			},
+			"self_check": s.buildSystemSelfCheck(""),
+			"release":    s.snapshotReleaseState(),
 			"training": map[string]interface{}{
 				"current_epoch": 0,
-				"is_running":    false,
+				"is_running":    sseServer != nil && sseServer.IsRunning(),
 			},
 		}
 	case "init_training_pipeline":
@@ -3154,22 +3132,30 @@ func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interfa
 		}
 		result = map[string]interface{}{"status": "initialized"}
 	case "start_ff_training":
-		result = map[string]interface{}{"status": "started", "epochs": 100}
+		// Check if we can passthrough to real backend
+		if s.canPassthroughToBackend() {
+			result, err = s.wsClient.SendAndWait(params, "ff_training_started", 30*time.Second)
+		} else {
+			result = map[string]interface{}{"status": "started", "mode": "local", "epochs": 100}
+		}
 	case "stop_ff_training":
+		if sseServer != nil && sseServer.IsRunning() {
+			sseServer.StopTraining()
+		}
 		result = map[string]interface{}{"status": "stopped"}
 	case "get_topology":
-		result = map[string]interface{}{
-			"nodes":      243,
-			"edges":      2000,
-			"topology":   "scale_free",
-			"avg_degree": 16.0,
-			"clustering": 0.85,
+		// Get real topology from backend if connected
+		if s.canPassthroughToBackend() {
+			result, err = s.wsClient.SendAndWait(params, "topology", 10*time.Second)
+		} else {
+			result = map[string]interface{}{"error": "backend not connected for real topology"}
 		}
 	case "compute_betti":
-		result = map[string]interface{}{
-			"betti_0": 1,
-			"betti_1": 1758,
-			"betti_2": 263,
+		// Compute real Betti numbers from backend
+		if s.canPassthroughToBackend() {
+			result, err = s.wsClient.SendAndWait(params, "betti", 10*time.Second)
+		} else {
+			result = map[string]interface{}{"error": "backend not connected for real Betti computation"}
 		}
 	case "ping":
 		result = map[string]interface{}{"pong": true}
