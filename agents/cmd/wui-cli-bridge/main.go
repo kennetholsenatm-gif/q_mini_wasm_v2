@@ -3010,6 +3010,83 @@ func NewWUIHTTPServer(port int, assetDir string) *WUIHTTPServer {
 	}
 }
 
+// FileEntry represents a file or directory entry
+type FileEntry struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	IsDir   bool   `json:"is_dir"`
+	Size    int64  `json:"size,omitempty"`
+	ModTime string `json:"mod_time,omitempty"`
+}
+
+// handleBrowseFiles serves the file browser API
+func (s *WUIHTTPServer) handleBrowseFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get path from query parameter
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = "."
+	}
+
+	// Security: prevent directory traversal
+	path = filepath.Clean(path)
+	if strings.Contains(path, "..") {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	// Read directory
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		// Try to provide helpful error
+		if os.IsNotExist(err) {
+			http.Error(w, fmt.Sprintf("Directory not found: %s", path), http.StatusNotFound)
+		} else {
+			http.Error(w, fmt.Sprintf("Cannot read directory: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Build file list
+	var files []FileEntry
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Skip hidden files
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		files = append(files, FileEntry{
+			Name:    entry.Name(),
+			Path:    filepath.Join(path, entry.Name()),
+			IsDir:   entry.IsDir(),
+			Size:    info.Size(),
+			ModTime: info.ModTime().Format(time.RFC3339),
+		})
+	}
+
+	// Sort: directories first, then alphabetically
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].IsDir != files[j].IsDir {
+			return files[i].IsDir
+		}
+		return files[i].Name < files[j].Name
+	})
+
+	// Return JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(files)
+}
+
 // Start begins the HTTP server for WUI files
 func (s *WUIHTTPServer) Start(projectRoot string) error {
 	s.mu.Lock()
@@ -3043,19 +3120,26 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 		return fmt.Errorf("WUI asset directory not found. Tried: %v", possiblePaths)
 	}
 
-	// Create file server
+	// Create router
+	mux := http.NewServeMux()
+
+	// Static file server
 	fs := http.FileServer(http.Dir(assetPath))
-	http.Handle("/", fs)
+	mux.Handle("/", fs)
+
+	// API endpoints
+	mux.HandleFunc("/api/browse", s.handleBrowseFiles)
 
 	s.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.port),
-		Handler: nil,
+		Handler: mux,
 	}
 
 	s.running = true
 	go func() {
 		fmt.Printf("[WUI HTTP] Server starting on http://localhost:%d\n", s.port)
 		fmt.Printf("[WUI HTTP] Serving files from: %s\n", assetPath)
+		fmt.Printf("[WUI HTTP] File browser API: http://localhost:%d/api/browse?path=.\n", s.port)
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("[WUI HTTP] Server error: %v\n", err)
 		}

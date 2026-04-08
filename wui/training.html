@@ -205,6 +205,131 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+        
+        /* Data Source Library Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 { margin: 0; }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            margin: 0;
+        }
+        .modal-body {
+            padding: 1rem 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .source-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+        .source-tab {
+            padding: 0.5rem 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+        }
+        .source-tab.active {
+            color: #4ecca3;
+            border-bottom-color: #4ecca3;
+        }
+        .source-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        .source-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .source-card:hover {
+            border-color: #4ecca3;
+            box-shadow: 0 2px 8px rgba(78, 204, 163, 0.2);
+        }
+        .source-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .source-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        .source-desc {
+            font-size: 0.8rem;
+            color: #666;
+            line-height: 1.4;
+        }
+        
+        /* File Browser */
+        .file-browser {
+            display: none;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .file-browser.active { display: block; }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .file-item:hover { background: #e9ecef; }
+        .file-item.selected { background: #cce5ff; }
+        .file-icon { margin-right: 0.5rem; font-size: 1.2rem; }
+        .file-name { flex: 1; }
+        .file-size { color: #666; font-size: 0.8rem; }
+        .breadcrumb {
+            padding: 0.5rem;
+            background: #e9ecef;
+            font-size: 0.9rem;
+        }
+        .breadcrumb span { cursor: pointer; color: #007bff; }
+        .breadcrumb span:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -246,18 +371,54 @@
             
             <div class="data-source-input">
                 <input type="text" id="new-source-input" placeholder="URL, path, or API endpoint...">
-                <select id="new-source-type">
+                <select id="new-source-type" onchange="onSourceTypeChange()">
                     <option value="web">Website</option>
                     <option value="local">Local Dataset</option>
                     <option value="api">API Endpoint</option>
                 </select>
                 <button onclick="addDataSource()">Add Source</button>
+                <button onclick="openSourceLibrary()" class="secondary">Browse Library</button>
+            </div>
+            
+            <!-- File Browser for Local Datasets -->
+            <div id="file-browser" class="file-browser">
+                <div class="breadcrumb" id="file-breadcrumb">
+                    <span onclick="browsePath('.')">.</span>
+                </div>
+                <div id="file-list"></div>
+                <div class="toolbar" style="margin-top: 0.5rem; padding: 0.5rem;">
+                    <button onclick="selectFileFromBrowser()">Select</button>
+                    <button onclick="closeFileBrowser()" class="secondary">Cancel</button>
+                    <span id="selected-file-path" style="margin-left: auto; color: #666;"></span>
+                </div>
             </div>
             
             <div class="toolbar">
                 <button onclick="loadDataSources()">Reload Sources</button>
                 <button onclick="saveDataSources()" class="secondary">Save Sources</button>
                 <button onclick="crawlAllSources()" class="secondary">Crawl All</button>
+                <button onclick="browseServerFiles()" class="secondary">Browse Server Files</button>
+            </div>
+        </div>
+
+        <!-- Data Source Library Modal -->
+        <div id="source-library-modal" class="modal-overlay">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>Data Source Library</h3>
+                    <button class="modal-close" onclick="closeSourceLibrary()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="source-tabs">
+                        <button class="source-tab active" onclick="switchTab('all')">All Sources</button>
+                        <button class="source-tab" onclick="switchTab('math')">Math/CS</button>
+                        <button class="source-tab" onclick="switchTab('science')">Science</button>
+                        <button class="source-tab" onclick="switchTab('bio')">Bio</button>
+                        <button class="source-tab" onclick="switchTab('knowledge')">Knowledge</button>
+                        <button class="source-tab" onclick="switchTab('ml')">ML/AI</button>
+                    </div>
+                    <div id="source-grid" class="source-grid"></div>
+                </div>
             </div>
         </div>
 
@@ -786,6 +947,415 @@ dataset_dir = "flash_cim_243expert/"
             if (sseClient && sseClient.isConnected) {
                 setTimeout(updateElapsedTime, 1000);
             }
+        }
+
+        // ==================== Data Source Library ====================
+        
+        const dataSourceLibrary = {
+            'huggingface': {
+                name: 'Hugging Face Datasets',
+                desc: 'Server-side streaming from 100K+ datasets',
+                icon: '🤗',
+                category: 'ml',
+                type: 'api',
+                url: 'datasets-server.huggingface.co'
+            },
+            'the-stack': {
+                name: 'The Stack (BigCode)',
+                desc: 'Massive repository of permissive source code',
+                icon: '💻',
+                category: 'math',
+                type: 'api',
+                url: 'huggingface.co/datasets/bigcode/the-stack'
+            },
+            'chembl': {
+                name: 'ChEMBL',
+                desc: 'Bioactive molecules with SMILES and binding affinities',
+                icon: '🧪',
+                category: 'science',
+                type: 'api',
+                url: 'ebi.ac.uk/chembl'
+            },
+            'materials-project': {
+                name: 'Materials Project',
+                desc: 'Crystal structures, band gaps, thermodynamic data',
+                icon: '💎',
+                category: 'science',
+                type: 'api',
+                url: 'materialsproject.org'
+            },
+            'dbpedia': {
+                name: 'DBpedia',
+                desc: 'Structured Wikipedia data via SPARQL',
+                icon: '📚',
+                category: 'knowledge',
+                type: 'api',
+                url: 'dbpedia.org'
+            },
+            'yago': {
+                name: 'YAGO',
+                desc: 'Semantic knowledge base from Wikipedia + WordNet',
+                icon: '🌐',
+                category: 'knowledge',
+                type: 'api',
+                url: 'yago-knowledge.org'
+            },
+            'ensembl': {
+                name: 'Ensembl',
+                desc: 'Genomic alignments and gene trees',
+                icon: '🧬',
+                category: 'bio',
+                type: 'api',
+                url: 'ensembl.org'
+            },
+            'sympy': {
+                name: 'SymPy Gamma',
+                desc: 'Step-by-step calculus and algebra',
+                icon: '∑',
+                category: 'math',
+                type: 'api',
+                url: 'gamma.sympy.org'
+            },
+            'mathlib4': {
+                name: 'Mathlib4 (Lean)',
+                desc: 'Verified TacticStates and proof steps',
+                icon: '⊢',
+                category: 'math',
+                type: 'api',
+                url: 'github.com/leanprover-community/mathlib4'
+            },
+            'arxiv': {
+                name: 'arXiv',
+                desc: 'Preprint papers in physics, math, CS',
+                icon: '📄',
+                category: 'math',
+                type: 'web',
+                url: 'arxiv.org'
+            },
+            'wolfram': {
+                name: 'WolframAlpha',
+                desc: 'Computational intelligence and knowledge',
+                icon: '🧮',
+                category: 'math',
+                type: 'api',
+                url: 'wolframalpha.com'
+            },
+            'wikidata': {
+                name: 'Wikidata',
+                desc: 'Structured knowledge base from Wikipedia',
+                icon: '📖',
+                category: 'knowledge',
+                type: 'api',
+                url: 'wikidata.org'
+            },
+            'pubchem': {
+                name: 'PubChem',
+                desc: 'Chemical molecule database',
+                icon: '⚗️',
+                category: 'science',
+                type: 'api',
+                url: 'pubchem.ncbi.nlm.nih.gov'
+            },
+            'pdb': {
+                name: 'Protein Data Bank',
+                desc: '3D structural data of proteins',
+                icon: '🧬',
+                category: 'bio',
+                type: 'api',
+                url: 'rcsb.org'
+            },
+            'oeis': {
+                name: 'OEIS',
+                desc: 'Online Encyclopedia of Integer Sequences',
+                icon: '🔢',
+                category: 'math',
+                type: 'web',
+                url: 'oeis.org'
+            }
+        };
+        
+        let currentLibraryTab = 'all';
+        
+        function openSourceLibrary() {
+            document.getElementById('source-library-modal').classList.add('active');
+            renderSourceLibrary();
+        }
+        
+        function closeSourceLibrary() {
+            document.getElementById('source-library-modal').classList.remove('active');
+        }
+        
+        function switchTab(category) {
+            currentLibraryTab = category;
+            
+            // Update tab styles
+            document.querySelectorAll('.source-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            renderSourceLibrary();
+        }
+        
+        function renderSourceLibrary() {
+            const grid = document.getElementById('source-grid');
+            grid.innerHTML = '';
+            
+            Object.entries(dataSourceLibrary).forEach(([key, source]) => {
+                if (currentLibraryTab !== 'all' && source.category !== currentLibraryTab) {
+                    return;
+                }
+                
+                const card = document.createElement('div');
+                card.className = 'source-card';
+                card.onclick = () => addSourceFromLibrary(key, source);
+                card.innerHTML = `
+                    <div class="source-icon">${source.icon}</div>
+                    <div class="source-name">${source.name}</div>
+                    <div class="source-desc">${source.desc}</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+        
+        function addSourceFromLibrary(key, source) {
+            const list = document.getElementById('data-source-list');
+            const item = document.createElement('div');
+            item.className = 'data-source-item';
+            item.innerHTML = `
+                <span class="data-source-name">${source.url || source.name}</span>
+                <span class="data-source-type ${source.type}">${source.type.toUpperCase()}</span>
+                <button class="data-source-remove" onclick="removeDataSource(this)">Remove</button>
+            `;
+            list.appendChild(item);
+            
+            closeSourceLibrary();
+        }
+
+        // ==================== File Browser ====================
+        
+        let currentBrowsePath = '.';
+        let selectedFilePath = null;
+        
+        function onSourceTypeChange() {
+            const type = document.getElementById('new-source-type').value;
+            const fileBrowser = document.getElementById('file-browser');
+            
+            if (type === 'local') {
+                // Auto-open file browser when selecting local
+                browseServerFiles();
+            } else {
+                fileBrowser.classList.remove('active');
+            }
+        }
+        
+        function browseServerFiles() {
+            document.getElementById('new-source-type').value = 'local';
+            currentBrowsePath = '.';
+            selectedFilePath = null;
+            loadFileList(currentBrowsePath);
+            document.getElementById('file-browser').classList.add('active');
+        }
+        
+        function closeFileBrowser() {
+            document.getElementById('file-browser').classList.remove('active');
+        }
+        
+        function loadFileList(path) {
+            fetch(`http://localhost:7345/api/browse?path=${encodeURIComponent(path)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(files => {
+                    renderFileList(path, files);
+                })
+                .catch(err => {
+                    console.error('File browser error:', err);
+                    document.getElementById('file-list').innerHTML = `
+                        <div style="padding: 1rem; color: #b42318;">
+                            Cannot browse files: ${err.message}<br>
+                            Make sure the WUI server is running on port 7345
+                        </div>
+                    `;
+                });
+        }
+        
+        function renderFileList(path, files) {
+            currentBrowsePath = path;
+            selectedFilePath = null;
+            
+            // Update breadcrumb
+            const parts = path.split(/[\\/]/).filter(p => p);
+            let breadcrumbHtml = '<span onclick="browsePath(\'.\')">.</span>';
+            let currentPath = '';
+            parts.forEach(part => {
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+                breadcrumbHtml += ` / <span onclick="browsePath('${currentPath.replace(/'/g, "\\'")}')">${part}</span>`;
+            });
+            document.getElementById('file-breadcrumb').innerHTML = breadcrumbHtml;
+            
+            // Render file list
+            const list = document.getElementById('file-list');
+            list.innerHTML = '';
+            
+            // Add ".." entry if not at root
+            if (path !== '.' && path !== '') {
+                const parent = path.split(/[\\/]/).slice(0, -1).join('/') || '.';
+                const upItem = document.createElement('div');
+                upItem.className = 'file-item';
+                upItem.innerHTML = `
+                    <span class="file-icon">📁</span>
+                    <span class="file-name">..</span>
+                `;
+                upItem.onclick = () => browsePath(parent);
+                list.appendChild(upItem);
+            }
+            
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                if (file.path === selectedFilePath) {
+                    item.classList.add('selected');
+                }
+                
+                const icon = file.is_dir ? '📁' : getFileIcon(file.name);
+                const size = file.is_dir ? '' : formatFileSize(file.size);
+                
+                item.innerHTML = `
+                    <span class="file-icon">${icon}</span>
+                    <span class="file-name">${file.name}</span>
+                    <span class="file-size">${size}</span>
+                `;
+                
+                if (file.is_dir) {
+                    item.ondblclick = () => browsePath(file.path);
+                } else {
+                    item.onclick = () => selectFile(file.path, item);
+                }
+                
+                list.appendChild(item);
+            });
+        }
+        
+        function browsePath(path) {
+            loadFileList(path);
+        }
+        
+        function selectFile(path, element) {
+            // Deselect previous
+            document.querySelectorAll('.file-item.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            
+            // Select new
+            element.classList.add('selected');
+            selectedFilePath = path;
+            document.getElementById('selected-file-path').textContent = path;
+        }
+        
+        function selectFileFromBrowser() {
+            if (!selectedFilePath) {
+                alert('Please select a file or folder');
+                return;
+            }
+            
+            document.getElementById('new-source-input').value = selectedFilePath;
+            closeFileBrowser();
+        }
+        
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'json': '📋',
+                'csv': '📊',
+                'txt': '📝',
+                'bin': '💾',
+                'gguf': '🧠',
+                'parquet': '📊',
+                'toml': '⚙️',
+                'md': '📄',
+                'py': '🐍',
+                'cpp': '⚡',
+                'h': '📦',
+                'go': '🐹'
+            };
+            return icons[ext] || '📄';
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+            if (bytes < 1024*1024*1024) return (bytes/1024/1024).toFixed(1) + ' MB';
+            return (bytes/1024/1024/1024).toFixed(1) + ' GB';
+        }
+        
+        // ==================== Training Control with Auto-Start ====================
+        
+        let mcpStartAttempts = 0;
+        const MAX_MCP_START_ATTEMPTS = 20;
+        
+        function startTraining() {
+            if (!window.qMiniMcpHost) {
+                // MCP bridge not available - try to auto-start
+                mcpStartAttempts = 0;
+                document.getElementById('config-status').textContent = 'Starting backend...';
+                document.getElementById('config-status').style.color = '#ffc107';
+                
+                // Check if backend is already trying to connect
+                pollForMcpConnection(() => {
+                    // Once connected, actually start training
+                    doStartTraining();
+                });
+                return;
+            }
+            
+            // MCP already available - start training immediately
+            doStartTraining();
+        }
+        
+        function pollForMcpConnection(callback) {
+            if (window.qMiniMcpHost) {
+                document.getElementById('config-status').textContent = 'Backend connected';
+                document.getElementById('config-status').style.color = '#2d7a51';
+                callback();
+                return;
+            }
+            
+            mcpStartAttempts++;
+            if (mcpStartAttempts > MAX_MCP_START_ATTEMPTS) {
+                document.getElementById('config-status').textContent = 'Backend not available';
+                document.getElementById('config-status').style.color = '#b42318';
+                alert('Training requires the MCP backend. Please restart with the full pipeline.');
+                return;
+            }
+            
+            // Try to connect via WebSocket or polling
+            setTimeout(() => pollForMcpConnection(callback), 500);
+        }
+        
+        function doStartTraining() {
+            if (!window.qMiniMcpHost) {
+                alert('Training backend not available');
+                return;
+            }
+            
+            window.qMiniMcpHost.callTool('wui_start_training_sse', {})
+                .then(() => {
+                    connectStream();
+                    streamStartTime = Date.now();
+                    updateElapsedTime();
+                    document.getElementById('config-status').textContent = 'Training started';
+                    document.getElementById('config-status').style.color = '#2d7a51';
+                })
+                .catch(err => {
+                    console.error('Failed to start training:', err);
+                    document.getElementById('config-status').textContent = 'Training failed';
+                    document.getElementById('config-status').style.color = '#b42318';
+                    alert('Failed to start training: ' + err.message);
+                });
         }
     </script>
 </body>
