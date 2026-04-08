@@ -3224,7 +3224,11 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 				content := string(recorder.body)
 				content = strings.Replace(content, "</head>", script+"</head>", 1)
 
-				w.Header().Set("Content-Type", "text/html")
+				// Copy headers from recorder and write response
+				for k, v := range recorder.Header() {
+					w.Header()[k] = v
+				}
+				w.WriteHeader(recorder.statusCode)
 				w.Write([]byte(content))
 				return
 			}
@@ -3235,25 +3239,29 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 	}
 }
 
-// responseRecorder captures response for modification
+// responseRecorder captures response for modification without writing to underlying writer
 type responseRecorder struct {
 	http.ResponseWriter
-	statusCode  int
-	body        []byte
-	wroteHeader bool
+	statusCode int
+	body       []byte
 }
 
 func (r *responseRecorder) WriteHeader(code int) {
-	if !r.wroteHeader {
+	if r.statusCode == 0 {
 		r.statusCode = code
-		r.wroteHeader = true
-		r.ResponseWriter.WriteHeader(code)
 	}
 }
 
 func (r *responseRecorder) Write(p []byte) (int, error) {
+	if r.statusCode == 0 {
+		r.statusCode = 200
+	}
 	r.body = append(r.body, p...)
-	return r.ResponseWriter.Write(p)
+	return len(p), nil
+}
+
+func (r *responseRecorder) Header() http.Header {
+	return r.ResponseWriter.Header()
 }
 
 // handleBrowseFiles serves the file browser API
