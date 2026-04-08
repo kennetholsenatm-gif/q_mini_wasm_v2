@@ -2990,11 +2990,12 @@ func (s *MCPServer) handleDetectHardwareLimits(params json.RawMessage) (interfac
 
 // WUIHTTPServer serves WUI static files from extracted assets
 type WUIHTTPServer struct {
-	mu       sync.RWMutex
-	server   *http.Server
-	port     int
-	running  bool
-	assetDir string
+	mu        sync.RWMutex
+	server    *http.Server
+	port      int
+	running   bool
+	assetDir  string
+	mcpServer *MCPServer
 }
 
 // NewWUIHTTPServer creates a new WUI HTTP server
@@ -3074,7 +3075,7 @@ func (s *MCPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interface{}) {
 	method, _ := msg["method"].(string)
 	id := msg["id"]
-	params, _ := msg["params"].(map[string]interface{})
+	_ = msg["params"] // Available if needed for specific handlers
 
 	// Route to appropriate handler
 	var result interface{}
@@ -3083,9 +3084,8 @@ func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interfa
 	switch method {
 	case "wui_start_training_sse":
 		// Start SSE server if not running
-		if sseTrainingServer == nil {
-			sseTrainingServer = NewTrainingSseServer("9090")
-			sseTrainingServer.Start()
+		if sseServer == nil {
+			InitSSEServer("9090")
 		}
 		result = map[string]interface{}{"status": "training_started", "stream_url": "http://localhost:9090/training-stream"}
 	case "wui_run_inference":
@@ -3347,9 +3347,13 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 
 	// API endpoints
 	mux.HandleFunc("/api/browse", s.handleBrowseFiles)
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		s.handleWebSocket(w, r)
-	})
+
+	// WebSocket endpoint for browser-based MCP
+	if s.mcpServer != nil {
+		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+			s.mcpServer.handleWebSocket(w, r)
+		})
+	}
 
 	s.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.port),
@@ -3407,6 +3411,9 @@ func (s *WUIHTTPServer) GetURL() string {
 // Global WUI HTTP server instance
 var wuiHTTPServer *WUIHTTPServer
 
+// Global MCP server instance (set by main)
+var globalMcpServer *MCPServer
+
 // InitWUIHTTPServer initializes the WUI HTTP server from TOML config
 func InitWUIHTTPServer(projectRoot string) error {
 	// Read TOML config to get port
@@ -3415,6 +3422,7 @@ func InitWUIHTTPServer(projectRoot string) error {
 	if err != nil {
 		// Use default port if TOML not found
 		wuiHTTPServer = NewWUIHTTPServer(7345, "")
+		wuiHTTPServer.mcpServer = globalMcpServer
 		return wuiHTTPServer.Start(projectRoot)
 	}
 
@@ -3452,6 +3460,7 @@ func InitWUIHTTPServer(projectRoot string) error {
 	}
 
 	wuiHTTPServer = NewWUIHTTPServer(port, "")
+	wuiHTTPServer.mcpServer = globalMcpServer
 	return wuiHTTPServer.Start(projectRoot)
 }
 
@@ -3485,6 +3494,7 @@ func (s *MCPServer) writeResponse(resp MCPResponse) {
 
 func main() {
 	server := NewMCPServer()
+	globalMcpServer = server
 
 	// Get executable path for self-extraction check
 	exePath, err := os.Executable()
