@@ -329,28 +329,17 @@
 
             <h3>Available Models</h3>
             <div class="model-list" id="model-list">
-                <div class="model-item" data-file="trained_20260407_144052_e3_b8.bin">
-                    <div>
-                        <div class="model-name">Training Run A</div>
-                        <div class="model-size">3 epochs, 8 batch</div>
-                    </div>
-                </div>
-                <div class="model-item" data-file="trained_20260407_151221_e3_b8.bin">
-                    <div>
-                        <div class="model-name">Training Run B</div>
-                        <div class="model-size">3 epochs, 8 batch</div>
-                    </div>
-                </div>
-                <div class="model-item" data-file="intermediate_epoch10.bin">
-                    <div>
-                        <div class="model-name">Intermediate Checkpoint</div>
-                        <div class="model-size">Epoch 10</div>
-                    </div>
-                </div>
+                <!-- Models will be populated dynamically -->
+            </div>
+            <div style="margin: 0.5rem 0; padding: 0.5rem; background: #1a1a2e; border-radius: 4px;">
+                <input type="file" id="model-file-input" accept=".bin,.gguf,.onnx" style="display: none;" onchange="handleModelFileSelect(event)">
+                <button class="btn small" onclick="document.getElementById('model-file-input').click()">Browse...</button>
+                <span id="selected-file-name" style="margin-left: 0.5rem; font-size: 0.8rem; color: #888;">No file selected</span>
             </div>
             <div class="btn-row">
                 <button class="btn primary" onclick="loadModel()">Load</button>
                 <button class="btn danger" onclick="unloadModel()">Unload</button>
+                <button class="btn small" onclick="scanForModels()">Scan Models/</button>
             </div>
             <div style="margin-top: 0.5rem;">
                 <span class="status-indicator status-warn" id="model-status-dot"></span>
@@ -554,24 +543,104 @@
 
         let currentModel = null;
         let isGenerating = false;
+        let availableModels = [];
+
+        function scanForModels() {
+            // In standalone mode, check localStorage for model list
+            const stored = localStorage.getItem('qmini_available_models');
+            if (stored) {
+                try {
+                    availableModels = JSON.parse(stored);
+                    renderModelList();
+                    return;
+                } catch (e) {
+                    console.log('Failed to parse stored models');
+                }
+            }
+            
+            // Default models
+            availableModels = [
+                { file: 'trained_20260407_144052_e3_b8.bin', name: 'Training Run A', size: '3 epochs, 8 batch' },
+                { file: 'trained_20260407_151221_e3_b8.bin', name: 'Training Run B', size: '3 epochs, 8 batch' },
+                { file: 'intermediate_epoch10.bin', name: 'Intermediate Checkpoint', size: 'Epoch 10' }
+            ];
+            renderModelList();
+        }
+        
+        function renderModelList() {
+            const list = document.getElementById('model-list');
+            list.innerHTML = '';
+            
+            availableModels.forEach(model => {
+                const item = document.createElement('div');
+                item.className = 'model-item';
+                item.dataset.file = model.file;
+                item.innerHTML = `
+                    <div>
+                        <div class="model-name">${model.name}</div>
+                        <div class="model-size">${model.size}</div>
+                    </div>
+                `;
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.model-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                });
+                list.appendChild(item);
+            });
+        }
+        
+        function handleModelFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                document.getElementById('selected-file-name').textContent = file.name;
+                // Add to model list
+                const newModel = { 
+                    file: file.name, 
+                    name: file.name.replace(/\.[^/.]+$/, ''), 
+                    size: `${(file.size / 1024 / 1024).toFixed(1)} MB` 
+                };
+                availableModels.unshift(newModel);
+                localStorage.setItem('qmini_available_models', JSON.stringify(availableModels));
+                renderModelList();
+                
+                // Auto-select the new model
+                setTimeout(() => {
+                    const firstItem = document.querySelector('.model-item');
+                    if (firstItem) firstItem.click();
+                }, 10);
+            }
+        }
 
         function loadModel() {
             const selected = document.querySelector('.model-item.active');
-            if (!selected) {
-                alert('Select a model first');
+            const fileInput = document.getElementById('model-file-input');
+            
+            let modelFile = null;
+            let modelName = null;
+            
+            if (selected) {
+                modelFile = selected.dataset.file;
+                modelName = selected.querySelector('.model-name').textContent;
+            } else if (fileInput.files[0]) {
+                modelFile = fileInput.files[0].name;
+                modelName = fileInput.files[0].name;
+            } else {
+                alert('Select a model from the list or browse for a file');
                 return;
             }
             
-            currentModel = selected.dataset.file;
+            currentModel = modelFile;
             document.getElementById('model-status-dot').className = 'status-indicator status-ok';
-            document.getElementById('model-status').textContent = `Loaded: ${currentModel}`;
+            document.getElementById('model-status').textContent = `Loaded: ${modelName}`;
             
-            // Update metrics
-            document.getElementById('model-size').textContent = '10B';
-            document.getElementById('memory-used').textContent = '1.2';
+            // Update metrics (simulated based on filename)
+            const size = modelFile.includes('large') ? 100 : (modelFile.includes('medium') ? 50 : 10);
+            document.getElementById('model-size').textContent = size + 'B';
+            document.getElementById('memory-used').textContent = (size * 0.12).toFixed(1);
             updateScaleIndicator();
             
-            addMessage('system', `Model loaded: ${currentModel} (10B params, 243 experts, 243 qutrits)`);
+            const mode = window.qMiniMcpHost ? 'LIVE' : 'SIMULATED';
+            addMessage('system', `[${mode}] Model loaded: ${modelName} (${size}B params, 243 experts, 243 qutrits)`);
         }
 
         function unloadModel() {
@@ -583,11 +652,14 @@
             addMessage('system', 'Model unloaded');
         }
 
-        document.querySelectorAll('.model-item').forEach(item => {
-            item.addEventListener('click', () => {
-                document.querySelectorAll('.model-item').forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-            });
+        // Initialize model list on load
+        document.addEventListener('DOMContentLoaded', () => {
+            scanForModels();
+            
+            // Show mode indicator
+            if (!window.qMiniMcpHost) {
+                addMessage('system', '[STANDALONE MODE] Inference is simulated. For real model inference, run: .\\qminiwasm.exe | .\\mcp-host.exe');
+            }
         });
 
         function addMessage(role, text) {
@@ -692,20 +764,31 @@
         }
 
         function simulateInference(prompt, bubble) {
-            // Simple simulation for standalone mode - generates coherent placeholder text
-            const responses = [
-                "I am a quantum-inspired ternary AI model. I can process queries using 243 experts and 243 qutrits to generate responses based on my training.",
-                "As an AI trained on mathematical and quantum physics datasets, I can help explain concepts related to GF(3) arithmetic, QGNN architectures, and ternary computing.",
-                "My architecture uses 243 MoE experts with ternary qutrit states (-1, 0, +1) for efficient computation. This allows me to run inference with extreme compression compared to fp32 models.",
-                "I'm designed to demonstrate the q_mini_wasm_v2 framework's capabilities. In production, I would connect to the actual inference engine to generate contextually relevant responses."
-            ];
+            // STANDALONE MODE: Simulated responses for demo purposes
+            // In production with MCP bridge, this would be real model inference
             
-            const response = responses[Math.floor(Math.random() * responses.length)];
+            const prefix = `[SIMULATED MODE - No MCP Bridge]\n\n`;
+            
+            // Generate a context-aware simulated response based on prompt keywords
+            let response;
+            const prompt_lower = prompt.toLowerCase();
+            
+            if (prompt_lower.includes('quantum') || prompt_lower.includes('qutrit')) {
+                response = `This is a SIMULATED response for demonstration.\n\nIn full mode with MCP bridge, I would process your quantum computing query using the QGNN with 243 ternary qutrit states. The query "${prompt}" would be encoded into GF(3) arithmetic and processed through the Mixture of Experts architecture.`;
+            } else if (prompt_lower.includes('math') || prompt_lower.includes('equation')) {
+                response = `This is a SIMULATED response for demonstration.\n\nIn full mode with MCP bridge, I would analyze your mathematical query "${prompt}" using the trained 243-expert model with ternary compression. The response would be generated through iterative message passing on the scale-free topology.`;
+            } else if (prompt_lower.includes('ternary') || prompt_lower.includes('gf3')) {
+                response = `This is a SIMULATED response for demonstration.\n\nIn full mode with MCP bridge, I would explain GF(3) arithmetic and ternary logic. Your query "${prompt}" would be processed using -1, 0, +1 states with 10x compression vs fp32.`;
+            } else {
+                response = `This is a SIMULATED response for demonstration purposes.\n\nYour query "${prompt}" cannot be answered with the real model because:\n\n1. MCP bridge is not connected\n2. No inference backend is running\n3. Standalone mode only serves static files\n\nTo get real inference:\n.\\qminiwasm.exe | .\\mcp-host.exe`;
+            }
+            
+            const fullResponse = prefix + response;
             let i = 0;
             
             const interval = setInterval(() => {
-                if (i < response.length && isGenerating) {
-                    bubble.textContent += response[i];
+                if (i < fullResponse.length && isGenerating) {
+                    bubble.textContent += fullResponse[i];
                     i++;
                     document.getElementById('iterations').textContent = i;
                     document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
@@ -713,7 +796,7 @@
                     clearInterval(interval);
                     finishGeneration(i, i * 0.01);
                 }
-            }, 20);
+            }, 15);
         }
 
         function finishGeneration(iterations, timeSeconds) {
