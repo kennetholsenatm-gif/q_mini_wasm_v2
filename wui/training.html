@@ -402,21 +402,45 @@ dataset_dir = "flash_cim_243expert/"
         });
 
         // Data source functions
+        const defaultDataSources = [
+            { name: 'arxiv.org/abs/quant-ph', type: 'web' },
+            { name: 'mathworld.wolfram.com', type: 'web' },
+            { name: 'oeis.org', type: 'web' },
+            { name: 'data/wikipedia_math', type: 'local' },
+            { name: 'data/stackexchange_physics', type: 'local' },
+        ];
+
         function loadDataSources() {
-            if (!window.qMiniMcpHost) {
-                console.log('MCP bridge not available - using default sources');
-                return;
+            // Try localStorage first (standalone mode)
+            const stored = localStorage.getItem('qmini_data_sources');
+            if (stored) {
+                try {
+                    const sources = JSON.parse(stored);
+                    renderDataSources(sources);
+                    return;
+                } catch (e) {
+                    console.log('Failed to parse stored sources');
+                }
             }
             
-            window.qMiniMcpHost.callTool('wui_get_data_sources', {})
-                .then(result => {
-                    if (result.sources && result.sources.length > 0) {
-                        renderDataSources(result.sources);
-                    }
-                })
-                .catch(err => {
-                    console.log('Using default data sources');
-                });
+            // Fall back to MCP bridge if available
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_get_data_sources', {})
+                    .then(result => {
+                        if (result.sources && result.sources.length > 0) {
+                            renderDataSources(result.sources);
+                        } else {
+                            renderDataSources(defaultDataSources);
+                        }
+                    })
+                    .catch(err => {
+                        console.log('Using default data sources');
+                        renderDataSources(defaultDataSources);
+                    });
+            } else {
+                // Standalone mode - use defaults
+                renderDataSources(defaultDataSources);
+            }
         }
 
         function renderDataSources(sources) {
@@ -467,11 +491,6 @@ dataset_dir = "flash_cim_243expert/"
         }
 
         function saveDataSources() {
-            if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available - sources not saved');
-                return;
-            }
-            
             const sources = [];
             document.querySelectorAll('.data-source-item').forEach(item => {
                 const name = item.querySelector('.data-source-name').textContent;
@@ -479,18 +498,25 @@ dataset_dir = "flash_cim_243expert/"
                 sources.push({ name, type });
             });
             
-            window.qMiniMcpHost.callTool('wui_save_data_sources', { sources })
-                .then(() => {
-                    alert('Data sources saved');
-                })
-                .catch(err => {
-                    alert('Failed to save data sources');
-                });
+            // Always save to localStorage
+            localStorage.setItem('qmini_data_sources', JSON.stringify(sources));
+            
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_save_data_sources', { sources })
+                    .then(() => {
+                        alert('Data sources saved (localStorage + MCP)');
+                    })
+                    .catch(err => {
+                        alert('Saved to localStorage (MCP unavailable)');
+                    });
+            } else {
+                alert('Data sources saved to localStorage');
+            }
         }
 
         function crawlAllSources() {
             if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available - cannot crawl');
+                alert('Crawling requires MCP bridge with backend engine. Run with: .\\qminiwasm.exe | .\\mcp-host.exe');
                 return;
             }
             
@@ -562,12 +588,40 @@ dataset_dir = "flash_cim_243expert/"
 
         // API Key functions
         function loadApiKeys() {
-            if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available');
-                return;
+            const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
+            
+            // Try localStorage first (standalone mode)
+            const stored = localStorage.getItem('qmini_api_keys');
+            if (stored) {
+                try {
+                    const keys = JSON.parse(stored);
+                    services.forEach(service => {
+                        const input = document.getElementById(`api-${service}`);
+                        const status = document.getElementById(`status-${service}`);
+                        
+                        if (keys[service]) {
+                            input.value = '********'; // Masked
+                            status.textContent = 'Stored (local)';
+                            status.className = 'api-status ok';
+                        } else {
+                            status.textContent = 'Missing';
+                            status.className = 'api-status missing';
+                        }
+                    });
+                    
+                    if (!window.qMiniMcpHost) {
+                        alert('Loaded from localStorage (MCP unavailable for Credential Manager)');
+                    }
+                    return;
+                } catch (e) {
+                    console.log('Failed to parse stored API keys');
+                }
             }
             
-            const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
+            if (!window.qMiniMcpHost) {
+                alert('MCP bridge not available - keys not loaded (run with .\\qminiwasm.exe | .\\mcp-host.exe for secure storage)');
+                return;
+            }
             
             window.qMiniMcpHost.callTool('wui_load_api_keys', {})
                 .then(result => {
@@ -592,11 +646,6 @@ dataset_dir = "flash_cim_243expert/"
         }
 
         function saveApiKeys() {
-            if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available');
-                return;
-            }
-            
             const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
             const keys = {};
             
@@ -607,15 +656,23 @@ dataset_dir = "flash_cim_243expert/"
                 }
             });
             
-            window.qMiniMcpHost.callTool('wui_store_api_keys', { keys })
-                .then(() => {
-                    alert('API keys saved securely to Windows Credential Manager');
-                    loadApiKeys(); // Refresh status
-                })
-                .catch(err => {
-                    console.error('Failed to save API keys:', err);
-                    alert('Failed to save API keys');
-                });
+            // Always save to localStorage
+            localStorage.setItem('qmini_api_keys', JSON.stringify(keys));
+            
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_store_api_keys', { keys })
+                    .then(() => {
+                        alert('API keys saved securely to Windows Credential Manager');
+                        loadApiKeys(); // Refresh status
+                    })
+                    .catch(err => {
+                        console.error('Failed to save API keys:', err);
+                        alert('Saved to localStorage (MCP credential storage unavailable)');
+                        loadApiKeys();
+                    });
+            } else {
+                alert('API keys saved to localStorage. For secure Windows Credential Manager storage, run with: .\\qminiwasm.exe | .\\mcp-host.exe');
+            }
         }
 
         // Training control functions
