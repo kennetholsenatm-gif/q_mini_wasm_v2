@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -3019,6 +3020,223 @@ type FileEntry struct {
 	ModTime string `json:"mod_time,omitempty"`
 }
 
+// WebSocket connections for browser-based MCP
+type wsConn struct {
+	conn   *websocket.Conn
+	server *MCPServer
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
+var wsClients = make(map[*websocket.Conn]*wsConn)
+var wsClientsMu sync.RWMutex
+
+func (s *MCPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		fmt.Printf("[WS] Upgrade error: %v\n", err)
+		return
+	}
+	defer conn.Close()
+
+	wsClientsMu.Lock()
+	wsClients[conn] = &wsConn{conn: conn, server: s}
+	wsClientsMu.Unlock()
+
+	fmt.Printf("[WS] Client connected\n")
+
+	// Send handshake
+	handshake := map[string]interface{}{
+		"type":    "handshake",
+		"version": desktopShellContractVersion,
+	}
+	conn.WriteJSON(handshake)
+
+	for {
+		var msg map[string]interface{}
+		if err := conn.ReadJSON(&msg); err != nil {
+			fmt.Printf("[WS] Read error: %v\n", err)
+			break
+		}
+
+		// Process MCP request
+		go s.handleWSMessage(conn, msg)
+	}
+
+	wsClientsMu.Lock()
+	delete(wsClients, conn)
+	wsClientsMu.Unlock()
+	fmt.Printf("[WS] Client disconnected\n")
+}
+
+func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interface{}) {
+	method, _ := msg["method"].(string)
+	id := msg["id"]
+	params, _ := msg["params"].(map[string]interface{})
+
+	// Route to appropriate handler
+	var result interface{}
+	var err error
+
+	switch method {
+	case "wui_start_training_sse":
+		// Start SSE server if not running
+		if sseTrainingServer == nil {
+			sseTrainingServer = NewTrainingSseServer("9090")
+			sseTrainingServer.Start()
+		}
+		result = map[string]interface{}{"status": "training_started", "stream_url": "http://localhost:9090/training-stream"}
+	case "wui_run_inference":
+		result = map[string]interface{}{"status": "inference_started", "request_id": fmt.Sprintf("inf_%d", time.Now().Unix())}
+	case "wui_get_data_sources":
+		result = map[string]interface{}{"sources": []interface{}{}}
+	case "wui_save_data_sources":
+		result = map[string]interface{}{"saved": true}
+	case "wui_load_training_config":
+		result = map[string]interface{}{"config": ""}
+	case "wui_save_training_config":
+		result = map[string]interface{}{"saved": true}
+	case "wui_load_api_keys":
+		result = map[string]interface{}{}
+	case "wui_store_api_keys":
+		result = map[string]interface{}{"stored": true}
+	case "wui_crawl_data_sources":
+		result = map[string]interface{}{"started": true}
+	case "wui_pause_training":
+		result = map[string]interface{}{"paused": true}
+	case "wui_stop_training_sse":
+		result = map[string]interface{}{"stopped": true}
+	case "ping":
+		result = map[string]interface{}{"pong": true}
+	default:
+		err = fmt.Errorf("unknown method: %s", method)
+	}
+
+	response := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+	}
+	if err != nil {
+		response["error"] = map[string]interface{}{"message": err.Error()}
+	} else {
+		response["result"] = result
+	}
+
+	conn.WriteJSON(response)
+}
+
+// injectMCPScript wraps the file server and injects the WebSocket MCP script into HTML files
+func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Check if request is for an HTML file
+		path := r.URL.Path
+		if path == "/" || strings.HasSuffix(path, ".html") {
+			// Read the file content
+			recorder := &responseRecorder{ResponseWriter: w, statusCode: 200}
+			h.ServeHTTP(recorder, r)
+
+			if recorder.statusCode == 200 && strings.Contains(string(recorder.body), "</head>") {
+				// Inject the MCP script before </head>
+				script := fmt.Sprintf(`<script>
+(function() {
+	// WebSocket MCP Bridge
+	const ws = new WebSocket('ws://localhost:%d/ws');
+	let pending = new Map();
+	let nextId = 1;
+	
+	ws.onopen = function() {
+		console.log('[MCP] WebSocket connected');
+		window.dispatchEvent(new CustomEvent('qminiMcpReady', { detail: { connected: true } }));
+	};
+	
+	ws.onmessage = function(event) {
+		const msg = JSON.parse(event.data);
+		if (msg.jsonrpc === '2.0' && msg.id !== undefined) {
+			const wait = pending.get(msg.id);
+			if (wait) {
+				pending.delete(msg.id);
+				if (msg.error) {
+					wait.reject(new Error(msg.error.message));
+				} else {
+					wait.resolve(msg.result);
+				}
+			}
+		}
+	};
+	
+	ws.onclose = function() {
+		console.log('[MCP] WebSocket disconnected');
+		window.qMiniMcpHost = null;
+	};
+	
+	window.qMiniMcpHost = {
+		callTool: function(name, args) {
+			return new Promise((resolve, reject) => {
+				if (ws.readyState !== WebSocket.OPEN) {
+					reject(new Error('WebSocket not connected'));
+					return;
+				}
+				const id = nextId++;
+				pending.set(id, { resolve, reject });
+				ws.send(JSON.stringify({
+					jsonrpc: '2.0',
+					id: id,
+					method: name,
+					params: args || {}
+				}));
+				// Timeout after 30 seconds
+				setTimeout(() => {
+					if (pending.has(id)) {
+						pending.delete(id);
+						reject(new Error('Request timeout'));
+					}
+				}, 30000);
+			});
+		},
+		ping: function() {
+			return this.callTool('ping', {});
+		}
+	};
+})();
+</script>`, port)
+
+				content := string(recorder.body)
+				content = strings.Replace(content, "</head>", script+"</head>", 1)
+
+				w.Header().Set("Content-Type", "text/html")
+				w.Write([]byte(content))
+				return
+			}
+		}
+
+		// Pass through normally
+		h.ServeHTTP(w, r)
+	}
+}
+
+// responseRecorder captures response for modification
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode  int
+	body        []byte
+	wroteHeader bool
+}
+
+func (r *responseRecorder) WriteHeader(code int) {
+	if !r.wroteHeader {
+		r.statusCode = code
+		r.wroteHeader = true
+		r.ResponseWriter.WriteHeader(code)
+	}
+}
+
+func (r *responseRecorder) Write(p []byte) (int, error) {
+	r.body = append(r.body, p...)
+	return r.ResponseWriter.Write(p)
+}
+
 // handleBrowseFiles serves the file browser API
 func (s *WUIHTTPServer) handleBrowseFiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -3123,12 +3341,15 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 	// Create router
 	mux := http.NewServeMux()
 
-	// Static file server
+	// Static file server with MCP injection
 	fs := http.FileServer(http.Dir(assetPath))
-	mux.Handle("/", fs)
+	mux.Handle("/", injectMCPScript(fs, s.port))
 
 	// API endpoints
 	mux.HandleFunc("/api/browse", s.handleBrowseFiles)
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		s.handleWebSocket(w, r)
+	})
 
 	s.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.port),
