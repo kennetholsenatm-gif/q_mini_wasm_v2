@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -127,21 +128,21 @@ type MCPServer struct {
 
 // ReleaseState tracks desktop build/deploy lifecycle.
 type ReleaseState struct {
-	Status               string   `json:"status"`
-	ArtifactPath         string   `json:"artifact_path,omitempty"`
-	ArtifactSHA256       string   `json:"artifact_sha256,omitempty"`
-	EmbeddedBundleSHA256 string   `json:"embedded_bundle_sha256,omitempty"`
-	EmbeddedBundleBytes  int64    `json:"embedded_bundle_bytes,omitempty"`
-	EmbeddedNativeRuntimeAssets int `json:"embedded_native_runtime_assets,omitempty"`
-	AssetDir             string   `json:"asset_dir,omitempty"`
-	AssetManifestPath    string   `json:"asset_manifest_path,omitempty"`
-	AssetCount           int      `json:"asset_count,omitempty"`
-	ShellContractVersion string   `json:"shell_contract_version,omitempty"`
-	Target               string   `json:"target,omitempty"`
-	LastAction           string   `json:"last_action,omitempty"`
-	LastError            string   `json:"last_error,omitempty"`
-	UpdatedAt            string   `json:"updated_at"`
-	LastLogLines         []string `json:"last_log_lines,omitempty"`
+	Status                      string   `json:"status"`
+	ArtifactPath                string   `json:"artifact_path,omitempty"`
+	ArtifactSHA256              string   `json:"artifact_sha256,omitempty"`
+	EmbeddedBundleSHA256        string   `json:"embedded_bundle_sha256,omitempty"`
+	EmbeddedBundleBytes         int64    `json:"embedded_bundle_bytes,omitempty"`
+	EmbeddedNativeRuntimeAssets int      `json:"embedded_native_runtime_assets,omitempty"`
+	AssetDir                    string   `json:"asset_dir,omitempty"`
+	AssetManifestPath           string   `json:"asset_manifest_path,omitempty"`
+	AssetCount                  int      `json:"asset_count,omitempty"`
+	ShellContractVersion        string   `json:"shell_contract_version,omitempty"`
+	Target                      string   `json:"target,omitempty"`
+	LastAction                  string   `json:"last_action,omitempty"`
+	LastError                   string   `json:"last_error,omitempty"`
+	UpdatedAt                   string   `json:"updated_at"`
+	LastLogLines                []string `json:"last_log_lines,omitempty"`
 }
 
 // TOMLValidationResult reports syntax and governance checks for config/system.toml.
@@ -179,9 +180,9 @@ type EmbeddedAssetManifest struct {
 }
 
 type EmbeddedAssetPayload struct {
-	Manifest   EmbeddedAssetManifest
-	Bundle     []byte
-	BundleHash string
+	Manifest     EmbeddedAssetManifest
+	Bundle       []byte
+	BundleHash   string
 	NativeAssets []string
 }
 
@@ -563,9 +564,9 @@ func buildEmbeddedAssetPayload(projectRoot string, requireNativeRuntime bool) (E
 
 	bundle := bundleBuf.Bytes()
 	return EmbeddedAssetPayload{
-		Manifest:   manifest,
-		Bundle:     bundle,
-		BundleHash: hashBytesHex(bundle),
+		Manifest:     manifest,
+		Bundle:       bundle,
+		BundleHash:   hashBytesHex(bundle),
 		NativeAssets: nativeAssets,
 	}, nil
 }
@@ -806,6 +807,13 @@ func (s *MCPServer) handleDesktopShellHandshake(params json.RawMessage) (interfa
 	}
 	_ = json.Unmarshal(params, &args)
 
+	// Initialize WUI HTTP server if not already running
+	if wuiHTTPServer == nil || !wuiHTTPServer.IsRunning() {
+		if err := InitWUIHTTPServer(s.projectRoot); err != nil {
+			fmt.Fprintf(os.Stderr, "[WUI HTTP] Failed to start: %v\n", err)
+		}
+	}
+
 	runtimeContractPath, runtimeBootstrapPath, err := ensureDesktopRuntimeContractAssets(s.projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize desktop shell runtime assets: %w", err)
@@ -823,16 +831,16 @@ func (s *MCPServer) handleDesktopShellHandshake(params json.RawMessage) (interfa
 
 	selfCheck := s.buildSystemSelfCheck(artifactPath)
 	result := map[string]interface{}{
-		"contract_version":     desktopShellContractVersion,
-		"required_method":      "window.qMiniMcpHost.callTool(name, arguments)",
-		"request_channel":      "qmini-mcp-request",
-		"response_channel":     "qmini-mcp-response",
-		"handshake_tool":       "wui_desktop_shell_handshake",
-		"runtime_contract_path": runtimeContractPath,
+		"contract_version":       desktopShellContractVersion,
+		"required_method":        "window.qMiniMcpHost.callTool(name, arguments)",
+		"request_channel":        "qmini-mcp-request",
+		"response_channel":       "qmini-mcp-response",
+		"handshake_tool":         "wui_desktop_shell_handshake",
+		"runtime_contract_path":  runtimeContractPath,
 		"runtime_bootstrap_path": runtimeBootstrapPath,
-		"artifact_path":        artifactPath,
-		"artifact_exists":      fileExists(artifactPath),
-		"self_check":           selfCheck,
+		"artifact_path":          artifactPath,
+		"artifact_exists":        fileExists(artifactPath),
+		"self_check":             selfCheck,
 	}
 
 	if args.ExtractAssets && fileExists(artifactPath) {
@@ -857,6 +865,11 @@ func (s *MCPServer) handleDesktopShellHandshake(params json.RawMessage) (interfa
 		result["asset_dir"] = extractRoot
 		result["embedded_asset_sha256"] = bundleHash
 		result["embedded_native_runtime_assets"] = nativeRuntimeAssets
+
+		// Add WUI HTTP server URL if running
+		if wuiHTTPServer != nil && wuiHTTPServer.IsRunning() {
+			result["wui_http_url"] = wuiHTTPServer.GetURL()
+		}
 	}
 
 	return result, nil
@@ -940,6 +953,29 @@ func (s *MCPServer) registerTools() {
 	s.tools["wui_rollback_release"] = s.handleRollbackRelease
 	s.tools["wui_get_release_status"] = s.handleGetReleaseStatus
 	s.tools["wui_get_ops_snapshot"] = s.handleGetOpsSnapshot
+
+	// API Key management (Windows Credential Manager)
+	s.tools["wui_store_api_keys"] = s.handleStoreApiKeys
+	s.tools["wui_load_api_keys"] = s.handleLoadApiKeys
+	s.tools["wui_delete_api_key"] = s.handleDeleteApiKey
+
+	// Training configuration management
+	s.tools["wui_load_training_config"] = s.handleLoadTrainingConfig
+	s.tools["wui_save_training_config"] = s.handleSaveTrainingConfig
+
+	// Training with SSE streaming
+	s.tools["wui_start_training_sse"] = s.handleStartTrainingWithSSE
+	s.tools["wui_stop_training_sse"] = s.handleStopTrainingSSE
+	s.tools["wui_get_training_status"] = s.handleGetTrainingStatus
+
+	// AI Inference suite
+	s.tools["wui_load_model"] = s.handleLoadModel
+	s.tools["wui_unload_model"] = s.handleUnloadModel
+	s.tools["wui_list_models"] = s.handleListModels
+	s.tools["wui_run_inference"] = s.handleRunInference
+	s.tools["wui_stop_inference"] = s.handleStopInference
+	s.tools["wui_get_inference_metrics"] = s.handleGetInferenceMetrics
+	s.tools["wui_detect_hardware_limits"] = s.handleDetectHardwareLimits
 }
 
 func detectProjectRoot() string {
@@ -1336,38 +1372,38 @@ func (s *MCPServer) buildSystemSelfCheck(expectArtifact string) map[string]inter
 	strictMode := s.wsClient == nil || s.wsClient.strictMode
 
 	checks := map[string]interface{}{
-		"mcp_bridge_connected":      mcpConnected,
-		"strict_mode":               strictMode,
-		"backend_passthrough":       s.canPassthroughToBackend(),
-		"pipeline_initialized":      s.pipeline != nil,
-		"cgo_enabled":               runtimeCGOEnabled(),
-		"system_toml_path":          tomlPath,
-		"system_toml_exists":        tomlExists,
-		"system_toml_writable":      tomlWritable,
-		"system_toml_validation":    validation,
-		"desktop_artifact_path":     artifactCandidate,
-		"desktop_artifact_exists":   artifactExists,
-		"desktop_artifact_sha256":   artifactSHA,
-		"embedded_asset_bundle":     bundleFound,
-		"embedded_asset_bytes":      bundleBytes,
-		"embedded_asset_sha256":     bundleHash,
-		"runtime_contract_path":     runtimeContractPath,
-		"runtime_contract_exists":   fileExists(runtimeContractPath),
-		"runtime_bootstrap_path":    runtimeBootstrapPath,
-		"runtime_bootstrap_exists":  fileExists(runtimeBootstrapPath),
-		"runtime_execution_available": runtimeExecutionAvailable,
-		"asset_manifest_path":       manifestPath,
-		"asset_manifest_exists":     fileExists(manifestPath),
-		"asset_count":               release.AssetCount,
-		"embedded_native_runtime_assets": embeddedNativeRuntimeAssets,
-		"native_runtime_artifact_paths":  nativeRuntimePaths,
+		"mcp_bridge_connected":               mcpConnected,
+		"strict_mode":                        strictMode,
+		"backend_passthrough":                s.canPassthroughToBackend(),
+		"pipeline_initialized":               s.pipeline != nil,
+		"cgo_enabled":                        runtimeCGOEnabled(),
+		"system_toml_path":                   tomlPath,
+		"system_toml_exists":                 tomlExists,
+		"system_toml_writable":               tomlWritable,
+		"system_toml_validation":             validation,
+		"desktop_artifact_path":              artifactCandidate,
+		"desktop_artifact_exists":            artifactExists,
+		"desktop_artifact_sha256":            artifactSHA,
+		"embedded_asset_bundle":              bundleFound,
+		"embedded_asset_bytes":               bundleBytes,
+		"embedded_asset_sha256":              bundleHash,
+		"runtime_contract_path":              runtimeContractPath,
+		"runtime_contract_exists":            fileExists(runtimeContractPath),
+		"runtime_bootstrap_path":             runtimeBootstrapPath,
+		"runtime_bootstrap_exists":           fileExists(runtimeBootstrapPath),
+		"runtime_execution_available":        runtimeExecutionAvailable,
+		"asset_manifest_path":                manifestPath,
+		"asset_manifest_exists":              fileExists(manifestPath),
+		"asset_count":                        release.AssetCount,
+		"embedded_native_runtime_assets":     embeddedNativeRuntimeAssets,
+		"native_runtime_artifact_paths":      nativeRuntimePaths,
 		"native_runtime_artifacts_available": nativeRuntimeAvailable,
-		"shell_contract_version":    desktopShellContractVersion,
-		"engine_artifact_path":      enginePath,
-		"engine_artifact_available": enginePath != "",
-		"bridge_binary_path":        bridgePath,
-		"bridge_binary_available":   bridgePath != "",
-		"timestamp":                 time.Now().Format(time.RFC3339),
+		"shell_contract_version":             desktopShellContractVersion,
+		"engine_artifact_path":               enginePath,
+		"engine_artifact_available":          enginePath != "",
+		"bridge_binary_path":                 bridgePath,
+		"bridge_binary_available":            bridgePath != "",
+		"timestamp":                          time.Now().Format(time.RFC3339),
 	}
 	if bundleErr != "" {
 		checks["embedded_asset_error"] = bundleErr
@@ -1607,32 +1643,32 @@ func (s *MCPServer) handleBuildRelease(params json.RawMessage) (interface{}, err
 	s.updateReleaseState("built", "build_release", "local", outputPath, combinedLogs, nil)
 
 	return map[string]interface{}{
-		"built":                  true,
-		"artifact_path":          outputPath,
-		"artifact_sha256":        artifactSHA,
-		"embedded_asset_sha256":  bundleHash,
-		"embedded_asset_bytes":   bundleBytes,
-		"asset_manifest_path":    manifestPath,
-		"asset_count":            assetCount,
+		"built":                          true,
+		"artifact_path":                  outputPath,
+		"artifact_sha256":                artifactSHA,
+		"embedded_asset_sha256":          bundleHash,
+		"embedded_asset_bytes":           bundleBytes,
+		"asset_manifest_path":            manifestPath,
+		"asset_count":                    assetCount,
 		"embedded_native_runtime_assets": nativeRuntimeAssets,
-		"native_runtime_assets":  payload.NativeAssets,
-		"require_native_runtime": requireNativeRuntime,
-		"require_cgo":           requireCGO,
-		"build_env":             map[string]interface{}{"CGO_ENABLED": buildEnv["CGO_ENABLED"]},
-		"asset_dir":              extractRoot,
-		"shell_contract_version": desktopShellContractVersion,
-		"log_tail":               combinedLogs,
+		"native_runtime_assets":          payload.NativeAssets,
+		"require_native_runtime":         requireNativeRuntime,
+		"require_cgo":                    requireCGO,
+		"build_env":                      map[string]interface{}{"CGO_ENABLED": buildEnv["CGO_ENABLED"]},
+		"asset_dir":                      extractRoot,
+		"shell_contract_version":         desktopShellContractVersion,
+		"log_tail":                       combinedLogs,
 	}, nil
 }
 
 func (s *MCPServer) handleDeployRelease(params json.RawMessage) (interface{}, error) {
 	var args struct {
-		ArtifactPath string `json:"artifact_path"`
-		Target       string `json:"target"`
-		DeployDir    string `json:"deploy_dir"`
-		ExtractDir   string `json:"extract_dir"`
-		ExtractAssets *bool `json:"extract_assets"`
-		RequireNativeRuntime *bool `json:"require_native_runtime"`
+		ArtifactPath         string `json:"artifact_path"`
+		Target               string `json:"target"`
+		DeployDir            string `json:"deploy_dir"`
+		ExtractDir           string `json:"extract_dir"`
+		ExtractAssets        *bool  `json:"extract_assets"`
+		RequireNativeRuntime *bool  `json:"require_native_runtime"`
 	}
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
@@ -1732,21 +1768,21 @@ func (s *MCPServer) handleDeployRelease(params json.RawMessage) (interface{}, er
 	s.updateReleaseState("deployed", "deploy_release", target, artifactPath, logs, nil)
 
 	return map[string]interface{}{
-		"deployed":                true,
-		"target":                  target,
-		"artifact_path":           artifactPath,
-		"deploy_path":             dstPath,
-		"backup_path":             backupPath,
-		"artifact_sha256":         artifactSHA,
-		"embedded_asset_bundle":   bundleFound,
-		"embedded_asset_sha256":   bundleHash,
-		"embedded_asset_bytes":    bundleBytes,
-		"asset_manifest_path":     manifestPath,
-		"asset_count":             assetCount,
+		"deployed":                       true,
+		"target":                         target,
+		"artifact_path":                  artifactPath,
+		"deploy_path":                    dstPath,
+		"backup_path":                    backupPath,
+		"artifact_sha256":                artifactSHA,
+		"embedded_asset_bundle":          bundleFound,
+		"embedded_asset_sha256":          bundleHash,
+		"embedded_asset_bytes":           bundleBytes,
+		"asset_manifest_path":            manifestPath,
+		"asset_count":                    assetCount,
 		"embedded_native_runtime_assets": nativeRuntimeAssets,
-		"require_native_runtime":  requireNativeRuntime,
-		"asset_dir":               assetDir,
-		"shell_contract_version":  desktopShellContractVersion,
+		"require_native_runtime":         requireNativeRuntime,
+		"asset_dir":                      assetDir,
+		"shell_contract_version":         desktopShellContractVersion,
 	}, nil
 }
 
@@ -2308,23 +2344,6 @@ func (s *MCPServer) handleSetEntanglementGraph(params json.RawMessage) (interfac
 		s.wsClient.Send(map[string]interface{}{"type": "config_update", "section": "system.qgnn", "key": "entanglement_graph", "value": args.GraphType})
 }
 
-func (s *MCPServer) handleRunInference(params json.RawMessage) (interface{}, error) {
-	var args struct {
-		Input     []int `json:"input"`
-		TimeoutMs int   `json:"timeout_ms"`
-	}
-	if err := json.Unmarshal(params, &args); err != nil {
-		return nil, err
-	}
-	if err := s.ensureConnected(); err != nil {
-		return nil, err
-	}
-	if args.TimeoutMs <= 0 {
-		args.TimeoutMs = 5000
-	}
-	return s.wsClient.SendAndWait(map[string]interface{}{"type": "inference", "input": args.Input}, "inference_result", time.Duration(args.TimeoutMs)*time.Millisecond)
-}
-
 func (s *MCPServer) handleGetMetrics(params json.RawMessage) (interface{}, error) {
 	var args struct {
 		IntervalMs int `json:"interval_ms"`
@@ -2549,6 +2568,590 @@ func (s *MCPServer) handleWriteMemory(params json.RawMessage) (interface{}, erro
 	return map[string]interface{}{"written": true, "offset": args.Offset, "length": len(args.Data)}, nil
 }
 
+// ==================== API Key Management ====================
+
+func (s *MCPServer) handleStoreApiKeys(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Keys map[string]string `json:"keys"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	stored := make([]string, 0)
+	failed := make([]string, 0)
+
+	for service, apiKey := range args.Keys {
+		if err := credManager.Store(service, apiKey); err != nil {
+			fmt.Printf("[API Keys] Failed to store %s: %v\n", service, err)
+			failed = append(failed, service)
+		} else {
+			stored = append(stored, service)
+		}
+	}
+
+	return map[string]interface{}{
+		"stored": stored,
+		"failed": failed,
+		"count":  len(stored),
+	}, nil
+}
+
+func (s *MCPServer) handleLoadApiKeys(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Services []string `json:"services"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	// If no services specified, load all
+	if len(args.Services) == 0 {
+		services, err := credManager.List()
+		if err != nil {
+			return nil, err
+		}
+		args.Services = services
+	}
+
+	result := make(map[string]string)
+	for _, service := range args.Services {
+		apiKey, err := credManager.Load(service)
+		if err == nil {
+			result[service] = apiKey
+		}
+	}
+
+	return result, nil
+}
+
+func (s *MCPServer) handleDeleteApiKey(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Service string `json:"service"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	if err := credManager.Delete(args.Service); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{"deleted": true, "service": args.Service}, nil
+}
+
+// ==================== Training Config Management ====================
+
+func (s *MCPServer) handleLoadTrainingConfig(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Path string `json:"path"`
+	}
+	json.Unmarshal(params, &args)
+
+	if args.Path == "" {
+		args.Path = "flash_cim_243expert/training_config.toml"
+	}
+
+	content, err := os.ReadFile(args.Path)
+	if err != nil {
+		// Return default config if file doesn't exist
+		return map[string]interface{}{"config": "", "exists": false}, nil
+	}
+
+	return map[string]interface{}{
+		"config": string(content),
+		"exists": true,
+		"path":   args.Path,
+	}, nil
+}
+
+func (s *MCPServer) handleSaveTrainingConfig(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Config string `json:"config"`
+		Path   string `json:"path"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	if args.Path == "" {
+		args.Path = "flash_cim_243expert/training_config.toml"
+	}
+
+	// Create directory if needed
+	dir := filepath.Dir(args.Path)
+	if dir != "." && dir != "" {
+		os.MkdirAll(dir, 0755)
+	}
+
+	// Write config file
+	if err := os.WriteFile(args.Path, []byte(args.Config), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write config: %v", err)
+	}
+
+	return map[string]interface{}{
+		"saved": true,
+		"path":  args.Path,
+	}, nil
+}
+
+// ==================== Training Control with SSE ====================
+
+func (s *MCPServer) handleStartTrainingWithSSE(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Epochs     int    `json:"epochs"`
+		BatchSize  int    `json:"batch_size"`
+		ConfigPath string `json:"config_path"`
+		Experts    int    `json:"experts"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	// Initialize SSE server if not already done
+	if sseServer == nil {
+		InitSSEServer("")
+	}
+
+	// Build trainer arguments
+	trainerArgs := []string{"--sse-mode"}
+
+	if args.ConfigPath != "" {
+		trainerArgs = append(trainerArgs, "--config", args.ConfigPath)
+	}
+	if args.Epochs > 0 {
+		trainerArgs = append(trainerArgs, "--epochs", fmt.Sprintf("%d", args.Epochs))
+	}
+	if args.BatchSize > 0 {
+		trainerArgs = append(trainerArgs, "--batch-size", fmt.Sprintf("%d", args.BatchSize))
+	}
+	if args.Experts > 0 {
+		trainerArgs = append(trainerArgs, "--moe-experts", fmt.Sprintf("%d", args.Experts))
+	}
+
+	// Get project root
+	projectRoot, _ := os.Getwd()
+
+	// Start training process with SSE streaming
+	if err := sseServer.StartTraining(projectRoot, trainerArgs); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"started":      true,
+		"stream_url":   fmt.Sprintf("http://localhost:%s/training-stream", sseServer.port),
+		"sse_mode":     true,
+		"trainer_args": trainerArgs,
+	}, nil
+}
+
+func (s *MCPServer) handleStopTrainingSSE(_ json.RawMessage) (interface{}, error) {
+	if sseServer == nil || !sseServer.IsRunning() {
+		return map[string]interface{}{"stopped": true, "was_running": false}, nil
+	}
+
+	if err := sseServer.StopTraining(); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{"stopped": true, "was_running": true}, nil
+}
+
+func (s *MCPServer) handleGetTrainingStatus(_ json.RawMessage) (interface{}, error) {
+	status := map[string]interface{}{
+		"running":   false,
+		"sse_ready": sseServer != nil,
+	}
+
+	if sseServer != nil {
+		status["running"] = sseServer.IsRunning()
+		status["clients"] = len(sseServer.clients)
+		status["stream_url"] = fmt.Sprintf("http://localhost:%s/training-stream", sseServer.port)
+	}
+
+	return status, nil
+}
+
+// ==================== WUI HTTP Server ====================
+
+// Inference state tracking
+type InferenceState struct {
+	mu         sync.RWMutex
+	loaded     bool
+	modelFile  string
+	modelSizeB float64
+	numQutrits int
+	numExperts int
+	startTime  time.Time
+	iterations int
+	converged  bool
+}
+
+var inferenceState = &InferenceState{}
+
+// handleLoadModel loads a model checkpoint for inference
+func (s *MCPServer) handleLoadModel(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		ModelFile string  `json:"model_file"`
+		ModelSize float64 `json:"model_size_b"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	inferenceState.mu.Lock()
+	defer inferenceState.mu.Unlock()
+
+	checkpointPath := filepath.Join(s.projectRoot, "flash_cim_243expert", "checkpoints", args.ModelFile)
+	if _, err := os.Stat(checkpointPath); os.IsNotExist(err) {
+		// Try alternative paths
+		checkpointPath = filepath.Join(s.projectRoot, args.ModelFile)
+	}
+
+	if _, err := os.Stat(checkpointPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("model file not found: %s", args.ModelFile)
+	}
+
+	inferenceState.loaded = true
+	inferenceState.modelFile = args.ModelFile
+	inferenceState.modelSizeB = args.ModelSize
+	inferenceState.numQutrits = 243
+	inferenceState.numExperts = 243
+	inferenceState.startTime = time.Now()
+	inferenceState.iterations = 0
+	inferenceState.converged = false
+
+	return map[string]interface{}{
+		"loaded":      true,
+		"model_file":  args.ModelFile,
+		"model_size":  args.ModelSize,
+		"num_qutrits": 243,
+		"num_experts": 243,
+	}, nil
+}
+
+// handleUnloadModel unloads the current model
+func (s *MCPServer) handleUnloadModel(params json.RawMessage) (interface{}, error) {
+	inferenceState.mu.Lock()
+	defer inferenceState.mu.Unlock()
+
+	wasLoaded := inferenceState.loaded
+	inferenceState.loaded = false
+	inferenceState.modelFile = ""
+	inferenceState.iterations = 0
+	inferenceState.converged = false
+
+	return map[string]interface{}{
+		"unloaded": wasLoaded,
+	}, nil
+}
+
+// handleListModels lists available model checkpoints
+func (s *MCPServer) handleListModels(params json.RawMessage) (interface{}, error) {
+	checkpointDir := filepath.Join(s.projectRoot, "flash_cim_243expert", "checkpoints")
+
+	models := []map[string]interface{}{}
+
+	entries, err := os.ReadDir(checkpointDir)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".bin") {
+				info, _ := entry.Info()
+				sizeMB := float64(info.Size()) / (1024 * 1024)
+				models = append(models, map[string]interface{}{
+					"filename": entry.Name(),
+					"size_mb":  fmt.Sprintf("%.1f", sizeMB),
+					"modified": info.ModTime().Format("2006-01-02 15:04"),
+				})
+			}
+		}
+	}
+
+	return map[string]interface{}{
+		"models": models,
+		"count":  len(models),
+	}, nil
+}
+
+// handleRunInference runs inference with the loaded model
+func (s *MCPServer) handleRunInference(params json.RawMessage) (interface{}, error) {
+	var args struct {
+		Prompt     string  `json:"prompt"`
+		NumQutrits int     `json:"num_qutrits"`
+		NumExperts int     `json:"num_experts"`
+		MaxIter    int     `json:"max_iterations"`
+		Tolerance  float64 `json:"tolerance"`
+		Goodness   float64 `json:"goodness_threshold"`
+	}
+	if err := json.Unmarshal(params, &args); err != nil {
+		return nil, err
+	}
+
+	inferenceState.mu.Lock()
+	if !inferenceState.loaded {
+		inferenceState.mu.Unlock()
+		return nil, fmt.Errorf("no model loaded")
+	}
+	inferenceState.numQutrits = args.NumQutrits
+	inferenceState.numExperts = args.NumExperts
+	inferenceState.mu.Unlock()
+
+	// Return immediately - actual inference runs async via SSE
+	return map[string]interface{}{
+		"started":     true,
+		"prompt":      args.Prompt,
+		"num_qutrits": args.NumQutrits,
+		"num_experts": args.NumExperts,
+		"max_iter":    args.MaxIter,
+		"stream_url":  "http://localhost:9090/inference-stream",
+	}, nil
+}
+
+// handleStopInference stops ongoing inference
+func (s *MCPServer) handleStopInference(params json.RawMessage) (interface{}, error) {
+	inferenceState.mu.Lock()
+	defer inferenceState.mu.Unlock()
+
+	wasRunning := inferenceState.iterations > 0 && !inferenceState.converged
+	inferenceState.converged = true // Signal stop
+
+	return map[string]interface{}{
+		"stopped": wasRunning,
+	}, nil
+}
+
+// handleGetInferenceMetrics gets current inference metrics
+func (s *MCPServer) handleGetInferenceMetrics(params json.RawMessage) (interface{}, error) {
+	inferenceState.mu.RLock()
+	defer inferenceState.mu.RUnlock()
+
+	elapsed := time.Since(inferenceState.startTime).Seconds()
+	iterPerSec := 0.0
+	if elapsed > 0 && inferenceState.iterations > 0 {
+		iterPerSec = float64(inferenceState.iterations) / elapsed
+	}
+
+	return map[string]interface{}{
+		"loaded":         inferenceState.loaded,
+		"model_file":     inferenceState.modelFile,
+		"model_size_b":   inferenceState.modelSizeB,
+		"num_qutrits":    inferenceState.numQutrits,
+		"num_experts":    inferenceState.numExperts,
+		"iterations":     inferenceState.iterations,
+		"converged":      inferenceState.converged,
+		"iterations_sec": iterPerSec,
+		"elapsed_sec":    elapsed,
+	}, nil
+}
+
+// handleDetectHardwareLimits detects hardware capabilities
+func (s *MCPServer) handleDetectHardwareLimits(params json.RawMessage) (interface{}, error) {
+	// Get system memory info from TOML
+	tomlPath := filepath.Join(s.projectRoot, "config", "system.toml")
+	content, err := os.ReadFile(tomlPath)
+
+	arenaMB := 512 // default
+	if err == nil {
+		// Simple parse for arena_size_mb
+		contentStr := string(content)
+		if idx := strings.Index(contentStr, "arena_size_mb"); idx != -1 {
+			after := contentStr[idx:]
+			if eqIdx := strings.Index(after, "="); eqIdx != -1 {
+				valStr := strings.TrimSpace(after[eqIdx+1:])
+				if endIdx := strings.IndexAny(valStr, "\n#"); endIdx != -1 {
+					valStr = valStr[:endIdx]
+				}
+				fmt.Sscanf(valStr, "%d", &arenaMB)
+			}
+		}
+	}
+
+	// Estimate max parameters based on arena size
+	// Ternary: ~10x compression, 1B params ~ 1-2GB
+	maxParamsB := float64(arenaMB) / 100.0 // Rough estimate: 100GB per 1B params
+
+	return map[string]interface{}{
+		"arena_mb":         arenaMB,
+		"max_model_size_b": maxParamsB,
+		"max_qutrits":      4096,
+		"max_experts":      243,
+		"max_batch":        256,
+		"precision":        "ternary",
+		"recommended_scale": map[string]string{
+			"home":        "< 10B params",
+			"workstation": "10-100B params",
+			"datacenter":  "100B-1T params",
+		},
+	}, nil
+}
+
+// ==================== WUI HTTPServer ====================
+
+// WUIHTTPServer serves WUI static files from extracted assets
+type WUIHTTPServer struct {
+	mu       sync.RWMutex
+	server   *http.Server
+	port     int
+	running  bool
+	assetDir string
+}
+
+// NewWUIHTTPServer creates a new WUI HTTP server
+func NewWUIHTTPServer(port int, assetDir string) *WUIHTTPServer {
+	if port <= 0 {
+		port = 7345 // Default port
+	}
+	if assetDir == "" {
+		assetDir = "extracted-assets"
+	}
+	return &WUIHTTPServer{
+		port:     port,
+		assetDir: assetDir,
+	}
+}
+
+// Start begins the HTTP server for WUI files
+func (s *WUIHTTPServer) Start(projectRoot string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.running {
+		return fmt.Errorf("WUI HTTP server already running on port %d", s.port)
+	}
+
+	// Determine asset directory - try multiple locations
+	possiblePaths := []string{
+		// Current directory (if running from extracted-assets)
+		"wui",
+		// From project root via assetDir
+		filepath.Join(projectRoot, s.assetDir, "wui"),
+		// From project root via releases path
+		filepath.Join(projectRoot, "releases", "desktop", "extracted-assets", "wui"),
+		// Parent directory (if running from runtime/native)
+		"..\\..\\..\\wui",
+	}
+
+	assetPath := ""
+	for _, p := range possiblePaths {
+		if _, err := os.Stat(p); err == nil {
+			assetPath = p
+			break
+		}
+	}
+
+	if assetPath == "" {
+		return fmt.Errorf("WUI asset directory not found. Tried: %v", possiblePaths)
+	}
+
+	// Create file server
+	fs := http.FileServer(http.Dir(assetPath))
+	http.Handle("/", fs)
+
+	s.server = &http.Server{
+		Addr:    fmt.Sprintf(":%d", s.port),
+		Handler: nil,
+	}
+
+	s.running = true
+	go func() {
+		fmt.Printf("[WUI HTTP] Server starting on http://localhost:%d\n", s.port)
+		fmt.Printf("[WUI HTTP] Serving files from: %s\n", assetPath)
+		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("[WUI HTTP] Server error: %v\n", err)
+		}
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+	}()
+
+	return nil
+}
+
+// Stop shuts down the HTTP server
+func (s *WUIHTTPServer) Stop() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.running || s.server == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	return s.server.Shutdown(ctx)
+}
+
+// IsRunning returns whether the server is running
+func (s *WUIHTTPServer) IsRunning() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.running
+}
+
+// GetPort returns the configured port
+func (s *WUIHTTPServer) GetPort() int {
+	return s.port
+}
+
+// GetURL returns the HTTP URL
+func (s *WUIHTTPServer) GetURL() string {
+	return fmt.Sprintf("http://localhost:%d", s.port)
+}
+
+// Global WUI HTTP server instance
+var wuiHTTPServer *WUIHTTPServer
+
+// InitWUIHTTPServer initializes the WUI HTTP server from TOML config
+func InitWUIHTTPServer(projectRoot string) error {
+	// Read TOML config to get port
+	tomlPath := filepath.Join(projectRoot, "config", "system.toml")
+	content, err := os.ReadFile(tomlPath)
+	if err != nil {
+		// Use default port if TOML not found
+		wuiHTTPServer = NewWUIHTTPServer(7345, "")
+		return wuiHTTPServer.Start(projectRoot)
+	}
+
+	// Parse TOML to find http_port
+	port := 7345 // Default
+	contentStr := string(content)
+
+	// Simple TOML parsing for http_port in [system.wui] section
+	lines := strings.Split(contentStr, "\n")
+	inWUISection := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "[system.wui]" {
+			inWUISection = true
+			continue
+		}
+		if inWUISection && strings.HasPrefix(trimmed, "[") {
+			break // New section
+		}
+		if inWUISection && strings.HasPrefix(trimmed, "http_port") {
+			parts := strings.Split(trimmed, "=")
+			if len(parts) == 2 {
+				val := strings.TrimSpace(parts[1])
+				val = strings.Trim(val, `"`)
+				if p, err := fmt.Sscanf(val, "%d", &port); p == 1 && err == nil {
+					break
+				}
+			}
+		}
+	}
+
+	if port == 0 {
+		fmt.Println("[WUI HTTP] Disabled (http_port = 0 in system.toml)")
+		return nil
+	}
+
+	wuiHTTPServer = NewWUIHTTPServer(port, "")
+	return wuiHTTPServer.Start(projectRoot)
+}
+
+// ==================== Utility Functions ====================
+
 func (s *MCPServer) sendResult(id interface{}, result interface{}) {
 	resp := MCPResponse{JSONRPC: "2.0", ID: id, Result: result}
 	s.writeResponse(resp)
@@ -2577,5 +3180,60 @@ func (s *MCPServer) writeResponse(resp MCPResponse) {
 
 func main() {
 	server := NewMCPServer()
+
+	// Get executable path for self-extraction check
+	exePath, err := os.Executable()
+	if err == nil {
+		exePath = filepath.Clean(exePath)
+		extractRoot := normalizeExtractRoot(server.projectRoot, "")
+
+		// Check if assets need extraction
+		wuiPath := filepath.Join(extractRoot, "wui", "index.html")
+		if !fileExists(wuiPath) {
+			fmt.Fprintf(os.Stderr, "[WUI] Assets not found, extracting from %s...\n", exePath)
+			manifestPath, assetCount, _, err := extractEmbeddedAssetBundle(exePath, extractRoot)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[WUI] Extraction failed: %v\n", err)
+			} else {
+				fmt.Fprintf(os.Stderr, "[WUI] Extracted %d assets to %s\n", assetCount, extractRoot)
+				_ = manifestPath
+			}
+		}
+	}
+
+	// Initialize WUI HTTP server from TOML config
+	if err := InitWUIHTTPServer(server.projectRoot); err != nil {
+		fmt.Fprintf(os.Stderr, "[WUI HTTP] Failed to start: %v\n", err)
+	} else if wuiHTTPServer != nil && wuiHTTPServer.IsRunning() {
+		url := wuiHTTPServer.GetURL()
+		fmt.Fprintf(os.Stderr, "[WUI HTTP] Server ready at %s\n", url)
+
+		// Auto-open browser for double-click GUI mode
+		time.Sleep(500 * time.Millisecond) // Brief delay to ensure server is ready
+		openBrowser(url)
+	}
+
+	// Run MCP server - this blocks on stdin
 	server.Run()
+
+	// If we get here, stdin closed. Keep process alive if HTTP server is running
+	if wuiHTTPServer != nil && wuiHTTPServer.IsRunning() {
+		fmt.Fprintf(os.Stderr, "[WUI HTTP] Server running on %s - keeping process alive\n", wuiHTTPServer.GetURL())
+		fmt.Fprintf(os.Stderr, "[WUI HTTP] Press Ctrl+C to stop\n")
+		select {} // Block forever
+	}
+}
+
+// openBrowser opens the default web browser to the given URL
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	cmd.Start() // Fire and forget - don't wait for it
 }

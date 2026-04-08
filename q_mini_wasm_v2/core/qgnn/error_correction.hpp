@@ -3,10 +3,10 @@
 #include <vector>
 #include <complex>
 #include <memory>
-#include "ternary/trit.hpp"
+#include "../ternary/trit.hpp"
 #include "graph_native.hpp"
 
-namespace qgnn {
+namespace q_mini_wasm_v2::core::qgnn {
 
 /**
  * @brief Base class for ternary quantum error correction codes
@@ -365,4 +365,4 @@ public:
     bool validate_system_integrity() const;
 };
 
-} // namespace qgnn
+} // namespace q_mini_wasm_v2::core::qgnn

@@ -217,6 +217,11 @@ websocket_port = 8080
 # Updates dashboard at 5 second intervals
 realtime_metrics = true
 
+# ? HTTP server port for WUI files
+# Tab: [0, 7345, 8765, 9243]
+# Set to 0 to disable HTTP server (uses file:// protocol instead)
+http_port = 7345
+
 # ? Default theme
 # Tab: ["light", "dark", "system"]
 # System follows OS preference

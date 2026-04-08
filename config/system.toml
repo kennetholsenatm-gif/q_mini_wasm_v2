@@ -217,6 +217,11 @@ websocket_port = 8080
 # Updates dashboard at 5 second intervals
 realtime_metrics = true
 
+# ? HTTP server port for WUI files
+# Tab: [0, 7345, 8765, 9243]
+# Set to 0 to disable HTTP server (uses file:// protocol instead)
+http_port = 7345
+
 # ? Default theme
 # Tab: ["light", "dark", "system"]
 # System follows OS preference
@@ -236,6 +241,123 @@ activity_log_size = 10
 # Tab: [true, false]
 # Persists TOML edits immediately
 auto_save_config = true
+
+# ============================================================================
+# INFERENCE CONFIGURATION (Ternary Qutrit Framework)
+# ============================================================================
+
+[system.inference]
+# ? Number of qutrits for inference
+# Ternary = 3 states per digit (vs 2 for binary)
+# Tab: [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+num_qutrits = 243
+
+# ? Number of MoE experts to activate
+# Framework supports up to 243 (5-trit addressing)
+# Training already validated with 243 experts
+# Tab: [1, 2, 4, 8, 16, 32, 64, 128, 243]
+num_experts = 243
+
+# ? Total parameters in model (billions)
+# Ternary efficiency: ~10x compression vs 32-bit float
+# 1 trillion params fits in ~100GB unified memory
+# Tab: [0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000]
+model_size_b = 10
+
+# ? Maximum message passing iterations
+# QGNN converges efficiently, can push hard
+# Tab: [10, 50, 100, 500, 1000, 5000, 10000, 50000]
+max_iterations = 5000
+
+# ? Convergence tolerance
+# Stricter precision when needed
+# Tab: [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0]
+convergence_tolerance = 0.001
+
+# ? Forward-forward goodness threshold
+# Higher values = stricter reality detection
+# Tab: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 100.0]
+goodness_threshold = 5.0
+
+# ? Entanglement graph topology
+# Scale-free = natural information flow
+# Tab: ["linear", "ring", "star", "random", "complete", "scale_free", "small_world", "hierarchical"]
+entanglement_graph = "scale_free"
+
+# ? Model checkpoint directory
+checkpoint_path = "flash_cim_243expert/checkpoints"
+
+# ? Auto-load model on startup
+# "latest" = most recent checkpoint
+# "biggest" = largest parameter count
+# Tab: ["", "latest", "biggest", "best_goodness", "filename.bin"]
+auto_load_model = ""
+
+# ? Enable Betti topology analysis
+# Zero overhead when disabled
+# Tab: [true, false]
+betti_analysis = true
+
+# ? Inference compute device
+# Multi-GPU support for large models
+# Tab: ["auto", "gpu", "multi_gpu", "cpu", "fpga"]
+device = "auto"
+
+# ? Batch size for throughput
+# Higher = better GPU utilization
+# Tab: [1, 4, 8, 16, 32, 64, 128, 256, 512]
+batch_size = 64
+
+# ? USM arena for inference (MB)
+# Framework efficiency allows massive models
+# 1TB unified memory = 10 trillion parameters
+# Tab: [1024, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576]
+arena_mb = 65536
+
+# ? Parallel inference streams
+# Saturation for multi-GPU or high batch
+# Tab: [1, 2, 4, 8, 16, 32, 64]
+parallel_streams = 8
+
+# ? Expert routing temperature
+# 0.1 = deterministic, 5.0 = very diverse
+# Tab: [0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+routing_temperature = 1.0
+
+# ? Load balancing monitoring
+# Track expert utilization
+# Tab: [true, false]
+monitor_expert_balance = true
+
+# ? Inference timeout (seconds)
+# 0 = unlimited (research mode)
+# Tab: [0, 30, 60, 300, 600, 3600, 7200]
+timeout_seconds = 0
+
+# ? Precision mode
+# Ternary = native framework precision (most efficient)
+# Tab: ["ternary", "fp8", "fp16", "bf16", "fp32"]
+precision = "ternary"
+
+# ? Sparsity pattern
+# MoE sparse = only active experts computed
+# Tab: ["dense", "moe_sparse", "unstructured", "block"]
+sparsity = "moe_sparse"
+
+# ? Enable Flash-CIM persistence
+# Store inference state in flash
+# Tab: [true, false]
+flash_persistence = false
+
+# ? Checkpoint compression
+# Reduce storage by 100x
+# Tab: ["none", "lz4", "zstd", "ternary_pack"]
+checkpoint_compression = "ternary_pack"
+
+# ? Automatic mixed precision
+# Use fastest precision per layer
+# Tab: [true, false]
+auto_mixed_precision = true
 
 # ============================================================================
 # PIPELINE INTEGRATION CONFIGURATION

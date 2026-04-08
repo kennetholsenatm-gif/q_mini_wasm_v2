@@ -31,43 +31,10 @@
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\network.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\geometric_context.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\entanglement_token.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\householder_synthesizer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\inference_pipeline.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\flash_cim\flash_cim.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\trainer_main.cpp">
+    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\data_synthesizer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_native.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_moe_router.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_migration_adapter.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\zx_calculus.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\error_correction.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\message_passing.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\ternary_tree.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\betti_extractor.cpp">
@@ -111,31 +78,13 @@
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\network.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\geometric_context.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\entanglement_token.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\householder_synthesizer.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\latency_profiler.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\inference_pipeline.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_migration_adapter.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\message_passing.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\ternary_tree.hpp">
+    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\data_synthesizer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\betti_extractor.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\latency_profiler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\runtime\orchestrator.hpp">

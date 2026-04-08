@@ -68,31 +68,19 @@ set(CORE_SOURCES
     core/learning/forward_forward.cpp
     core/network.hpp
     core/network.cpp
-    core/inference/geometric_context.hpp
-    core/inference/geometric_context.cpp
-    core/inference/entanglement_token.hpp
-    core/inference/entanglement_token.cpp
-    core/inference/householder_synthesizer.hpp
-    core/inference/householder_synthesizer.cpp
-    core/inference/latency_profiler.hpp
-    core/inference/inference_pipeline.hpp
-    core/inference/inference_pipeline.cpp
-    core/flash_cim/flash_cim.cpp
-    core/training/trainer_main.cpp
+    core/training/data_synthesizer.hpp
+    core/training/data_synthesizer.cpp
     core/qgnn/graph_native.cpp
-    core/qgnn/graph_moe_router.cpp
-    core/qgnn/graph_migration_adapter.cpp
-    core/qgnn/zx_calculus.cpp
-    core/qgnn/error_correction.cpp
-    core/qgnn/graph_moe_router.cpp
-    core/qgnn/graph_migration_adapter.hpp
-    core/qgnn/graph_migration_adapter.cpp
-    core/qgnn/message_passing.hpp
-    core/qgnn/message_passing.cpp
-    core/qgnn/ternary_tree.hpp
-    core/qgnn/ternary_tree.cpp
     core/qgnn/betti_extractor.hpp
     core/qgnn/betti_extractor.cpp
+    # core/inference/geometric_context.hpp  # TODO: Fix std::min and extract_context_vector
+    # core/inference/geometric_context.cpp
+    # core/inference/householder_synthesizer.hpp  # TODO: Fix compute_reflection_error
+    # core/inference/householder_synthesizer.cpp
+    core/inference/latency_profiler.hpp
+    # core/inference/inference_pipeline.hpp
+    # core/inference/inference_pipeline.cpp
+    # core/flash_cim/flash_cim.cpp  # TODO: Exclude from build - not essential for core training
 )
 
 set(RUNTIME_SOURCES
@@ -125,6 +113,48 @@ endif()
 target_include_directories(q_mini_wasm_v2_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# ============================================================================
+# Data Synthesizer Agent - HTTP Client Dependencies
+# ============================================================================
+
+option(USE_LIBCURL "Enable libcurl for Data Synthesizer HTTP requests" ON)
+
+if(USE_LIBCURL)
+    # Try vcpkg first if available
+    if(DEFINED ENV{VCPKG_ROOT})
+        set(VCPKG_CURL_ROOT "$ENV{VCPKG_ROOT}/installed/x64-windows")
+        if(EXISTS "${VCPKG_CURL_ROOT}/include/curl/curl.h")
+            set(CURL_FOUND TRUE)
+            set(CURL_INCLUDE_DIR "${VCPKG_CURL_ROOT}/include")
+            set(CURL_LIBRARY "${VCPKG_CURL_ROOT}/lib/libcurl.lib")
+            message(STATUS "Data Synthesizer: Found libcurl via vcpkg at ${VCPKG_CURL_ROOT}")
+        endif()
+    endif()
+    
+    # Fallback to find_package
+    if(NOT CURL_FOUND)
+        find_package(CURL QUIET)
+    endif()
+    
+    if(CURL_FOUND)
+        target_compile_definitions(q_mini_wasm_v2_core PUBLIC HAS_LIBCURL=1)
+        if(CURL_INCLUDE_DIR)
+            target_include_directories(q_mini_wasm_v2_core PUBLIC ${CURL_INCLUDE_DIR})
+        endif()
+        if(CURL_LIBRARY)
+            target_link_libraries(q_mini_wasm_v2_core PUBLIC ${CURL_LIBRARY})
+        else()
+            target_link_libraries(q_mini_wasm_v2_core PUBLIC CURL::libcurl)
+        endif()
+        message(STATUS "Data Synthesizer: libcurl enabled for HTTP API requests")
+    else()
+        message(WARNING "libcurl not found. Install libcurl to enable real API data synthesis.")
+        message(STATUS "  Windows: vcpkg install curl:x64-windows")
+        message(STATUS "  Linux: sudo apt-get install libcurl4-openssl-dev")
+        message(STATUS "  macOS: brew install curl")
+    endif()
+endif()
 
 # ============================================================================
 # Modular DLL Targets (4 GF(3) Acceleration Libraries)

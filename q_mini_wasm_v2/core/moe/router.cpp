@@ -13,8 +13,6 @@ MoERouter::MoERouter(const ExpertConfig& config)
     , expert_weights_(config.total_experts)
     , routing_weights_(config.total_experts, std::vector<ternary::Trit>(config.routing_qutrits, ternary::Trit::ZERO))
     , ternary_seed_(42)  // Deterministic seed for reproducibility
-    , learning_episode_(0)
-    , rl_initialized_(ternary::Trit::ZERO)
     , expert_loads_(config.total_experts, 0)  // Initialize load tracking
     , expert_request_counts_(config.total_experts, 0)
 {
@@ -40,8 +38,6 @@ MoERouter::MoERouter(const ExpertConfig& config, const EntangledRoutingConfig& e
     , expert_weights_(config.total_experts)
     , routing_weights_(config.total_experts, std::vector<ternary::Trit>(config.routing_qutrits, ternary::Trit::ZERO))
     , ternary_seed_(42)  // Deterministic seed for reproducibility
-    , learning_episode_(0)
-    , rl_initialized_(ternary::Trit::ZERO)
     , expert_loads_(config.total_experts, 0)  // Initialize load tracking
     , expert_request_counts_(config.total_experts, 0)
 {
@@ -489,7 +485,7 @@ int32_t MoERouter::compute_energy_cost_fixed(size_t expert_count) const {
 }
 
 // Energy-aware scaling using fixed-point
-size_t MoERouter::energy_aware_scaling(
+size_t MoERouter::energy_aware_scaling_fixed(
     uint32_t current_load,
     int32_t energy_budget_fixed,  // Fixed-point: budget in pJ * 1000
     uint32_t thermal_limit
@@ -748,7 +744,7 @@ std::vector<size_t> MoERouter::quantum_entangled_selection(
 
 std::vector<size_t> MoERouter::multi_objective_selection(
     const std::vector<ternary::Trit>& input,
-    const std::vector<int32_t>& objectives_fixed
+    const std::vector<ternary::ProbTrit>& objectives
 ) {
     // Default objectives: [performance, load_balance, energy, latency] in fixed-point (scale 1000)
     std::vector<std::vector<int32_t>> objective_scores(config_.total_experts, std::vector<int32_t>(4, 0));
@@ -776,10 +772,17 @@ std::vector<size_t> MoERouter::multi_objective_selection(
     }
     
     // Compute weighted scores using fixed-point arithmetic
-    std::vector<int32_t> weighted_scores(config_.total_experperts, 0);
+    std::vector<int32_t> weighted_scores(config_.total_experts, 0);
     for (size_t e = 0; e < config_.total_experts; ++e) {
-        for (size_t o = 0; o < objectives_fixed.size() && o < 4; ++o) {
-            weighted_scores[e] += (objective_scores[e][o] * objectives_fixed[o]) / 1000;
+        for (size_t o = 0; o < objectives.size() && o < 4; ++o) {
+            // Convert ProbTrit to fixed-point weight (LOW=250, MED=500, HIGH=750)
+            int32_t obj_weight = 500;
+            switch (objectives[o]) {
+                case ternary::ProbTrit::LOW_PROB: obj_weight = 250; break;
+                case ternary::ProbTrit::MED_PROB: obj_weight = 500; break;
+                case ternary::ProbTrit::HIGH_PROB: obj_weight = 750; break;
+            }
+            weighted_scores[e] += (objective_scores[e][o] * obj_weight) / 1000;
         }
     }
     
@@ -962,53 +965,6 @@ size_t MoERouter::predictive_expert_scaling(
     return current_active_experts_;
 }
 
-size_t MoERouter::energy_aware_scaling_fixed(
-    uint32_t current_load,
-    int32_t energy_budget_fixed,
-    uint32_t thermal_limit
-) {
-    // Update thermal and energy tracking
-    thermal_current_ = std::min(thermal_current_ + (current_load / 10), thermal_limit);
-    
-    // Compute energy cost for different expert counts
-    size_t optimal_experts = current_active_experts_;
-    int32_t best_efficiency = 0;  // Fixed-point efficiency (scale 1000)
-    
-    const size_t MIN_EXPERTS = std::max(config_.active_experts * 50 / 100, size_t(1));
-    const size_t MAX_EXPERTS = std::min(config_.active_experts * 130 / 100, config_.total_experts);
-    
-    for (size_t e = MIN_EXPERTS; e <= MAX_EXPERTS; ++e) {
-        int32_t energy_cost = compute_energy_cost_fixed(e);
-        uint32_t estimated_latency = estimate_latency(e, current_load);
-        
-        // Energy efficiency: throughput per energy unit (fixed-point, scale 1000)
-        int32_t efficiency = (static_cast<int32_t>(e) * 1000 * 1000) / (energy_cost + estimated_latency / 100);
-        
-        // Check thermal and energy constraints
-        if (energy_cost <= energy_budget_fixed && thermal_current_ <= thermal_limit) {
-            if (efficiency > best_efficiency) {
-                best_efficiency = efficiency;
-                optimal_experts = e;
-            }
-        }
-    }
-    
-    // If no configuration meets constraints, choose least violating option
-    if (optimal_experts == current_active_experts_ && best_efficiency == 0) {
-        for (size_t e = MIN_EXPERTS; e <= MAX_EXPERTS; ++e) {
-            int32_t energy_cost = compute_energy_cost_fixed(e);
-            if (energy_cost < compute_energy_cost_fixed(optimal_experts)) {
-                optimal_experts = e;
-            }
-        }
-    }
-    
-    current_active_experts_ = optimal_experts;
-    scaling_decision_count_++;
-    
-    return current_active_experts_;
-}
-
 size_t MoERouter::latency_critical_scaling(
     uint32_t current_load,
     uint32_t latency_target,
@@ -1098,30 +1054,6 @@ uint32_t MoERouter::predict_load(const std::vector<uint32_t>& load_history) cons
     return static_cast<uint32_t>(prediction);
 }
 
-int32_t MoERouter::compute_energy_cost_fixed(size_t expert_count) const {
-    // Base energy cost: energy per expert * number of experts (fixed-point, scale 1000)
-    int32_t energy_per_expert = 500;  // Default 0.5 pJ/op in fixed-point
-    switch (energy_per_expert_) {
-        case ternary::EnergyTrit::VERY_LOW: energy_per_expert = 100; break;
-        case ternary::EnergyTrit::LOW: energy_per_expert = 300; break;
-        case ternary::EnergyTrit::MEDIUM: energy_per_expert = 500; break;
-        case ternary::EnergyTrit::HIGH: energy_per_expert = 800; break;
-        case ternary::EnergyTrit::VERY_HIGH: energy_per_expert = 1200; break;
-    }
-    int32_t base_cost = static_cast<int32_t>(expert_count) * energy_per_expert;
-    
-    // Overhead cost: quadratic scaling for coordination (fixed-point)
-    int32_t overhead = (static_cast<int32_t>(expert_count * expert_count) * 10) / 1000; // 0.01 pJ/op per expert pair
-    
-    // Thermal penalty: increased cost at high temperatures (fixed-point)
-    int32_t thermal_penalty = 0;
-    if (thermal_current_ > 70) {
-        thermal_penalty = (base_cost * (thermal_current_ - 70)) / 1000;
-    }
-    
-    return base_cost + overhead + thermal_penalty;
-}
-
 uint32_t MoERouter::estimate_latency(size_t expert_count, uint32_t current_load) const {
     if (expert_count == 0) return 1000; // Very high latency with no experts
     
@@ -1180,7 +1112,7 @@ std::vector<size_t> MoERouter::advanced_priority_route(
     priority_queue_sizes_[static_cast<size_t>(priority)]++;
     
     // Adaptive priority scaling based on system conditions
-    PriorityLevel adjusted_priority = adaptive_priority_scaling(priority, system_load, 100 - system_load);
+    PriorityLevel adjusted_priority = static_cast<PriorityLevel>(adaptive_priority_scaling(priority, system_load, 100 - system_load));
     
     // Compute base routing with priority bias
     auto logits = compute_routing_logits(input);
@@ -1226,13 +1158,13 @@ int MoERouter::adaptive_priority_scaling(
 ) {
     // Under high congestion, elevate priorities to maintain QoS
     if (congestion_level > 80) {
-        if (base_priority == PriorityLevel::NORMAL) return PriorityLevel::HIGH;
-        if (base_priority == PriorityLevel::LOW) return PriorityLevel::NORMAL;
+        if (base_priority == PriorityLevel::NORMAL) return static_cast<int>(PriorityLevel::HIGH);
+        if (base_priority == PriorityLevel::LOW) return static_cast<int>(PriorityLevel::NORMAL);
     }
     
     // Under low resources, prioritize critical requests
     if (resource_availability < 30) {
-        if (base_priority == PriorityLevel::HIGH) return PriorityLevel::CRITICAL;
+        if (base_priority == PriorityLevel::HIGH) return static_cast<int>(PriorityLevel::CRITICAL);
     }
     
     // Under excellent conditions, can be more lenient
@@ -1242,11 +1174,11 @@ int MoERouter::adaptive_priority_scaling(
         fairness_counter++;
         
         if (fairness_counter % 10 == 0 && base_priority == PriorityLevel::HIGH) {
-            return PriorityLevel::NORMAL; // Occasionally downgrade for fairness
+            return (int)PriorityLevel::NORMAL; // Occasionally downgrade for fairness
         }
     }
     
-    return base_priority;
+    return (int)base_priority;
 }
 
 std::vector<std::vector<size_t>> MoERouter::priority_aware_load_balance(
@@ -1320,184 +1252,29 @@ ternary::Trit MoERouter::check_sla_compliance(
     return ternary::Trit::POSITIVE;
 }
 
-int32_t MoERouter::compute_priority_fairness_fixed() const {
-    // Jain's fairness index for priority queues (fixed-point, scale 1000)
-    // Formula: (sum of queue_sizes)^2 / (n * sum of queue_sizes^2)
-    int64_t numerator = 0;  // Use int64 to prevent overflow
-    int64_t denominator = 0;
-    
-    for (uint32_t queue_size : priority_queue_sizes_) {
-        numerator += queue_size;
-        denominator += static_cast<int64_t>(queue_size) * queue_size;
-    }
-    
-    if (denominator == 0) return 1000;  // Perfect fairness when all queues empty
-    
-    // Compute (numerator^2 / (n * denominator)) in fixed-point
-    int64_t numerator_sq = numerator * numerator;
-    int64_t n_times_denom = static_cast<int64_t>(priority_queue_sizes_.size()) * denominator;
-    int32_t fairness = static_cast<int32_t>((numerator_sq * 1000) / n_times_denom);
-    
-    return fairness;
+// Stub implementations for missing functions
+void MoERouter::reserve_priority_experts(PriorityLevel /*priority*/, size_t /*count*/) {
+    // TODO: Implement priority expert reservation
 }
 
-void MoERouter::reserve_priority_experts(PriorityLevel priority, size_t expert_count) {
-    size_t priority_idx = static_cast<size_t>(priority);
-    priority_reserved_experts_[priority_idx].clear();
-    
-    // Select best performing experts for reservation
-    std::vector<std::pair<int32_t, size_t>> expert_scores;
-    for (size_t i = 0; i < config_.total_experts; ++i) {
-        int32_t score = std::accumulate(expert_performance_history_[i].end() - 10, 
-                                       expert_performance_history_[i].end(), 0) / 10;
-        expert_scores.emplace_back(score, i);
-    }
-    
-    std::sort(expert_scores.begin(), expert_scores.end(), std::greater<>());
-    
-    for (size_t i = 0; i < std::min(expert_count, expert_scores.size()); ++i) {
-        priority_reserved_experts_[priority_idx].push_back(expert_scores[i].second);
-    }
+std::vector<int32_t> MoERouter::advanced_priority_bias(
+    const std::vector<int32_t>& logits,
+    PriorityLevel /*priority*/) const {
+    // TODO: Implement advanced priority bias
+    return logits;
 }
 
-std::vector<int32_t> MoERouter::advanced_priority_bias(const std::vector<int32_t>& logits, PriorityLevel priority) const {
-    std::vector<int32_t> biased = logits;
-    
-    // Enhanced priority bias with context awareness
-    const int32_t ENHANCED_BIAS_TABLE[] = {
-        -10,  // LOW: stronger penalty
-        0,    // NORMAL: neutral
-        +10,  // HIGH: significant favor
-        +25   // CRITICAL: maximum priority
-    };
-    
-    int32_t bias = ENHANCED_BIAS_TABLE[static_cast<uint8_t>(priority)];
-    
-    // Apply bias with fairness consideration (fixed-point: 1000 = 1.0)
-    int32_t fairness = compute_priority_fairness_fixed();
-    if (fairness < 800 && priority != PriorityLevel::CRITICAL) {
-        // Reduce bias if fairness is poor (except for critical)
-        // fairness < 0.8 in floating point = fairness < 800 in fixed-point
-        bias = bias * 80 / 100;
-    }
-    
-    for (auto& val : biased) {
-        val += bias;
-    }
-    
-    return biased;
-}
-
-// ============================================================================
-// Advanced Load Balancing Implementation
-// ============================================================================
-
-std::vector<size_t> MoERouter::predictive_load_balance(
-    const std::vector<size_t>& current_loads,
-    const std::vector<uint32_t>& load_predictions,
-    uint32_t bottleneck_threshold
-) {
-    // Update load prediction history
-    for (size_t i = 0; i < config_.total_experts && i < load_predictions.size(); ++i) {
-        if (load_prediction_history_[i].size() >= 10) {
-            load_prediction_history_[i].erase(load_prediction_history_[i].begin());
-        }
-        load_prediction_history_[i].push_back(load_predictions[i]);
-    }
-    
-    // Detect current bottlenecks
-    // Compute max load for simple thresholding
-    size_t max_load = 0;
-    for (size_t load : current_loads) {
-        if (load > max_load) max_load = load;
-    }
-    size_t bottleneck_thresh = (max_load * 80) / 100;
-    for (size_t i = 0; i < current_loads.size() && i < bottleneck_flags_.size(); ++i) {
-        bottleneck_flags_[i] = (current_loads[i] > bottleneck_thresh) ? ternary::Trit::POSITIVE : ternary::Trit::ZERO;
-    }
-    
-    // Create expert selection scores based on predicted loads
-    std::vector<std::pair<int32_t, size_t>> expert_scores;
-    expert_scores.reserve(config_.total_experts);
-    
-    for (size_t i = 0; i < config_.total_experts; ++i) {
-        int32_t score = 100; // Base score
-        
-        // Penalize experts with high current loads
-        score -= static_cast<int32_t>(current_loads[i] * 2);
-        
-        // Penalize experts with high predicted loads
-        uint32_t avg_predicted = std::accumulate(load_prediction_history_[i].begin(), 
-                                               load_prediction_history_[i].end(), 0) / load_prediction_history_[i].size();
-        score -= static_cast<int32_t>(avg_predicted);
-        
-        // Heavily penalize bottlenecked experts
-        if (bottleneck_flags_[i]) {
-            score -= 50;
-        }
-        
-        expert_scores.emplace_back(score, i);
-    }
-    
-    // Sort by score (descending)
-    std::sort(expert_scores.begin(), expert_scores.end(), std::greater<>());
-    
-    // Select top experts avoiding bottlenecks
-    std::vector<size_t> selected_experts;
-    for (const auto& entry : expert_scores) {
-        if (selected_experts.size() >= current_active_experts_) break;
-        if (!bottleneck_flags_[entry.second]) {
-            selected_experts.push_back(entry.second);
-        }
-    }
-    
-    // If not enough non-bottleneck experts, include bottlenecked ones
-    if (selected_experts.size() < current_active_experts_) {
-        for (const auto& entry : expert_scores) {
-            if (selected_experts.size() >= current_active_experts_) break;
-            if (std::find(selected_experts.begin(), selected_experts.end(), entry.second) == selected_experts.end()) {
-                selected_experts.push_back(entry.second);
-            }
-        }
-    }
-    
-    return selected_experts;
-}
-
-// ============================================================================
-// Ternary Deterministic Generation & Helper Methods
-// ============================================================================
-
-void MoERouter::create_expert_groups(size_t num_groups) {
-    expert_groups_.clear();
-    expert_groups_.resize(num_groups);
-    
-    // Simple round-robin assignment to groups
-    for (size_t i = 0; i < config_.total_experts; ++i) {
-        size_t group_idx = i % num_groups;
-        expert_groups_[group_idx].push_back(i);
-    }
+void MoERouter::create_expert_groups(size_t /*num_groups*/) {
+    // TODO: Implement expert group creation
 }
 
 ternary::Trit MoERouter::ternary_random() noexcept {
-    // Simple linear congruential generator in GF(3) space
-    ternary_seed_ = (ternary_seed_ * 1103515245 + 12345) & 0x7fffffff;
-    
-    // Map to ternary space
-    int32_t trit_val = static_cast<int32_t>(ternary_seed_ % 3);
-    if (trit_val == 0) return ternary::Trit::NEGATIVE;  // Map 0 -> -1
-    if (trit_val == 1) return ternary::Trit::ZERO;     // Map 1 -> 0
-    return ternary::Trit::POSITIVE;                     // Map 2 -> +1
-}
-
-ternary::ProbTrit MoERouter::ternary_prob_random() noexcept {
-    // Use ternary random to generate probability
-    ternary::Trit base_trit = ternary_random();
-    
-    // Map trit to probability space
-    if (base_trit == ternary::Trit::NEGATIVE) return ternary::ProbTrit::LOW_PROB;
-    if (base_trit == ternary::Trit::ZERO) return ternary::ProbTrit::MED_PROB;
-    return ternary::ProbTrit::HIGH_PROB;
+    // Simple deterministic ternary random using LCG
+    ternary_seed_ = ternary_seed_ * 1103515245 + 12345;
+    int val = (ternary_seed_ / 65536) % 3;
+    if (val == 0) return ternary::Trit::NEGATIVE;
+    if (val == 1) return ternary::Trit::ZERO;
+    return ternary::Trit::POSITIVE;
 }
 
 } // namespace q_mini_wasm_v2::core::moe

@@ -3,7 +3,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
-#include "ternary/trit.hpp"
+#include "../ternary/trit.hpp"
 #include "graph_native.hpp"
 
 namespace qgnn {
@@ -421,4 +421,4 @@ public:
     void optimize_for_degraded_performance();
 };
 
-} // namespace qgnn
+} // namespace q_mini_wasm_v2::core::qgnn

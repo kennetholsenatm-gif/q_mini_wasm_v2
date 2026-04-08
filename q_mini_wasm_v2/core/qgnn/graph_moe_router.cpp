@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <chrono>
 
 namespace q_mini_wasm_v2::core::qgnn {
 

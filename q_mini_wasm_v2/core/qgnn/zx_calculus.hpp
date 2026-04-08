@@ -3,10 +3,10 @@
 #include <vector>
 #include <memory>
 #include <complex>
-#include "ternary/trit.hpp"
+#include "../ternary/trit.hpp"
 #include "graph_native.hpp"
 
-namespace qgnn {
+namespace q_mini_wasm_v2::core::qgnn {
 
 /**
  * @brief Fixed-point complex number representation for quantum phases
@@ -243,4 +243,4 @@ public:
     void export_metrics(const std::string& filename) const;
 };
 
-} // namespace qgnn
+} // namespace q_mini_wasm_v2::core::qgnn

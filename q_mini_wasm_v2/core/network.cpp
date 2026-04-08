@@ -24,9 +24,7 @@ TernaryNeuralNetwork::TernaryNeuralNetwork(const NetworkConfig& config)
     learning::FFConfig ff_config{
         config.num_layers,
         config.neurons_per_layer,
-        config.learning_rate_shift,
-        2,  // positive_threshold (must be non-negative int)
-        0   // negative_threshold
+        config.learning_rate_shift
     };
     for (size_t i = 0; i < config.total_experts; ++i) {
         experts_.push_back(std::make_unique<learning::ForwardForwardLearner>(ff_config));
@@ -144,6 +142,13 @@ std::vector<ternary::Trit> TernaryNeuralNetwork::infer(const std::vector<double>
     }
 
     return output;
+}
+
+learning::ForwardForwardLearner* TernaryNeuralNetwork::get_expert(size_t expert_id) {
+    if (expert_id < experts_.size()) {
+        return experts_[expert_id].get();
+    }
+    return nullptr;
 }
 
 } // namespace q_mini_wasm_v2::core

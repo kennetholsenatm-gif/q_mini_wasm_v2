@@ -6,7 +6,7 @@
 #include <iomanip>
 #include <iostream>
 
-namespace qgnn {
+namespace q_mini_wasm_v2::core::qgnn {
 
 // ============================================================================
 // TernaryTreeOptimizer Implementation
@@ -1079,4 +1079,4 @@ void TernaryMemorySystem::optimize_for_degraded_performance() {
     optimizer->enable_cache_optimization(false);
 }
 
-} // namespace qgnn
+} // namespace q_mini_wasm_v2::core::qgnn

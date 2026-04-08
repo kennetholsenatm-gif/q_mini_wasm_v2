@@ -3,13 +3,14 @@
   "bundle_schema": "qmini.desktop.asset_bundle.v1",
   "shell_contract_version": "qmini.desktop.mcp_host.v1",
   "native_runtime_assets": [
-    "runtime/native/q_mini_wasm_v2.exe"
+    "runtime/native/q_mini_wasm_v2_trainer.exe",
+    "runtime/native/wui-cli-bridge.exe"
   ],
   "entries": [
     {
       "path": "config/system.toml",
-      "size": 9162,
-      "sha256": "762f693b25a34f3b0282d51434916d96eb091b288ef9e27879f030a2d2db3800"
+      "size": 9310,
+      "sha256": "1130cf492209fa47663848b6e109c89e9594f677aacc0953b1124840cc7ad063"
     },
     {
       "path": "runtime/desktop_shell_bootstrap.js",
@@ -22,9 +23,14 @@
       "sha256": "a7cdf524a1afe6771722e8e38416e1f7fc74864933acc745c9fa3a45e507eb68"
     },
     {
-      "path": "runtime/native/q_mini_wasm_v2.exe",
-      "size": 13655040,
-      "sha256": "17b40e379a2dbce53169486556151cb36c06eedaf4cccaa9a47702012bce6651"
+      "path": "runtime/native/q_mini_wasm_v2_trainer.exe",
+      "size": 149504,
+      "sha256": "aa6d71e91606eb5899c733aecb7c4d2122b3e87b0ed357d74e6316b029cdafa2"
+    },
+    {
+      "path": "runtime/native/wui-cli-bridge.exe",
+      "size": 10925056,
+      "sha256": "ab5ea7b32e56e7e9e03d8af0ca08578a9cd8a22c16b93ec3ebe1ee9c93164e40"
     },
     {
       "path": "wui/README.md",
@@ -38,8 +44,8 @@
     },
     {
       "path": "wui/config.html",
-      "size": 14560,
-      "sha256": "19f749af16b58a214a81db7fcc74c18cbe968971de51ba069e617dc3b1be12ae"
+      "size": 14609,
+      "sha256": "44c5a3d042a9ae546ecafd852318331bb6389870c1efe46462c09b09efa988d3"
     },
     {
       "path": "wui/data/glossary.json",
@@ -48,13 +54,13 @@
     },
     {
       "path": "wui/glossary.html",
-      "size": 3918,
-      "sha256": "0bc9a7269fdf7abd7ed13d041ba6b99a536e0583a5ee8b1e431227ab448bea50"
+      "size": 3967,
+      "sha256": "9458e4defe1bd0ec74c6dad23ed315b7f75913ee1f35296af23ff4ed152b0958"
     },
     {
       "path": "wui/index.html",
-      "size": 34006,
-      "sha256": "3f80aa76957a27f11d501f9dc96176327590e7f889a81706159afd9d6e368e5e"
+      "size": 34055,
+      "sha256": "5146a8378f400472c174c3ffecd0ae8b9089305b54427d9fbc7998fa90dfe1c3"
     },
     {
       "path": "wui/js/mcp-host-bridge.js",
@@ -62,9 +68,19 @@
       "sha256": "c94873466109a0f970bbe180bece154ed0a78f8f8b71e87fe22a95118eef6f02"
     },
     {
+      "path": "wui/js/training-sse-client.js",
+      "size": 4285,
+      "sha256": "4ebb5caf43f3756941888d71d79a9fdbbbb2cbd359b376d6561bf074e8375729"
+    },
+    {
+      "path": "wui/training.html",
+      "size": 18493,
+      "sha256": "c12eadbd63cf5caae255fbcd691703ec1c4c2f3c64f4f3e91f5c823d738d84eb"
+    },
+    {
       "path": "wui/wiki.html",
-      "size": 3809,
-      "sha256": "f694b69dda239b15e7e66025734e5a89bc21366905200ea6e16f6e5d93b158e4"
+      "size": 3858,
+      "sha256": "b86cec5ea61db109238ae8551d2e8a33711c92f78fe6ab34d9adb1c6e875d7b5"
     }
   ]
 }

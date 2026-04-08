@@ -229,6 +229,16 @@ private:
     
     // Flash-CIM state
     bool flash_cim_initialized_;
+    struct FlashCIMConfig {
+        size_t pack_size = 5;
+        size_t wordline_count = 64;
+        bool multi_wordline_sensing = true;
+    } flash_cim_config_;
+    
+    // Flash-CIM helper methods
+    std::vector<uint8_t> pack_trits_to_bytes(const std::vector<int8_t>& trits);
+    std::vector<int8_t> simulate_mws_computation(const std::vector<uint8_t>& packed_data);
+    int8_t gf3_multiply(int8_t a, int8_t b);
     
     // ========================================================================
     // Worker Thread Function

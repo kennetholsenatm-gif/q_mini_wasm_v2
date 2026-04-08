@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <queue>
 
-namespace qgnn {
+namespace q_mini_wasm_v2::core::qgnn {
 
 // ZXDiagram Implementation
 ZXDiagram::ZXDiagram(size_t inputs, size_t outputs) 
@@ -719,4 +719,4 @@ void ZXPerformanceAnalyzer::export_metrics(const std::string& filename) const {
     std::cout << "Metrics exported to " << filename << "\n";
 }
 
-} // namespace qgnn
+} // namespace q_mini_wasm_v2::core::qgnn

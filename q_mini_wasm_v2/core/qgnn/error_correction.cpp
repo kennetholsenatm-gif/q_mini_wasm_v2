@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <iostream>
 
-namespace qgnn {
+namespace q_mini_wasm_v2::core::qgnn {
 
 // Constantin-Rao Code Implementation
 ConstantinRaoCode::ConstantinRaoCode(size_t n, size_t k, size_t t)
@@ -794,4 +794,4 @@ std::complex<int32_t> PhaseDriftCorrection::predict_phase_drift(size_t qubit_ind
     return std::complex<int32_t>(recent_trend, 0);
 }
 
-} // namespace qgnn
+} // namespace q_mini_wasm_v2::core::qgnn

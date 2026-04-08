@@ -6,8 +6,11 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <filesystem>
+#include <iomanip>
 #include "../ternary/trit.hpp"
 #include "../network.hpp"
+#include "data_synthesizer.hpp"
 
 using namespace q_mini_wasm_v2::core;
 
@@ -42,21 +45,124 @@ std::vector<ternary::Trit> text_to_trits(const std::string& text, size_t dim = 6
     return result;
 }
 
+// Simple TOML config loader - no external deps
+class ConfigLoader {
+    std::string raw_content;
+    
+    size_t find_in_section(const std::string& section, const std::string& key) {
+        std::string section_header = "[" + section + "]";
+        size_t section_start = raw_content.find(section_header);
+        if (section_start == std::string::npos) return std::string::npos;
+        
+        size_t next_section = raw_content.find("[", section_start + section_header.length());
+        size_t search_end = (next_section == std::string::npos) ? raw_content.length() : next_section;
+        
+        std::string key_search = key + " =";
+        size_t key_pos = raw_content.find(key_search, section_start);
+        if (key_pos == std::string::npos || key_pos > search_end) return std::string::npos;
+        
+        return key_pos + key_search.length();
+    }
+    
+public:
+    bool load(const std::string& path) {
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            std::cerr << "[Config] Failed to load: " << path << std::endl;
+            return false;
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        raw_content = buffer.str();
+        std::cout << "[Config] Loaded: " << path << std::endl;
+        return true;
+    }
+    
+    size_t get_size_t(const std::string& section, const std::string& key) {
+        size_t val_pos = find_in_section(section, key);
+        if (val_pos == std::string::npos) return 0;
+        
+        // Skip whitespace and find number
+        size_t num_start = raw_content.find_first_of("0123456789", val_pos);
+        if (num_start == std::string::npos) return 0;
+        
+        size_t num_end = raw_content.find_first_not_of("0123456789", num_start);
+        std::string num_str = raw_content.substr(num_start, num_end - num_start);
+        return std::stoull(num_str);
+    }
+    
+    std::string get_string(const std::string& section, const std::string& key) {
+        size_t val_pos = find_in_section(section, key);
+        if (val_pos == std::string::npos) return "";
+        
+        // Find quoted string
+        size_t quote_start = raw_content.find('"', val_pos);
+        if (quote_start == std::string::npos) return "";
+        
+        size_t quote_end = raw_content.find('"', quote_start + 1);
+        if (quote_end == std::string::npos) return "";
+        
+        return raw_content.substr(quote_start + 1, quote_end - quote_start - 1);
+    }
+    
+    bool get_bool(const std::string& section, const std::string& key) {
+        size_t val_pos = find_in_section(section, key);
+        if (val_pos == std::string::npos) return false;
+        
+        // Find value
+        size_t val_start = raw_content.find_first_not_of(" \t", val_pos);
+        if (val_start == std::string::npos) return false;
+        
+        std::string val = raw_content.substr(val_start, 5);
+        return val.substr(0, 4) == "true" || val.substr(0, 1) == "1";
+    }
+};
+
 int main(int argc, char* argv[]) {
-    // Default parameters matching the research defaults and WUI
-    size_t epochs = 100;
-    size_t batch_size = 32;
-    ternary::ProbTrit learning_rate = ternary::ProbTrit::LOW_PROB;  // Ternary learning rate
-    size_t context_window = 4096;
-    size_t entanglement_tokens = 256;
-    size_t moe_experts = 8;
-    size_t moe_top_k = 2;
-    bool steane_correction = true;
-    bool flash_cim = false;
+    // Load config from file FIRST
+    std::string config_path = "flash_cim_243expert/training_config.toml";
+    
+    // SSE mode flag for WUI live streaming
+    bool sse_mode = false;
+    
+    // Parse CLI arguments - first pass for config and flags
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--config" && i + 1 < argc) {
+            config_path = argv[++i];
+        } else if (arg == "--sse-mode") {
+            sse_mode = true;
+        }
+    }
+    
+    // Helper lambda for SSE-compatible output
+    auto log_progress = [&](const std::string& json_msg) {
+        if (sse_mode) {
+            std::cout << "data: " << json_msg << "\n\n" << std::flush;
+        } else {
+            std::cout << json_msg << "\n" << std::flush;
+        }
+    };
+    
+    ConfigLoader config;
+    bool has_config = config.load(config_path);
+    
+    // Default parameters - loaded from config if available
+    size_t epochs = has_config ? config.get_size_t("training", "epochs") : 100;
+    size_t batch_size = has_config ? config.get_size_t("training", "batch_size") : 8192;
+    size_t checkpoint_interval = has_config ? config.get_size_t("training", "checkpoint_interval") : 5;
+    
+    ternary::ProbTrit learning_rate = ternary::ProbTrit::LOW_PROB;
+    size_t context_window = has_config ? config.get_size_t("model", "context_window") : 4096;
+    size_t entanglement_tokens = has_config ? config.get_size_t("model", "entanglement_tokens") : 256;
+    size_t moe_experts = has_config ? config.get_size_t("model", "moe_experts") : 243;
+    size_t moe_top_k = has_config ? config.get_size_t("model", "moe_top_k") : 16;
+    bool steane_correction = has_config ? config.get_bool("features", "steane_correction") : true;
+    bool flash_cim = has_config ? config.get_bool("features", "flash_cim") : true;
     
     std::string dataset_path = "";
-    std::string base_model_path = "";
-    std::string output_path = "";
+    std::string base_model_path = has_config ? config.get_string("paths", "base_model") : "flash_cim_243expert/checkpoints/final_model.json";
+    std::string output_path = "";  // Auto-generated if empty
 
     // Parse CLI arguments
     for (int i = 1; i < argc; ++i) {
@@ -91,11 +197,17 @@ int main(int argc, char* argv[]) {
             base_model_path = argv[++i];
         } else if (arg == "--output" && i + 1 < argc) {
             output_path = argv[++i];
+        } else if (arg == "--checkpoint-every" && i + 1 < argc) {
+            checkpoint_interval = std::stoull(argv[++i]);
+        } else if (arg == "--sse-mode") {
+            sse_mode = true;
+        } else if (arg == "--config" && i + 1 < argc) {
+            // Already processed above, skip
+            ++i;
         }
     }
 
-    std::cout << "{\"status\": \"init\", \"message\": \"Initializing Advanced Ternary Neural Network Pipeline\"}\n";
-    std::cout.flush();
+    log_progress("{\"status\": \"init\", \"message\": \"Config loaded: epochs=" + std::to_string(epochs) + ", batch=" + std::to_string(batch_size) + ", experts=" + std::to_string(moe_experts) + "\"}");
 
     // Configure the network based on the research paper parameters
     NetworkConfig net_config;
@@ -115,8 +227,7 @@ int main(int argc, char* argv[]) {
     try {
         TernaryNeuralNetwork tnn(net_config);
         
-        std::cout << "{\"status\": \"progress\", \"step\": \"Network configured. Architecture: MoE Routing, FF Layers, Steane Polling\"}\n";
-        std::cout.flush();
+        log_progress("{\"status\": \"progress\", \"step\": \"Network configured. Architecture: MoE Routing, FF Layers, Steane Polling\"}");
 
         // Dataset loading or simulation
         std::vector<std::vector<ternary::Trit>> dataset;
@@ -139,16 +250,15 @@ int main(int argc, char* argv[]) {
                 }
                 file.close();
                 
-                std::cout << "{\"status\": \"progress\", \"step\": \"Loaded " << dataset.size() << " samples from dataset\"}\n";
+            log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(dataset.size()) + " samples from dataset\"}");
             } else {
-                std::cout << "{\"status\": \"warning\", \"step\": \"Could not open dataset file, using simulation\"}\n";
+                log_progress("{\"status\": \"warning\", \"step\": \"Could not open dataset file, using simulation\"}");
             }
         }
         
         // If no dataset loaded, generate synthetic data
         if (dataset.empty()) {
-            std::cout << "{\"status\": \"progress\", \"step\": \"No dataset provided. Simulating Quantum Distribution...\"}\n";
-            std::cout.flush();
+            log_progress("{\"status\": \"progress\", \"step\": \"No dataset provided. Simulating Quantum Distribution...\"}");
             
             // Generate ternary dataset using deterministic seed
             uint32_t seed = 42;
@@ -165,13 +275,30 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        std::cout << "{\"status\": \"progress\", \"step\": \"Commencing Forward-Forward Entropy Training...\"}\n";
-        std::cout.flush();
+        log_progress("{\"status\": \"progress\", \"step\": \"Commencing Forward-Forward Entropy Training...\"}");
 
         auto start_time = std::chrono::steady_clock::now();
         
-        // Execute the advanced training pipeline
-        tnn.train(dataset, epochs);
+        // Training loop - per batch per epoch for API-based training
+        for (size_t epoch = 0; epoch < epochs; ++epoch) {
+            // Convert dataset to double format for this epoch
+            std::vector<std::vector<double>> batch_data;
+            for (const auto& sample : dataset) {
+                std::vector<double> sample_vec;
+                sample_vec.reserve(sample.size());
+                for (const auto& trit : sample) {
+                    sample_vec.push_back(static_cast<double>(trit));
+                }
+                batch_data.push_back(std::move(sample_vec));
+            }
+            
+            if (!batch_data.empty()) {
+                // Train on batch for 1 epoch
+                tnn.train(batch_data, 1);
+            }
+            
+            log_progress("{\"status\": \"epoch\", \"epoch\": " + std::to_string(epoch + 1) + ", \"samples\": " + std::to_string(batch_data.size()) + "}");
+        }
         
         auto end_time = std::chrono::steady_clock::now();
         std::chrono::duration<double> elapsed = end_time - start_time;
@@ -194,7 +321,7 @@ int main(int argc, char* argv[]) {
                 size_t total_params = 0;
                 for (size_t expert_id = 0; expert_id < moe_experts; ++expert_id) {
                     // Get expert weights from TNN
-                    auto& expert = tnn.get_expert(expert_id);
+                    auto expert = tnn.get_expert(expert_id);
                     if (expert) {
                         auto weights_data = expert->serialize_weights();
                         
@@ -216,18 +343,16 @@ int main(int argc, char* argv[]) {
                 out_file << "total_params: " << total_params << "\n";
                 out_file.close();
                 
-                std::cout << "{\"status\": \"progress\", \"step\": \"Saved trained MoE model to " << output_path << "\"}\n";
+                log_progress("{\"status\": \"progress\", \"step\": \"Saved trained MoE model to " + output_path + "\"}");
             } else {
-                std::cout << "{\"status\": \"error\", \"step\": \"Failed to save model to " << output_path << "\"}\n";
+                log_progress("{\"status\": \"error\", \"step\": \"Failed to save model to " + output_path + "\"}");
             }
             std::cout.flush();
         }
 
-        std::cout << "{\"status\": \"complete\", \"message\": \"Training complete\", \"time_s\": " << elapsed.count() << "}\n";
-        std::cout.flush();
+        log_progress("{\"status\": \"complete\", \"message\": \"Training complete\", \"time_s\": " + std::to_string(elapsed.count()) + "}");
     } catch (const std::exception& e) {
-        std::cout << "{\"status\": \"error\", \"message\": \"Exception: " << e.what() << "\"}\n";
-        std::cout.flush();
+        log_progress("{\"status\": \"error\", \"message\": \"Exception: " + std::string(e.what()) + "\"}");
         return 1;
     }
     

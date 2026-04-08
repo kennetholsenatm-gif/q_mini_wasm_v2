@@ -78,7 +78,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>%(AdditionalOptions) /FS /Zi-</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -100,16 +100,16 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;HAS_LIBCURL=1;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;HAS_LIBCURL=1;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -122,7 +122,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>%(AdditionalOptions) /FS /Zi-</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -143,18 +143,18 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;HAS_LIBCURL=1;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;HAS_LIBCURL=1;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -167,7 +167,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>%(AdditionalOptions) /FS /Zi-</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -188,18 +188,18 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;HAS_LIBCURL=1;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;HAS_LIBCURL=1;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -212,7 +212,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>%(AdditionalOptions) /FS /Zi-</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -234,16 +234,16 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;HAS_LIBCURL=1;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;HAS_LIBCURL=1;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Midl>
-      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2;C:\vcpkg\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -333,29 +333,12 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\learning\forward_forward.cpp" />
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\network.hpp" />
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\network.cpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\geometric_context.hpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\geometric_context.cpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\entanglement_token.hpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\entanglement_token.cpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\householder_synthesizer.hpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\householder_synthesizer.cpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\latency_profiler.hpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\inference_pipeline.hpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\inference_pipeline.cpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\flash_cim\flash_cim.cpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\trainer_main.cpp" />
+    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\data_synthesizer.hpp" />
+    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\data_synthesizer.cpp" />
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_native.cpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_moe_router.cpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_migration_adapter.cpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\zx_calculus.cpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\error_correction.cpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_migration_adapter.hpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\message_passing.hpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\message_passing.cpp" />
-    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\ternary_tree.hpp" />
-    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\ternary_tree.cpp" />
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\betti_extractor.hpp" />
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\betti_extractor.cpp" />
+    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\inference\latency_profiler.hpp" />
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\runtime\orchestrator.hpp" />
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\runtime\orchestrator.cpp" />
   </ItemGroup>

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Training - q_mini_wasm_v2</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.5;
+        }
+        header {
+            background: #1a1a2e;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        nav a { color: #ccc; text-decoration: none; margin-left: 1.5rem; }
+        nav a:hover, nav a.active { color: #4ecca3; }
+        main {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            color: #1a1a2e;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #4ecca3;
+        }
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        textarea {
+            width: 100%;
+            min-height: 400px;
+            font-family: 'SF Mono', monospace;
+            font-size: 13px;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            background: #4ecca3;
+            color: #1a1a2e;
+            border: none;
+            padding: 0.65rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+        }
+        button:hover { background: #3dbb92; }
+        button.secondary { background: #1a1a2e; color: #fff; }
+        button.secondary:hover { background: #2d2d44; }
+        button.danger { background: #e74c3c; color: #fff; }
+        button.danger:hover { background: #c0392b; }
+        .toolbar {
+            display: flex;
+            gap: 0.6rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        .api-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr auto;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .api-grid label {
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        .api-grid input[type="password"] {
+            padding: 0.4rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .api-status {
+            font-size: 0.8rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+        }
+        .api-status.ok { background: #e8f8f1; color: #1e6f4f; }
+        .api-status.missing { background: #fff8e6; color: #8b6b00; }
+        #stream-container {
+            background: #1a1a2e;
+            color: #4ecca3;
+            padding: 1rem;
+            border-radius: 4px;
+            font-family: 'SF Mono', monospace;
+            font-size: 0.85rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #stream-container .line {
+            margin-bottom: 0.25rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        #stream-container .line.epoch {
+            color: #ffd700;
+        }
+        #stream-container .line.error {
+            color: #ff6b6b;
+        }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .metric-box {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .metric-box .value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+        .metric-box .label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+        .connection-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .connection-status.connected { background: #4ecca3; }
+        .connection-status.disconnected { background: #e74c3c; }
+        .connection-status.connecting { background: #ffc107; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Training Configuration</h1>
+        <nav>
+            <a href="index.html">Dashboard</a>
+            <a href="config.html">Config</a>
+            <a href="training.html" class="active">Training</a>
+            <a href="api-docs.html">API Docs</a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- TOML Configuration -->
+        <div class="card full-width">
+            <h2>Training Configuration (TOML)</h2>
+            <textarea id="config-editor" spellcheck="false"></textarea>
+            <div class="toolbar">
+                <button onclick="loadConfig()">Load Config</button>
+                <button onclick="saveConfig()" class="secondary">Save Config</button>
+                <button onclick="resetConfig()">Reset to Default</button>
+                <span id="config-status" style="margin-left: auto; color: #666;"></span>
+            </div>
+        </div>
+
+        <!-- API Credentials -->
+        <div class="card">
+            <h2>API Credentials (Secure Storage)</h2>
+            <div class="api-grid">
+                <label>WolframAlpha:</label>
+                <input type="password" id="api-wolfram" placeholder="API Key">
+                <span class="api-status missing" id="status-wolfram">Missing</span>
+                
+                <label>Wikidata:</label>
+                <input type="password" id="api-wikidata" placeholder="API Key">
+                <span class="api-status missing" id="status-wikidata">Missing</span>
+                
+                <label>arXiv:</label>
+                <input type="password" id="api-arxiv" placeholder="API Key (optional)">
+                <span class="api-status missing" id="status-arxiv">Missing</span>
+                
+                <label>GitHub:</label>
+                <input type="password" id="api-github" placeholder="API Key">
+                <span class="api-status missing" id="status-github">Missing</span>
+                
+                <label>Lean:</label>
+                <input type="password" id="api-lean" placeholder="API Key">
+                <span class="api-status missing" id="status-lean">Missing</span>
+            </div>
+            <div class="toolbar">
+                <button onclick="loadApiKeys()">Load from Credential Manager</button>
+                <button onclick="saveApiKeys()" class="secondary">Save Securely</button>
+            </div>
+        </div>
+
+        <!-- Training Control -->
+        <div class="card">
+            <h2>Training Control</h2>
+            <div class="toolbar">
+                <button onclick="startTraining()">Start Training</button>
+                <button onclick="pauseTraining()" class="secondary">Pause</button>
+                <button onclick="stopTraining()" class="danger">Stop</button>
+            </div>
+            <div class="metric-grid">
+                <div class="metric-box">
+                    <div class="value" id="metric-epoch">0</div>
+                    <div class="label">Current Epoch</div>
+                </div>
+                <div class="metric-box">
+                    <div class="value" id="metric-samples">0</div>
+                    <div class="label">Samples/Batch</div>
+                </div>
+                <div class="metric-box">
+                    <div class="value" id="metric-time">0:00</div>
+                    <div class="label">Elapsed Time</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Stream -->
+        <div class="card full-width">
+            <h2>
+                <span class="connection-status disconnected" id="stream-indicator"></span>
+                Live Training Stream
+            </h2>
+            <div id="stream-container"></div>
+            <div class="toolbar">
+                <button onclick="connectStream()">Connect</button>
+                <button onclick="disconnectStream()" class="secondary">Disconnect</button>
+                <button onclick="clearStream()">Clear</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/training-sse-client.js"></script>
+    <script>
+        // Default TOML configuration
+        const defaultConfig = `[training]
+epochs = 100
+batch_size = 8192
+checkpoint_interval = 5
+learning_rate = 33
+
+[model]
+moe_experts = 243
+moe_top_k = 16
+context_window = 4096
+entanglement_tokens = 256
+shadow_dim = 1024
+num_layers = 3
+neurons_per_layer = 128
+routing_qutrits = 8
+learning_rate_shift = 2
+
+[features]
+steane_correction = true
+flash_cim = true
+worker_threads = 4
+
+[apis]
+wolfram = false
+pubchem = true
+oeis = true
+wikidata = false
+arxiv = false
+nasa = true
+pdb = true
+github = false
+lean = false
+
+[streaming]
+enabled = true
+port = 9090
+
+[paths]
+base_model = "flash_cim_243expert/checkpoints/final_model.json"
+output_dir = "flash_cim_243expert/checkpoints/"
+dataset_dir = "flash_cim_243expert/"
+`;
+
+        let sseClient = null;
+        let streamStartTime = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConfig();
+            
+            // Check if we should auto-connect
+            if (window.location.hash === '#autoconnect') {
+                connectStream();
+            }
+        });
+
+        // Config functions
+        function loadConfig() {
+            const editor = document.getElementById('config-editor');
+            const status = document.getElementById('config-status');
+            
+            // Try to load from file via MCP bridge
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_load_training_config', {})
+                    .then(result => {
+                        if (result.config) {
+                            editor.value = result.config;
+                            status.textContent = 'Loaded from file';
+                            status.style.color = '#2d7a51';
+                        } else {
+                            editor.value = defaultConfig;
+                            status.textContent = 'Using default config';
+                        }
+                    })
+                    .catch(() => {
+                        editor.value = defaultConfig;
+                        status.textContent = 'Using default config';
+                    });
+            } else {
+                editor.value = defaultConfig;
+                status.textContent = 'MCP bridge not available';
+            }
+        }
+
+        function saveConfig() {
+            const editor = document.getElementById('config-editor');
+            const status = document.getElementById('config-status');
+            
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_save_training_config', { config: editor.value })
+                .then(() => {
+                    status.textContent = 'Config saved';
+                    status.style.color = '#2d7a51';
+                })
+                .catch(() => {
+                    status.textContent = 'Failed to save';
+                    status.style.color = '#b42318';
+                });
+            } else {
+                status.textContent = 'MCP bridge not available';
+            }
+        }
+
+        function resetConfig() {
+            document.getElementById('config-editor').value = defaultConfig;
+            document.getElementById('config-status').textContent = 'Reset to default';
+        }
+
+        // API Key functions
+        function loadApiKeys() {
+            if (!window.qMiniMcpHost) {
+                alert('MCP bridge not available');
+                return;
+            }
+            
+            const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
+            
+            window.qMiniMcpHost.callTool('wui_load_api_keys', {})
+                .then(result => {
+                    services.forEach(service => {
+                        const input = document.getElementById(`api-${service}`);
+                        const status = document.getElementById(`status-${service}`);
+                        
+                        if (result[service]) {
+                            input.value = '********'; // Masked
+                            status.textContent = 'Stored';
+                            status.className = 'api-status ok';
+                        } else {
+                            status.textContent = 'Missing';
+                            status.className = 'api-status missing';
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to load API keys:', err);
+                    alert('Failed to load API keys from Credential Manager');
+                });
+        }
+
+        function saveApiKeys() {
+            if (!window.qMiniMcpHost) {
+                alert('MCP bridge not available');
+                return;
+            }
+            
+            const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
+            const keys = {};
+            
+            services.forEach(service => {
+                const input = document.getElementById(`api-${service}`);
+                if (input.value && input.value !== '********') {
+                    keys[service] = input.value;
+                }
+            });
+            
+            window.qMiniMcpHost.callTool('wui_store_api_keys', { keys })
+                .then(() => {
+                    alert('API keys saved securely to Windows Credential Manager');
+                    loadApiKeys(); // Refresh status
+                })
+                .catch(err => {
+                    console.error('Failed to save API keys:', err);
+                    alert('Failed to save API keys');
+                });
+        }
+
+        // Training control functions
+        function startTraining() {
+            if (!window.qMiniMcpHost) {
+                alert('MCP bridge not available');
+                return;
+            }
+            
+            window.qMiniMcpHost.callTool('wui_start_training_sse', {})
+                .then(() => {
+                    connectStream();
+                    streamStartTime = Date.now();
+                    updateElapsedTime();
+                })
+                .catch(err => {
+                    console.error('Failed to start training:', err);
+                    alert('Failed to start training: ' + err.message);
+                });
+        }
+
+        function pauseTraining() {
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_pause_training', {});
+            }
+        }
+
+        function stopTraining() {
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_stop_training_sse', {});
+            }
+            disconnectStream();
+        }
+
+        // Stream functions
+        function connectStream() {
+            if (sseClient) {
+                sseClient.disconnect();
+            }
+            
+            sseClient = new TrainingSseClient('http://localhost:9090/training-stream');
+            
+            sseClient.onConnect(() => {
+                document.getElementById('stream-indicator').className = 'connection-status connected';
+            });
+            
+            sseClient.onMessage((data) => {
+                appendToStream(data);
+                updateMetrics(data);
+            });
+            
+            sseClient.onError(() => {
+                document.getElementById('stream-indicator').className = 'connection-status disconnected';
+            });
+            
+            document.getElementById('stream-indicator').className = 'connection-status connecting';
+            sseClient.connect();
+        }
+
+        function disconnectStream() {
+            if (sseClient) {
+                sseClient.disconnect();
+                document.getElementById('stream-indicator').className = 'connection-status disconnected';
+            }
+        }
+
+        function clearStream() {
+            document.getElementById('stream-container').innerHTML = '';
+        }
+
+        function appendToStream(data) {
+            const container = document.getElementById('stream-container');
+            const line = document.createElement('div');
+            line.className = 'line';
+            
+            if (data.status === 'epoch') {
+                line.className += ' epoch';
+                line.textContent = `Epoch ${data.epoch}: ${data.samples} samples`;
+            } else if (data.status === 'error') {
+                line.className += ' error';
+                line.textContent = `Error: ${data.message || data.step}`;
+            } else if (data.status === 'progress') {
+                line.textContent = data.step;
+            } else if (data.status === 'complete') {
+                line.textContent = `Training complete in ${data.time_s.toFixed(1)}s`;
+            } else {
+                line.textContent = JSON.stringify(data);
+            }
+            
+            container.appendChild(line);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateMetrics(data) {
+            if (data.epoch) {
+                document.getElementById('metric-epoch').textContent = data.epoch;
+            }
+            if (data.samples) {
+                document.getElementById('metric-samples').textContent = data.samples;
+            }
+        }
+
+        function updateElapsedTime() {
+            if (!streamStartTime) return;
+            
+            const elapsed = Math.floor((Date.now() - streamStartTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            document.getElementById('metric-time').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (sseClient && sseClient.isConnected) {
+                setTimeout(updateElapsedTime, 1000);
+            }
+        }
+    </script>
+</body>
+</html>

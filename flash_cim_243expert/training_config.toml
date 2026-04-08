@@ -1,0 +1,32 @@
+[training]
+epochs = 100
+batch_size = 8192
+checkpoint_interval = 5
+learning_rate = 33
+
+[model]
+moe_experts = 243
+moe_top_k = 16
+context_window = 4096
+entanglement_tokens = 256
+shadow_dim = 1024
+num_layers = 3
+neurons_per_layer = 128
+routing_qutrits = 8
+learning_rate_shift = 2
+
+[features]
+steane_correction = true
+flash_cim = true
+worker_threads = 4
+
+[data_synthesizer]
+acquisition_threads = 4
+perturbation_threads = 2
+api_wait_ms = 2000
+batch_timeout_seconds = 300
+
+[paths]
+base_model = "flash_cim_243expert/checkpoints/final_model.json"
+output_dir = "flash_cim_243expert/checkpoints/"
+dataset_dir = "flash_cim_243expert/"

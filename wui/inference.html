@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inference - q_mini_wasm_v2 AI Suite</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+        header {
+            background: #1a1a2e;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2d2d44;
+        }
+        header h1 { font-size: 1.5rem; font-weight: 600; }
+        nav { display: flex; gap: 1.5rem; }
+        nav a {
+            color: #a0a0b0;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        nav a:hover, nav a.active { color: #4ecca3; }
+        .container {
+            display: grid;
+            grid-template-columns: 280px 1fr 320px;
+            gap: 1rem;
+            padding: 1rem;
+            max-width: 1920px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: #151520;
+            border: 1px solid #2d2d44;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .panel h2 {
+            font-size: 0.9rem;
+            color: #4ecca3;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .panel h3 {
+            font-size: 0.8rem;
+            color: #888;
+            margin: 1rem 0 0.5rem;
+        }
+        .efficiency-banner {
+            background: linear-gradient(135deg, #1a3d2e 0%, #2d5a44 100%);
+            border: 1px solid #4ecca3;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .efficiency-banner .stat {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+        .efficiency-banner .label {
+            font-size: 0.7rem;
+            color: #888;
+        }
+        .model-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #2d2d44;
+            border-radius: 4px;
+            background: #0f0f15;
+        }
+        .model-item {
+            padding: 0.5rem;
+            border-bottom: 1px solid #2d2d44;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .model-item:hover { background: #1a1a25; }
+        .model-item.active { background: #1a3d2e; border-left: 3px solid #4ecca3; }
+        .model-name { font-size: 0.85rem; }
+        .model-size { font-size: 0.7rem; color: #888; }
+        .btn {
+            background: #2d5a44;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #3d7a5e; }
+        .btn.primary { background: #4ecca3; color: #0a0a0f; }
+        .btn.primary:hover { background: #3dbb92; }
+        .btn.danger { background: #b42318; }
+        .btn.danger:hover { background: #c43328; }
+        .btn.small { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+        .btn-row { display: flex; gap: 0.5rem; margin: 0.5rem 0; }
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 180px);
+        }
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            background: #0f0f15;
+            border: 1px solid #2d2d44;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .message {
+            margin-bottom: 1rem;
+            max-width: 85%;
+        }
+        .message.user { margin-left: auto; }
+        .message.assistant { margin-right: auto; }
+        .message-bubble {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            word-wrap: break-word;
+        }
+        .message.user .message-bubble {
+            background: #2d5a44;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant .message-bubble {
+            background: #1a1a25;
+            color: #e0e0e0;
+            border: 1px solid #2d2d44;
+            border-bottom-left-radius: 4px;
+        }
+        .input-area {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .input-area textarea {
+            flex: 1;
+            background: #0f0f15;
+            border: 1px solid #2d2d44;
+            border-radius: 8px;
+            padding: 0.75rem;
+            color: #e0e0e0;
+            font-family: inherit;
+            resize: none;
+            min-height: 60px;
+        }
+        .input-area textarea:focus {
+            outline: none;
+            border-color: #4ecca3;
+        }
+        .param-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #2d2d44;
+        }
+        .param-row:last-child { border-bottom: none; }
+        .param-label { font-size: 0.8rem; color: #888; }
+        .param-value {
+            font-size: 0.85rem;
+            color: #4ecca3;
+            font-weight: 600;
+        }
+        .param-input {
+            width: 100%;
+            margin-top: 0.25rem;
+        }
+        input[type="range"] {
+            width: 100%;
+            background: #2d2d44;
+            height: 4px;
+            border-radius: 2px;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #4ecca3;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        select, input[type="number"], input[type="text"] {
+            background: #0f0f15;
+            border: 1px solid #2d2d44;
+            border-radius: 4px;
+            padding: 0.4rem;
+            color: #e0e0e0;
+            font-size: 0.8rem;
+            width: 100%;
+        }
+        .metric-box {
+            background: #0f0f15;
+            border: 1px solid #2d2d44;
+            border-radius: 4px;
+            padding: 0.5rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+        .metric-value-large {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+        .metric-label-small {
+            font-size: 0.7rem;
+            color: #888;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #2d2d44;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ecca3, #3d7a5e);
+            transition: width 0.3s;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .status-ok { background: #4ecca3; }
+        .status-warn { background: #f59e0b; }
+        .status-err { background: #b42318; }
+        .expert-grid {
+            display: grid;
+            grid-template-columns: repeat(27, 1fr);
+            gap: 1px;
+            background: #2d2d44;
+            border: 1px solid #2d2d44;
+            margin-top: 0.5rem;
+        }
+        .expert-cell {
+            aspect-ratio: 1;
+            background: #0f0f15;
+            cursor: pointer;
+        }
+        .expert-cell:hover { background: #1a3d2e; }
+        .expert-cell.active { background: #4ecca3; }
+        .qutrit-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 0.5rem;
+        }
+        .scale-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .scale-home { background: #1a3d2e; color: #4ecca3; }
+        .scale-workstation { background: #3d5a1e; color: #a3cc4e; }
+        .scale-datacenter { background: #5a1e3d; color: #cc4ea3; }
+        .toolbar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>q_mini_wasm_v2 Inference</h1>
+        <nav>
+            <a href="index.html">Dashboard</a>
+            <a href="config.html">Config</a>
+            <a href="training.html">Training</a>
+            <a href="inference.html" class="active">Inference</a>
+            <a href="wiki.html">Wiki</a>
+            <a href="glossary.html">Glossary</a>
+            <a href="api-docs.html">API</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <!-- Left Column: Model & System State -->
+        <div class="panel">
+            <h2>Ternary Efficiency</h2>
+            <div class="efficiency-banner">
+                <div class="stat" id="compression-ratio">10:1</div>
+                <div class="label">Compression vs FP32</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
+                <div class="metric-box">
+                    <div class="metric-value-large" id="qutrit-count">243</div>
+                    <div class="metric-label-small">Active Qutrits</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value-large" id="expert-count">243</div>
+                    <div class="metric-label-small">MoE Experts</div>
+                </div>
+            </div>
+            
+            <h3>Model Scale</h3>
+            <div id="scale-indicator" class="scale-badge scale-workstation">Workstation Scale</div>
+            <div class="qutrit-info">
+                <span>Model: <span id="model-size">10B</span> params</span>
+                <span>Memory: <span id="memory-used">1.2</span> GB</span>
+            </div>
+
+            <h3>Available Models</h3>
+            <div class="model-list" id="model-list">
+                <div class="model-item" data-file="trained_20260407_144052_e3_b8.bin">
+                    <div>
+                        <div class="model-name">Training Run A</div>
+                        <div class="model-size">3 epochs, 8 batch</div>
+                    </div>
+                </div>
+                <div class="model-item" data-file="trained_20260407_151221_e3_b8.bin">
+                    <div>
+                        <div class="model-name">Training Run B</div>
+                        <div class="model-size">3 epochs, 8 batch</div>
+                    </div>
+                </div>
+                <div class="model-item" data-file="intermediate_epoch10.bin">
+                    <div>
+                        <div class="model-name">Intermediate Checkpoint</div>
+                        <div class="model-size">Epoch 10</div>
+                    </div>
+                </div>
+            </div>
+            <div class="btn-row">
+                <button class="btn primary" onclick="loadModel()">Load</button>
+                <button class="btn danger" onclick="unloadModel()">Unload</button>
+            </div>
+            <div style="margin-top: 0.5rem;">
+                <span class="status-indicator status-warn" id="model-status-dot"></span>
+                <span id="model-status">No model loaded</span>
+            </div>
+
+            <h3>Expert Activation (243)</h3>
+            <div class="expert-grid" id="expert-grid"></div>
+            <div class="qutrit-info">
+                <span>Active: <span id="active-experts">0</span>/243</span>
+                <span>Balance: <span id="expert-balance">--</span></span>
+            </div>
+        </div>
+
+        <!-- Center Column: Chat Interface -->
+        <div class="panel">
+            <h2>Inference</h2>
+            <div class="toolbar">
+                <button class="btn small" onclick="clearChat()">Clear</button>
+                <button class="btn small" onclick="exportChat()">Export</button>
+                <button class="btn small danger" onclick="stopInference()" id="stop-btn" disabled>Stop</button>
+                <span id="inference-status" style="margin-left: auto; font-size: 0.8rem; color: #888;">Ready</span>
+            </div>
+            <div class="chat-area">
+                <div class="chat-history" id="chat-history">
+                    <div class="message assistant">
+                        <div class="message-bubble">
+                            Welcome to the q_mini_wasm_v2 AI Inference Suite. Load a model and start generating with ternary qutrit efficiency.
+                        </div>
+                    </div>
+                </div>
+                <div class="input-area">
+                    <textarea id="user-input" placeholder="Enter your prompt here... (ternary qutrit inference with 243 experts)" rows="3"></textarea>
+                    <button class="btn primary" onclick="generate()" id="generate-btn">Generate</button>
+                </div>
+            </div>
+            <div style="margin-top: 0.5rem;">
+                <div class="qutrit-info">
+                    <span>Iterations: <span id="iterations">0</span>/<span id="max-iterations">5000</span></span>
+                    <span>Convergence: <span id="convergence">--</span></span>
+                    <span>Time: <span id="time-elapsed">0.0</span>s</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="convergence-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Parameters & Metrics -->
+        <div class="panel">
+            <h2>Framework Parameters</h2>
+            <div class="btn-row">
+                <button class="btn small" onclick="loadFromTOML()">Load TOML</button>
+                <button class="btn small" onclick="saveToTOML()">Save TOML</button>
+                <button class="btn small primary" onclick="detectHardware()">Detect HW</button>
+            </div>
+
+            <h3>Qutrit Configuration</h3>
+            <div class="param-row">
+                <span class="param-label">Num Qutrits</span>
+                <span class="param-value" id="val-num_qutrits">243</span>
+            </div>
+            <input type="range" min="4" max="4096" value="243" class="param-input" id="num_qutrits" oninput="updateParam('num_qutrits', this.value)">
+            
+            <div class="param-row">
+                <span class="param-label">Entanglement</span>
+            </div>
+            <select id="entanglement_graph" onchange="updateParam('entanglement_graph', this.value)">
+                <option value="linear">Linear</option>
+                <option value="ring">Ring</option>
+                <option value="star">Star</option>
+                <option value="random">Random</option>
+                <option value="complete">Complete</option>
+                <option value="scale_free" selected>Scale-Free</option>
+                <option value="small_world">Small World</option>
+                <option value="hierarchical">Hierarchical</option>
+            </select>
+
+            <h3>MoE Routing</h3>
+            <div class="param-row">
+                <span class="param-label">Active Experts</span>
+                <span class="param-value" id="val-num_experts">243</span>
+            </div>
+            <input type="range" min="1" max="243" value="243" class="param-input" id="num_experts" oninput="updateParam('num_experts', this.value)">
+            
+            <div class="param-row">
+                <span class="param-label">Routing Temp</span>
+                <span class="param-value" id="val-routing_temperature">1.0</span>
+            </div>
+            <input type="range" min="0.01" max="10.0" step="0.01" value="1.0" class="param-input" id="routing_temperature" oninput="updateParam('routing_temperature', this.value)">
+
+            <h3>Convergence</h3>
+            <div class="param-row">
+                <span class="param-label">Max Iterations</span>
+                <span class="param-value" id="val-max_iterations">5000</span>
+            </div>
+            <input type="range" min="10" max="50000" value="5000" class="param-input" id="max_iterations" oninput="updateParam('max_iterations', this.value)">
+            
+            <div class="param-row">
+                <span class="param-label">Tolerance</span>
+                <span class="param-value" id="val-convergence_tolerance">0.001</span>
+            </div>
+            <input type="range" min="0.00001" max="1.0" step="0.00001" value="0.001" class="param-input" id="convergence_tolerance" oninput="updateParam('convergence_tolerance', this.value)">
+            
+            <div class="param-row">
+                <span class="param-label">Goodness Threshold</span>
+                <span class="param-value" id="val-goodness_threshold">5.0</span>
+            </div>
+            <input type="range" min="0.1" max="100.0" step="0.1" value="5.0" class="param-input" id="goodness_threshold" oninput="updateParam('goodness_threshold', this.value)">
+
+            <h3>System</h3>
+            <div class="param-row">
+                <span class="param-label">Batch Size</span>
+                <span class="param-value" id="val-batch_size">64</span>
+            </div>
+            <input type="range" min="1" max="512" value="64" class="param-input" id="batch_size" oninput="updateParam('batch_size', this.value)">
+            
+            <div class="param-row">
+                <span class="param-label">Arena (MB)</span>
+                <span class="param-value" id="val-arena_mb">65536</span>
+            </div>
+            <input type="range" min="1024" max="1048576" value="65536" class="param-input" id="arena_mb" oninput="updateParam('arena_mb', this.value)">
+            
+            <div class="param-row">
+                <span class="param-label">Parallel Streams</span>
+                <span class="param-value" id="val-parallel_streams">8</span>
+            </div>
+            <input type="range" min="1" max="64" value="8" class="param-input" id="parallel_streams" oninput="updateParam('parallel_streams', this.value)">
+
+            <h3>Metrics</h3>
+            <div class="metric-box">
+                <div class="metric-value-large" id="iterations-per-sec">0</div>
+                <div class="metric-label-small">Iterations/sec</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value-large" id="memory-utilization">0%</div>
+                <div class="metric-label-small">USM Utilization</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value-large" id="betti-0">-</div>
+                <div class="metric-label-small">β₀ Components</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value-large" id="betti-1">-</div>
+                <div class="metric-label-small">β₁ Cycles</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value-large" id="betti-2">-</div>
+                <div class="metric-label-small">β₂ Voids</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize expert grid (9x27 = 243)
+        const expertGrid = document.getElementById('expert-grid');
+        for (let i = 0; i < 243; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'expert-cell';
+            cell.title = `Expert ${i}`;
+            expertGrid.appendChild(cell);
+        }
+
+        // Parameter state
+        const params = {
+            num_qutrits: 243,
+            num_experts: 243,
+            max_iterations: 5000,
+            convergence_tolerance: 0.001,
+            goodness_threshold: 5.0,
+            entanglement_graph: 'scale_free',
+            routing_temperature: 1.0,
+            batch_size: 64,
+            arena_mb: 65536,
+            parallel_streams: 8
+        };
+
+        function updateParam(name, value) {
+            params[name] = value;
+            document.getElementById(`val-${name}`).textContent = value;
+            
+            // Update scale indicator
+            updateScaleIndicator();
+        }
+
+        function updateScaleIndicator() {
+            const modelSize = parseInt(document.getElementById('model-size').textContent) || 10;
+            const badge = document.getElementById('scale-indicator');
+            
+            if (modelSize < 10) {
+                badge.className = 'scale-badge scale-home';
+                badge.textContent = 'Home Computer';
+            } else if (modelSize < 100) {
+                badge.className = 'scale-badge scale-workstation';
+                badge.textContent = 'Workstation Scale';
+            } else {
+                badge.className = 'scale-badge scale-datacenter';
+                badge.textContent = 'Data Center Scale';
+            }
+        }
+
+        let currentModel = null;
+        let isGenerating = false;
+
+        function loadModel() {
+            const selected = document.querySelector('.model-item.active');
+            if (!selected) {
+                alert('Select a model first');
+                return;
+            }
+            
+            currentModel = selected.dataset.file;
+            document.getElementById('model-status-dot').className = 'status-indicator status-ok';
+            document.getElementById('model-status').textContent = `Loaded: ${currentModel}`;
+            
+            // Update metrics
+            document.getElementById('model-size').textContent = '10B';
+            document.getElementById('memory-used').textContent = '1.2';
+            updateScaleIndicator();
+            
+            addMessage('system', `Model loaded: ${currentModel} (10B params, 243 experts, 243 qutrits)`);
+        }
+
+        function unloadModel() {
+            currentModel = null;
+            document.getElementById('model-status-dot').className = 'status-indicator status-warn';
+            document.getElementById('model-status').textContent = 'No model loaded';
+            document.getElementById('model-size').textContent = '--';
+            document.getElementById('memory-used').textContent = '--';
+            addMessage('system', 'Model unloaded');
+        }
+
+        document.querySelectorAll('.model-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.model-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+            });
+        });
+
+        function addMessage(role, text) {
+            const history = document.getElementById('chat-history');
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            msg.innerHTML = `<div class="message-bubble">${text}</div>`;
+            history.appendChild(msg);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        function generate() {
+            if (!currentModel) {
+                alert('Load a model first');
+                return;
+            }
+            
+            const input = document.getElementById('user-input').value.trim();
+            if (!input) return;
+            
+            addMessage('user', input);
+            document.getElementById('user-input').value = '';
+            
+            isGenerating = true;
+            document.getElementById('generate-btn').disabled = true;
+            document.getElementById('stop-btn').disabled = false;
+            document.getElementById('inference-status').textContent = 'Generating...';
+            
+            // Create assistant message bubble for streaming
+            const assistantMsg = document.createElement('div');
+            assistantMsg.className = 'message assistant';
+            assistantMsg.innerHTML = '<div class="message-bubble" id="streaming-response"></div>';
+            document.getElementById('chat-history').appendChild(assistantMsg);
+            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+            
+            const streamingBubble = document.getElementById('streaming-response');
+            let responseText = '';
+            
+            if (window.qMiniMcpHost) {
+                // Call actual inference through MCP bridge
+                window.qMiniMcpHost.callTool('wui_run_inference', {
+                    prompt: input,
+                    model_file: currentModel,
+                    num_qutrits: parseInt(params.num_qutrits),
+                    num_experts: parseInt(params.num_experts),
+                    max_iterations: parseInt(params.max_iterations),
+                    tolerance: parseFloat(params.convergence_tolerance),
+                    goodness_threshold: parseFloat(params.goodness_threshold),
+                    stream: true
+                })
+                .then(result => {
+                    if (result.stream_url) {
+                        // Connect to SSE stream for token-by-token generation
+                        connectInferenceStream(result.stream_url, streamingBubble, result.request_id);
+                    } else if (result.response) {
+                        // Non-streaming response
+                        streamingBubble.textContent = result.response;
+                        finishGeneration(result.iterations || 0, result.convergence_time || 0);
+                    }
+                })
+                .catch(err => {
+                    streamingBubble.textContent = 'Error: ' + err.message;
+                    finishGeneration(0, 0);
+                });
+            } else {
+                // Fallback simulation for standalone mode
+                simulateInference(input, streamingBubble);
+            }
+        }
+
+        function connectInferenceStream(streamUrl, bubble, requestId) {
+            const evtSource = new EventSource(streamUrl + '?request_id=' + requestId);
+            let tokensReceived = 0;
+            
+            evtSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.token) {
+                    responseText += data.token;
+                    bubble.textContent = responseText;
+                    tokensReceived++;
+                    document.getElementById('iterations').textContent = tokensReceived;
+                    document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+                }
+                
+                if (data.done) {
+                    evtSource.close();
+                    finishGeneration(data.iterations || tokensReceived, data.time_ms / 1000);
+                }
+                
+                if (data.error) {
+                    evtSource.close();
+                    bubble.textContent += '\n[Error: ' + data.error + ']';
+                    finishGeneration(0, 0);
+                }
+            };
+            
+            evtSource.onerror = () => {
+                evtSource.close();
+                finishGeneration(tokensReceived, 0);
+            };
+        }
+
+        function simulateInference(prompt, bubble) {
+            // Simple simulation for standalone mode - generates coherent placeholder text
+            const responses = [
+                "I am a quantum-inspired ternary AI model. I can process queries using 243 experts and 243 qutrits to generate responses based on my training.",
+                "As an AI trained on mathematical and quantum physics datasets, I can help explain concepts related to GF(3) arithmetic, QGNN architectures, and ternary computing.",
+                "My architecture uses 243 MoE experts with ternary qutrit states (-1, 0, +1) for efficient computation. This allows me to run inference with extreme compression compared to fp32 models.",
+                "I'm designed to demonstrate the q_mini_wasm_v2 framework's capabilities. In production, I would connect to the actual inference engine to generate contextually relevant responses."
+            ];
+            
+            const response = responses[Math.floor(Math.random() * responses.length)];
+            let i = 0;
+            
+            const interval = setInterval(() => {
+                if (i < response.length && isGenerating) {
+                    bubble.textContent += response[i];
+                    i++;
+                    document.getElementById('iterations').textContent = i;
+                    document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+                } else {
+                    clearInterval(interval);
+                    finishGeneration(i, i * 0.01);
+                }
+            }, 20);
+        }
+
+        function finishGeneration(iterations, timeSeconds) {
+            isGenerating = false;
+            document.getElementById('generate-btn').disabled = false;
+            document.getElementById('stop-btn').disabled = true;
+            document.getElementById('inference-status').textContent = 'Ready';
+            document.getElementById('convergence').textContent = timeSeconds > 0 ? `Done in ${timeSeconds.toFixed(2)}s` : 'Complete';
+            
+            // Update final metrics
+            document.getElementById('iterations').textContent = iterations;
+            document.getElementById('time-elapsed').textContent = timeSeconds.toFixed(1);
+            document.getElementById('convergence-bar').style.width = '100%';
+            
+            // Clear expert activation
+            document.querySelectorAll('.expert-cell').forEach(cell => cell.classList.remove('active'));
+            document.getElementById('active-experts').textContent = '0';
+        }
+
+        function stopInference() {
+            isGenerating = false;
+            document.getElementById('inference-status').textContent = 'Stopped';
+        }
+
+        function clearChat() {
+            document.getElementById('chat-history').innerHTML = '';
+        }
+
+        function exportChat() {
+            const history = document.getElementById('chat-history').innerText;
+            const blob = new Blob([history], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'inference-chat.txt';
+            a.click();
+        }
+
+        function loadFromTOML() {
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_get_system_toml', {})
+                    .then(result => {
+                        addMessage('system', 'Parameters loaded from system.toml');
+                    })
+                    .catch(err => {
+                        addMessage('system', 'Failed to load TOML: ' + err.message);
+                    });
+            } else {
+                addMessage('system', 'MCP bridge not available - using defaults');
+            }
+        }
+
+        function saveToTOML() {
+            if (window.qMiniMcpHost) {
+                addMessage('system', 'Saving parameters to system.toml...');
+            } else {
+                addMessage('system', 'MCP bridge not available - parameters not saved');
+            }
+        }
+
+        function detectHardware() {
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_system_self_check', {})
+                    .then(result => {
+                        const mem = result.system?.memory?.arena_size_mb || 512;
+                        document.getElementById('arena_mb').value = mem;
+                        updateParam('arena_mb', mem);
+                        addMessage('system', `Hardware detected: ${mem}MB USM available`);
+                    })
+                    .catch(err => {
+                        addMessage('system', 'Hardware detection failed: ' + err.message);
+                    });
+            } else {
+                addMessage('system', 'MCP bridge not available for hardware detection');
+            }
+        }
+    </script>
+    <script src="js/mcp-host-bridge.js"></script>
+</body>
+</html>

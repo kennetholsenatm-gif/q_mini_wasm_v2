@@ -466,6 +466,18 @@ uint32_t StabilizerTableau::calculate_gf3_rank() const {
     return rank;
 }
 
+std::vector<ternary::Trit> StabilizerTableau::get_pauli_vector() const {
+    std::vector<ternary::Trit> result;
+    result.reserve(phase_.size());
+    for (uint8_t p : phase_) {
+        // Convert GF(3) values {0,1,2} to Trit {-1,0,+1}
+        if (p == 0) result.push_back(ternary::Trit::ZERO);
+        else if (p == 1) result.push_back(ternary::Trit::POSITIVE);
+        else result.push_back(ternary::Trit::NEGATIVE);
+    }
+    return result;
+}
+
 std::unique_ptr<StabilizerTableau> create_tableau(size_t num_qutrits) {
     return std::make_unique<StabilizerTableau>(num_qutrits);
 }

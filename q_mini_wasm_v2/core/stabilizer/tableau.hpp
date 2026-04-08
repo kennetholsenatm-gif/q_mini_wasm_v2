@@ -178,6 +178,12 @@ public:
      */
     uint32_t calculate_gf3_rank() const;
 
+    /**
+     * @brief Get Pauli vector representation for symplectic computations
+     * @return Vector of trits representing Pauli operators
+     */
+    std::vector<ternary::Trit> get_pauli_vector() const;
+
 private:
     size_t n_;  // Number of qutrits
     

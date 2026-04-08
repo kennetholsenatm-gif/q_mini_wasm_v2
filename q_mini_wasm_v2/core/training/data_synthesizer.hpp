@@ -90,6 +90,8 @@ public:
 private:
     size_t rate_limit_ = 100;
     size_t backoff_ms_ = 1000;
+    std::string api_key_ = "";  // Set via environment or config
+    std::chrono::steady_clock::time_point last_query_time_;
 };
 
 /**
@@ -105,12 +107,13 @@ public:
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
     
-    // Generate valid SMILES variation (positive) vs corrupted (negative)
+    // Generate valid SMILES variation (positive) vs corrupted with valency violations (negative)
     static ApiPayload perturb_smiles(const ApiPayload& positive);
 
 private:
     size_t rate_limit_ = 50;
     size_t backoff_ms_ = 2000;
+    std::chrono::steady_clock::time_point last_query_time_;
 };
 
 /**
@@ -132,6 +135,140 @@ public:
 private:
     size_t rate_limit_ = 200;
     size_t backoff_ms_ = 500;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief Wikidata SPARQL API client
+ * 
+ * Queries RDF triples, ontological graphs.
+ * Perturbation: Property recommender disruption (plausible but incorrect entity swapping)
+ */
+class WikidataClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Disrupt ontological triples by swapping objects with plausible alternatives
+    static ApiPayload perturb_triples(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 100;
+    size_t backoff_ms_ = 1000;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief arXiv API client
+ * 
+ * Queries scientific pre-prints, abstracts, papers.
+ * Perturbation: Semantic contradiction injection (invert core claims)
+ */
+class ArxivClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Generate negative samples by inverting scientific claims
+    static ApiPayload perturb_scientific(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 150;
+    size_t backoff_ms_ = 1000;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief NASA Exoplanet Archive API client
+ * 
+ * Queries photometric time-series transit data.
+ * Perturbation: Non-Keplerian transit noise injection
+ */
+class NasaExoplanetClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Inject synthetic astrophysical anomalies into light curves
+    static ApiPayload perturb_transit(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 100;
+    size_t backoff_ms_ = 1500;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief Protein Data Bank API client
+ * 
+ * Queries 3D protein folding coordinates, atomic structures.
+ * Perturbation: Spatial coordinate drift (steric clash generation)
+ */
+class PdbClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Apply rotational/translational noise to generate non-physical structures
+    static ApiPayload perturb_coordinates(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 50;
+    size_t backoff_ms_ = 2000;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief GitHub API client
+ * 
+ * Queries SYCL/C++/WebAssembly code repositories.
+ * Perturbation: AST mutilation (remove barriers, swap memory allocations)
+ */
+class GitHubClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Apply destructive logical mutations to code AST
+    static ApiPayload perturb_code(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 60;  // GitHub unauthenticated rate limit
+    size_t backoff_ms_ = 2000;
+    std::string api_key_ = "";
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief Lean Theorem Prover API client
+ * 
+ * Queries formal mathematical proofs, tactic states.
+ * Perturbation: Frame-preserving mutation (invalid tactic injection)
+ */
+class LeanClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Inject contextually plausible but mathematically invalid tactics
+    static ApiPayload perturb_proof(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 100;
+    size_t backoff_ms_ = 1000;
+    std::chrono::steady_clock::time_point last_query_time_;
 };
 
 /**
@@ -143,7 +280,13 @@ public:
     ~ThreadPool();
     
     template<typename F>
-    void enqueue(F&& task);
+    void enqueue(F&& task) {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            tasks_.emplace(std::forward<F>(task));
+        }
+        condition_.notify_one();
+    }
     
     void wait_for_completion();
 
