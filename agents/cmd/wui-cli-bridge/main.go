@@ -3141,14 +3141,22 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 				// Inject the MCP script before </head>
 				script := fmt.Sprintf(`<script>
 (function() {
-	// WebSocket MCP Bridge
+	// WebSocket MCP Bridge - Auto-connecting backend
 	const ws = new WebSocket('ws://localhost:%d/ws');
 	let pending = new Map();
+	let callQueue = [];
 	let nextId = 1;
+	let isConnected = false;
 	
 	ws.onopen = function() {
-		console.log('[MCP] WebSocket connected');
+		console.log('[MCP] WebSocket connected - backend ready');
+		isConnected = true;
 		window.dispatchEvent(new CustomEvent('qminiMcpReady', { detail: { connected: true } }));
+		// Process any queued calls
+		while (callQueue.length > 0) {
+			const call = callQueue.shift();
+			doCall(call.name, call.args, call.resolve, call.reject);
+		}
 	};
 	
 	ws.onmessage = function(event) {
@@ -3168,37 +3176,48 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 	
 	ws.onclose = function() {
 		console.log('[MCP] WebSocket disconnected');
-		window.qMiniMcpHost = null;
+		isConnected = false;
 	};
 	
+	function doCall(name, args, resolve, reject) {
+		const id = nextId++;
+		pending.set(id, { resolve, reject });
+		ws.send(JSON.stringify({
+			jsonrpc: '2.0',
+			id: id,
+			method: name,
+			params: args || {}
+		}));
+		// Timeout after 30 seconds
+		setTimeout(() => {
+			if (pending.has(id)) {
+				pending.delete(id);
+				reject(new Error('Request timeout'));
+			}
+		}, 30000);
+	}
+	
 	window.qMiniMcpHost = {
+		connected: false,
 		callTool: function(name, args) {
 			return new Promise((resolve, reject) => {
-				if (ws.readyState !== WebSocket.OPEN) {
-					reject(new Error('WebSocket not connected'));
+				if (!isConnected) {
+					// Queue the call for when connection is ready
+					callQueue.push({ name, args, resolve, reject });
 					return;
 				}
-				const id = nextId++;
-				pending.set(id, { resolve, reject });
-				ws.send(JSON.stringify({
-					jsonrpc: '2.0',
-					id: id,
-					method: name,
-					params: args || {}
-				}));
-				// Timeout after 30 seconds
-				setTimeout(() => {
-					if (pending.has(id)) {
-						pending.delete(id);
-						reject(new Error('Request timeout'));
-					}
-				}, 30000);
+				doCall(name, args, resolve, reject);
 			});
 		},
 		ping: function() {
 			return this.callTool('ping', {});
 		}
 	};
+	
+	// Update connected status
+	Object.defineProperty(window.qMiniMcpHost, 'connected', {
+		get: function() { return isConnected; }
+	});
 })();
 </script>`, port)
 

@@ -834,10 +834,35 @@ dataset_dir = "flash_cim_243expert/"
         // Training control functions
         function startTraining() {
             if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available');
+                alert('MCP bridge not available - please wait for connection');
                 return;
             }
             
+            // Check if connected, if not wait a moment
+            if (!window.qMiniMcpHost.connected) {
+                const statusEl = document.getElementById('stream-status');
+                if (statusEl) statusEl.textContent = 'Connecting to backend...';
+                
+                // Wait up to 3 seconds for connection
+                let attempts = 0;
+                const checkAndStart = () => {
+                    attempts++;
+                    if (window.qMiniMcpHost && window.qMiniMcpHost.connected) {
+                        doStartTraining();
+                    } else if (attempts < 30) {
+                        setTimeout(checkAndStart, 100);
+                    } else {
+                        alert('Backend connection timeout - please refresh page');
+                    }
+                };
+                setTimeout(checkAndStart, 100);
+                return;
+            }
+            
+            doStartTraining();
+        }
+        
+        function doStartTraining() {
             window.qMiniMcpHost.callTool('wui_start_training_sse', {})
                 .then(() => {
                     connectStream();
