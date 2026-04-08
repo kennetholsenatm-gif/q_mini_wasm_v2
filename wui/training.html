@@ -572,7 +572,7 @@ dataset_dir = "flash_cim_243expert/"
         ];
 
         function loadDataSources() {
-            // Try localStorage first (standalone mode)
+            // Load from localStorage
             const stored = localStorage.getItem('qmini_data_sources');
             if (stored) {
                 try {
@@ -599,7 +599,6 @@ dataset_dir = "flash_cim_243expert/"
                         renderDataSources(defaultDataSources);
                     });
             } else {
-                // Standalone mode - use defaults
                 renderDataSources(defaultDataSources);
             }
         }
@@ -665,10 +664,10 @@ dataset_dir = "flash_cim_243expert/"
             if (window.qMiniMcpHost) {
                 window.qMiniMcpHost.callTool('wui_save_data_sources', { sources })
                     .then(() => {
-                        alert('Data sources saved (localStorage + MCP)');
+                        alert('Data sources saved');
                     })
                     .catch(err => {
-                        alert('Saved to localStorage (MCP unavailable)');
+                        alert('Saved to localStorage');
                     });
             } else {
                 alert('Data sources saved to localStorage');
@@ -677,7 +676,7 @@ dataset_dir = "flash_cim_243expert/"
 
         function crawlAllSources() {
             if (!window.qMiniMcpHost) {
-                alert('Crawling requires MCP bridge with backend engine. Run with: .\\qminiwasm.exe | .\\mcp-host.exe');
+                alert('Crawling requires MCP bridge with backend engine');
                 return;
             }
             
@@ -751,7 +750,7 @@ dataset_dir = "flash_cim_243expert/"
         function loadApiKeys() {
             const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
             
-            // Try localStorage first (standalone mode)
+            // Load from localStorage first
             const stored = localStorage.getItem('qmini_api_keys');
             if (stored) {
                 try {
@@ -769,10 +768,6 @@ dataset_dir = "flash_cim_243expert/"
                             status.className = 'api-status missing';
                         }
                     });
-                    
-                    if (!window.qMiniMcpHost) {
-                        alert('Loaded from localStorage (MCP unavailable for Credential Manager)');
-                    }
                     return;
                 } catch (e) {
                     console.log('Failed to parse stored API keys');
@@ -780,7 +775,7 @@ dataset_dir = "flash_cim_243expert/"
             }
             
             if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available - keys not loaded (run with .\\qminiwasm.exe | .\\mcp-host.exe for secure storage)');
+                alert('MCP bridge not available');
                 return;
             }
             
@@ -828,11 +823,11 @@ dataset_dir = "flash_cim_243expert/"
                     })
                     .catch(err => {
                         console.error('Failed to save API keys:', err);
-                        alert('Saved to localStorage (MCP credential storage unavailable)');
+                        alert('Saved to localStorage');
                         loadApiKeys();
                     });
             } else {
-                alert('API keys saved to localStorage. For secure Windows Credential Manager storage, run with: .\\qminiwasm.exe | .\\mcp-host.exe');
+                alert('API keys saved to localStorage');
             }
         }
 

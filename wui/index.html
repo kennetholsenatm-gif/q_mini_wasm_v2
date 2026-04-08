@@ -166,9 +166,6 @@
             <a href="wiki.html">Wiki</a>
             <a href="glossary.html">Glossary</a>
         </nav>
-        <div id="mode-banner" style="display: none; background: #2d5a44; color: #4ecca3; padding: 0.3rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-            Standalone Mode
-        </div>
     </header>
 
     <main>
@@ -422,29 +419,6 @@
         };
 
         const useBridge = () => !!window.wsBridge?.isConnected;
-        const isStandaloneMode = () => window.location.port === '7345' || window.location.href.includes('localhost:7345');
-
-        function updateStandaloneStatus() {
-            if (isStandaloneMode()) {
-                // Show standalone mode banner
-                const banner = document.getElementById('mode-banner');
-                if (banner) banner.style.display = 'block';
-                
-                // Running in standalone HTTP server mode - update UI to reflect this
-                setChip('bridge-conn-chip', 'ok', 'HTTP Mode');
-                setText('self-check-summary', 'Standalone Mode Active\nHTTP Server: localhost:7345\nWUI: Serving static files\nBridge: Not connected (expected)');
-                setText('self-check-missing', 'none');
-                setText('self-check-errors', 'Limited features available. Connect via MCP for full functionality.');
-                
-                document.getElementById('quantum-status').textContent = 'HTTP Ready';
-                document.getElementById('q-dot').className = 'status-indicator status-ok';
-                document.getElementById('ternary-status').textContent = 'Active';
-                document.getElementById('t-dot').className = 'status-indicator status-ok';
-                
-                return true;
-            }
-            return false;
-        }
 
         function toMessage(error) {
             return error?.message || String(error || 'unknown error');
@@ -514,13 +488,6 @@
         }
 
         async function runSelfCheck() {
-            // Check if in standalone mode first
-            if (isStandaloneMode()) {
-                updateStandaloneStatus();
-                log('Standalone mode active - HTTP server running on :7345');
-                return;
-            }
-            
             if (!useBridge()) {
                 log('ERROR: backend unavailable. Cannot run system self-check.');
                 return;
@@ -536,10 +503,6 @@
         }
 
         async function refreshOpsSnapshot() {
-            if (isStandaloneMode()) {
-                log('Ops snapshot: Not available in standalone mode (requires MCP bridge)');
-                return;
-            }
             if (!useBridge()) {
                 log('ERROR: backend unavailable. Cannot refresh ops snapshot.');
                 return;
@@ -553,10 +516,6 @@
         }
 
         async function buildRelease() {
-            if (isStandaloneMode()) {
-                log('Build: Not available in standalone mode (requires MCP bridge)');
-                return;
-            }
             if (!useBridge()) {
                 log('ERROR: backend unavailable. Cannot build desktop release.');
                 return;
@@ -571,10 +530,6 @@
         }
 
         async function deployRelease() {
-            if (isStandaloneMode()) {
-                log('Deploy: Not available in standalone mode (requires MCP bridge)');
-                return;
-            }
             if (!useBridge()) {
                 log('ERROR: backend unavailable. Cannot deploy desktop release.');
                 return;
@@ -590,10 +545,6 @@
         }
 
         async function rollbackRelease() {
-            if (isStandaloneMode()) {
-                log('Rollback: Not available in standalone mode (requires MCP bridge)');
-                return;
-            }
             if (!useBridge()) {
                 log('ERROR: backend unavailable. Cannot rollback release.');
                 return;
@@ -609,10 +560,6 @@
         }
 
         async function refreshReleaseStatus() {
-            if (isStandaloneMode()) {
-                log('Release status: Not available in standalone mode (requires MCP bridge)');
-                return;
-            }
             if (!useBridge()) {
                 log('ERROR: backend unavailable. Cannot refresh release status.');
                 return;

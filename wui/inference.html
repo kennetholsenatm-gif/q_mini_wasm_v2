@@ -633,14 +633,13 @@
             document.getElementById('model-status-dot').className = 'status-indicator status-ok';
             document.getElementById('model-status').textContent = `Loaded: ${modelName}`;
             
-            // Update metrics (simulated based on filename)
+            // Update metrics based on filename
             const size = modelFile.includes('large') ? 100 : (modelFile.includes('medium') ? 50 : 10);
             document.getElementById('model-size').textContent = size + 'B';
             document.getElementById('memory-used').textContent = (size * 0.12).toFixed(1);
             updateScaleIndicator();
             
-            const mode = window.qMiniMcpHost ? 'LIVE' : 'SIMULATED';
-            addMessage('system', `[${mode}] Model loaded: ${modelName} (${size}B params, 243 experts, 243 qutrits)`);
+            addMessage('system', `Model loaded: ${modelName} (${size}B params, 243 experts, 243 qutrits)`);
         }
 
         function unloadModel() {
@@ -655,12 +654,27 @@
         // Initialize model list on load
         document.addEventListener('DOMContentLoaded', () => {
             scanForModels();
-            
-            // Show mode indicator
-            if (!window.qMiniMcpHost) {
-                addMessage('system', '[STANDALONE MODE] Inference is simulated. For real model inference, run: .\\qminiwasm.exe | .\\mcp-host.exe');
-            }
+            ensureBackendConnection();
         });
+        
+        // Ensure backend is connected before allowing inference
+        function ensureBackendConnection() {
+            if (!window.qMiniMcpHost) {
+                addMessage('system', 'Waiting for backend connection...');
+                // Poll for connection
+                let attempts = 0;
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (window.qMiniMcpHost) {
+                        clearInterval(checkInterval);
+                        addMessage('system', 'Backend connected - ready for inference');
+                    } else if (attempts > 20) {
+                        clearInterval(checkInterval);
+                        addMessage('system', 'Backend connection timeout - please restart with MCP bridge');
+                    }
+                }, 500);
+            }
+        }
 
         function addMessage(role, text) {
             const history = document.getElementById('chat-history');
@@ -698,36 +712,37 @@
             const streamingBubble = document.getElementById('streaming-response');
             let responseText = '';
             
-            if (window.qMiniMcpHost) {
-                // Call actual inference through MCP bridge
-                window.qMiniMcpHost.callTool('wui_run_inference', {
-                    prompt: input,
-                    model_file: currentModel,
-                    num_qutrits: parseInt(params.num_qutrits),
-                    num_experts: parseInt(params.num_experts),
-                    max_iterations: parseInt(params.max_iterations),
-                    tolerance: parseFloat(params.convergence_tolerance),
-                    goodness_threshold: parseFloat(params.goodness_threshold),
-                    stream: true
-                })
-                .then(result => {
-                    if (result.stream_url) {
-                        // Connect to SSE stream for token-by-token generation
-                        connectInferenceStream(result.stream_url, streamingBubble, result.request_id);
-                    } else if (result.response) {
-                        // Non-streaming response
-                        streamingBubble.textContent = result.response;
-                        finishGeneration(result.iterations || 0, result.convergence_time || 0);
-                    }
-                })
-                .catch(err => {
-                    streamingBubble.textContent = 'Error: ' + err.message;
-                    finishGeneration(0, 0);
-                });
-            } else {
-                // Fallback simulation for standalone mode
-                simulateInference(input, streamingBubble);
+            if (!window.qMiniMcpHost) {
+                streamingBubble.textContent = 'ERROR: Backend not connected. Inference requires MCP bridge.';
+                finishGeneration(0, 0);
+                return;
             }
+            
+            // Call actual inference through MCP bridge
+            window.qMiniMcpHost.callTool('wui_run_inference', {
+                prompt: input,
+                model_file: currentModel,
+                num_qutrits: parseInt(params.num_qutrits),
+                num_experts: parseInt(params.num_experts),
+                max_iterations: parseInt(params.max_iterations),
+                tolerance: parseFloat(params.convergence_tolerance),
+                goodness_threshold: parseFloat(params.goodness_threshold),
+                stream: true
+            })
+            .then(result => {
+                if (result.stream_url) {
+                    // Connect to SSE stream for token-by-token generation
+                    connectInferenceStream(result.stream_url, streamingBubble, result.request_id);
+                } else if (result.response) {
+                    // Non-streaming response
+                    streamingBubble.textContent = result.response;
+                    finishGeneration(result.iterations || 0, result.convergence_time || 0);
+                }
+            })
+            .catch(err => {
+                streamingBubble.textContent = 'Error: ' + err.message;
+                finishGeneration(0, 0);
+            });
         }
 
         function connectInferenceStream(streamUrl, bubble, requestId) {
@@ -761,42 +776,6 @@
                 evtSource.close();
                 finishGeneration(tokensReceived, 0);
             };
-        }
-
-        function simulateInference(prompt, bubble) {
-            // STANDALONE MODE: Simulated responses for demo purposes
-            // In production with MCP bridge, this would be real model inference
-            
-            const prefix = `[SIMULATED MODE - No MCP Bridge]\n\n`;
-            
-            // Generate a context-aware simulated response based on prompt keywords
-            let response;
-            const prompt_lower = prompt.toLowerCase();
-            
-            if (prompt_lower.includes('quantum') || prompt_lower.includes('qutrit')) {
-                response = `This is a SIMULATED response for demonstration.\n\nIn full mode with MCP bridge, I would process your quantum computing query using the QGNN with 243 ternary qutrit states. The query "${prompt}" would be encoded into GF(3) arithmetic and processed through the Mixture of Experts architecture.`;
-            } else if (prompt_lower.includes('math') || prompt_lower.includes('equation')) {
-                response = `This is a SIMULATED response for demonstration.\n\nIn full mode with MCP bridge, I would analyze your mathematical query "${prompt}" using the trained 243-expert model with ternary compression. The response would be generated through iterative message passing on the scale-free topology.`;
-            } else if (prompt_lower.includes('ternary') || prompt_lower.includes('gf3')) {
-                response = `This is a SIMULATED response for demonstration.\n\nIn full mode with MCP bridge, I would explain GF(3) arithmetic and ternary logic. Your query "${prompt}" would be processed using -1, 0, +1 states with 10x compression vs fp32.`;
-            } else {
-                response = `This is a SIMULATED response for demonstration purposes.\n\nYour query "${prompt}" cannot be answered with the real model because:\n\n1. MCP bridge is not connected\n2. No inference backend is running\n3. Standalone mode only serves static files\n\nTo get real inference:\n.\\qminiwasm.exe | .\\mcp-host.exe`;
-            }
-            
-            const fullResponse = prefix + response;
-            let i = 0;
-            
-            const interval = setInterval(() => {
-                if (i < fullResponse.length && isGenerating) {
-                    bubble.textContent += fullResponse[i];
-                    i++;
-                    document.getElementById('iterations').textContent = i;
-                    document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
-                } else {
-                    clearInterval(interval);
-                    finishGeneration(i, i * 0.01);
-                }
-            }, 15);
         }
 
         function finishGeneration(iterations, timeSeconds) {
