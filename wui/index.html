@@ -780,6 +780,23 @@
             log(`ERROR: ${message}`);
         });
 
+        // Listen for SSE backend_ready event
+        const evtSource = new EventSource('http://localhost:9090/training-stream');
+        evtSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'backend_ready') {
+                    log('Backend ready via SSE');
+                    refreshDashboard();
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        };
+        evtSource.onerror = () => {
+            // Silently retry - SSE will auto-reconnect
+        };
+
         window.addEventListener('metricsUpdate', (event) => {
             const metrics = event.detail || {};
 

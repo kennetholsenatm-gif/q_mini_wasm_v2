@@ -3489,6 +3489,12 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 		fmt.Printf("[WUI HTTP] Server starting on http://localhost:%d\n", s.port)
 		fmt.Printf("[WUI HTTP] Serving files from: %s\n", assetPath)
 		fmt.Printf("[WUI HTTP] File browser API: http://localhost:%d/api/browse?path=.\n", s.port)
+
+		// Also start SSE server for backend_ready notifications
+		if sseServer == nil {
+			InitSSEServer("9090")
+		}
+
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("[WUI HTTP] Server error: %v\n", err)
 		}

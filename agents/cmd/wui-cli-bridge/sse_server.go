@@ -210,10 +210,19 @@ func (s *SSEServer) IsRunning() bool {
 // Global SSE server instance
 var sseServer *SSEServer
 
-// InitSSEServer initializes the SSE server
+// InitSSEServer initializes the SSE server and broadcasts ready event
 func InitSSEServer(port string) {
 	sseServer = NewSSEServer(port)
 	sseServer.Start()
+
+	// Broadcast backend ready after brief delay to let clients connect
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		msg := fmt.Sprintf(`{"type": "backend_ready", "timestamp": "%s", "message": "Backend initialized and ready"}`,
+			time.Now().Format(time.RFC3339))
+		sseServer.Broadcast(msg)
+		fmt.Printf("[SSE] Broadcasted backend_ready event\n")
+	}()
 }
 
 // CredentialManager handles Windows Credential Manager operations
@@ -231,7 +240,7 @@ func NewCredentialManager() *CredentialManager {
 // Store saves an API key to Windows Credential Manager
 func (cm *CredentialManager) Store(service, apiKey string) error {
 	target := cm.targetPrefix + service
-	
+
 	// Use cmdkey.exe to store credential
 	cmd := exec.Command("cmdkey", "/add", target, "/user", "api_key", "/pass", apiKey)
 	output, err := cmd.CombinedOutput()
@@ -244,15 +253,15 @@ func (cm *CredentialManager) Store(service, apiKey string) error {
 // Load retrieves an API key from Windows Credential Manager
 func (cm *CredentialManager) Load(service string) (string, error) {
 	target := cm.targetPrefix + service
-	
+
 	// Use PowerShell to retrieve credential
-	cmd := exec.Command("powershell", "-Command", 
+	cmd := exec.Command("powershell", "-Command",
 		fmt.Sprintf("$cred = Get-StoredCredential -Target '%s' -ErrorAction SilentlyContinue; if ($cred) { $cred.GetNetworkCredential().Password }", target))
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to load credential: %v", err)
 	}
-	
+
 	apiKey := strings.TrimSpace(string(output))
 	if apiKey == "" {
 		return "", fmt.Errorf("credential not found for service: %s", service)
@@ -263,7 +272,7 @@ func (cm *CredentialManager) Load(service string) (string, error) {
 // Delete removes an API key from Windows Credential Manager
 func (cm *CredentialManager) Delete(service string) error {
 	target := cm.targetPrefix + service
-	
+
 	cmd := exec.Command("cmdkey", "/delete", target)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -279,7 +288,7 @@ func (cm *CredentialManager) List() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list credentials: %v", err)
 	}
-	
+
 	var services []string
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
