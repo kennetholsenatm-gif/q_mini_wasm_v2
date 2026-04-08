@@ -750,12 +750,24 @@
                 log('Engine connected');
             }
 
-            if (window.wsBridge) {
-                window.wsBridge.getReleaseStatus().catch(() => {});
-                window.wsBridge.runSystemSelfCheck().catch(() => {});
-                window.wsBridge.getOpsSnapshot().catch(() => {});
+            // Wait for wsBridge to be ready then refresh dashboard
+            if (window.wsBridge && window.wsBridge.isConnected) {
+                refreshDashboard();
+            } else {
+                // Wait for connection
+                window.addEventListener('wsBridgeReady', refreshDashboard, { once: true });
             }
         });
+        
+        function refreshDashboard() {
+            if (!window.wsBridge || !window.wsBridge.isConnected) {
+                log('Waiting for backend connection...');
+                return;
+            }
+            window.wsBridge.getReleaseStatus().catch(() => {});
+            window.wsBridge.runSystemSelfCheck().catch(() => {});
+            window.wsBridge.getOpsSnapshot().catch(() => {});
+        }
 
         window.addEventListener('engineDisconnected', () => {
             document.getElementById('quantum-status').textContent = 'Offline';

@@ -3201,11 +3201,23 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 		console.log('[MCP] WebSocket connected - backend ready');
 		isConnected = true;
 		window.dispatchEvent(new CustomEvent('qminiMcpReady', { detail: { connected: true } }));
+		// Dispatch to window for any listeners
+		window.dispatchEvent(new Event('wsBridgeReady'));
 		// Process any queued calls
 		while (callQueue.length > 0) {
 			const call = callQueue.shift();
 			doCall(call.name, call.args, call.resolve, call.reject);
 		}
+	};
+	
+	ws.onerror = function(error) {
+		console.error('[MCP] WebSocket error:', error);
+		isConnected = false;
+	};
+	
+	ws.onclose = function(event) {
+		console.log('[MCP] WebSocket disconnected - code:', event.code, 'reason:', event.reason);
+		isConnected = false;
 	};
 	
 	ws.onmessage = function(event) {
@@ -3221,11 +3233,6 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 				}
 			}
 		}
-	};
-	
-	ws.onclose = function() {
-		console.log('[MCP] WebSocket disconnected');
-		isConnected = false;
 	};
 	
 	function doCall(name, args, resolve, reject) {
