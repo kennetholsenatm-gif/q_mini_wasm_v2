@@ -1317,45 +1317,6 @@ dataset_dir = "flash_cim_243expert/"
         let mcpStartAttempts = 0;
         const MAX_MCP_START_ATTEMPTS = 20;
         
-        function startTraining() {
-            if (!window.qMiniMcpHost) {
-                // MCP bridge not available - try to auto-start
-                mcpStartAttempts = 0;
-                document.getElementById('config-status').textContent = 'Starting backend...';
-                document.getElementById('config-status').style.color = '#ffc107';
-                
-                // Check if backend is already trying to connect
-                pollForMcpConnection(() => {
-                    // Once connected, actually start training
-                    doStartTraining();
-                });
-                return;
-            }
-            
-            // MCP already available - start training immediately
-            doStartTraining();
-        }
-        
-        function pollForMcpConnection(callback) {
-            if (window.qMiniMcpHost) {
-                document.getElementById('config-status').textContent = 'Backend connected';
-                document.getElementById('config-status').style.color = '#2d7a51';
-                callback();
-                return;
-            }
-            
-            mcpStartAttempts++;
-            if (mcpStartAttempts > MAX_MCP_START_ATTEMPTS) {
-                document.getElementById('config-status').textContent = 'Backend not available';
-                document.getElementById('config-status').style.color = '#b42318';
-                alert('Training requires the MCP backend. Please restart with the full pipeline.');
-                return;
-            }
-            
-            // Try to connect via WebSocket or polling
-            setTimeout(() => pollForMcpConnection(callback), 500);
-        }
-        
         function doStartTraining() {
             if (!window.qMiniMcpHost) {
                 alert('Training backend not available');
