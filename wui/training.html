@@ -341,7 +341,8 @@
             <a href="training.html" class="active">Training</a>
             <a href="inference.html">Inference</a>
             <a href="wiki.html">Wiki</a>
-            <a href="api-docs.html">API Docs</a>
+            <a href="glossary.html">Glossary</a>
+            <a href="api-docs.html">API</a>
         </nav>
     </header>
 
@@ -396,7 +397,8 @@
             <div class="toolbar">
                 <button onclick="loadDataSources()">Reload Sources</button>
                 <button onclick="saveDataSources()" class="secondary">Save Sources</button>
-                <button onclick="crawlAllSources()" class="secondary">Crawl All</button>
+                <button onclick="addSourcesToConfig()" class="secondary" style="background: #2d7a51; color: white;">Add to Config File</button>
+                <button onclick="crawlAllSources()" class="secondary">Crawl All & Train</button>
                 <button onclick="browseServerFiles()" class="secondary">Browse Server Files</button>
             </div>
         </div>
@@ -467,6 +469,21 @@
         <!-- Training Control -->
         <div class="card">
             <h2>Training Control</h2>
+            
+            <!-- Dataset Selection -->
+            <div style="margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 6px; border: 1px solid var(--border-color);">
+                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.9rem;">Dataset File (JSONL)</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="dataset-path" value="c:/GitHub/q_mini_wasm_v2/datasets/sample_training_data.jsonl" 
+                           style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.85rem;">
+                    <button onclick="browseDataset()" style="padding: 0.5rem 1rem; white-space: nowrap;">Browse...</button>
+                    <button onclick="useSampleDataset()" style="padding: 0.5rem 1rem; white-space: nowrap;" class="secondary">Use Sample</button>
+                </div>
+                <div id="dataset-status" style="font-size: 0.8rem; margin-top: 0.4rem; color: #666;">
+                    Format: {"text": "your training text here"} one per line
+                </div>
+            </div>
+            
             <div class="toolbar">
                 <button onclick="startTraining()">Start Training</button>
                 <button onclick="pauseTraining()" class="secondary">Pause</button>
@@ -488,6 +505,46 @@
             </div>
         </div>
 
+        <!-- Training Metadata -->
+        <div class="card">
+            <h2>Training Metadata</h2>
+            <div id="training-metadata" style="font-size: 12px; line-height: 1.6;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div><strong>Data Source:</strong> <span id="meta-data-source">-</span></div>
+                    <div><strong>Source Type:</strong> <span id="meta-source-type">-</span></div>
+                    <div><strong>Progress:</strong> <span id="meta-progress">-</span></div>
+                    <div><strong>Total Samples:</strong> <span id="meta-total-samples">-</span></div>
+                    <div><strong>Batch Size:</strong> <span id="meta-batch-size">-</span></div>
+                    <div><strong>Experts:</strong> <span id="meta-experts">-</span></div>
+                    <div><strong>Top-K:</strong> <span id="meta-top-k">-</span></div>
+                    <div><strong>LR Shift:</strong> <span id="meta-lr-shift">-</span></div>
+                    <div><strong>Steane:</strong> <span id="meta-steane">-</span></div>
+                    <div><strong>Flash CIM:</strong> <span id="meta-flash">-</span></div>
+                    <div><strong>Context:</strong> <span id="meta-context">-</span></div>
+                    <div><strong>Elapsed:</strong> <span id="meta-elapsed">-</span></div>
+                </div>
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                    <strong>Last Sample ID:</strong> <span id="meta-sample-id">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Checkpoint Manager -->
+        <div class="card">
+            <h2>Checkpoint Manager</h2>
+            <div id="checkpoint-list" style="font-family: monospace; font-size: 0.85rem; max-height: 200px; overflow-y: auto; background: #f8f9fa; padding: 0.75rem; border-radius: 4px; margin-bottom: 0.75rem;">
+                <div style="color: #666;">No checkpoints loaded. Click refresh to see saved models.</div>
+            </div>
+            <div class="toolbar">
+                <button onclick="refreshCheckpoints()">Refresh List</button>
+                <button onclick="resumeTraining()" class="secondary" style="background: #2d7a51; color: white;">Resume Training</button>
+                <button onclick="loadSelectedCheckpoint()" class="secondary">Load for Inference</button>
+            </div>
+            <div style="margin-top: 0.75rem; font-size: 0.8rem; color: #666;">
+                Checkpoints are saved to: <code>flash_cim_243expert/checkpoints/</code>
+            </div>
+        </div>
+
         <!-- Live Stream -->
         <div class="card full-width">
             <h2>
@@ -503,8 +560,20 @@
         </div>
     </main>
 
+    <script src="js/mcp-host-bridge.js"></script>
     <script src="js/training-sse-client.js"></script>
     <script>
+        // Helper to wait for bridge with timeout
+        async function waitForBridge(timeoutMs = 5000) {
+            if (window.wsBridge && window.wsBridge.isConnected) return window.wsBridge;
+            const start = Date.now();
+            while (Date.now() - start < timeoutMs) {
+                if (window.wsBridge && window.wsBridge.isConnected) return window.wsBridge;
+                await new Promise(r => setTimeout(r, 100));
+            }
+            return window.wsBridge;
+        }
+
         // Default TOML configuration
         const defaultConfig = `[training]
 epochs = 100
@@ -571,7 +640,7 @@ dataset_dir = "flash_cim_243expert/"
             { name: 'data/stackexchange_physics', type: 'local' },
         ];
 
-        function loadDataSources() {
+        async function loadDataSources() {
             // Load from localStorage
             const stored = localStorage.getItem('qmini_data_sources');
             if (stored) {
@@ -585,8 +654,9 @@ dataset_dir = "flash_cim_243expert/"
             }
             
             // Fall back to MCP bridge if available
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_get_data_sources', {})
+            const bridge = await waitForBridge(3000);
+            if (bridge && bridge.isConnected) {
+                bridge.callTool('wui_get_data_sources', {})
                     .then(result => {
                         if (result.sources && result.sources.length > 0) {
                             renderDataSources(result.sources);
@@ -661,8 +731,8 @@ dataset_dir = "flash_cim_243expert/"
             // Always save to localStorage
             localStorage.setItem('qmini_data_sources', JSON.stringify(sources));
             
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_save_data_sources', { sources })
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_save_data_sources', { sources })
                     .then(() => {
                         alert('Data sources saved');
                     })
@@ -674,19 +744,105 @@ dataset_dir = "flash_cim_243expert/"
             }
         }
 
-        function crawlAllSources() {
-            if (!window.qMiniMcpHost) {
-                alert('Crawling requires MCP bridge with backend engine');
+        async function addSourcesToConfig() {
+            if (!window.wsBridge || !window.wsBridge.isConnected) {
+                alert('MCP bridge not connected');
                 return;
             }
             
-            window.qMiniMcpHost.callTool('wui_crawl_data_sources', {})
-                .then(() => {
-                    alert('Crawling all data sources...');
-                })
-                .catch(err => {
-                    alert('Failed to start crawling');
-                });
+            // Get ALL sources from the UI - API, web, and local
+            const sources = [];
+            const apiSources = [];
+            const localSources = [];
+            
+            document.querySelectorAll('.data-source-item').forEach(item => {
+                const name = item.querySelector('.data-source-name').textContent;
+                const typeEl = item.querySelector('.data-source-type');
+                const type = typeEl ? typeEl.textContent.toLowerCase() : 'web';
+                
+                if (type === 'api' || name.includes('arxiv') || name.includes('oeis') || name.includes('wolfram')) {
+                    apiSources.push(name);
+                } else if (type === 'local' || (!name.startsWith('http') && !name.includes('.'))) {
+                    localSources.push(name);
+                } else {
+                    sources.push(name); // web sources
+                }
+            });
+            
+            // Combine all sources
+            const allSources = [...apiSources, ...sources, ...localSources];
+            
+            if (allSources.length === 0) {
+                alert('No sources to add. Add sources to Training Data Sources first.');
+                return;
+            }
+            
+            // Load current config
+            let config = '';
+            const configEditor = document.getElementById('config-editor');
+            if (configEditor && configEditor.value) {
+                config = configEditor.value;
+            } else {
+                // Try to load from server
+                try {
+                    const result = await window.wsBridge.callTool('wui_get_training_config', {});
+                    config = result.config || '[training]\nepochs = 10000\nbatch_size = 1000000\ncheckpoint_interval = 1\nlearning_rate = 100\n';
+                } catch (err) {
+                    config = '[training]\nepochs = 10000\nbatch_size = 1000000\ncheckpoint_interval = 1\nlearning_rate = 100\n';
+                }
+            }
+            
+            // Remove existing data_sources section if present
+            const dataSourcesMatch = config.match(/\n?\[data_sources\][\s\S]*?(?=\n\[|$)/);
+            if (dataSourcesMatch) {
+                config = config.replace(dataSourcesMatch[0], '');
+            }
+            
+            // Add new data_sources section
+            const urlsText = allSources.map(u => `    "${u}"`).join(',\n');
+            config += `\n[data_sources]\nurls = [\n${urlsText}\n]\nrecursive = true\nmax_depth = 5\nmax_pages_per_source = 50000\n`;
+            
+            // Update editor
+            if (configEditor) {
+                configEditor.value = config;
+            }
+            
+            // Save to file
+            try {
+                await window.wsBridge.callTool('wui_save_training_config', { config: config });
+                
+                // Show what was saved with breakdown
+                let typeBreakdown = [];
+                if (apiSources.length > 0) typeBreakdown.push(`${apiSources.length} API`);
+                if (sources.length > 0) typeBreakdown.push(`${sources.length} web`);
+                if (localSources.length > 0) typeBreakdown.push(`${localSources.length} local`);
+                
+                const message = `✓ Saved ${allSources.length} sources (${typeBreakdown.join(', ')}) to flash_cim_243expert/training_config.toml:\n\n${allSources.join('\n')}\n\n[data_sources] section updated.`;
+                alert(message);
+                
+                document.getElementById('config-status').textContent = `Config saved with ${allSources.length} sources (${typeBreakdown.join(', ')}) - check the file!`;
+                document.getElementById('config-status').style.color = '#2d7a51';
+            } catch (err) {
+                console.error('Failed to save config:', err);
+                alert('Failed to save config: ' + err.message);
+            }
+        }
+
+        async function crawlAllSources() {
+            if (!window.wsBridge || !window.wsBridge.isConnected) {
+                alert('MCP bridge not connected');
+                return;
+            }
+            
+            // First add sources to config
+            await addSourcesToConfig();
+            
+            // Count all sources for the message
+            const allItems = document.querySelectorAll('.data-source-item');
+            
+            // Start training
+            alert('Starting training with ' + allItems.length + ' sources (API + web + local)...');
+            doStartTraining();
         }
 
         // Initialize data sources on load
@@ -695,13 +851,14 @@ dataset_dir = "flash_cim_243expert/"
         });
 
         // Config functions
-        function loadConfig() {
+        async function loadConfig() {
             const editor = document.getElementById('config-editor');
             const status = document.getElementById('config-status');
             
             // Try to load from file via MCP bridge
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_load_training_config', {})
+            const bridge = await waitForBridge(3000);
+            if (bridge && bridge.isConnected) {
+                bridge.callTool('wui_load_training_config', {})
                     .then(result => {
                         if (result.config) {
                             editor.value = result.config;
@@ -726,8 +883,8 @@ dataset_dir = "flash_cim_243expert/"
             const editor = document.getElementById('config-editor');
             const status = document.getElementById('config-status');
             
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_save_training_config', { config: editor.value })
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_save_training_config', { config: editor.value })
                 .then(() => {
                     status.textContent = 'Config saved';
                     status.style.color = '#2d7a51';
@@ -774,12 +931,12 @@ dataset_dir = "flash_cim_243expert/"
                 }
             }
             
-            if (!window.qMiniMcpHost) {
+            if (!window.wsBridge) {
                 alert('MCP bridge not available');
                 return;
             }
             
-            window.qMiniMcpHost.callTool('wui_load_api_keys', {})
+            window.wsBridge.callTool('wui_load_api_keys', {})
                 .then(result => {
                     services.forEach(service => {
                         const input = document.getElementById(`api-${service}`);
@@ -815,8 +972,8 @@ dataset_dir = "flash_cim_243expert/"
             // Always save to localStorage
             localStorage.setItem('qmini_api_keys', JSON.stringify(keys));
             
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_store_api_keys', { keys })
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_store_api_keys', { keys })
                     .then(() => {
                         alert('API keys saved securely to Windows Credential Manager');
                         loadApiKeys(); // Refresh status
@@ -832,30 +989,10 @@ dataset_dir = "flash_cim_243expert/"
         }
 
         // Training control functions
-        function startTraining() {
-            if (!window.qMiniMcpHost) {
+        async function startTraining() {
+            const bridge = await waitForBridge(5000);
+            if (!bridge || !bridge.isConnected) {
                 alert('MCP bridge not available - please wait for connection');
-                return;
-            }
-            
-            // Check if connected, if not wait a moment
-            if (!window.qMiniMcpHost.connected) {
-                const statusEl = document.getElementById('stream-status');
-                if (statusEl) statusEl.textContent = 'Connecting to backend...';
-                
-                // Wait up to 3 seconds for connection
-                let attempts = 0;
-                const checkAndStart = () => {
-                    attempts++;
-                    if (window.qMiniMcpHost && window.qMiniMcpHost.connected) {
-                        doStartTraining();
-                    } else if (attempts < 30) {
-                        setTimeout(checkAndStart, 100);
-                    } else {
-                        alert('Backend connection timeout - please refresh page');
-                    }
-                };
-                setTimeout(checkAndStart, 100);
                 return;
             }
             
@@ -863,7 +1000,24 @@ dataset_dir = "flash_cim_243expert/"
         }
         
         function doStartTraining() {
-            window.qMiniMcpHost.callTool('wui_start_training_sse', {})
+            // Get dataset path from input field and convert to forward slashes
+            // Windows accepts forward slashes, and this avoids escape sequence issues
+            const datasetPath = document.getElementById('dataset-path').value.trim().replace(/\\/g, '/');
+            
+            if (!datasetPath) {
+                alert('Please select a dataset file');
+                return;
+            }
+            
+            console.log('Starting training with dataset:', datasetPath);
+            
+            const trainingParams = {
+                dataset_path: datasetPath,
+                experts: 243
+                // epochs and batch_size are read from config file (training_config.toml)
+            };
+            
+            window.wsBridge.callTool('wui_start_training_sse', trainingParams)
                 .then(() => {
                     connectStream();
                     streamStartTime = Date.now();
@@ -874,18 +1028,155 @@ dataset_dir = "flash_cim_243expert/"
                     alert('Failed to start training: ' + err.message);
                 });
         }
+        
+        function browseDataset() {
+            // Create a hidden file input
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.jsonl,.json,.txt';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    // For security, we can only get the filename, not full path
+                    // So we construct a path relative to working directory
+                    const fileName = file.name;
+                    const pathInput = document.getElementById('dataset-path');
+                    
+                    // Try to use the existing path as base and just change filename
+                    // Use forward slashes to avoid Windows escape issues
+                    let currentPath = pathInput.value;
+                    let dir = currentPath.substring(0, currentPath.lastIndexOf('/') + 1) || 'datasets/';
+                    
+                    pathInput.value = dir + fileName;
+                    document.getElementById('dataset-status').textContent = 
+                        'Selected: ' + fileName + ' (' + formatFileSize(file.size) + ')';
+                }
+            };
+            input.click();
+        }
+        
+        function useSampleDataset() {
+            document.getElementById('dataset-path').value = 'c:/GitHub/q_mini_wasm_v2/datasets/sample_training_data.jsonl';
+            document.getElementById('dataset-status').textContent = 'Using sample dataset with 30 training samples';
+        }
+
+        // Checkpoint Manager functions
+        async function refreshCheckpoints() {
+            if (!window.wsBridge || !window.wsBridge.isConnected) {
+                alert('MCP bridge not connected');
+                return;
+            }
+            
+            try {
+                const result = await window.wsBridge.callTool('wui_list_models', {});
+                displayCheckpoints(result.models || []);
+            } catch (error) {
+                console.error('Failed to list checkpoints:', error);
+                document.getElementById('checkpoint-list').innerHTML = 
+                    '<div style="color: #e74c3c;">Error loading checkpoints: ' + error.message + '</div>';
+            }
+        }
+        
+        function displayCheckpoints(models) {
+            const listEl = document.getElementById('checkpoint-list');
+            if (!models || models.length === 0) {
+                listEl.innerHTML = '<div style="color: #666;">No checkpoints found. Train a model to create checkpoints.</div>';
+                return;
+            }
+            
+            const lines = models.map((cp, idx) => {
+                const name = cp.filename || cp.name || cp;
+                const size = cp.size_mb ? ` (${cp.size_mb} MB)` : '';
+                const date = cp.modified ? ` - ${cp.modified}` : '';
+                return `<div class="checkpoint-item" data-filename="${name}" onclick="selectCheckpoint(this)" style="padding: 4px; cursor: pointer; border-radius: 3px;">${idx + 1}. ${name}${size}${date}</div>`;
+            });
+            listEl.innerHTML = lines.join('');
+        }
+        
+        let selectedCheckpointFile = null;
+        
+        function selectCheckpoint(element) {
+            // Deselect previous
+            document.querySelectorAll('.checkpoint-item').forEach(el => {
+                el.style.background = 'transparent';
+                el.style.fontWeight = 'normal';
+            });
+            
+            // Select new
+            element.style.background = '#e8f8f1';
+            element.style.fontWeight = 'bold';
+            selectedCheckpointFile = element.getAttribute('data-filename');
+        }
+        
+        async function loadSelectedCheckpoint() {
+            if (!selectedCheckpointFile) {
+                alert('Please select a checkpoint first');
+                return;
+            }
+            
+            if (!window.wsBridge || !window.wsBridge.isConnected) {
+                alert('MCP bridge not connected');
+                return;
+            }
+            
+            try {
+                const result = await window.wsBridge.callTool('wui_load_model', {
+                    model_file: selectedCheckpointFile
+                });
+                
+                if (result.loaded) {
+                    alert(`Loaded checkpoint: ${selectedCheckpointFile}\nExperts: ${result.num_experts}\nQutrits: ${result.num_qutrits}`);
+                } else {
+                    alert('Failed to load checkpoint');
+                }
+            } catch (error) {
+                console.error('Failed to load checkpoint:', error);
+                alert('Error loading checkpoint: ' + error.message);
+            }
+        }
+
+        async function resumeTraining() {
+            if (!window.wsBridge || !window.wsBridge.isConnected) {
+                alert('MCP bridge not connected');
+                return;
+            }
+            
+            // Get dataset path
+            const datasetPath = document.getElementById('dataset-path').value.trim().replace(/\\/g, '/');
+            if (!datasetPath) {
+                alert('Please select a dataset file first');
+                return;
+            }
+            
+            const trainingParams = {
+                dataset_path: datasetPath,
+                experts: 243,
+                resume: true  // Add resume flag
+            };
+            
+            try {
+                await window.wsBridge.callTool('wui_start_training_sse', trainingParams);
+                connectStream();
+                streamStartTime = Date.now();
+                updateElapsedTime();
+            } catch (err) {
+                console.error('Failed to resume training:', err);
+                alert('Failed to resume: ' + err.message);
+            }
+        }
 
         function pauseTraining() {
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_pause_training', {});
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_pause_training', {});
             }
         }
 
         function stopTraining() {
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_stop_training_sse', {});
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_stop_training_sse', {});
             }
             disconnectStream();
+            streamStartTime = null; // Stop the elapsed time timer
         }
 
         // Stream functions
@@ -924,14 +1215,23 @@ dataset_dir = "flash_cim_243expert/"
             document.getElementById('stream-container').innerHTML = '';
         }
 
+        const MAX_STREAM_LINES = 500; // Prevent infinite DOM growth
+        
         function appendToStream(data) {
+            console.log('[Training] Received data:', JSON.stringify(data));
             const container = document.getElementById('stream-container');
             const line = document.createElement('div');
             line.className = 'line';
             
             if (data.status === 'epoch') {
                 line.className += ' epoch';
-                line.textContent = `Epoch ${data.epoch}: ${data.samples} samples`;
+                if (data.samples !== undefined) {
+                    line.textContent = `Epoch ${data.epoch}: ${data.samples} samples`;
+                } else if (data.loss !== undefined) {
+                    line.textContent = `Epoch ${data.epoch}: loss=${data.loss}, reward=${data.reward}, entropy=${data.entropy}`;
+                } else {
+                    line.textContent = `Epoch ${data.epoch}: ${JSON.stringify(data)}`;
+                }
             } else if (data.status === 'error') {
                 line.className += ' error';
                 line.textContent = `Error: ${data.message || data.step}`;
@@ -939,11 +1239,18 @@ dataset_dir = "flash_cim_243expert/"
                 line.textContent = data.step;
             } else if (data.status === 'complete') {
                 line.textContent = `Training complete in ${data.time_s.toFixed(1)}s`;
+                streamStartTime = null; // Stop the elapsed time timer
             } else {
                 line.textContent = JSON.stringify(data);
             }
             
             container.appendChild(line);
+            
+            // Limit lines to prevent DOM bloat and page freeze
+            while (container.children.length > MAX_STREAM_LINES) {
+                container.removeChild(container.firstChild);
+            }
+            
             container.scrollTop = container.scrollHeight;
         }
 
@@ -951,8 +1258,57 @@ dataset_dir = "flash_cim_243expert/"
             if (data.epoch) {
                 document.getElementById('metric-epoch').textContent = data.epoch;
             }
-            if (data.samples) {
+            // Use batch_size from trainer output, fallback to samples or loss+entropy
+            if (data.batch_size) {
+                document.getElementById('metric-samples').textContent = data.batch_size;
+            } else if (data.samples) {
                 document.getElementById('metric-samples').textContent = data.samples;
+            } else if (data.reward !== undefined && data.entropy !== undefined) {
+                const total = data.reward + data.entropy;
+                document.getElementById('metric-samples').textContent = total;
+            }
+            
+            // Update rich metadata from epoch data
+            if (data.data_source) {
+                document.getElementById('meta-data-source').textContent = data.data_source.split('/').pop();
+            }
+            if (data.source_type) {
+                document.getElementById('meta-source-type').textContent = data.source_type;
+            }
+            if (data.epoch && data.total_epochs) {
+                document.getElementById('meta-progress').textContent = `${data.epoch}/${data.total_epochs} (${data.progress_pct || Math.round(data.epoch/data.total_epochs*100)}%)`;
+            }
+            if (data.total_samples) {
+                document.getElementById('meta-total-samples').textContent = data.total_samples;
+            }
+            if (data.batch_size) {
+                document.getElementById('meta-batch-size').textContent = data.batch_size;
+            }
+            if (data.experts) {
+                document.getElementById('meta-experts').textContent = data.experts;
+            }
+            if (data.top_k !== undefined) {
+                document.getElementById('meta-top-k').textContent = data.top_k;
+            }
+            if (data.learning_rate_shift !== undefined) {
+                document.getElementById('meta-lr-shift').textContent = data.learning_rate_shift;
+            }
+            if (data.steane_correction !== undefined) {
+                document.getElementById('meta-steane').textContent = data.steane_correction ? 'ON' : 'OFF';
+            }
+            if (data.flash_cim !== undefined) {
+                document.getElementById('meta-flash').textContent = data.flash_cim ? 'ON' : 'OFF';
+            }
+            if (data.context_window) {
+                document.getElementById('meta-context').textContent = data.context_window;
+            }
+            if (data.elapsed_seconds !== undefined) {
+                const mins = Math.floor(data.elapsed_seconds / 60);
+                const secs = data.elapsed_seconds % 60;
+                document.getElementById('meta-elapsed').textContent = `${mins}m ${secs}s`;
+            }
+            if (data.samples_processed) {
+                document.getElementById('meta-sample-id').textContent = `batch-${data.epoch}-${data.samples_processed}`;
             }
         }
 
@@ -964,9 +1320,8 @@ dataset_dir = "flash_cim_243expert/"
             const seconds = elapsed % 60;
             document.getElementById('metric-time').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
-            if (sseClient && sseClient.isConnected) {
-                setTimeout(updateElapsedTime, 1000);
-            }
+            // Continue updating as long as streamStartTime is set (training is running)
+            setTimeout(updateElapsedTime, 1000);
         }
 
         // ==================== Data Source Library ====================
@@ -1316,28 +1671,6 @@ dataset_dir = "flash_cim_243expert/"
         
         let mcpStartAttempts = 0;
         const MAX_MCP_START_ATTEMPTS = 20;
-        
-        function doStartTraining() {
-            if (!window.qMiniMcpHost) {
-                alert('Training backend not available');
-                return;
-            }
-            
-            window.qMiniMcpHost.callTool('wui_start_training_sse', {})
-                .then(() => {
-                    connectStream();
-                    streamStartTime = Date.now();
-                    updateElapsedTime();
-                    document.getElementById('config-status').textContent = 'Training started';
-                    document.getElementById('config-status').style.color = '#2d7a51';
-                })
-                .catch(err => {
-                    console.error('Failed to start training:', err);
-                    document.getElementById('config-status').textContent = 'Training failed';
-                    document.getElementById('config-status').style.color = '#b42318';
-                    alert('Failed to start training: ' + err.message);
-                });
-        }
     </script>
 </body>
 </html>

@@ -19,7 +19,7 @@ GF3LinearLayer::GF3LinearLayer(const LayerConfig& config)
     }
     
     // Initialize bias
-    if (config_.use_bias) {
+    if (config_.use_bias == ternary::Trit::POSITIVE) {
         bias_.resize(config_.output_dim, ternary::Trit::ZERO);
     }
 }
@@ -27,7 +27,7 @@ GF3LinearLayer::GF3LinearLayer(const LayerConfig& config)
 std::vector<ternary::Trit> GF3LinearLayer::Forward(
     const std::vector<ternary::Trit>& input
 ) {
-    if (config_.use_tropical) {
+    if (config_.use_tropical == ternary::Trit::POSITIVE) {
         return TropicalForward(input);
     } else {
         return StandardForward(input);
@@ -54,7 +54,7 @@ std::vector<ternary::Trit> GF3LinearLayer::TropicalForward(
         }
         
         // Add bias if enabled
-        if (config_.use_bias && j < bias_.size()) {
+        if (config_.use_bias == ternary::Trit::POSITIVE && j < bias_.size()) {
             max_val = TropicalAdd(max_val, static_cast<int8_t>(bias_[j]));
         }
         
@@ -89,7 +89,7 @@ std::vector<ternary::Trit> GF3LinearLayer::StandardForward(
         }
         
         // Add bias
-        if (config_.use_bias && j < bias_.size()) {
+        if (config_.use_bias == ternary::Trit::POSITIVE && j < bias_.size()) {
             sum += static_cast<int8_t>(bias_[j]);
         }
         
@@ -110,7 +110,7 @@ void GF3LinearLayer::InitializeWeights(int seed) {
         }
     }
     
-    if (config_.use_bias) {
+    if (config_.use_bias == ternary::Trit::POSITIVE) {
         for (size_t j = 0; j < config_.output_dim; ++j) {
             bias_[j] = static_cast<ternary::Trit>(dist(rng));
         }
@@ -131,7 +131,7 @@ ternary::Trit GF3LinearLayer::GetWeight(size_t in_idx, size_t out_idx) const {
 }
 
 void GF3LinearLayer::SetBias(const std::vector<ternary::Trit>& bias) {
-    if (config_.use_bias && bias.size() == config_.output_dim) {
+    if (config_.use_bias == ternary::Trit::POSITIVE && bias.size() == config_.output_dim) {
         bias_ = bias;
     }
 }

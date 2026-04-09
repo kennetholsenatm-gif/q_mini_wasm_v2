@@ -117,11 +117,12 @@ func (c *BridgeClient) IsConnected() bool {
 
 // MCPServer handles MCP protocol.
 type MCPServer struct {
-	wsClient    *BridgeClient
-	pipeline    *TrainingPipelineCGO
-	scanner     *bufio.Scanner
-	tools       map[string]ToolHandler
-	projectRoot string
+	wsClient      *BridgeClient
+	pipeline      *TrainingPipelineCGO
+	scanner       *bufio.Scanner
+	tools         map[string]ToolHandler
+	projectRoot   string
+	httpMCPActive bool // Track HTTP-based MCP connections
 
 	releaseMu sync.RWMutex
 	release   ReleaseState
@@ -968,6 +969,7 @@ func (s *MCPServer) registerTools() {
 	s.tools["wui_start_training_sse"] = s.handleStartTrainingWithSSE
 	s.tools["wui_stop_training_sse"] = s.handleStopTrainingSSE
 	s.tools["wui_get_training_status"] = s.handleGetTrainingStatus
+	s.tools["get_resource_metrics"] = s.handleGetResourceMetrics
 
 	// AI Inference suite
 	s.tools["wui_load_model"] = s.handleLoadModel
@@ -1369,8 +1371,9 @@ func (s *MCPServer) buildSystemSelfCheck(expectArtifact string) map[string]inter
 		joinProjectPath(s.projectRoot, filepath.Join("agents", "cmd", "wui-cli-bridge", "wui-mcp.exe")),
 	})
 
-	mcpConnected := s.wsClient != nil && s.wsClient.IsConnected()
-	strictMode := s.wsClient == nil || s.wsClient.strictMode
+	// Check both WebSocket and HTTP connections
+	mcpConnected := (s.wsClient != nil && s.wsClient.IsConnected()) || s.httpMCPActive
+	strictMode := (s.wsClient != nil && s.wsClient.strictMode) || (s.wsClient == nil && s.httpMCPActive)
 
 	checks := map[string]interface{}{
 		"mcp_bridge_connected":               mcpConnected,
@@ -2700,10 +2703,14 @@ func (s *MCPServer) handleSaveTrainingConfig(params json.RawMessage) (interface{
 
 func (s *MCPServer) handleStartTrainingWithSSE(params json.RawMessage) (interface{}, error) {
 	var args struct {
-		Epochs     int    `json:"epochs"`
-		BatchSize  int    `json:"batch_size"`
-		ConfigPath string `json:"config_path"`
-		Experts    int    `json:"experts"`
+		Epochs             int    `json:"epochs"`
+		BatchSize          int    `json:"batch_size"`
+		ConfigPath         string `json:"config_path"`
+		Experts            int    `json:"experts"`
+		DatasetPath        string `json:"dataset_path"`
+		OutputPath         string `json:"output_path"`
+		CheckpointInterval int    `json:"checkpoint_interval"`
+		Resume             bool   `json:"resume"`
 	}
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, err
@@ -2712,6 +2719,15 @@ func (s *MCPServer) handleStartTrainingWithSSE(params json.RawMessage) (interfac
 	// Initialize SSE server if not already done
 	if sseServer == nil {
 		InitSSEServer("")
+	}
+
+	// Generate default output path if not provided
+	if args.OutputPath == "" {
+		timestamp := time.Now().Format("20060102_150405")
+		args.OutputPath = fmt.Sprintf("flash_cim_243expert/checkpoints/trained_%s.bbin", timestamp)
+	}
+	if args.CheckpointInterval == 0 {
+		args.CheckpointInterval = 5 // Save every 5 epochs by default
 	}
 
 	// Build trainer arguments
@@ -2729,6 +2745,15 @@ func (s *MCPServer) handleStartTrainingWithSSE(params json.RawMessage) (interfac
 	if args.Experts > 0 {
 		trainerArgs = append(trainerArgs, "--moe-experts", fmt.Sprintf("%d", args.Experts))
 	}
+	if args.DatasetPath != "" {
+		trainerArgs = append(trainerArgs, "--dataset", args.DatasetPath)
+	}
+	if args.Resume {
+		trainerArgs = append(trainerArgs, "--resume")
+	}
+	// Always pass output path and checkpoint interval
+	trainerArgs = append(trainerArgs, "--output", args.OutputPath)
+	trainerArgs = append(trainerArgs, "--checkpoint-every", fmt.Sprintf("%d", args.CheckpointInterval))
 
 	// Get project root
 	projectRoot, _ := os.Getwd()
@@ -2771,6 +2796,29 @@ func (s *MCPServer) handleGetTrainingStatus(_ json.RawMessage) (interface{}, err
 	}
 
 	return status, nil
+}
+
+func (s *MCPServer) handleGetResourceMetrics(_ json.RawMessage) (interface{}, error) {
+	// Get actual system memory info
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	// System memory (not just Go heap) - use reasonable estimates
+	// This returns actual memory the Go runtime sees, which is closer to real usage
+	totalAllocMB := int64(m.TotalAlloc / 1024 / 1024)
+	sysMB := int64(m.Sys / 1024 / 1024)
+
+	return map[string]interface{}{
+		"memory_used_mb":  sysMB,
+		"memory_total_mb": 0, // Would need platform-specific code for total system RAM
+		"memory_mb":       sysMB,
+		"go_heap_mb":      int64(m.HeapAlloc / 1024 / 1024),
+		"go_sys_mb":       sysMB,
+		"alloc_mb":        totalAllocMB,
+		"cpu_percent":     0.0, // Would need platform-specific code
+		"disk_io_mb":      0.0,
+		"timestamp":       time.Now().Format(time.RFC3339),
+	}, nil
 }
 
 // ==================== WUI HTTP Server ====================
@@ -2856,7 +2904,7 @@ func (s *MCPServer) handleListModels(params json.RawMessage) (interface{}, error
 	entries, err := os.ReadDir(checkpointDir)
 	if err == nil {
 		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".bin") {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".bbin") {
 				info, _ := entry.Info()
 				sizeMB := float64(info.Size()) / (1024 * 1024)
 				models = append(models, map[string]interface{}{
@@ -3070,6 +3118,88 @@ func (s *MCPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	delete(wsClients, conn)
 	wsClientsMu.Unlock()
 	fmt.Printf("[WS] Client disconnected\n")
+}
+
+// handleMCPHTTP handles HTTP JSON-RPC MCP requests (browser fallback)
+func (s *MCPServer) handleMCPHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Parse JSON-RPC request
+	var req MCPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.sendHTTPMCPError(w, nil, -32700, "Parse error", err.Error())
+		return
+	}
+
+	// Special case for wui_connect - return connection info
+	if req.Method == "wui_connect" {
+		// Mark HTTP MCP as active
+		s.httpMCPActive = true
+		result := map[string]interface{}{
+			"strict_mode":          true,
+			"backend_passthrough":  false,
+			"pipeline_initialized": false,
+			"connected":            true,
+			"version":              desktopShellContractVersion,
+		}
+		s.sendHTTPMCPResult(w, req.ID, result)
+		return
+	}
+
+	// Route to tool handler
+	handler, ok := s.tools[req.Method]
+	if !ok {
+		s.sendHTTPMCPError(w, req.ID, -32601, "Method not found", req.Method)
+		return
+	}
+
+	// Execute handler
+	result, err := handler(req.Params)
+	if err != nil {
+		s.sendHTTPMCPError(w, req.ID, -32603, "Internal error", err.Error())
+		return
+	}
+
+	s.sendHTTPMCPResult(w, req.ID, result)
+}
+
+// sendHTTPMCPResult sends a JSON-RPC result response over HTTP
+func (s *MCPServer) sendHTTPMCPResult(w http.ResponseWriter, id interface{}, result interface{}) {
+	resp := MCPResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result:  result,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// sendHTTPMCPError sends a JSON-RPC error response over HTTP
+func (s *MCPServer) sendHTTPMCPError(w http.ResponseWriter, id interface{}, code int, message string, data interface{}) {
+	resp := MCPResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error: &MCPError{
+			Code:    code,
+			Message: message,
+			Data:    data,
+		},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interface{}) {
@@ -3465,9 +3595,9 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 	// Create router
 	mux := http.NewServeMux()
 
-	// Static file server with MCP injection
+	// Static file server - direct serving without injection
 	fs := http.FileServer(http.Dir(assetPath))
-	mux.Handle("/", injectMCPScript(fs, s.port))
+	mux.Handle("/", fs)
 
 	// API endpoints
 	mux.HandleFunc("/api/browse", s.handleBrowseFiles)
@@ -3476,6 +3606,10 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 	if s.mcpServer != nil {
 		mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 			s.mcpServer.handleWebSocket(w, r)
+		})
+		// HTTP JSON-RPC endpoint for browser-based MCP (fallback)
+		mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+			s.mcpServer.handleMCPHTTP(w, r)
 		})
 	}
 

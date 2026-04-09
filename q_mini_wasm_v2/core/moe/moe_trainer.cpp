@@ -1,4 +1,5 @@
 #include "moe_trainer.hpp"
+#include "gf3_layers.hpp"
 #include <random>
 #include <algorithm>
 #include <numeric>
@@ -83,14 +84,14 @@ MoETrainingMetrics MoETrainer::TrainEpoch(
     UpdateMetrics(batch_metrics);
     
     // Check load balancing
-    epoch_metrics.load_balance_loss = ComputeLoadBalancingLoss();
-    epoch_metrics.load_balance_score = router_.GetLoadStats().imbalance_score;
+    epoch_metrics.load_balance_loss_fixed = ComputeLoadBalancingLoss();
+    epoch_metrics.load_balance_score_fixed = router_.GetLoadStats().imbalance_score_fixed;
     
     // Update history
     history_.push_back(current_metrics_);
     
     // Check convergence
-    if (HasConverged()) {
+    if (HasConverged() == ternary::Trit::POSITIVE) {
         std::cout << "Training converged at epoch " << current_epoch_ << std::endl;
     }
     
@@ -322,7 +323,7 @@ void MoETrainer::RebalanceLoads() {
 // Monitoring
 // ============================================================================
 
-ternary::Trit MoETrainer::HasConverged() const {
+ternary::Trit MoETrainer::HasConverged() {
     if (current_metrics_.avg_goodness_delta_fixed < config_.min_goodness_delta_threshold_fixed) {
         epochs_without_improvement_++;
         
@@ -419,7 +420,7 @@ int32_t MoETrainer::ComputeExpertDiversity() const {
     
     const auto& utilization = current_metrics_.expert_utilization_fixed;
     const auto& request_counts = current_metrics_.expert_request_counts;
-    const auto& goodness_deltas = current_metrics_.expert_goodness_deltas;
+    const auto& goodness_deltas = current_metrics_.expert_goodness_deltas_fixed;
     
     size_t num_experts = router_.GetConfig().total_experts;
     if (num_experts < 2) return 1000;  // Single expert is trivially diverse (max)

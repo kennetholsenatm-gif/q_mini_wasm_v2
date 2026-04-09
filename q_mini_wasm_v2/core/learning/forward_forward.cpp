@@ -82,31 +82,40 @@ std::vector<std::vector<ternary::Trit>> ForwardForwardLearner::generate_negative
         std::uniform_int_distribution<size_t> pos_dist(0, sample.size() - 1);
         std::uniform_int_distribution<int> val_dist(-1, 1);
         
-        size_t num_corruptions = std::max(size_t(1), sample.size() / 10);
+        // High corruption (50%) for uniform data like dictionaries
+        size_t num_corruptions = std::max(size_t(1), sample.size() / 2);
         for (size_t i = 0; i < num_corruptions; ++i) {
             size_t pos = pos_dist(rng);
             corrupted[pos] = static_cast<ternary::Trit>(val_dist(rng));
         }
         
-        negative_samples.push_back(corrupted);
+        // Permute the corrupted sample to break local uniformity
+        std::vector<ternary::Trit> permuted(corrupted.size());
+        for (size_t i = 0; i < corrupted.size(); ++i) {
+            size_t permuted_pos = (i * 37 + 17) % corrupted.size();  // Simple permutation
+            permuted[permuted_pos] = corrupted[i];
+        }
+        
+        negative_samples.push_back(permuted);
     }
     
     return negative_samples;
 }
 
 uint32_t ForwardForwardLearner::compute_goodness(const std::vector<ternary::Trit>& activations) const {
-    // Goodness = sum of squared activations (tropical inner product with itself)
-    // Optimized for GF(3) ternary values {-1, 0, 1}: square is always 0 or 1
-    // This eliminates floating point multiplication entirely
-    uint32_t goodness = 0;
+    // Layer-normalized goodness: how many standard deviations above mean activation
+    // This prevents saturation - even small differences matter
+    uint32_t active_count = 0;
     for (const auto& act : activations) {
-        // For ternary values: (-1)^2 = 1, 0^2 = 0, 1^2 = 1
-        // So we just count non-zero trits
         if (act != ternary::Trit::ZERO) {
-            goodness++;
+            active_count++;
         }
     }
-    return goodness;
+    
+    // Normalize by layer size (128 neurons) and add resolution for small differences
+    // Return 0-255 range instead of 0-128 to give more granularity
+    uint32_t normalized = (active_count * 200) / std::max(size_t(1), activations.size());
+    return normalized;
 }
 
 uint32_t ForwardForwardLearner::compute_entangled_goodness(const stabilizer::StabilizerTableau& tableau) const {
@@ -130,7 +139,7 @@ LayerGoodness ForwardForwardLearner::train_layer_entangled(
     for (const auto& sample : positive_data) {
         auto tableau = stabilizer::create_tableau(std::max(sample.size(), config_.neurons_per_layer));
         auto activations = entangled_forward(*tableau, sample);
-        pos_sum += compute_entangled_goodness(*tableau);
+        pos_sum += compute_goodness(activations);
     }
     goodness.positive_goodness = positive_data.empty() ? 0 : static_cast<uint32_t>(pos_sum / positive_data.size());
     
@@ -139,7 +148,7 @@ LayerGoodness ForwardForwardLearner::train_layer_entangled(
     for (const auto& sample : negative_data) {
         auto tableau = stabilizer::create_tableau(std::max(sample.size(), config_.neurons_per_layer));
         auto activations = entangled_forward(*tableau, sample);
-        neg_sum += compute_entangled_goodness(*tableau);
+        neg_sum += compute_goodness(activations);
     }
     goodness.negative_goodness = negative_data.empty() ? 0 : static_cast<uint32_t>(neg_sum / negative_data.size());
     
@@ -295,7 +304,8 @@ void ForwardForwardLearner::reset_weights() {
 
 void ForwardForwardLearner::initialize_weights() {
     static std::mt19937 rng(std::random_device{}());
-    std::uniform_int_distribution<int> dist(-1, 1);
+    // Initialize with more zeros to reduce saturation
+    std::discrete_distribution<int> dist({40, 20, 40}); // -1: 40%, 0: 20%, +1: 40%
     
     for (size_t layer = 0; layer < config_.num_layers; ++layer) {
         size_t input_size = (layer == 0) ? config_.neurons_per_layer : config_.neurons_per_layer;
@@ -317,9 +327,16 @@ void ForwardForwardLearner::initialize_weights() {
 }
 
 ternary::Trit ForwardForwardLearner::ternary_activation(int32_t x) {
-    // Ternary activation: sign function with zero threshold
-    if (x > 0) return ternary::Trit::POSITIVE;
-    if (x < 0) return ternary::Trit::NEGATIVE;
+    // Threshold activation with noise to break symmetry
+    // Require stronger signal to activate (threshold = 2 instead of 0)
+    static thread_local std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> noise(-1, 1);
+    
+    int32_t threshold = 2;  // Higher threshold = sparser activations
+    x += noise(rng);  // Add jitter to break ties
+    
+    if (x > threshold) return ternary::Trit::POSITIVE;
+    if (x < -threshold) return ternary::Trit::NEGATIVE;
     return ternary::Trit::ZERO;
 }
 

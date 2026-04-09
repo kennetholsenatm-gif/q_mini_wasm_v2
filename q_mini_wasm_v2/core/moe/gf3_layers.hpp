@@ -2,6 +2,7 @@
 
 #include "expert_network.hpp"
 #include <vector>
+#include <memory>
 #include <cstddef>
 #include <cstdint>
 
@@ -128,7 +129,7 @@ public:
     size_t GetOutputDim() const { return config_.output_dim; }
     size_t GetParameterCount() const { 
         return config_.input_dim * config_.output_dim + 
-               (config_.use_bias ? config_.output_dim : 0); 
+               (config_.use_bias == ternary::Trit::POSITIVE ? config_.output_dim : 0); 
     }
 
     /**

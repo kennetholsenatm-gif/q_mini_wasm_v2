@@ -17,7 +17,7 @@ UnifiedMoERouter::UnifiedMoERouter(const UnifiedMoEConfig& config)
     , load_stats_{}
     , stats_{}
 {
-    if (!config_.validate()) {
+    if (config_.validate() != ternary::Trit::POSITIVE) {
         throw std::invalid_argument("Invalid UnifiedMoEConfig provided");
     }
     
@@ -39,7 +39,7 @@ UnifiedMoERouter::UnifiedMoERouter(const UnifiedMoEConfig& config)
     
     // Build hierarchical clusters for large scale
     if (config_.topology == UnifiedMoEConfig::TopologyType::HIERARCHICAL ||
-        config_.use_hierarchical_selection) {
+        config_.use_hierarchical_selection == ternary::Trit::POSITIVE) {
         BuildClusters();
     }
     
@@ -53,6 +53,16 @@ UnifiedMoERouter::UnifiedMoERouter(const UnifiedMoEConfig& config)
 UnifiedMoERouter::~UnifiedMoERouter() = default;
 
 // ============================================================================
+// Expert Registration
+// ============================================================================
+
+void UnifiedMoERouter::RegisterExpert(size_t expert_id, std::shared_ptr<ExpertNetwork> expert) {
+    if (expert_id < experts_.size()) {
+        experts_[expert_id] = expert;
+    }
+}
+
+// ============================================================================
 // Core Routing
 // ============================================================================
 
@@ -64,7 +74,7 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::Route(
     RoutingResult result;
     
     // Select routing strategy based on scale
-    if (config_.use_hierarchical_selection && config_.total_experts > 128) {
+    if (config_.use_hierarchical_selection == ternary::Trit::POSITIVE && config_.total_experts > 128) {
         result = HierarchicalRoute(input);
         result.used_hierarchical = ternary::Trit::POSITIVE;
     } else {
@@ -72,7 +82,7 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::Route(
         auto logits = ComputeTropicalLogits(input);
         
         // Apply load balancing if enabled (fixed-point version)
-        if (config_.enable_load_balancing) {
+        if (config_.enable_load_balancing == ternary::Trit::POSITIVE) {
             auto stats = GetLoadStats();
             logits = ApplyLoadBalancingFixed(logits, stats);
         }
@@ -118,7 +128,7 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::Route(
     
     // Compute load balance score
     auto stats = GetLoadStats();
-    result.load_balance_score = stats.imbalance_score;
+    result.load_balance_score_fixed = stats.imbalance_score_fixed;
     
     // Update global stats
     stats_.total_routings++;
@@ -184,7 +194,7 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::HierarchicalRoute(
             }
             
             // Add load balancing penalty (fixed-point: 0.01 = 10/1000)
-            if (config_.enable_load_balancing) {
+            if (config_.enable_load_balancing == ternary::Trit::POSITIVE) {
                 int32_t load_penalty = static_cast<int32_t>(expert_request_counts_[expert_id]) * 10 / 1000;
                 score -= load_penalty;
             }
@@ -319,7 +329,7 @@ void UnifiedMoERouter::InitializeEntanglement() {
             CreateRingTopology();
             break;
         case UnifiedMoEConfig::TopologyType::SMALL_WORLD:
-            CreateSmallWorldTopology(config_.small_world_rewiring_prob, config_.small_world_k);
+            CreateSmallWorldTopology(config_.small_world_rewiring_prob_fixed, config_.small_world_k);
             break;
         case UnifiedMoEConfig::TopologyType::HIERARCHICAL:
             CreateHierarchicalTopology(config_.cluster_size);
@@ -427,7 +437,7 @@ int32_t UnifiedMoERouter::ComputeLoadBalanceLossFixed(const LoadStats& stats) {
     }
     
     // Apply load_balance_alpha (assume it's already in appropriate scale)
-    return loss * config_.load_balance_alpha / 1000;
+    return loss * config_.load_balance_alpha_fixed / 1000;
 }
 
 std::vector<int32_t> UnifiedMoERouter::ApplyLoadBalancingFixed(
@@ -568,10 +578,18 @@ std::vector<size_t> UnifiedMoERouter::HierarchicalSelect(
     
     for (size_t c = 0; c < clusters_.size(); ++c) {
         // Compute tropical inner product between input and cluster centroid
-        int32_t score = TropicalInnerProduct(
-            std::vector<int32_t>(input.begin(), input.end()),
-            std::vector<int32_t>(clusters_[c].centroid.begin(), clusters_[c].centroid.end())
-        );
+        // Convert Trit vectors to int32_t explicitly
+        std::vector<int32_t> input_int;
+        input_int.reserve(input.size());
+        for (const auto& t : input) {
+            input_int.push_back(static_cast<int32_t>(t));
+        }
+        std::vector<int32_t> centroid_int;
+        centroid_int.reserve(clusters_[c].centroid.size());
+        for (const auto& t : clusters_[c].centroid) {
+            centroid_int.push_back(static_cast<int32_t>(t));
+        }
+        int32_t score = TropicalInnerProduct(input_int, centroid_int);
         cluster_scores[c] = score;
     }
     
@@ -686,7 +704,7 @@ size_t UnifiedMoERouter::AdjustExpertScale(uint32_t current_load) {
 
 ternary::Trit UnifiedMoERouter::Validate243Config() const {
     ternary::Trit valid = (config_.total_experts == 243) ? ternary::Trit::POSITIVE : ternary::Trit::ZERO;
-    if (valid == ternary::Trit::POSITIVE && !config_.use_hierarchical_selection) {
+    if (valid == ternary::Trit::POSITIVE && config_.use_hierarchical_selection != ternary::Trit::POSITIVE) {
         valid = ternary::Trit::ZERO;
     }
     if (valid == ternary::Trit::POSITIVE && 

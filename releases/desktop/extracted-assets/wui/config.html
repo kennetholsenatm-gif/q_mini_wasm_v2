@@ -122,6 +122,17 @@
             white-space: pre-wrap;
             word-break: break-word;
         }
+        .config-selector {
+            margin-bottom: 1rem;
+        }
+        .config-selector select {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 0.9rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
         .grow { grid-row: span 2; }
     </style>
 </head>
@@ -132,19 +143,29 @@
             <a href="index.html">Dashboard</a>
             <a href="config.html" class="active">Config</a>
             <a href="training.html">Training</a>
+            <a href="inference.html">Inference</a>
             <a href="wiki.html">Wiki</a>
             <a href="glossary.html">Glossary</a>
         </nav>
     </header>
     <main>
         <div class="card grow">
-            <h2>Authoritative TOML Editor</h2>
-            <p class="hint">Single source of truth: <code>config/system.toml</code>. Validate before saving; host writes a <code>.bak</code> backup on update.</p>
+            <h2>Configuration Editor</h2>
+            <div class="config-selector">
+                <label style="font-size: 0.85rem; color: #666; display: block; margin-bottom: 0.3rem;">Select configuration file:</label>
+                <select id="config-select" onchange="switchConfig()">
+                    <option value="config/system.toml">System Configuration (system.toml)</option>
+                    <option value="flash_cim_243expert/training_config.toml">Training Configuration (training_config.toml)</option>
+                    <option value="config/inference.toml">Inference Configuration (inference.toml)</option>
+                    <option value="config/memory.toml">Memory Configuration (memory.toml)</option>
+                </select>
+            </div>
+            <p class="hint">Single source of truth. Validate before saving; host writes a <code>.bak</code> backup on update.</p>
             <textarea id="config" spellcheck="false"></textarea>
             <div class="toolbar">
-                <button onclick="loadConfig()" class="secondary">Reload from Host</button>
+                <button onclick="loadConfig()" class="secondary">Reload</button>
                 <button onclick="validateConfig()" class="secondary">Validate</button>
-                <button onclick="saveConfig()">Save Configuration</button>
+                <button onclick="saveConfig()">Save</button>
                 <span id="status" style="margin-left: 0.25rem; color: #666;">Waiting for MCP host...</span>
             </div>
             <p class="hint" style="margin-top: 0.6rem; margin-bottom: 0;">Use <kbd>Tab</kbd> for indentation. Save path is MCP-only (no direct browser file writes).</p>
@@ -193,6 +214,18 @@
         const missingSectionsEl = document.getElementById('missing-sections');
         const validationMessagesEl = document.getElementById('validation-messages');
         const selfCheckSummaryEl = document.getElementById('self-check-summary');
+        const configSelect = document.getElementById('config-select');
+
+        function getCurrentConfigPath() {
+            return configSelect?.value || 'config/system.toml';
+        }
+
+        function switchConfig() {
+            const path = getCurrentConfigPath();
+            configPathEl.textContent = path;
+            setStatus(`Switched to ${path}`);
+            loadConfig();
+        }
 
         function setStatus(message, isError = false) {
             status.textContent = message;
@@ -239,19 +272,150 @@
             }
         }
 
+        // Embedded default configurations for standalone mode
+        const defaultConfigs = {
+            'config/system.toml': `[system]
+name = "q_mini_wasm_v2"
+version = "0.1.0"
+
+[system.qgnn]
+num_qutrits = 243
+num_experts = 243
+entanglement_graph = "scale_free"
+routing_temperature = 1.0
+
+[system.training]
+max_iterations = 5000
+convergence_tolerance = 0.001
+goodness_threshold = 5.0
+
+[system.memory]
+arena_mb = 65536
+batch_size = 64
+parallel_streams = 8
+
+[apis]
+wolfram = false
+pubchem = true
+oeis = true`,
+            'flash_cim_243expert/training_config.toml': `[training]
+epochs = 100
+batch_size = 32
+learning_rate = 0.001
+
+[data_sources]
+sources = [
+    { name = "arxiv.org/abs/quant-ph", type = "web" },
+    { name = "mathworld.wolfram.com", type = "web" },
+    { name = "oeis.org", type = "web" }
+]
+
+[flash_cim]
+enabled = true
+experts = 243`,
+            'config/inference.toml': `[inference]
+max_tokens = 2048
+temperature = 0.7
+top_p = 0.9
+streaming = true
+
+[model]
+path = "models/"
+default_model = "trained_latest.bin"`,
+            'config/memory.toml': `[memory]
+arena_size_mb = 65536
+max_sequence_length = 4096
+cache_strategy = "lru"
+
+[usm]
+enabled = true
+device = "auto"`
+        };
+
+        const isStandaloneMode = () => window.location.port === '7345' || window.location.href.includes('localhost:7345');
+
         async function loadConfig() {
+            const path = getCurrentConfigPath();
+            
+            // Try localStorage first (standalone mode)
+            if (isStandaloneMode() || !window.wsBridge) {
+                const stored = localStorage.getItem(`qmini_config_${path}`);
+                if (stored) {
+                    textarea.value = stored;
+                    setStatus(`Loaded ${path} from localStorage`);
+                    // Auto-validate in standalone
+                    validateConfigStandalone(stored, path);
+                    return;
+                }
+                
+                // Use embedded default
+                const defaultConfig = defaultConfigs[path];
+                if (defaultConfig) {
+                    textarea.value = defaultConfig;
+                    setStatus(`Loaded default ${path}`);
+                    validateConfigStandalone(defaultConfig, path);
+                } else {
+                    textarea.value = '# No configuration available';
+                    setStatus('No default config for this path', true);
+                }
+                return;
+            }
+            
             await withBridge(async () => {
                 setStatus('Loading...');
-                await window.wsBridge.send({ type: 'get_system_toml' });
+                await window.wsBridge.send({ type: 'get_toml', path: path });
             });
+        }
+        
+        function validateConfigStandalone(configText, path) {
+            // Basic TOML validation for standalone mode
+            const errors = [];
+            const warnings = [];
+            const missing_sections = [];
+            
+            // Check for required sections based on config type
+            if (path.includes('system')) {
+                if (!configText.includes('[system]')) missing_sections.push('system');
+                if (!configText.includes('[system.qgnn]')) missing_sections.push('system.qgnn');
+            }
+            
+            // Basic syntax check
+            const lines = configText.split('\n');
+            lines.forEach((line, idx) => {
+                if (line.trim().startsWith('=')) {
+                    errors.push(`Line ${idx + 1}: Invalid syntax (starts with =)`);
+                }
+            });
+            
+            const valid = errors.length === 0;
+            renderValidationResult({ 
+                valid, 
+                errors, 
+                warnings, 
+                missing_sections 
+            }, path);
+            
+            return valid;
         }
 
         async function validateConfig() {
+            const path = getCurrentConfigPath();
+            
+            if (isStandaloneMode() || !window.wsBridge) {
+                const valid = validateConfigStandalone(textarea.value, path);
+                if (valid) {
+                    setStatus('Validation passed (standalone mode)');
+                } else {
+                    setStatus('Validation failed; review errors.', true);
+                }
+                return;
+            }
+            
             await withBridge(async () => {
                 setStatus('Validating...');
                 const payload = await window.wsBridge.validateSystemToml(textarea.value, '');
                 const validation = payload?.validation || payload || {};
-                renderValidationResult(validation, payload?.path || 'config/system.toml');
+                renderValidationResult(validation, payload?.path || path);
 
                 if (validation.valid) {
                     setStatus('Validation passed');
@@ -262,25 +426,60 @@
         }
         
         async function saveConfig() {
+            const path = getCurrentConfigPath();
+            const configText = textarea.value;
+            
+            // Always save to localStorage
+            localStorage.setItem(`qmini_config_${path}`, configText);
+            
+            if (isStandaloneMode() || !window.wsBridge) {
+                const valid = validateConfigStandalone(configText, path);
+                if (!valid) {
+                    setStatus('Saved to localStorage (validation warnings present)', true);
+                } else {
+                    setStatus(`Saved ${path} to localStorage`);
+                }
+                backupPathEl.textContent = '(localStorage backup)';
+                return;
+            }
+            
             await withBridge(async () => {
                 setStatus('Validating before save...');
-                const validationPayload = await window.wsBridge.validateSystemToml(textarea.value, '');
+                const validationPayload = await window.wsBridge.validateSystemToml(configText, '');
                 const validation = validationPayload?.validation || validationPayload || {};
-                renderValidationResult(validation, validationPayload?.path || 'config/system.toml');
+                renderValidationResult(validation, path);
 
                 if (!validation.valid) {
-                    setStatus('Save blocked: system TOML is invalid.', true);
+                    setStatus('Save blocked: TOML is invalid.', true);
                     return;
                 }
 
                 setStatus('Saving...');
-                const out = await window.wsBridge.setSystemToml(textarea.value);
+                const out = await window.wsBridge.setSystemToml(configText, path);
                 backupPathEl.textContent = out?.backup_path || '(no backup created)';
-                setStatus('Saved');
+                setStatus(`Saved ${path}`);
             });
         }
 
         async function runSelfCheck() {
+            if (isStandaloneMode()) {
+                const summary = [
+                    'Mode: STANDALONE (HTTP server only)',
+                    'ready_for_operator_pipeline: false (requires MCP bridge)',
+                    'mcp_bridge_connected: false (expected in standalone)',
+                    'cgo_enabled: unknown (no backend connected)',
+                    'desktop_artifact_exists: true (qminiwasm.exe running)',
+                    'timestamp: ' + new Date().toISOString(),
+                    '',
+                    'To enable full features, run with:',
+                    '.\\qminiwasm.exe | .\\mcp-host.exe'
+                ];
+                selfCheckSummaryEl.textContent = summary.join('\n');
+                setValidationChip('warn', 'Standalone Mode');
+                setStatus('Self-check: Standalone mode active');
+                return;
+            }
+            
             await withBridge(async () => {
                 setStatus('Running self-check...');
                 const out = await window.wsBridge.runSystemSelfCheck('');
@@ -308,20 +507,20 @@
         window.addEventListener('systemTomlLoaded', (event) => {
             const payload = event.detail || {};
             textarea.value = payload.toml || '';
-            configPathEl.textContent = payload.path || 'config/system.toml';
-            setStatus(`Loaded ${payload.path || 'system TOML'}`);
+            configPathEl.textContent = payload.path || getCurrentConfigPath();
+            setStatus(`Loaded ${payload.path || 'TOML'}`);
         });
 
         window.addEventListener('systemTomlValidated', (event) => {
             const payload = event.detail || {};
-            renderValidationResult(payload.validation || payload, payload.path || 'config/system.toml');
+            renderValidationResult(payload.validation || payload, payload.path || getCurrentConfigPath());
         });
 
         window.addEventListener('systemTomlSaved', (event) => {
             const payload = event.detail || {};
             backupPathEl.textContent = payload.backup_path || '(no backup created)';
-            renderValidationResult(payload.validation || {}, payload.path || 'config/system.toml');
-            setStatus(`Saved ${payload.path || 'system TOML'}`);
+            renderValidationResult(payload.validation || {}, payload.path || getCurrentConfigPath());
+            setStatus(`Saved ${payload.path || 'TOML'}`);
         });
 
         window.addEventListener('systemSelfCheck', (event) => {
@@ -351,8 +550,14 @@
         });
 
         document.addEventListener('DOMContentLoaded', () => {
-            setStatus('Waiting for MCP host...');
-            setValidationChip('warn', 'Unknown');
+            if (isStandaloneMode()) {
+                setStatus('Standalone mode - using localStorage/defaults');
+                setValidationChip('warn', 'Standalone');
+                loadConfig();
+            } else {
+                setStatus('Waiting for MCP host...');
+                setValidationChip('warn', 'Unknown');
+            }
             renderValidationResult({ valid: false, errors: [], warnings: [], missing_sections: [] }, 'config/system.toml');
         });
     </script>

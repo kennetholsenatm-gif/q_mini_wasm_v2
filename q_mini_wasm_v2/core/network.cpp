@@ -65,8 +65,7 @@ std::vector<ternary::Trit> TernaryNeuralNetwork::preprocess(const std::vector<do
 }
 
 void TernaryNeuralNetwork::train(const std::vector<std::vector<double>>& positive_data, size_t epochs) {
-    std::cout << "{\"status\": \"progress\", \"step\": \"Starting Ternary Neural Network FF Training...\"}\n";
-    std::cout.flush();
+    std::cout << "data: {\"status\": \"progress\", \"step\": \"Starting Ternary Neural Network FF Training...\"}\n\n" << std::flush;
 
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         // Prepare preprocessed discrete datasets
@@ -94,25 +93,24 @@ void TernaryNeuralNetwork::train(const std::vector<std::vector<double>>& positiv
                 
                 // Output JSON for the Go server to stream
                 // We map delta to loss, and positive_goodness to reward, negative_goodness to entropy
-                std::cout << "{\"status\": \"epoch\", \"epoch\": " << epoch + 1
+                // Include batch_size so UI can show samples processed
+                std::cout << "data: {\"status\": \"epoch\", \"epoch\": " << epoch + 1
                           << ", \"loss\": " << goodness.delta 
                           << ", \"reward\": " << goodness.positive_goodness 
-                          << ", \"entropy\": " << goodness.negative_goodness << "}\n";
-                std::cout.flush();
+                          << ", \"entropy\": " << goodness.negative_goodness 
+                          << ", \"batch_size\": " << discrete_positive.size() << "}\n\n" << std::flush;
             }
         }
     }
     
     // Polling simulation for Steane Codes to ensure fault-tolerance integrity
     if (config_.enable_steane) {
-        std::cout << "{\"status\": \"progress\", \"step\": \"Running Steane [7,1,3] Fault-Tolerance Parity Poll...\"}\n";
-        std::cout.flush();
+        std::cout << "data: {\"status\": \"progress\", \"step\": \"Running Steane [7,1,3] Fault-Tolerance Parity Poll...\"}\n\n" << std::flush;
         std::vector<ternary::Trit> dummy_phys(7, ternary::Trit::ZERO);
         auto steane_future = orchestrator_->submit_steane_polling(*steane_, dummy_phys);
         int error_loc = steane_future.get();
         if (error_loc != -1) {
-            std::cout << "{\"status\": \"progress\", \"step\": \"Steane Code corrected error at physical qutrit " << error_loc << "\"}\n";
-            std::cout.flush();
+            std::cout << "data: {\"status\": \"progress\", \"step\": \"Steane Code corrected error at physical qutrit " << error_loc << "\"}\n\n" << std::flush;
         }
     }
     

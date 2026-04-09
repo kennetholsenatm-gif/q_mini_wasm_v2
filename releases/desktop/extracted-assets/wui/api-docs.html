@@ -19,7 +19,30 @@
             color: #d4d4d4;
             height: 100vh;
             display: flex;
+            flex-direction: column;
         }
+        
+        .site-header {
+            background: #1a1a2e;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .site-header h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+        .site-header nav { display: flex; gap: 1.25rem; }
+        .site-header nav a {
+            color: #a0a0b0;
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+        .site-header nav a:hover, .site-header nav a.active { color: #4ecca3; }
+        
+        .api-main { display: flex; flex: 1; overflow: hidden; }
         
         .api-sidebar {
             width: 250px;
@@ -219,6 +242,20 @@
     </style>
 </head>
 <body>
+    <header class="site-header">
+        <h1>q_mini_wasm_v2</h1>
+        <nav>
+            <a href="index.html">Dashboard</a>
+            <a href="config.html">Config</a>
+            <a href="training.html">Training</a>
+            <a href="inference.html">Inference</a>
+            <a href="wiki.html">Wiki</a>
+            <a href="glossary.html">Glossary</a>
+            <a href="api-docs.html" class="active">API</a>
+        </nav>
+    </header>
+    
+    <div class="api-main">
     <div class="api-sidebar">
         <div class="search-box">
             <input type="text" class="search-input" placeholder="Search API..." onkeyup="searchAPI(this.value)">
@@ -423,6 +460,7 @@ std::cout &lt;&lt; <span class="code-string">"Energy: "</span> &lt;&lt; result.e
 };
             </div>
         </div>
+    </div>
     </div>
 
     <script>

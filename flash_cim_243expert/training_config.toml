@@ -1,32 +1,71 @@
 [training]
 epochs = 100
-batch_size = 8192
-checkpoint_interval = 5
-learning_rate = 33
+batch_size = 32768
+checkpoint_interval = 10
+learning_rate = 10
 
 [model]
-moe_experts = 243
-moe_top_k = 16
-context_window = 4096
-entanglement_tokens = 256
-shadow_dim = 1024
-num_layers = 3
-neurons_per_layer = 128
-routing_qutrits = 8
+moe_experts = 512
+moe_top_k = 32
+context_window = 8192
+entanglement_tokens = 1024
+shadow_dim = 4096
+num_layers = 64
+neurons_per_layer = 2048
+routing_qutrits = 12
 learning_rate_shift = 2
 
 [features]
 steane_correction = true
 flash_cim = true
-worker_threads = 4
+worker_threads = 16
 
-[data_synthesizer]
-acquisition_threads = 4
-perturbation_threads = 2
-api_wait_ms = 2000
-batch_timeout_seconds = 300
+[apis]
+wolfram = false
+pubchem = true
+oeis = true
+wikidata = false
+arxiv = false
+nasa = true
+pdb = true
+github = false
+lean = false
+
+[streaming]
+enabled = true
+port = 9090
 
 [paths]
 base_model = "flash_cim_243expert/checkpoints/final_model.json"
 output_dir = "flash_cim_243expert/checkpoints/"
 dataset_dir = "flash_cim_243expert/"
+
+[data_sources]
+urls = [
+    "arxiv.org/abs/quant-ph",
+    "mathworld.wolfram.com",
+    "oeis.org",
+    "datasets-server.huggingface.co",
+    "huggingface.co/datasets/bigcode/the-stack",
+    "ebi.ac.uk/chembl",
+    "materialsproject.org",
+    "dbpedia.org",
+    "yago-knowledge.org",
+    "ensembl.org",
+    "dbpedia.org",
+    "yago-knowledge.org",
+    "ensembl.org",
+    "gamma.sympy.org",
+    "github.com/leanprover-community/mathlib4",
+    "arxiv.org",
+    "wolframalpha.com",
+    "wikidata.org",
+    "pubchem.ncbi.nlm.nih.gov",
+    "rcsb.org",
+    "oeis.org",
+    "data/wikipedia_math",
+    "data/stackexchange_physics"
+]
+recursive = true
+max_depth = 5
+max_pages_per_source = 50000

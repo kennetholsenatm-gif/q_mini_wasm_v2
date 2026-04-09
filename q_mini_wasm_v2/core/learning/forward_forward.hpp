@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <algorithm>
 #include "../ternary/trit.hpp"
 #include "../stabilizer/tableau.hpp"
 
@@ -12,7 +13,7 @@ struct FFConfig {
     size_t num_layers = 3;
     size_t neurons_per_layer = 128;
     int learning_rate = 1;  // GF(3) fixed-point Q24.8 representation
-    int learning_rate_shift = 10;  // For fixed-point arithmetic
+    int learning_rate_shift = 3;  // For fixed-point arithmetic (divide by 8)
 };
 
 struct LayerGoodness {

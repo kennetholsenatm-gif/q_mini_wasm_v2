@@ -152,6 +152,184 @@
         .connection-status.connected { background: #4ecca3; }
         .connection-status.disconnected { background: #e74c3c; }
         .connection-status.connecting { background: #ffc107; }
+        .data-source-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f8f9fa;
+            margin: 0.5rem 0;
+        }
+        .data-source-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            border-bottom: 1px solid #ddd;
+        }
+        .data-source-item:last-child { border-bottom: none; }
+        .data-source-item:hover { background: #e9ecef; }
+        .data-source-name { font-size: 0.9rem; flex: 1; }
+        .data-source-type {
+            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            margin-right: 0.5rem;
+        }
+        .data-source-type.web { background: #cce5ff; color: #004085; }
+        .data-source-type.local { background: #d4edda; color: #155724; }
+        .data-source-type.api { background: #fff3cd; color: #856404; }
+        .data-source-remove {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .data-source-remove:hover { background: #c0392b; }
+        .data-source-input {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .data-source-input input {
+            flex: 1;
+            padding: 0.4rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .data-source-input select {
+            padding: 0.4rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        /* Data Source Library Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 { margin: 0; }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            margin: 0;
+        }
+        .modal-body {
+            padding: 1rem 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .source-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+        .source-tab {
+            padding: 0.5rem 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+        }
+        .source-tab.active {
+            color: #4ecca3;
+            border-bottom-color: #4ecca3;
+        }
+        .source-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        .source-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .source-card:hover {
+            border-color: #4ecca3;
+            box-shadow: 0 2px 8px rgba(78, 204, 163, 0.2);
+        }
+        .source-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .source-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        .source-desc {
+            font-size: 0.8rem;
+            color: #666;
+            line-height: 1.4;
+        }
+        
+        /* File Browser */
+        .file-browser {
+            display: none;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .file-browser.active { display: block; }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .file-item:hover { background: #e9ecef; }
+        .file-item.selected { background: #cce5ff; }
+        .file-icon { margin-right: 0.5rem; font-size: 1.2rem; }
+        .file-name { flex: 1; }
+        .file-size { color: #666; font-size: 0.8rem; }
+        .breadcrumb {
+            padding: 0.5rem;
+            background: #e9ecef;
+            font-size: 0.9rem;
+        }
+        .breadcrumb span { cursor: pointer; color: #007bff; }
+        .breadcrumb span:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -161,11 +339,89 @@
             <a href="index.html">Dashboard</a>
             <a href="config.html">Config</a>
             <a href="training.html" class="active">Training</a>
+            <a href="inference.html">Inference</a>
+            <a href="wiki.html">Wiki</a>
             <a href="api-docs.html">API Docs</a>
         </nav>
     </header>
 
     <main>
+        <!-- Training Data Sources -->
+        <div class="card full-width">
+            <h2>Training Data Sources</h2>
+            <p class="hint">Add websites, local datasets, or API endpoints to train against. These will be crawled/fetched during training.</p>
+            
+            <div class="data-source-list" id="data-source-list">
+                <div class="data-source-item">
+                    <span class="data-source-name">wikipedia.org (mathematics section)</span>
+                    <span class="data-source-type web">Website</span>
+                    <button class="data-source-remove" onclick="removeDataSource(this)">Remove</button>
+                </div>
+                <div class="data-source-item">
+                    <span class="data-source-name">arxiv.org (quant-ph category)</span>
+                    <span class="data-source-type web">Website</span>
+                    <button class="data-source-remove" onclick="removeDataSource(this)">Remove</button>
+                </div>
+                <div class="data-source-item">
+                    <span class="data-source-name">flash_cim_243expert/datasets/</span>
+                    <span class="data-source-type local">Local</span>
+                    <button class="data-source-remove" onclick="removeDataSource(this)">Remove</button>
+                </div>
+            </div>
+            
+            <div class="data-source-input">
+                <input type="text" id="new-source-input" placeholder="URL, path, or API endpoint...">
+                <select id="new-source-type" onchange="onSourceTypeChange()">
+                    <option value="web">Website</option>
+                    <option value="local">Local Dataset</option>
+                    <option value="api">API Endpoint</option>
+                </select>
+                <button onclick="addDataSource()">Add Source</button>
+                <button onclick="openSourceLibrary()" class="secondary">Browse Library</button>
+            </div>
+            
+            <!-- File Browser for Local Datasets -->
+            <div id="file-browser" class="file-browser">
+                <div class="breadcrumb" id="file-breadcrumb">
+                    <span onclick="browsePath('.')">.</span>
+                </div>
+                <div id="file-list"></div>
+                <div class="toolbar" style="margin-top: 0.5rem; padding: 0.5rem;">
+                    <button onclick="selectFileFromBrowser()">Select</button>
+                    <button onclick="closeFileBrowser()" class="secondary">Cancel</button>
+                    <span id="selected-file-path" style="margin-left: auto; color: #666;"></span>
+                </div>
+            </div>
+            
+            <div class="toolbar">
+                <button onclick="loadDataSources()">Reload Sources</button>
+                <button onclick="saveDataSources()" class="secondary">Save Sources</button>
+                <button onclick="crawlAllSources()" class="secondary">Crawl All</button>
+                <button onclick="browseServerFiles()" class="secondary">Browse Server Files</button>
+            </div>
+        </div>
+
+        <!-- Data Source Library Modal -->
+        <div id="source-library-modal" class="modal-overlay">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>Data Source Library</h3>
+                    <button class="modal-close" onclick="closeSourceLibrary()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="source-tabs">
+                        <button class="source-tab active" onclick="switchTab('all')">All Sources</button>
+                        <button class="source-tab" onclick="switchTab('math')">Math/CS</button>
+                        <button class="source-tab" onclick="switchTab('science')">Science</button>
+                        <button class="source-tab" onclick="switchTab('bio')">Bio</button>
+                        <button class="source-tab" onclick="switchTab('knowledge')">Knowledge</button>
+                        <button class="source-tab" onclick="switchTab('ml')">ML/AI</button>
+                    </div>
+                    <div id="source-grid" class="source-grid"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- TOML Configuration -->
         <div class="card full-width">
             <h2>Training Configuration (TOML)</h2>
@@ -247,8 +503,20 @@
         </div>
     </main>
 
+    <script src="js/mcp-host-bridge.js"></script>
     <script src="js/training-sse-client.js"></script>
     <script>
+        // Helper to wait for bridge with timeout
+        async function waitForBridge(timeoutMs = 5000) {
+            if (window.wsBridge && window.wsBridge.isConnected) return window.wsBridge;
+            const start = Date.now();
+            while (Date.now() - start < timeoutMs) {
+                if (window.wsBridge && window.wsBridge.isConnected) return window.wsBridge;
+                await new Promise(r => setTimeout(r, 100));
+            }
+            return window.wsBridge;
+        }
+
         // Default TOML configuration
         const defaultConfig = `[training]
 epochs = 100
@@ -306,14 +574,148 @@ dataset_dir = "flash_cim_243expert/"
             }
         });
 
+        // Data source functions
+        const defaultDataSources = [
+            { name: 'arxiv.org/abs/quant-ph', type: 'web' },
+            { name: 'mathworld.wolfram.com', type: 'web' },
+            { name: 'oeis.org', type: 'web' },
+            { name: 'data/wikipedia_math', type: 'local' },
+            { name: 'data/stackexchange_physics', type: 'local' },
+        ];
+
+        async function loadDataSources() {
+            // Load from localStorage
+            const stored = localStorage.getItem('qmini_data_sources');
+            if (stored) {
+                try {
+                    const sources = JSON.parse(stored);
+                    renderDataSources(sources);
+                    return;
+                } catch (e) {
+                    console.log('Failed to parse stored sources');
+                }
+            }
+            
+            // Fall back to MCP bridge if available
+            const bridge = await waitForBridge(3000);
+            if (bridge && bridge.isConnected) {
+                bridge.callTool('wui_get_data_sources', {})
+                    .then(result => {
+                        if (result.sources && result.sources.length > 0) {
+                            renderDataSources(result.sources);
+                        } else {
+                            renderDataSources(defaultDataSources);
+                        }
+                    })
+                    .catch(err => {
+                        console.log('Using default data sources');
+                        renderDataSources(defaultDataSources);
+                    });
+            } else {
+                renderDataSources(defaultDataSources);
+            }
+        }
+
+        function renderDataSources(sources) {
+            const list = document.getElementById('data-source-list');
+            list.innerHTML = '';
+            
+            sources.forEach(source => {
+                const item = document.createElement('div');
+                item.className = 'data-source-item';
+                item.innerHTML = `
+                    <span class="data-source-name">${source.name || source.url || source.path}</span>
+                    <span class="data-source-type ${source.type}">${source.type.toUpperCase()}</span>
+                    <button class="data-source-remove" onclick="removeDataSource(this)">Remove</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function addDataSource() {
+            const input = document.getElementById('new-source-input');
+            const typeSelect = document.getElementById('new-source-type');
+            const name = input.value.trim();
+            const type = typeSelect.value;
+            
+            if (!name) {
+                alert('Please enter a URL, path, or API endpoint');
+                return;
+            }
+            
+            const list = document.getElementById('data-source-list');
+            const item = document.createElement('div');
+            item.className = 'data-source-item';
+            item.innerHTML = `
+                <span class="data-source-name">${name}</span>
+                <span class="data-source-type ${type}">${type.toUpperCase()}</span>
+                <button class="data-source-remove" onclick="removeDataSource(this)">Remove</button>
+            `;
+            list.appendChild(item);
+            
+            input.value = '';
+        }
+
+        function removeDataSource(button) {
+            const item = button.closest('.data-source-item');
+            if (item) {
+                item.remove();
+            }
+        }
+
+        function saveDataSources() {
+            const sources = [];
+            document.querySelectorAll('.data-source-item').forEach(item => {
+                const name = item.querySelector('.data-source-name').textContent;
+                const type = item.querySelector('.data-source-type').textContent.toLowerCase();
+                sources.push({ name, type });
+            });
+            
+            // Always save to localStorage
+            localStorage.setItem('qmini_data_sources', JSON.stringify(sources));
+            
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_save_data_sources', { sources })
+                    .then(() => {
+                        alert('Data sources saved');
+                    })
+                    .catch(err => {
+                        alert('Saved to localStorage');
+                    });
+            } else {
+                alert('Data sources saved to localStorage');
+            }
+        }
+
+        function crawlAllSources() {
+            if (!window.wsBridge) {
+                alert('Crawling requires MCP bridge with backend engine');
+                return;
+            }
+            
+            window.wsBridge.callTool('wui_crawl_data_sources', {})
+                .then(() => {
+                    alert('Crawling all data sources...');
+                })
+                .catch(err => {
+                    alert('Failed to start crawling');
+                });
+        }
+
+        // Initialize data sources on load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDataSources();
+        });
+
         // Config functions
-        function loadConfig() {
+        async function loadConfig() {
             const editor = document.getElementById('config-editor');
             const status = document.getElementById('config-status');
             
             // Try to load from file via MCP bridge
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_load_training_config', {})
+            const bridge = await waitForBridge(3000);
+            if (bridge && bridge.isConnected) {
+                bridge.callTool('wui_load_training_config', {})
                     .then(result => {
                         if (result.config) {
                             editor.value = result.config;
@@ -338,8 +740,8 @@ dataset_dir = "flash_cim_243expert/"
             const editor = document.getElementById('config-editor');
             const status = document.getElementById('config-status');
             
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_save_training_config', { config: editor.value })
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_save_training_config', { config: editor.value })
                 .then(() => {
                     status.textContent = 'Config saved';
                     status.style.color = '#2d7a51';
@@ -360,14 +762,38 @@ dataset_dir = "flash_cim_243expert/"
 
         // API Key functions
         function loadApiKeys() {
-            if (!window.qMiniMcpHost) {
+            const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
+            
+            // Load from localStorage first
+            const stored = localStorage.getItem('qmini_api_keys');
+            if (stored) {
+                try {
+                    const keys = JSON.parse(stored);
+                    services.forEach(service => {
+                        const input = document.getElementById(`api-${service}`);
+                        const status = document.getElementById(`status-${service}`);
+                        
+                        if (keys[service]) {
+                            input.value = '********'; // Masked
+                            status.textContent = 'Stored (local)';
+                            status.className = 'api-status ok';
+                        } else {
+                            status.textContent = 'Missing';
+                            status.className = 'api-status missing';
+                        }
+                    });
+                    return;
+                } catch (e) {
+                    console.log('Failed to parse stored API keys');
+                }
+            }
+            
+            if (!window.wsBridge) {
                 alert('MCP bridge not available');
                 return;
             }
             
-            const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
-            
-            window.qMiniMcpHost.callTool('wui_load_api_keys', {})
+            window.wsBridge.callTool('wui_load_api_keys', {})
                 .then(result => {
                     services.forEach(service => {
                         const input = document.getElementById(`api-${service}`);
@@ -390,11 +816,6 @@ dataset_dir = "flash_cim_243expert/"
         }
 
         function saveApiKeys() {
-            if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available');
-                return;
-            }
-            
             const services = ['wolfram', 'wikidata', 'arxiv', 'github', 'lean'];
             const keys = {};
             
@@ -405,25 +826,51 @@ dataset_dir = "flash_cim_243expert/"
                 }
             });
             
-            window.qMiniMcpHost.callTool('wui_store_api_keys', { keys })
-                .then(() => {
-                    alert('API keys saved securely to Windows Credential Manager');
-                    loadApiKeys(); // Refresh status
-                })
-                .catch(err => {
-                    console.error('Failed to save API keys:', err);
-                    alert('Failed to save API keys');
-                });
+            // Always save to localStorage
+            localStorage.setItem('qmini_api_keys', JSON.stringify(keys));
+            
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_store_api_keys', { keys })
+                    .then(() => {
+                        alert('API keys saved securely to Windows Credential Manager');
+                        loadApiKeys(); // Refresh status
+                    })
+                    .catch(err => {
+                        console.error('Failed to save API keys:', err);
+                        alert('Saved to localStorage');
+                        loadApiKeys();
+                    });
+            } else {
+                alert('API keys saved to localStorage');
+            }
         }
 
         // Training control functions
-        function startTraining() {
-            if (!window.qMiniMcpHost) {
-                alert('MCP bridge not available');
+        async function startTraining() {
+            const bridge = await waitForBridge(5000);
+            if (!bridge || !bridge.isConnected) {
+                alert('MCP bridge not available - please wait for connection');
                 return;
             }
             
-            window.qMiniMcpHost.callTool('wui_start_training_sse', {})
+            doStartTraining();
+        }
+        
+        function doStartTraining() {
+            // Use dataset from standard acquisition location or crawl first if needed
+            const datasetPath = 'D:/qmini_ff_prod/datasets/processed/data.jsonl';
+            
+            // Check if we have local sources configured
+            const hasLocalSources = document.querySelectorAll('.data-source-item').length > 0;
+            
+            const trainingParams = {
+                dataset_path: datasetPath,
+                epochs: 100,
+                batch_size: 8192,
+                experts: 243
+            };
+            
+            window.wsBridge.callTool('wui_start_training_sse', trainingParams)
                 .then(() => {
                     connectStream();
                     streamStartTime = Date.now();
@@ -436,16 +883,17 @@ dataset_dir = "flash_cim_243expert/"
         }
 
         function pauseTraining() {
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_pause_training', {});
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_pause_training', {});
             }
         }
 
         function stopTraining() {
-            if (window.qMiniMcpHost) {
-                window.qMiniMcpHost.callTool('wui_stop_training_sse', {});
+            if (window.wsBridge) {
+                window.wsBridge.callTool('wui_stop_training_sse', {});
             }
             disconnectStream();
+            streamStartTime = null; // Stop the elapsed time timer
         }
 
         // Stream functions
@@ -485,13 +933,20 @@ dataset_dir = "flash_cim_243expert/"
         }
 
         function appendToStream(data) {
+            console.log('[Training] Received data:', JSON.stringify(data));
             const container = document.getElementById('stream-container');
             const line = document.createElement('div');
             line.className = 'line';
             
             if (data.status === 'epoch') {
                 line.className += ' epoch';
-                line.textContent = `Epoch ${data.epoch}: ${data.samples} samples`;
+                if (data.samples !== undefined) {
+                    line.textContent = `Epoch ${data.epoch}: ${data.samples} samples`;
+                } else if (data.loss !== undefined) {
+                    line.textContent = `Epoch ${data.epoch}: loss=${data.loss}, reward=${data.reward}, entropy=${data.entropy}`;
+                } else {
+                    line.textContent = `Epoch ${data.epoch}: ${JSON.stringify(data)}`;
+                }
             } else if (data.status === 'error') {
                 line.className += ' error';
                 line.textContent = `Error: ${data.message || data.step}`;
@@ -499,6 +954,7 @@ dataset_dir = "flash_cim_243expert/"
                 line.textContent = data.step;
             } else if (data.status === 'complete') {
                 line.textContent = `Training complete in ${data.time_s.toFixed(1)}s`;
+                streamStartTime = null; // Stop the elapsed time timer
             } else {
                 line.textContent = JSON.stringify(data);
             }
@@ -511,8 +967,14 @@ dataset_dir = "flash_cim_243expert/"
             if (data.epoch) {
                 document.getElementById('metric-epoch').textContent = data.epoch;
             }
-            if (data.samples) {
+            // Use batch_size from trainer output, fallback to samples or loss+entropy
+            if (data.batch_size) {
+                document.getElementById('metric-samples').textContent = data.batch_size;
+            } else if (data.samples) {
                 document.getElementById('metric-samples').textContent = data.samples;
+            } else if (data.reward !== undefined && data.entropy !== undefined) {
+                const total = data.reward + data.entropy;
+                document.getElementById('metric-samples').textContent = total;
             }
         }
 
@@ -524,9 +986,378 @@ dataset_dir = "flash_cim_243expert/"
             const seconds = elapsed % 60;
             document.getElementById('metric-time').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
-            if (sseClient && sseClient.isConnected) {
-                setTimeout(updateElapsedTime, 1000);
+            // Continue updating as long as streamStartTime is set (training is running)
+            setTimeout(updateElapsedTime, 1000);
+        }
+
+        // ==================== Data Source Library ====================
+        
+        const dataSourceLibrary = {
+            'huggingface': {
+                name: 'Hugging Face Datasets',
+                desc: 'Server-side streaming from 100K+ datasets',
+                icon: '🤗',
+                category: 'ml',
+                type: 'api',
+                url: 'datasets-server.huggingface.co'
+            },
+            'the-stack': {
+                name: 'The Stack (BigCode)',
+                desc: 'Massive repository of permissive source code',
+                icon: '💻',
+                category: 'math',
+                type: 'api',
+                url: 'huggingface.co/datasets/bigcode/the-stack'
+            },
+            'chembl': {
+                name: 'ChEMBL',
+                desc: 'Bioactive molecules with SMILES and binding affinities',
+                icon: '🧪',
+                category: 'science',
+                type: 'api',
+                url: 'ebi.ac.uk/chembl'
+            },
+            'materials-project': {
+                name: 'Materials Project',
+                desc: 'Crystal structures, band gaps, thermodynamic data',
+                icon: '💎',
+                category: 'science',
+                type: 'api',
+                url: 'materialsproject.org'
+            },
+            'dbpedia': {
+                name: 'DBpedia',
+                desc: 'Structured Wikipedia data via SPARQL',
+                icon: '📚',
+                category: 'knowledge',
+                type: 'api',
+                url: 'dbpedia.org'
+            },
+            'yago': {
+                name: 'YAGO',
+                desc: 'Semantic knowledge base from Wikipedia + WordNet',
+                icon: '🌐',
+                category: 'knowledge',
+                type: 'api',
+                url: 'yago-knowledge.org'
+            },
+            'ensembl': {
+                name: 'Ensembl',
+                desc: 'Genomic alignments and gene trees',
+                icon: '🧬',
+                category: 'bio',
+                type: 'api',
+                url: 'ensembl.org'
+            },
+            'sympy': {
+                name: 'SymPy Gamma',
+                desc: 'Step-by-step calculus and algebra',
+                icon: '∑',
+                category: 'math',
+                type: 'api',
+                url: 'gamma.sympy.org'
+            },
+            'mathlib4': {
+                name: 'Mathlib4 (Lean)',
+                desc: 'Verified TacticStates and proof steps',
+                icon: '⊢',
+                category: 'math',
+                type: 'api',
+                url: 'github.com/leanprover-community/mathlib4'
+            },
+            'arxiv': {
+                name: 'arXiv',
+                desc: 'Preprint papers in physics, math, CS',
+                icon: '📄',
+                category: 'math',
+                type: 'web',
+                url: 'arxiv.org'
+            },
+            'wolfram': {
+                name: 'WolframAlpha',
+                desc: 'Computational intelligence and knowledge',
+                icon: '🧮',
+                category: 'math',
+                type: 'api',
+                url: 'wolframalpha.com'
+            },
+            'wikidata': {
+                name: 'Wikidata',
+                desc: 'Structured knowledge base from Wikipedia',
+                icon: '📖',
+                category: 'knowledge',
+                type: 'api',
+                url: 'wikidata.org'
+            },
+            'pubchem': {
+                name: 'PubChem',
+                desc: 'Chemical molecule database',
+                icon: '⚗️',
+                category: 'science',
+                type: 'api',
+                url: 'pubchem.ncbi.nlm.nih.gov'
+            },
+            'pdb': {
+                name: 'Protein Data Bank',
+                desc: '3D structural data of proteins',
+                icon: '🧬',
+                category: 'bio',
+                type: 'api',
+                url: 'rcsb.org'
+            },
+            'oeis': {
+                name: 'OEIS',
+                desc: 'Online Encyclopedia of Integer Sequences',
+                icon: '🔢',
+                category: 'math',
+                type: 'web',
+                url: 'oeis.org'
             }
+        };
+        
+        let currentLibraryTab = 'all';
+        
+        function openSourceLibrary() {
+            document.getElementById('source-library-modal').classList.add('active');
+            renderSourceLibrary();
+        }
+        
+        function closeSourceLibrary() {
+            document.getElementById('source-library-modal').classList.remove('active');
+        }
+        
+        function switchTab(category) {
+            currentLibraryTab = category;
+            
+            // Update tab styles
+            document.querySelectorAll('.source-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            renderSourceLibrary();
+        }
+        
+        function renderSourceLibrary() {
+            const grid = document.getElementById('source-grid');
+            grid.innerHTML = '';
+            
+            Object.entries(dataSourceLibrary).forEach(([key, source]) => {
+                if (currentLibraryTab !== 'all' && source.category !== currentLibraryTab) {
+                    return;
+                }
+                
+                const card = document.createElement('div');
+                card.className = 'source-card';
+                card.onclick = () => addSourceFromLibrary(key, source);
+                card.innerHTML = `
+                    <div class="source-icon">${source.icon}</div>
+                    <div class="source-name">${source.name}</div>
+                    <div class="source-desc">${source.desc}</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+        
+        function addSourceFromLibrary(key, source) {
+            const list = document.getElementById('data-source-list');
+            const item = document.createElement('div');
+            item.className = 'data-source-item';
+            item.innerHTML = `
+                <span class="data-source-name">${source.url || source.name}</span>
+                <span class="data-source-type ${source.type}">${source.type.toUpperCase()}</span>
+                <button class="data-source-remove" onclick="removeDataSource(this)">Remove</button>
+            `;
+            list.appendChild(item);
+            
+            closeSourceLibrary();
+        }
+
+        // ==================== File Browser ====================
+        
+        let currentBrowsePath = '.';
+        let selectedFilePath = null;
+        
+        function onSourceTypeChange() {
+            const type = document.getElementById('new-source-type').value;
+            const fileBrowser = document.getElementById('file-browser');
+            
+            if (type === 'local') {
+                // Auto-open file browser when selecting local
+                browseServerFiles();
+            } else {
+                fileBrowser.classList.remove('active');
+            }
+        }
+        
+        function browseServerFiles() {
+            document.getElementById('new-source-type').value = 'local';
+            currentBrowsePath = '.';
+            selectedFilePath = null;
+            loadFileList(currentBrowsePath);
+            document.getElementById('file-browser').classList.add('active');
+        }
+        
+        function closeFileBrowser() {
+            document.getElementById('file-browser').classList.remove('active');
+        }
+        
+        function loadFileList(path) {
+            fetch(`http://localhost:7345/api/browse?path=${encodeURIComponent(path)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(files => {
+                    renderFileList(path, files);
+                })
+                .catch(err => {
+                    console.error('File browser error:', err);
+                    document.getElementById('file-list').innerHTML = `
+                        <div style="padding: 1rem; color: #b42318;">
+                            Cannot browse files: ${err.message}<br>
+                            Make sure the WUI server is running on port 7345
+                        </div>
+                    `;
+                });
+        }
+        
+        function renderFileList(path, files) {
+            currentBrowsePath = path;
+            selectedFilePath = null;
+            
+            // Update breadcrumb
+            const parts = path.split(/[\\/]/).filter(p => p);
+            let breadcrumbHtml = '<span onclick="browsePath(\'.\')">.</span>';
+            let currentPath = '';
+            parts.forEach(part => {
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+                breadcrumbHtml += ` / <span onclick="browsePath('${currentPath.replace(/'/g, "\\'")}')">${part}</span>`;
+            });
+            document.getElementById('file-breadcrumb').innerHTML = breadcrumbHtml;
+            
+            // Render file list
+            const list = document.getElementById('file-list');
+            list.innerHTML = '';
+            
+            // Add ".." entry if not at root
+            if (path !== '.' && path !== '') {
+                const parent = path.split(/[\\/]/).slice(0, -1).join('/') || '.';
+                const upItem = document.createElement('div');
+                upItem.className = 'file-item';
+                upItem.innerHTML = `
+                    <span class="file-icon">📁</span>
+                    <span class="file-name">..</span>
+                `;
+                upItem.onclick = () => browsePath(parent);
+                list.appendChild(upItem);
+            }
+            
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                if (file.path === selectedFilePath) {
+                    item.classList.add('selected');
+                }
+                
+                const icon = file.is_dir ? '📁' : getFileIcon(file.name);
+                const size = file.is_dir ? '' : formatFileSize(file.size);
+                
+                item.innerHTML = `
+                    <span class="file-icon">${icon}</span>
+                    <span class="file-name">${file.name}</span>
+                    <span class="file-size">${size}</span>
+                `;
+                
+                if (file.is_dir) {
+                    item.ondblclick = () => browsePath(file.path);
+                } else {
+                    item.onclick = () => selectFile(file.path, item);
+                }
+                
+                list.appendChild(item);
+            });
+        }
+        
+        function browsePath(path) {
+            loadFileList(path);
+        }
+        
+        function selectFile(path, element) {
+            // Deselect previous
+            document.querySelectorAll('.file-item.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            
+            // Select new
+            element.classList.add('selected');
+            selectedFilePath = path;
+            document.getElementById('selected-file-path').textContent = path;
+        }
+        
+        function selectFileFromBrowser() {
+            if (!selectedFilePath) {
+                alert('Please select a file or folder');
+                return;
+            }
+            
+            document.getElementById('new-source-input').value = selectedFilePath;
+            closeFileBrowser();
+        }
+        
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const icons = {
+                'json': '📋',
+                'csv': '📊',
+                'txt': '📝',
+                'bin': '💾',
+                'gguf': '🧠',
+                'parquet': '📊',
+                'toml': '⚙️',
+                'md': '📄',
+                'py': '🐍',
+                'cpp': '⚡',
+                'h': '📦',
+                'go': '🐹'
+            };
+            return icons[ext] || '📄';
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+            if (bytes < 1024*1024*1024) return (bytes/1024/1024).toFixed(1) + ' MB';
+            return (bytes/1024/1024/1024).toFixed(1) + ' GB';
+        }
+        
+        // ==================== Training Control with Auto-Start ====================
+        
+        let mcpStartAttempts = 0;
+        const MAX_MCP_START_ATTEMPTS = 20;
+        
+        function doStartTraining() {
+            if (!window.wsBridge) {
+                alert('Training backend not available');
+                return;
+            }
+            
+            window.wsBridge.callTool('wui_start_training_sse', {})
+                .then(() => {
+                    connectStream();
+                    streamStartTime = Date.now();
+                    updateElapsedTime();
+                    document.getElementById('config-status').textContent = 'Training started';
+                    document.getElementById('config-status').style.color = '#2d7a51';
+                })
+                .catch(err => {
+                    console.error('Failed to start training:', err);
+                    document.getElementById('config-status').textContent = 'Training failed';
+                    document.getElementById('config-status').style.color = '#b42318';
+                    alert('Failed to start training: ' + err.message);
+                });
         }
     </script>
 </body>

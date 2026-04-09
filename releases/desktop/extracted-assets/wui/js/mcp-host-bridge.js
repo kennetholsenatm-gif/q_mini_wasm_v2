@@ -75,6 +75,58 @@
         }
     }
 
+    /**
+     * HTTPBrowserAdapter - Browser-based MCP adapter using HTTP/JSON-RPC
+     * Falls back to HTTP when running in a browser (not desktop shell)
+     */
+    class HTTPBrowserAdapter {
+        constructor(baseUrl = '') {
+            this.baseUrl = baseUrl || window.location.origin;
+            this.nextId = 1;
+        }
+
+        async callTool(name, args) {
+            const id = this.nextId++;
+            const request = {
+                jsonrpc: '2.0',
+                id: id,
+                method: name,
+                params: args || {}
+            };
+
+            console.log(`[HTTP MCP] Calling ${name}...`);
+
+            const response = await fetch(`${this.baseUrl}/mcp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(request)
+            });
+
+            if (!response.ok) {
+                console.error(`[HTTP MCP] HTTP error: ${response.status}`);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log(`[HTTP MCP] Response for ${name}:`, result);
+
+            if (result.error) {
+                throw new Error(result.error.message || String(result.error));
+            }
+
+            return result.result;
+        }
+
+        async checkHealth() {
+            try {
+                const response = await fetch(`${this.baseUrl}/health`, { method: 'GET' });
+                return response.ok;
+            } catch {
+                return false;
+            }
+        }
+    }
+
     function resolveAdapter() {
         const directCandidates = [
             globalThis.qMiniMcpHost,
@@ -92,7 +144,8 @@
             return new WebView2HostAdapter(globalThis.chrome.webview);
         }
 
-        return null;
+        // Fallback to HTTP adapter for browser-based development
+        return new HTTPBrowserAdapter();
     }
 
     class MCPHostBridge {
@@ -110,13 +163,18 @@
         }
 
         async init() {
+            console.log('[MCPHostBridge] Initializing...');
             if (!this.adapter) {
+                console.error('[MCPHostBridge] No adapter available');
                 this.emitError(new Error('No desktop MCP host adapter detected'));
                 return;
             }
+            console.log('[MCPHostBridge] Adapter type:', this.adapter.constructor.name);
 
             try {
+                console.log('[MCPHostBridge] Calling wui_connect...');
                 const info = await this.callTool('wui_connect', { host: 'localhost', port: 8080, timeout_ms: 5000 });
+                console.log('[MCPHostBridge] wui_connect success:', info);
                 this.connectionInfo = {
                     strict_mode: info?.strict_mode !== false,
                     backend_passthrough: !!info?.backend_passthrough,
@@ -136,6 +194,7 @@
                     this.startPolling();
                 }
             } catch (error) {
+                console.error('[MCPHostBridge] Connection failed:', error);
                 this.isConnected = false;
                 this.emitError(error);
                 globalThis.dispatchEvent(new CustomEvent('engineDisconnected'));

@@ -3,6 +3,7 @@
 #include "../ternary/trit.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -147,7 +148,7 @@ public:
     }
     
     UnifiedMoEConfig Build() const {
-        if (!config_.validate()) {
+        if (config_.validate() != ternary::Trit::POSITIVE) {
             throw std::invalid_argument("Invalid MoE configuration");
         }
         return config_;

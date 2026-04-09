@@ -4,6 +4,7 @@
 #include "expert_network.hpp"
 #include "../learning/forward_forward.hpp"
 #include <vector>
+#include <string>
 #include <memory>
 #include <functional>
 
@@ -203,7 +204,7 @@ public:
     /**
      * @brief Check if training has converged
      */
-    ternary::Trit HasConverged() const;
+    ternary::Trit HasConverged();  // Non-const as it modifies internal state
     
     /**
      * @brief Get best epoch metrics
@@ -239,8 +240,8 @@ private:
     // Metrics
     MoETrainingMetrics current_metrics_;
     std::vector<MoETrainingMetrics> history_;
-    MoETrainingMetrics best_metrics_;
-    size_t epochs_without_improvement_ = 0;
+    mutable MoETrainingMetrics best_metrics_;
+    mutable size_t epochs_without_improvement_ = 0;
     
     // Training state
     uint32_t current_epoch_ = 0;

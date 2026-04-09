@@ -8,35 +8,67 @@
 #include <algorithm>
 #include <filesystem>
 #include <iomanip>
+#include <cstdio>
 #include "../ternary/trit.hpp"
 #include "../network.hpp"
 #include "data_synthesizer.hpp"
 
+// Windows compatibility for popen/pclose
+#ifdef _WIN32
+    #define popen _popen
+    #define pclose _pclose
+#endif
+
 using namespace q_mini_wasm_v2::core;
 
 // Simple JSON text extraction for dataset loading
+// Handles: {"text": "content"} or {"text":"content"}
 std::string extract_json_text(const std::string& line) {
-    // Look for "text":"..." pattern
-    size_t start = line.find("\"text\":\"");
-    if (start == std::string::npos) return "";
-    start += 8; // skip "text":"
-
-    size_t end = line.find("\",\"", start);
-    if (end == std::string::npos) {
-        end = line.find("\"}", start);
+    // Look for "text" key (with optional whitespace and colon)
+    size_t key_pos = line.find("\"text\"");
+    if (key_pos == std::string::npos) return "";
+    
+    // Move past the key and any whitespace/colon
+    size_t start = key_pos + 6; // skip "text"
+    
+    // Skip whitespace
+    while (start < line.length() && isspace(line[start])) start++;
+    
+    // Expect colon
+    if (start >= line.length() || line[start] != ':') return "";
+    start++; // skip colon
+    
+    // Skip whitespace after colon
+    while (start < line.length() && isspace(line[start])) start++;
+    
+    // Expect opening quote
+    if (start >= line.length() || line[start] != '"') return "";
+    start++; // skip opening quote
+    
+    // Find closing quote (handle escaped quotes by simple skip)
+    size_t end = start;
+    while (end < line.length()) {
+        if (line[end] == '"' && (end == start || line[end-1] != '\\')) {
+            break; // Found unescaped closing quote
+        }
+        end++;
     }
-    if (end == std::string::npos) return "";
-
+    
+    if (end >= line.length()) return "";
+    
     return line.substr(start, end - start);
 }
 
 // Convert text string to ternary trits (64-dimensional)
+// Uses position-sensitive hashing to create more variance from uniform data
 std::vector<ternary::Trit> text_to_trits(const std::string& text, size_t dim = 64) {
     std::vector<ternary::Trit> result(dim, ternary::Trit::ZERO);
 
     for (size_t i = 0; i < dim && i < text.size(); ++i) {
-        // Map char to ternary: hash and mod 3
-        int val = static_cast<unsigned char>(text[i]) % 3;
+        // Position-sensitive hash: combine char value with position
+        // This ensures "(a)" at position 0 differs from "(a)" at position 10
+        uint32_t hash = static_cast<unsigned char>(text[i]) * 2654435761u + static_cast<uint32_t>(i) * 2246822519u;
+        int val = hash % 3;
         if (val == 0) result[i] = ternary::Trit::NEGATIVE;
         else if (val == 1) result[i] = ternary::Trit::ZERO;
         else result[i] = ternary::Trit::POSITIVE;
@@ -116,6 +148,40 @@ public:
         std::string val = raw_content.substr(val_start, 5);
         return val.substr(0, 4) == "true" || val.substr(0, 1) == "1";
     }
+    
+    std::vector<std::string> get_string_array(const std::string& section, const std::string& key) {
+        std::vector<std::string> result;
+        size_t val_pos = find_in_section(section, key);
+        if (val_pos == std::string::npos) return result;
+        
+        // Find opening bracket
+        size_t bracket_start = raw_content.find('[', val_pos);
+        if (bracket_start == std::string::npos) return result;
+        
+        // Find closing bracket
+        size_t bracket_end = raw_content.find(']', bracket_start);
+        if (bracket_end == std::string::npos) return result;
+        
+        // Extract array content
+        std::string array_content = raw_content.substr(bracket_start + 1, bracket_end - bracket_start - 1);
+        
+        // Parse quoted strings
+        size_t pos = 0;
+        while (pos < array_content.length()) {
+            // Find opening quote
+            size_t quote_start = array_content.find('"', pos);
+            if (quote_start == std::string::npos) break;
+            
+            // Find closing quote
+            size_t quote_end = array_content.find('"', quote_start + 1);
+            if (quote_end == std::string::npos) break;
+            
+            result.push_back(array_content.substr(quote_start + 1, quote_end - quote_start - 1));
+            pos = quote_end + 1;
+        }
+        
+        return result;
+    }
 };
 
 int main(int argc, char* argv[]) {
@@ -193,6 +259,8 @@ int main(int argc, char* argv[]) {
             flash_cim = (val == "true" || val == "1");
         } else if (arg == "--dataset" && i + 1 < argc) {
             dataset_path = argv[++i];
+            // Log what we received for debugging
+            log_progress("{\"status\": \"debug\", \"step\": \"Dataset argument received: " + dataset_path + "\"}");
         } else if (arg == "--base-model" && i + 1 < argc) {
             base_model_path = argv[++i];
         } else if (arg == "--output" && i + 1 < argc) {
@@ -207,15 +275,20 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    log_progress("{\"status\": \"init\", \"message\": \"Config loaded: epochs=" + std::to_string(epochs) + ", batch=" + std::to_string(batch_size) + ", experts=" + std::to_string(moe_experts) + "\"}");
+    log_progress("{\"status\": \"init\", \"message\": \"Config loaded: epochs=" + std::to_string(epochs) + ", batch=" + std::to_string(batch_size) + ", experts=" + std::to_string(moe_experts) + ", layers=" + std::to_string(num_layers) + ", neurons=" + std::to_string(neurons_per_layer) + "\"}");
 
+    // Read model dimensions from config
+    size_t shadow_dim = has_config ? config.get_size_t("model", "shadow_dim") : 1024;
+    size_t num_layers = has_config ? config.get_size_t("model", "num_layers") : 3;
+    size_t neurons_per_layer = has_config ? config.get_size_t("model", "neurons_per_layer") : 128;
+    
     // Configure the network based on the research paper parameters
     NetworkConfig net_config;
     net_config.input_dim = context_window;
-    net_config.shadow_dim = 1024;
+    net_config.shadow_dim = shadow_dim;
     net_config.hash_dim = entanglement_tokens;
-    net_config.num_layers = 3;  // Common standard for FF layers
-    net_config.neurons_per_layer = 128;
+    net_config.num_layers = num_layers;
+    net_config.neurons_per_layer = neurons_per_layer;
     net_config.total_experts = moe_experts;
     net_config.active_experts = moe_top_k;
     net_config.routing_qutrits = 8;
@@ -232,14 +305,15 @@ int main(int argc, char* argv[]) {
         // Dataset loading or simulation
         std::vector<std::vector<ternary::Trit>> dataset;
         if (!dataset_path.empty()) {
-            std::cout << "{\"status\": \"progress\", \"step\": \"Loading dataset from " << dataset_path << "\"}\n";
-            std::cout.flush();
+            log_progress("{\"status\": \"progress\", \"step\": \"Loading dataset from: " + dataset_path + "\"}");
             
             std::ifstream file(dataset_path);
             if (file.is_open()) {
                 std::string line;
                 size_t loaded = 0;
+                size_t lines_read = 0;
                 while (std::getline(file, line) && loaded < batch_size) {
+                    lines_read++;
                     // Extract text from JSON and convert to trits
                     std::string text = extract_json_text(line);
                     if (!text.empty()) {
@@ -250,33 +324,92 @@ int main(int argc, char* argv[]) {
                 }
                 file.close();
                 
-            log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(dataset.size()) + " samples from dataset\"}");
+                if (dataset.empty()) {
+                    log_progress("{\"status\": \"warning\", \"step\": \"Opened file but loaded 0 samples from " + std::to_string(lines_read) + " lines - check JSON format\"}");
+                } else {
+                    log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(dataset.size()) + " samples from " + std::to_string(lines_read) + " lines\"}");
+                }
             } else {
-                log_progress("{\"status\": \"warning\", \"step\": \"Could not open dataset file, using simulation\"}");
+                log_progress("{\"status\": \"error\", \"step\": \"Could not open dataset file: " + dataset_path + "\"}");
             }
         }
         
-        // If no dataset loaded, generate synthetic data
-        if (dataset.empty()) {
-            log_progress("{\"status\": \"progress\", \"step\": \"No dataset provided. Simulating Quantum Distribution...\"}");
+        // Fetch web data sources from config
+        std::vector<std::string> web_sources = config.get_string_array("data_sources", "urls");
+        if (!web_sources.empty()) {
+            log_progress("{\"status\": \"progress\", \"step\": \"Fetching " + std::to_string(web_sources.size()) + " web data sources...\"}");
             
-            // Generate ternary dataset using deterministic seed
-            uint32_t seed = 42;
-            dataset.resize(batch_size, std::vector<ternary::Trit>(context_window));
-            for (auto& row : dataset) {
-                for (auto& val : row) {
-                    // Simple deterministic ternary generation
-                    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-                    int trit_val = seed % 3;
-                    if (trit_val == 0) val = ternary::Trit::NEGATIVE;
-                    else if (trit_val == 1) val = ternary::Trit::ZERO;
-                    else val = ternary::Trit::POSITIVE;
+            for (const auto& url : web_sources) {
+                if (url.empty()) continue;
+                
+                log_progress("{\"status\": \"progress\", \"step\": \"Fetching: " + url + "\"}");
+                
+                // Simple text extraction - fetch and process
+                #ifdef HAS_LIBCURL
+                // Use curl to fetch
+                std::string cmd = "curl -s -L --max-time 30 --max-filesize 10485760 \"" + url + "\" 2>/dev/null";
+                #else
+                // Fallback: use system curl
+                std::string cmd = "curl -s -L --max-time 30 \"" + url + "\" 2>nul";
+                #endif
+                
+                FILE* pipe = popen(cmd.c_str(), "r");
+                if (pipe) {
+                    char buffer[4096];
+                    std::string content;
+                    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                        content += buffer;
+                        if (content.length() > 100000) break; // Limit to 100KB per source
+                    }
+                    pclose(pipe);
+                    
+                    // Extract text content (strip HTML tags roughly)
+                    std::string text;
+                    bool in_tag = false;
+                    for (char c : content) {
+                        if (c == '<') in_tag = true;
+                        else if (c == '>') in_tag = false;
+                        else if (!in_tag && std::isprint(c)) text += c;
+                    }
+                    
+                    // Split into sentences/samples and convert to trits
+                    size_t samples_added = 0;
+                    std::string sentence;
+                    for (char c : text) {
+                        sentence += c;
+                        if (c == '.' || c == '!' || c == '?') {
+                            if (sentence.length() > 20) {  // Min sentence length
+                                auto sample = text_to_trits(sentence, context_window);
+                                if (!sample.empty() && dataset.size() < batch_size) {
+                                    dataset.push_back(sample);
+                                    samples_added++;
+                                }
+                            }
+                            sentence.clear();
+                        }
+                    }
+                    
+                    log_progress("{\"status\": \"progress\", \"step\": \"Added " + std::to_string(samples_added) + " samples from web source\"}");
+                } else {
+                    log_progress("{\"status\": \"warning\", \"step\": \"Failed to fetch: " + url + "\"}");
                 }
             }
         }
         
+        // If no dataset loaded, training cannot proceed
+        if (dataset.empty()) {
+            log_progress("{\"status\": \"error\", \"step\": \"No dataset loaded. Training requires real data.\"}");
+            std::cerr << "ERROR: No dataset loaded. Please provide --dataset path to a valid JSONL file or configure web data sources." << std::endl;
+            return 1;
+        }
+        
         log_progress("{\"status\": \"progress\", \"step\": \"Commencing Forward-Forward Entropy Training...\"}");
-
+        
+        // Training metadata for rich reporting
+        std::string data_source = dataset_path;
+        size_t total_samples = dataset.size();
+        std::string source_type = "jsonl_file";
+        
         auto start_time = std::chrono::steady_clock::now();
         
         // Training loop - per batch per epoch for API-based training
@@ -297,7 +430,30 @@ int main(int argc, char* argv[]) {
                 tnn.train(batch_data, 1);
             }
             
-            log_progress("{\"status\": \"epoch\", \"epoch\": " + std::to_string(epoch + 1) + ", \"samples\": " + std::to_string(batch_data.size()) + "}");
+            // Rich epoch metadata
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - start_time).count();
+            
+            std::string epoch_json = "{"
+                "\"status\": \"epoch\","
+                "\"epoch\": " + std::to_string(epoch + 1) + ","
+                "\"total_epochs\": " + std::to_string(epochs) + ","
+                "\"samples_processed\": " + std::to_string(batch_data.size()) + ","
+                "\"total_samples\": " + std::to_string(total_samples) + ","
+                "\"data_source\": \"" + data_source + "\","
+                "\"source_type\": \"" + source_type + "\","
+                "\"elapsed_seconds\": " + std::to_string(elapsed) + ","
+                "\"progress_pct\": " + std::to_string(static_cast<int>((epoch + 1) * 100 / epochs)) + ","
+                "\"batch_size\": " + std::to_string(batch_size) + ","
+                "\"experts\": " + std::to_string(moe_experts) + ","
+                "\"top_k\": " + std::to_string(moe_top_k) + ","
+                "\"learning_rate_shift\": " + std::to_string(net_config.learning_rate_shift) + ","
+                "\"steane_correction\": " + std::string(steane_correction ? "true" : "false") + ","
+                "\"flash_cim\": " + std::string(flash_cim ? "true" : "false") + ","
+                "\"context_window\": " + std::to_string(context_window) +
+                "}";
+            
+            log_progress(epoch_json);
         }
         
         auto end_time = std::chrono::steady_clock::now();

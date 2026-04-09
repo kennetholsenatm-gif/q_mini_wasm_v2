@@ -2,6 +2,10 @@
 
 #include "../ternary/trit.hpp"
 #include <vector>
+#include <string>
+#include <map>
+#include <functional>
+#include <memory>
 #include <cstddef>
 #include <cstdint>
 

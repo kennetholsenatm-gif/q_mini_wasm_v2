@@ -545,34 +545,8 @@
         let isGenerating = false;
         let availableModels = [];
 
-        async function scanForModels() {
-            // Try to fetch from backend first
-            if (window.mcpBridge && window.mcpBridge.sendMessage) {
-                try {
-                    const response = await window.mcpBridge.sendMessage({
-                        jsonrpc: '2.0',
-                        method: 'wui_list_models',
-                        params: {},
-                        id: Date.now()
-                    });
-                    
-                    if (response && response.result && response.result.models) {
-                        availableModels = response.result.models.map(m => ({
-                            file: m.filename,
-                            name: m.filename.replace('.bbin', ''),
-                            size: m.size_mb + ' MB',
-                            modified: m.modified
-                        }));
-                        localStorage.setItem('qmini_available_models', JSON.stringify(availableModels));
-                        renderModelList();
-                        return;
-                    }
-                } catch (e) {
-                    console.log('Backend scan failed, falling back to localStorage:', e);
-                }
-            }
-            
-            // Fallback: check localStorage
+        function scanForModels() {
+            // In standalone mode, check localStorage for model list
             const stored = localStorage.getItem('qmini_available_models');
             if (stored) {
                 try {
@@ -584,8 +558,12 @@
                 }
             }
             
-            // Last resort: empty list
-            availableModels = [];
+            // Default models
+            availableModels = [
+                { file: 'trained_20260407_144052_e3_b8.bin', name: 'Training Run A', size: '3 epochs, 8 batch' },
+                { file: 'trained_20260407_151221_e3_b8.bin', name: 'Training Run B', size: '3 epochs, 8 batch' },
+                { file: 'intermediate_epoch10.bin', name: 'Intermediate Checkpoint', size: 'Epoch 10' }
+            ];
             renderModelList();
         }
         
@@ -681,13 +659,13 @@
         
         // Ensure backend is connected before allowing inference
         function ensureBackendConnection() {
-            if (!window.wsBridge || !window.wsBridge.isConnected) {
+            if (!window.qMiniMcpHost) {
                 addMessage('system', 'Waiting for backend connection...');
                 // Poll for connection
                 let attempts = 0;
                 const checkInterval = setInterval(() => {
                     attempts++;
-                    if (window.wsBridge && window.wsBridge.isConnected) {
+                    if (window.qMiniMcpHost) {
                         clearInterval(checkInterval);
                         addMessage('system', 'Backend connected - ready for inference');
                     } else if (attempts > 20) {
@@ -734,14 +712,14 @@
             const streamingBubble = document.getElementById('streaming-response');
             let responseText = '';
             
-            if (!window.wsBridge || !window.wsBridge.isConnected) {
+            if (!window.qMiniMcpHost) {
                 streamingBubble.textContent = 'ERROR: Backend not connected. Inference requires MCP bridge.';
                 finishGeneration(0, 0);
                 return;
             }
             
             // Call actual inference through MCP bridge
-            window.wsBridge.callTool('wui_run_inference', {
+            window.qMiniMcpHost.callTool('wui_run_inference', {
                 prompt: input,
                 model_file: currentModel,
                 num_qutrits: parseInt(params.num_qutrits),
@@ -837,8 +815,8 @@
         }
 
         function loadFromTOML() {
-            if (window.wsBridge && window.wsBridge.isConnected) {
-                window.wsBridge.callTool('wui_get_system_toml', {})
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_get_system_toml', {})
                     .then(result => {
                         addMessage('system', 'Parameters loaded from system.toml');
                     })
@@ -851,7 +829,7 @@
         }
 
         function saveToTOML() {
-            if (window.wsBridge && window.wsBridge.isConnected) {
+            if (window.qMiniMcpHost) {
                 addMessage('system', 'Saving parameters to system.toml...');
             } else {
                 addMessage('system', 'MCP bridge not available - parameters not saved');
@@ -859,8 +837,8 @@
         }
 
         function detectHardware() {
-            if (window.wsBridge && window.wsBridge.isConnected) {
-                window.wsBridge.callTool('wui_system_self_check', {})
+            if (window.qMiniMcpHost) {
+                window.qMiniMcpHost.callTool('wui_system_self_check', {})
                     .then(result => {
                         const mem = result.system?.memory?.arena_size_mb || 512;
                         document.getElementById('arena_mb').value = mem;

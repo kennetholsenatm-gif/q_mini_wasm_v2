@@ -19,6 +19,7 @@ type SSEServer struct {
 	trainingCmd *exec.Cmd
 	isRunning   bool
 	port        string
+	lineBuffer  strings.Builder // Buffer for incomplete lines
 }
 
 // NewSSEServer creates a new SSE server
@@ -99,7 +100,25 @@ func (s *SSEServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // Broadcast sends a message to all connected clients
+// Strips SSE "data: " prefix if present (trainer outputs SSE format)
 func (s *SSEServer) Broadcast(msg string) {
+	original := msg
+	// Strip SSE "data: " prefix if present
+	msg = strings.TrimSpace(msg)
+	if strings.HasPrefix(msg, "data: ") {
+		msg = msg[6:] // Strip "data: " prefix
+	}
+	if msg == "" {
+		return
+	}
+
+	// Debug: log first 100 chars of what we're broadcasting
+	preview := msg
+	if len(preview) > 100 {
+		preview = preview[:100] + "..."
+	}
+	fmt.Printf("[SSE Broadcast] Original: %q -> Broadcast: %q\n", original[:min(50, len(original))], preview)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for client := range s.clients {
@@ -109,6 +128,13 @@ func (s *SSEServer) Broadcast(msg string) {
 			// Channel full, skip
 		}
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // StartTraining launches the trainer with SSE output
@@ -144,20 +170,43 @@ func (s *SSEServer) StartTraining(projectRoot string, args []string) error {
 	s.isRunning = true
 	s.Broadcast(`{"status": "init", "message": "Training process started"}`)
 
-	// Stream stdout to SSE clients
+	// Stream stdout to SSE clients with proper line buffering
 	go func() {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 4096)
 		for {
 			n, err := stdout.Read(buf)
 			if n > 0 {
-				lines := strings.Split(string(buf[:n]), "\n")
-				for _, line := range lines {
+				data := string(buf[:n])
+				lines := strings.Split(data, "\n")
+
+				// Process all lines except possibly the last incomplete one
+				for i := 0; i < len(lines)-1; i++ {
+					s.lineBuffer.WriteString(lines[i])
+					line := s.lineBuffer.String()
+					s.lineBuffer.Reset()
 					if strings.TrimSpace(line) != "" {
 						s.Broadcast(line)
 					}
 				}
+
+				// Last line: if data ends with newline, it's complete; otherwise buffer it
+				if strings.HasSuffix(data, "\n") {
+					if strings.TrimSpace(lines[len(lines)-1]) != "" {
+						s.Broadcast(lines[len(lines)-1])
+					}
+				} else {
+					s.lineBuffer.WriteString(lines[len(lines)-1])
+				}
 			}
 			if err != nil {
+				// Flush any remaining buffered content
+				if s.lineBuffer.Len() > 0 {
+					line := s.lineBuffer.String()
+					s.lineBuffer.Reset()
+					if strings.TrimSpace(line) != "" {
+						s.Broadcast(line)
+					}
+				}
 				break
 			}
 		}
