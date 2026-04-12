@@ -1,28 +1,28 @@
 # Gemini Agent Improver
 
-Auto-improves MCP agents using Google's Gemini API (free tier) with LangGraph.
+Auto-improves MCP agents using Google's Gemini API (free tier).
 
 ## Overview
 
-This module implements a ReAct agent that analyzes existing MCP servers and suggests improvements. It uses:
+ReAct agent that analyzes MCP servers and suggests improvements:
 
 - **Gemini API** (free tier) for LLM capabilities
-- **LangGraph** for stateful agent orchestration
+- **LangGraph** for stateful orchestration
 - **ReAct pattern** for reasoning and acting
 
 ## Setup
 
-### 1. Get Gemini API Key
+### API Key
 
-1. Go to [Google AI Studio](https://aistudio.google.com/)
-2. Create a new API key (free tier)
-3. Set the environment variable:
+1. Visit [Google AI Studio](https://aistudio.google.com/)
+2. Create API key (free tier)
+3. Set environment variable:
 
 ```powershell
-$env:GEMINI_API_KEY = "your-api-key-here"
+$env:GEMINI_API_KEY = "your-key-here"
 ```
 
-### 2. Install Dependencies
+### Install
 
 ```powershell
 pip install -r requirements.txt
@@ -32,112 +32,69 @@ pip install -r requirements.txt
 
 ### Basic Analysis
 
-Analyze an MCP server for improvements:
-
 ```powershell
 python agent.py qminiwasm-self-learning all
 ```
 
 ### Analysis Types
 
-- performance: Focus on performance improvements
-- usability: Focus on user experience improvements
-- coverage: Focus on feature coverage
-- all: Comprehensive analysis (default)
+| Type | Focus |
+|:-----|:------|
+| performance | Speed optimizations |
+| usability | UX improvements |
+| coverage | Feature completeness |
+| all | Comprehensive (default) |
 
-### Example Commands
+### Commands
 
 ```powershell
-# Analyze self-learning MCP server
+# Self-learning server
 python agent.py qminiwasm-self-learning all
 
-# Analyze documentation intelligence MCP server for usability
+# Usability focus
 python agent.py qminiwasm-doc-intelligence usability
 
-# Run complete improvement cycle
+# With improvement cycle
 python agent.py qminiwasm-self-learning all --cycle
 ```
 
-## Agent Tools
+## Tools
 
-### 1. analyze_mcp_server
-Analyzes an MCP server configuration and suggests improvements.
+| Tool | Purpose |
+|:-----|:--------|
+| analyze_mcp_server | Analyze server config |
+| suggest_tool_improvement | Improve specific tool |
+| evolve_schema | Evolve schema patterns |
 
-**Parameters:**
-- server_name: Name of the MCP server
-- analysis_type: Type of analysis (performance/usability/coverage/all)
+## Limits
 
-### 2. suggest_tool_improvement
-Suggests improvements for a specific tool.
-
-**Parameters:**
-- tool_name: Name of the tool to improve
-- improvement_type: Type of improvement (efficiency/reliability/usability/all)
-
-### 3. evolve_schema
-Evolves a schema based on usage patterns.
-
-**Parameters:**
-- schema_path: Path to the schema file
-- evolution_goal: Goal of evolution (add_field/optimize/validate/document)
-
-## Free Tier Limits
-
-- **Requests per minute:** 60
-- **Tokens per minute:** 32,000
-- **Requests per day:** 1,500
-
-## Integration with q_mini_wasm_v2
-
-This agent integrates with the existing self-learning MCP server pattern:
-
-1. **Pattern Analysis**: Uses the existing analyze_patterns tool
-2. **Tool Suggestion**: Enhances the suggest_tool tool with Gemini intelligence
-3. **Schema Evolution**: Improves the evolve_schema tool with better suggestions
-
-## Example Output
-
-```
-Running analysis for qminiwasm-self-learning (all)...
-
-=== Analysis Results ===
-
-Step 1:
-Message: I'll analyze the MCP server 'qminiwasm-self-learning' for all improvements...
-Tool calls: 1
-
-Step 2:
-Message: Based on the analysis, I found several areas for improvement...
-Tool calls: 2
-
-Step 3:
-Message: Here are my recommendations for improving the MCP server...
-```
+| Metric | Limit |
+|:-------|:------|
+| Requests/min | 60 |
+| Tokens/min | 32,000 |
+| Requests/day | 1,500 |
 
 ## Architecture
 
 ```
-Gemini API (Free Tier)
-        ↓
-    LangGraph Agent
-        ↓
-    ReAct Pattern
-        ↓
-┌─────────────────────────────────────┐
-│  Tools:                            │
-│  1. analyze_mcp_server             │
-│  2. suggest_tool_improvement       │
-│  3. evolve_schema                  │
-└─────────────────────────────────────┘
-        ↓
-    MCP Server Configs
-        ↓
-    Improvement Suggestions
+Gemini API
+    ↓
+LangGraph Agent
+    ↓
+ReAct Pattern
+    ↓
+┌─────────────────┐
+│ analyze_mcp     │
+│ suggest_tool    │
+│ evolve_schema   │
+└─────────────────┘
+    ↓
+Improvements
 ```
 
-## Future Enhancements
+## Future Work
 
-1. **Automated Implementation**: Automatically implement suggested improvements
-2. **Learning from Feedback**: Learn from user feedback to improve suggestions
-3. **Multi-Agent Collaboration**: Coordinate multiple agents for complex improvements
-4. **Integration with CI/CD**: Integrate with GitHub Actions for automated improvements
+- Automated implementation of suggestions
+- User feedback learning
+- Multi-agent coordination
+- CI/CD integration

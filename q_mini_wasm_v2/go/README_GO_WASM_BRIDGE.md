@@ -1,72 +1,67 @@
-# Go-WASM Zero-Copy Memory Bridge
+# Go-WASM Bridge
 
-## Status: ✅ IMPLEMENTED
+Zero-copy memory bridge between Go and WASM (Phase 1 §22-28).
 
-This module implements Phase 1 §22-28: **Zero-copy unified memory arena interface** from the Quantum Architecture Review.
+## Status
+
+✅ **Implemented**
 
 ## Architecture
 
-Provides a direct memory mapping interface between Go gateway and WASM runtime using WASM Memory64 standard. Both environments access exact same physical memory regions without any copying, serialization, or marshalling.
+Direct memory mapping via WASM Memory64. No copying, serialization, or marshalling.
 
 ## Files
 
 | File | Purpose |
-|:----- |:-------- |
-| `go_wasm_bridge.hpp` | Public C API and native interface |
+|:-----|:--------|
+| `go_wasm_bridge.hpp` | C API interface |
 | `go_wasm_bridge.cpp` | Core implementation |
 
 ## Compliance
 
-✅ **FULLY COMPLIANT** with §25 memory domain resolution specification
-
-✅ Zero memory copy across Go/WASM boundary
-✅ WASM Memory64 standard compliant
-✅ Native C ABI with explicit export names
-✅ Linear address space translation layer
-✅ Direct MCP dispatch integration
-✅ Zero marshalling overhead
+✅ §25 memory domain resolution  
+✅ Zero-copy Go/WASM  
+✅ WASM Memory64  
+✅ Native C ABI  
+✅ Linear address space  
+✅ MCP dispatch  
+✅ Zero marshalling
 
 ## API Exports
 
-These functions are directly imported into Go runtime via WASM import table:
-
-| Export Name | Purpose |
-|:----------- |:------- |
-| `go_wasm_bridge_initialize` | Initialize shared memory arena |
-| `go_wasm_bridge_get_global_state` | Get pointer to global stabilizer state |
-| `go_wasm_bridge_allocate` | Allocate buffer in shared arena |
-| `go_wasm_bridge_deallocate` | Release buffer |
-| `go_wasm_bridge_dispatch` | Dispatch MCP request directly |
-| `go_wasm_bridge_get_response_size` | Get response buffer size |
+| Function | Purpose |
+|:---------|:--------|
+| `bridge_initialize()` | Init shared arena |
+| `bridge_get_global_state()` | Get global state ptr |
+| `bridge_allocate()` | Allocate buffer |
+| `bridge_deallocate()` | Release buffer |
+| `bridge_dispatch()` | Dispatch MCP request |
 
 ## Performance
 
-| Operation | Before (JSON RPC) | After (Zero-Copy) | Improvement |
-|:--------- |:----------------- |:----------------- |:----------- |
-| MCP Request Dispatch | 127μs | 110ns | **1150x faster** |
-| Memory Transfer Overhead | 100% copy | 0% copy | **Eliminated** |
-| Serialization Cost | 85% CPU | 0% CPU | **Removed** |
-| Maximum Throughput | 8,000 ops/sec | 9,000,000 ops/sec | **1125x higher** |
+| Operation | Before (JSON) | After (Zero-Copy) | Gain |
+|:----------|:--------------|:------------------|:-----|
+| Dispatch | 127μs | 110ns | 1150x |
+| Copy Overhead | 100% | 0% | Eliminated |
+| Serialization | 85% CPU | 0% CPU | Removed |
+| Throughput | 8K ops/s | 9M ops/s | 1125x |
 
 ## Integration
 
-- Directly integrated with MCP Multiplexer dispatch mechanism
-- Uses existing shared memory arena implementation
-- Compatible with Go `syscall/js` WASM runtime
-- No intermediate buffers or data copying required
-- All memory addresses are linear offsets within WASM address space
+- MCP Multiplexer dispatch
+- Shared memory arena
+- Go `syscall/js` compatible
+- Linear WASM address space
 
-## Operation
+## Architecture
 
 ```
-┌─────────────┐        ┌───────────────────────────────────┐        ┌─────────────┐
-│ Go Gateway  │        │ Shared WASM Linear Memory          │        │ C++ Runtime │
-│             │        │                                   │        │             │
-│  [Ptr] ────┼────────┼──► Physical Memory Address ◄────────┼────────┼──── [Ptr]  │
-│             │        │                                   │        │             │
-└─────────────┘        └───────────────────────────────────┘        └─────────────┘
+┌─────────┐     ┌───────────────────┐     ┌─────────┐
+│  Go     │     │  Shared Memory    │     │  C++    │
+│ [Ptr] ──┼────►│  Physical Address │◄────┼──[Ptr]  │
+└─────────┘     └───────────────────┘     └─────────┘
 
-                          ➔ NO COPYING ➔
+       ➔ No Copying ➔
 ```
 
-Both environments operate on exactly the same physical memory bytes.
+Same physical memory bytes accessed by both environments.

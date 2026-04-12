@@ -16,7 +16,7 @@ func RunPhase1NLPMath() error {
 	// Example: A well-known open source english dictionary JSON
 	dictURL := "https://raw.githubusercontent.com/matthewreagan/WebstersEnglishDictionary/master/dictionary.json"
 	log.Printf("Fetching dictionary from %s...", dictURL)
-	
+
 	body, err := FetchURL(dictURL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch dictionary: %v", err)
@@ -30,12 +30,8 @@ func RunPhase1NLPMath() error {
 		}
 		sort.Strings(keys)
 
-		maxEntries := 50000
-		if maxEntries > len(keys) {
-			maxEntries = len(keys)
-		}
-
-		for i := 0; i < maxEntries; i++ {
+		// Process all dictionary entries - no artificial limit
+		for i := 0; i < len(keys); i++ {
 			word := keys[i]
 			definition := dict[word]
 			if len(definition) == 0 {

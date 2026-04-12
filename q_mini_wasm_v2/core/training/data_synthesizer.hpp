@@ -88,8 +88,8 @@ public:
     static ApiPayload perturb_symbolic(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 100;
-    size_t backoff_ms_ = 1000;
+    size_t rate_limit_ = 10000;  // 100x increase - external APIs enforce via HTTP 429
+    size_t backoff_ms_ = 100;
     std::string api_key_ = "";  // Set via environment or config
     std::chrono::steady_clock::time_point last_query_time_;
 };
@@ -111,8 +111,8 @@ public:
     static ApiPayload perturb_smiles(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 50;
-    size_t backoff_ms_ = 2000;
+    size_t rate_limit_ = 5000;  // 100x increase
+    size_t backoff_ms_ = 200;
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -133,8 +133,8 @@ public:
     static ApiPayload perturb_sequence(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 200;
-    size_t backoff_ms_ = 500;
+    size_t rate_limit_ = 20000;  // 100x increase
+    size_t backoff_ms_ = 50;
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -155,8 +155,8 @@ public:
     static ApiPayload perturb_triples(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 100;
-    size_t backoff_ms_ = 1000;
+    size_t rate_limit_ = 10000;  // 100x increase
+    size_t backoff_ms_ = 100;
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -177,8 +177,8 @@ public:
     static ApiPayload perturb_scientific(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 150;
-    size_t backoff_ms_ = 1000;
+    size_t rate_limit_ = 15000;  // 100x increase
+    size_t backoff_ms_ = 100;
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -199,8 +199,8 @@ public:
     static ApiPayload perturb_transit(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 100;
-    size_t backoff_ms_ = 1500;
+    size_t rate_limit_ = 10000;  // 100x increase
+    size_t backoff_ms_ = 150;
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -221,8 +221,8 @@ public:
     static ApiPayload perturb_coordinates(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 50;
-    size_t backoff_ms_ = 2000;
+    size_t rate_limit_ = 5000;  // 100x increase
+    size_t backoff_ms_ = 200;
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -243,8 +243,8 @@ public:
     static ApiPayload perturb_code(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 60;  // GitHub unauthenticated rate limit
-    size_t backoff_ms_ = 2000;
+    size_t rate_limit_ = 6000;  // 100x increase - use API key for production
+    size_t backoff_ms_ = 200;
     std::string api_key_ = "";
     std::chrono::steady_clock::time_point last_query_time_;
 };
@@ -266,8 +266,8 @@ public:
     static ApiPayload perturb_proof(const ApiPayload& positive);
 
 private:
-    size_t rate_limit_ = 100;
-    size_t backoff_ms_ = 1000;
+    size_t rate_limit_ = 10000;  // 100x increase
+    size_t backoff_ms_ = 100;
     std::chrono::steady_clock::time_point last_query_time_;
 };
 

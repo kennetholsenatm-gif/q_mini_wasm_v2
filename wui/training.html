@@ -474,7 +474,7 @@
             <div style="margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 6px; border: 1px solid var(--border-color);">
                 <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.9rem;">Dataset File (JSONL)</label>
                 <div style="display: flex; gap: 0.5rem;">
-                    <input type="text" id="dataset-path" value="c:/GitHub/q_mini_wasm_v2/datasets/sample_training_data.jsonl" 
+                    <input type="text" id="dataset-path" value="c:/GitHub/q_mini_wasm_v2/datasets/general/data.jsonl" 
                            style="flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.85rem;">
                     <button onclick="browseDataset()" style="padding: 0.5rem 1rem; white-space: nowrap;">Browse...</button>
                     <button onclick="useSampleDataset()" style="padding: 0.5rem 1rem; white-space: nowrap;" class="secondary">Use Sample</button>
@@ -1013,8 +1013,8 @@ dataset_dir = "flash_cim_243expert/"
             
             const trainingParams = {
                 dataset_path: datasetPath,
-                experts: 243
-                // epochs and batch_size are read from config file (training_config.toml)
+                // Read experts from config file (training_config.toml) instead of hardcoding
+                // epochs and batch_size are also read from config file
             };
             
             window.wsBridge.callTool('wui_start_training_sse', trainingParams)
@@ -1056,8 +1056,8 @@ dataset_dir = "flash_cim_243expert/"
         }
         
         function useSampleDataset() {
-            document.getElementById('dataset-path').value = 'c:/GitHub/q_mini_wasm_v2/datasets/sample_training_data.jsonl';
-            document.getElementById('dataset-status').textContent = 'Using sample dataset with 30 training samples';
+            document.getElementById('dataset-path').value = 'c:/GitHub/q_mini_wasm_v2/datasets/general/data.jsonl';
+            document.getElementById('dataset-status').textContent = 'Using general dataset (~30MB JSONL)';
         }
 
         // Checkpoint Manager functions
@@ -1150,7 +1150,7 @@ dataset_dir = "flash_cim_243expert/"
             
             const trainingParams = {
                 dataset_path: datasetPath,
-                experts: 243,
+                // Read experts from config file (training_config.toml) instead of hardcoding
                 resume: true  // Add resume flag
             };
             
@@ -1237,6 +1237,10 @@ dataset_dir = "flash_cim_243expert/"
                 line.textContent = `Error: ${data.message || data.step}`;
             } else if (data.status === 'progress') {
                 line.textContent = data.step;
+            } else if (data.status === 'checkpoint') {
+                line.className += ' epoch';
+                line.style.color = '#4ecca3'; // Green for checkpoint
+                line.textContent = `💾 Checkpoint saved: Epoch ${data.epoch}`;
             } else if (data.status === 'complete') {
                 line.textContent = `Training complete in ${data.time_s.toFixed(1)}s`;
                 streamStartTime = null; // Stop the elapsed time timer

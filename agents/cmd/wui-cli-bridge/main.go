@@ -2139,13 +2139,7 @@ func (s *MCPServer) handleFetchURL(params json.RawMessage) (interface{}, error) 
 	if args.TimeoutMs > 180000 {
 		args.TimeoutMs = 180000
 	}
-	if args.MaxBytes <= 0 {
-		args.MaxBytes = 5 * 1024 * 1024
-	}
-	if args.MaxBytes > 25*1024*1024 {
-		args.MaxBytes = 25 * 1024 * 1024
-	}
-
+	// No MaxBytes limit - fetch unlimited data for large scale training
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(args.TimeoutMs)*time.Millisecond)
 	defer cancel()
 
@@ -2161,32 +2155,20 @@ func (s *MCPServer) handleFetchURL(params json.RawMessage) (interface{}, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, args.MaxBytes))
+	// Read entire response without limit
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	truncated := false
-	if int64(len(body)) >= args.MaxBytes {
-		probe := make([]byte, 1)
-		n, _ := resp.Body.Read(probe)
-		if n > 0 {
-			truncated = true
-		}
-	}
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("non-success status code %d for %s", resp.StatusCode, args.URL)
-	}
-	if truncated {
-		return nil, fmt.Errorf("response for %s exceeded max_bytes=%d and was truncated", args.URL, args.MaxBytes)
 	}
 
 	return map[string]interface{}{
 		"url":         args.URL,
 		"status_code": resp.StatusCode,
 		"bytes":       len(body),
-		"max_bytes":   args.MaxBytes,
 		"body":        string(body),
 	}, nil
 }
@@ -3790,6 +3772,12 @@ func main() {
 		// Auto-open browser for double-click GUI mode
 		time.Sleep(500 * time.Millisecond) // Brief delay to ensure server is ready
 		openBrowser(url)
+	}
+
+	// Initialize SSE server for training stream (port 9090)
+	if sseServer == nil {
+		InitSSEServer("9090")
+		fmt.Fprintln(os.Stderr, "[SSE] Training stream server initialized on port 9090")
 	}
 
 	// Run MCP server - this blocks on stdin

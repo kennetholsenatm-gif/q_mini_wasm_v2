@@ -25,21 +25,21 @@ const (
 
 // TaskResult represents the result of an agent task execution
 type TaskResult struct {
-	Success   bool                   `json:"success"`
-	Data      map[string]interface{} `json:"data"`
-	Errors    []string               `json:"errors"`
-	Metrics   map[string]float64     `json:"metrics"`
-	Timestamp time.Time              `json:"timestamp"`
+	SuccessInt int8                   `json:"success"` // 0/1 instead of bool
+	Data       map[string]interface{} `json:"data"`
+	Errors     []string               `json:"errors"`
+	Metrics    map[string]int64       `json:"metrics"` // Fixed-point (scale 1000 = 1.0)
+	Timestamp  time.Time              `json:"timestamp"`
 }
 
 // NewTaskResult creates a new TaskResult with default values
 func NewTaskResult() *TaskResult {
 	return &TaskResult{
-		Success:   true,
-		Data:      make(map[string]interface{}),
-		Errors:    make([]string, 0),
-		Metrics:   make(map[string]float64),
-		Timestamp: time.Now(),
+		SuccessInt: 1, // true = 1
+		Data:       make(map[string]interface{}),
+		Errors:     make([]string, 0),
+		Metrics:    make(map[string]int64),
+		Timestamp:  time.Now(),
 	}
 }
 
@@ -137,7 +137,7 @@ type BaseAgent struct {
 	requestTimestamps  []time.Time
 	tokenUsage         int64
 	dailyRequests      int64
-	performanceMetrics map[string][]float64
+	performanceMetrics map[string][]int64
 	mu                 sync.RWMutex
 }
 
@@ -150,7 +150,7 @@ func NewBaseAgent(config AgentConfig) *BaseAgent {
 		State:  AgentStateIdle,
 		Memory: NewAgentMemory(),
 		Logger: logger,
-		performanceMetrics: map[string][]float64{
+		performanceMetrics: map[string][]int64{
 			"response_time": {},
 			"token_usage":   {},
 			"success_rate":  {},
@@ -248,7 +248,8 @@ func (a *BaseAgent) saveMemory() error {
 }
 
 // CheckRateLimit checks if request is within rate limits
-func (a *BaseAgent) CheckRateLimit(estimatedTokens int) bool {
+// Returns int8: 1 = allowed, 0 = denied (GF(3) compliant)
+func (a *BaseAgent) CheckRateLimit(estimatedTokens int) int8 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -270,7 +271,7 @@ func (a *BaseAgent) CheckRateLimit(estimatedTokens int) bool {
 			Int("current", len(a.requestTimestamps)).
 			Int("limit", a.Config.RateLimitRPM).
 			Msg("RPM limit reached")
-		return false
+		return 0 // false = 0
 	}
 
 	// Check TPM limit
@@ -279,10 +280,10 @@ func (a *BaseAgent) CheckRateLimit(estimatedTokens int) bool {
 			Int64("current", a.tokenUsage).
 			Int("limit", a.Config.RateLimitTPM).
 			Msg("TPM limit approaching")
-		return false
+		return 0 // false = 0
 	}
 
-	return true
+	return 1 // true = 1
 }
 
 // RecordRequest records a request for rate limiting
@@ -307,9 +308,9 @@ func (a *BaseAgent) ExecuteTask(task map[string]interface{}) (*TaskResult, error
 	a.Logger.Debug().Interface("task", task).Msg("Executing task")
 
 	// Base implementation - override in specific agents
-	result.Success = true
+	result.SuccessInt = 1 // true = 1
 	result.Data["status"] = "executed"
-	result.Metrics["execution_time"] = 0.0
+	result.Metrics["execution_time"] = 0 // Fixed-point (0 = 0.0)
 
 	a.State = AgentStateIdle
 	return result, nil
@@ -329,14 +330,14 @@ func (a *BaseAgent) AnalyzePerformance() (map[string]interface{}, error) {
 	// Calculate average metrics
 	for metric, values := range a.performanceMetrics {
 		if len(values) == 0 {
-			analysis[metric+"_avg"] = 0.0
+			analysis[metric+"_avg"] = 0 // Fixed-point (0 = 0.0)
 			continue
 		}
-		sum := 0.0
+		sum := int64(0)
 		for _, v := range values {
 			sum += v
 		}
-		analysis[metric+"_avg"] = sum / float64(len(values))
+		analysis[metric+"_avg"] = sum / int64(len(values))
 	}
 
 	return analysis, nil
@@ -351,11 +352,11 @@ func (a *BaseAgent) SuggestImprovements() ([]map[string]interface{}, error) {
 
 	// Analyze token usage patterns
 	if a.tokenUsage > 100000 {
-		savings := float64(a.tokenUsage) * 0.2
+		savings := a.tokenUsage * 200 / 1000 // 0.2 in fixed-point (200/1000)
 		improvements = append(improvements, map[string]interface{}{
 			"type":       "cost_optimization",
-			"suggestion": fmt.Sprintf("Implement response caching to reduce token usage (potential 20%% savings: %.0f tokens)", savings),
-			"confidence": 0.85,
+			"suggestion": fmt.Sprintf("Implement response caching to reduce token usage (potential 20%% savings: %d tokens)", savings),
+			"confidence": 850, // 0.85 in fixed-point (850/1000)
 			"impact":     "high",
 			"category":   "token_efficiency",
 		})
@@ -363,12 +364,12 @@ func (a *BaseAgent) SuggestImprovements() ([]map[string]interface{}, error) {
 
 	// Analyze task frequency for caching opportunities
 	if a.taskCount > 50 {
-		hitRate := calculateOptimalCacheHitRate(a.taskCount, a.dailyRequests)
-		if hitRate > 0.6 {
+		hitRateFixed := calculateOptimalCacheHitRate(a.taskCount, a.dailyRequests) // Returns fixed-point (600 = 0.6)
+		if hitRateFixed > 600 {                                                    // 0.6 in fixed-point
 			improvements = append(improvements, map[string]interface{}{
 				"type":       "performance",
-				"suggestion": fmt.Sprintf("Enable aggressive caching (estimated hit rate: %.0f%%)", hitRate*100),
-				"confidence": hitRate,
+				"suggestion": fmt.Sprintf("Enable aggressive caching (estimated hit rate: %d%%)", hitRateFixed/10),
+				"confidence": hitRateFixed,
 				"impact":     "medium",
 				"category":   "caching",
 			})
@@ -396,12 +397,12 @@ func (a *BaseAgent) SuggestImprovements() ([]map[string]interface{}, error) {
 			recentAvg := average(recent)
 			olderAvg := average(older)
 
-			// Detect degradation
-			if recentAvg > olderAvg*1.2 {
+			// Detect degradation (1.2 in fixed-point = 1200/1000 = 1200)
+			if recentAvg > (olderAvg*1200)/1000 {
 				improvements = append(improvements, map[string]interface{}{
 					"type":       "performance_regression",
-					"suggestion": fmt.Sprintf("Investigate %s degradation (%.1f%% increase)", metric, (recentAvg/olderAvg-1)*100),
-					"confidence": 0.75,
+					"suggestion": fmt.Sprintf("Investigate %s degradation (%d%% increase)", metric, ((recentAvg*1000)/olderAvg-1000)/10),
+					"confidence": 750, // 0.75 in fixed-point
 					"impact":     "high",
 					"category":   metric,
 				})
@@ -413,40 +414,42 @@ func (a *BaseAgent) SuggestImprovements() ([]map[string]interface{}, error) {
 }
 
 // calculateOptimalCacheHitRate estimates optimal cache hit rate based on usage patterns
-func calculateOptimalCacheHitRate(taskCount, dailyRequests int64) float64 {
+// Returns fixed-point value (800 = 0.8, 600 = 0.6, etc.)
+func calculateOptimalCacheHitRate(taskCount, dailyRequests int64) int64 {
 	if dailyRequests == 0 {
-		return 0.0
+		return 0
 	}
 
 	// Simple heuristic: higher request count with stable task types = better caching
-	ratio := float64(taskCount) / float64(dailyRequests)
-	if ratio < 0.1 {
-		return 0.8 // Stable workload, high cache benefit
-	} else if ratio < 0.3 {
-		return 0.6 // Moderate variety
+	// ratio in fixed-point: taskCount * 1000 / dailyRequests
+	ratioFixed := (taskCount * 1000) / dailyRequests
+	if ratioFixed < 100 { // 0.1 in fixed-point
+		return 800 // Stable workload, high cache benefit (0.8)
+	} else if ratioFixed < 300 { // 0.3 in fixed-point
+		return 600 // Moderate variety (0.6)
 	}
-	return 0.4 // High variety, lower cache benefit
+	return 400 // High variety, lower cache benefit (0.4)
 }
 
-// average calculates the average of a slice
-func average(values []float64) float64 {
+// average calculates the average of a slice (fixed-point)
+func average(values []int64) int64 {
 	if len(values) == 0 {
-		return 0.0
+		return 0
 	}
-	sum := 0.0
+	sum := int64(0)
 	for _, v := range values {
 		sum += v
 	}
-	return sum / float64(len(values))
+	return sum / int64(len(values))
 }
 
-// RecordPerformanceMetric records a performance metric
-func (a *BaseAgent) RecordPerformanceMetric(name string, value float64) {
+// RecordPerformanceMetric records a performance metric (fixed-point)
+func (a *BaseAgent) RecordPerformanceMetric(name string, value int64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if _, exists := a.performanceMetrics[name]; !exists {
-		a.performanceMetrics[name] = make([]float64, 0)
+		a.performanceMetrics[name] = make([]int64, 0)
 	}
 
 	a.performanceMetrics[name] = append(a.performanceMetrics[name], value)

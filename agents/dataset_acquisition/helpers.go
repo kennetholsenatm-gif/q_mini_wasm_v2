@@ -17,10 +17,10 @@ import (
 )
 
 type DatasetEntry struct {
-	Text       string `json:"text"`
-	Source     string `json:"source"`
-	Domain     string `json:"domain"`
-	URL        string `json:"url,omitempty"`
+	Text        string `json:"text"`
+	Source      string `json:"source"`
+	Domain      string `json:"domain"`
+	URL         string `json:"url,omitempty"`
 	RetrievedAt string `json:"retrieved_at"`
 }
 
@@ -47,17 +47,14 @@ func NormalizeText(input string) string {
 	return strings.Join(clean, " ")
 }
 
-func ExtractUsefulLines(body string, maxLines int, minLen int) []string {
-	if maxLines <= 0 {
-		maxLines = 256
-	}
+func ExtractUsefulLines(body string, minLen int) []string {
 	if minLen <= 0 {
 		minLen = 24
 	}
 
 	body = strings.ReplaceAll(body, "\r\n", "\n")
 	lines := strings.Split(body, "\n")
-	out := make([]string, 0, maxLines)
+	out := make([]string, 0, len(lines))
 	seen := make(map[string]struct{})
 
 	for _, raw := range lines {
@@ -70,9 +67,6 @@ func ExtractUsefulLines(body string, maxLines int, minLen int) []string {
 		}
 		seen[line] = struct{}{}
 		out = append(out, line)
-		if len(out) >= maxLines {
-			break
-		}
 	}
 
 	return out
@@ -273,7 +267,6 @@ func FetchURL(target string) ([]byte, error) {
 	res, err := fetchTransport.CallTool("wui_fetch_url", map[string]interface{}{
 		"url":        target,
 		"timeout_ms": 60000,
-		"max_bytes":  50 * 1024 * 1024,
 	})
 	if err != nil {
 		return nil, err

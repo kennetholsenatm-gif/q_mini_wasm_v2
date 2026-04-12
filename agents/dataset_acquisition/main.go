@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-const MaxDiskUsage = 150 * 1024 * 1024 * 1024 // 150 GB safety limit
+const MaxDiskUsage = 50 * 1024 * 1024 * 1024 * 1024 // 50 TB limit for large scale training
 
 var (
-	RunRoot   = getenvDefault("QMINI_RUN_ROOT", `D:\qmini_ff_prod`)
-	TargetDir = filepath.Join(RunRoot, "datasets", "raw")
-	LinkPath  = filepath.Join(RunRoot, "datasets", "processed", "data.jsonl")
+	RunRoot    = getenvDefault("QMINI_RUN_ROOT", `D:\qmini_ff_prod`)
+	TargetDir  = filepath.Join(RunRoot, "datasets", "raw")
+	LinkPath   = filepath.Join(RunRoot, "datasets", "processed", "data.jsonl")
 	ReportPath = filepath.Join(RunRoot, "reports", "dataset_manifest.json")
 )
 
 type phaseResult struct {
-	Name       string  `json:"name"`
-	File       string  `json:"file"`
-	Entries    int     `json:"entries"`
-	SizeBytes  int64   `json:"size_bytes"`
-	SHA256     string  `json:"sha256"`
-	DurationS  float64 `json:"duration_s"`
+	Name      string  `json:"name"`
+	File      string  `json:"file"`
+	Entries   int     `json:"entries"`
+	SizeBytes int64   `json:"size_bytes"`
+	SHA256    string  `json:"sha256"`
+	DurationS float64 `json:"duration_s"`
 }
 
 func getenvDefault(key, fallback string) string {
@@ -144,15 +144,15 @@ func main() {
 	}
 
 	manifest := map[string]interface{}{
-		"generated_at":      NowRFC3339(),
-		"run_root":          RunRoot,
-		"target_dir":        TargetDir,
-		"combined_path":     combinedPath,
-		"link_path":         LinkPath,
-		"combined_entries":  combinedEntries,
+		"generated_at":        NowRFC3339(),
+		"run_root":            RunRoot,
+		"target_dir":          TargetDir,
+		"combined_path":       combinedPath,
+		"link_path":           LinkPath,
+		"combined_entries":    combinedEntries,
 		"combined_size_bytes": combinedSize,
-		"combined_sha256":   combinedSHA,
-		"phases":            results,
+		"combined_sha256":     combinedSHA,
+		"phases":              results,
 	}
 	if err := WriteJSONFile(ReportPath, manifest); err != nil {
 		log.Fatalf("Failed to write dataset manifest: %v", err)
@@ -184,13 +184,13 @@ func ConsolidateAndLink() error {
 		if count == 0 {
 			return fmt.Errorf("phase file %s is empty", srcPath)
 		}
-		
+
 		in, err := os.Open(srcPath)
 		if err != nil {
 			log.Printf("Failed to open %s: %v", srcPath, err)
 			return err
 		}
-		
+
 		_, err = io.Copy(out, in)
 		in.Close()
 		if err != nil {

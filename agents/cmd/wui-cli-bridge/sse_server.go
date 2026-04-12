@@ -37,12 +37,168 @@ func NewSSEServer(port string) *SSEServer {
 func (s *SSEServer) Start() {
 	http.HandleFunc("/training-stream", s.handleSSE)
 	http.HandleFunc("/health", s.handleHealth)
+	http.HandleFunc("/mcp", s.handleMCP) // JSON-RPC endpoint for WUI
 	go func() {
 		fmt.Printf("[SSE] Server starting on port %s\n", s.port)
 		if err := http.ListenAndServe(":"+s.port, nil); err != nil {
 			fmt.Printf("[SSE] Server error: %v\n", err)
 		}
 	}()
+}
+
+// handleMCP handles JSON-RPC requests from WUI
+func (s *SSEServer) handleMCP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"jsonrpc": "2.0",
+			"error":   map[string]interface{}{"code": -32600, "message": "Invalid Request"},
+		})
+		return
+	}
+
+	var req struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      interface{}     `json:"id"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"jsonrpc": "2.0",
+			"error":   map[string]interface{}{"code": -32700, "message": "Parse error"},
+		})
+		return
+	}
+
+	result, err := s.handleMCPMethod(req.Method, req.Params)
+
+	response := map[string]interface{}{"jsonrpc": "2.0", "id": req.ID}
+	if err != nil {
+		response["error"] = map[string]interface{}{"code": -32603, "message": err.Error()}
+	} else {
+		response["result"] = result
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleMCPMethod routes MCP method calls
+func (s *SSEServer) handleMCPMethod(method string, params json.RawMessage) (interface{}, error) {
+	switch method {
+	case "wui_connect":
+		return map[string]interface{}{
+			"connected":            true,
+			"strict_mode":          false,
+			"backend_passthrough":  true,
+			"pipeline_initialized": true,
+		}, nil
+
+	case "wui_start_training_sse":
+		var p struct {
+			DatasetPath string `json:"dataset_path"`
+		}
+		json.Unmarshal(params, &p)
+
+		// Start actual training process
+		args := []string{"--sse-mode"} // Enable SSE output format for WUI
+		if p.DatasetPath != "" {
+			args = append(args, "--dataset", p.DatasetPath)
+		}
+		// Add config file path
+		args = append(args, "--config", "flash_cim_243expert/training_config.toml")
+
+		// Get project root (current directory)
+		projectRoot, _ := os.Getwd()
+
+		if err := s.StartTraining(projectRoot, args); err != nil {
+			return nil, fmt.Errorf("failed to start training: %v", err)
+		}
+
+		s.Broadcast(`{"status": "init", "message": "Training started via MCP"}`)
+		return map[string]interface{}{
+			"status":     "training_started",
+			"stream_url": "http://localhost:" + s.port + "/training-stream",
+		}, nil
+
+	case "wui_stop_training", "wui_stop_training_sse":
+		if err := s.StopTraining(); err != nil {
+			return nil, fmt.Errorf("failed to stop training: %v", err)
+		}
+		s.Broadcast(`{"status": "stopped", "message": "Training stopped"}`)
+		return map[string]interface{}{"stopped": true}, nil
+
+	case "wui_list_models":
+		return map[string]interface{}{"models": []interface{}{}}, nil
+
+	case "wui_load_api_keys":
+		// Load all API keys from Windows Credential Manager
+		services := []string{"wolfram", "wikidata", "arxiv", "github", "lean"}
+		keys := make(map[string]string)
+		for _, svc := range services {
+			if key, err := credManager.Load(svc); err == nil && key != "" {
+				keys[svc] = key
+			}
+		}
+		return map[string]interface{}{"keys": keys}, nil
+
+	case "wui_store_api_keys":
+		// Store API keys to Windows Credential Manager
+		var p struct {
+			Keys map[string]string `json:"keys"`
+		}
+		json.Unmarshal(params, &p)
+		for svc, key := range p.Keys {
+			if key != "" {
+				credManager.Store(svc, key)
+			}
+		}
+		return map[string]interface{}{"stored": true}, nil
+
+	case "wui_get_training_config":
+		// Load training config from file
+		configPath := filepath.Join("flash_cim_243expert", "training_config.toml")
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return map[string]interface{}{"config": ""}, nil
+		}
+		return map[string]interface{}{"config": string(data)}, nil
+
+	case "wui_save_training_config":
+		// Save training config to file
+		var p struct {
+			Config string `json:"config"`
+		}
+		json.Unmarshal(params, &p)
+		configDir := "flash_cim_243expert"
+		os.MkdirAll(configDir, 0755)
+		configPath := filepath.Join(configDir, "training_config.toml")
+		if err := os.WriteFile(configPath, []byte(p.Config), 0644); err != nil {
+			return nil, fmt.Errorf("failed to save config: %v", err)
+		}
+		return map[string]interface{}{"saved": true}, nil
+
+	case "wui_get_data_sources":
+		// Return data sources (placeholder - would load from storage)
+		return map[string]interface{}{"sources": []interface{}{}}, nil
+
+	case "wui_save_data_sources":
+		// Save data sources (placeholder)
+		return map[string]interface{}{"saved": true}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown method: %s", method)
+	}
 }
 
 // handleSSE handles SSE connections

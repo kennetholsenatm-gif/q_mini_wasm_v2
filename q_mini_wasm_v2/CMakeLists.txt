@@ -64,6 +64,8 @@ set(CORE_SOURCES
     core/learning/entropy_goodness.cpp
     core/moe/router.hpp
     core/moe/router.cpp
+    core/moe/self_organizing_expert.hpp
+    core/moe/self_organizing_expert.cpp
     core/learning/forward_forward.hpp
     core/learning/forward_forward.cpp
     core/network.hpp

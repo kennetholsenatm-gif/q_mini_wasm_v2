@@ -35,6 +35,8 @@
 - `agents/training/train_test_agent.go` ✅
 - `agents/training/train_general_model.go` ✅
 - `agents/training/train_all_agents.go` ✅
+- `agents/base_agent.go` ✅ (base agent foundation)
+- `agents/pkg/base_agent.go` ✅ (pkg agent foundation)
 
 **Changes Made:**
 

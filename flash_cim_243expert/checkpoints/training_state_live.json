@@ -1,0 +1,9 @@
+{
+  "checkpoint_version": 1,
+  "epoch": 1,
+  "samples_processed_in_epoch": 25000,
+  "total_samples_per_epoch": 32768,
+  "experts_active": 8,
+  "elapsed_seconds": 68666,
+  "checkpoint_time": "1775994559"
+}

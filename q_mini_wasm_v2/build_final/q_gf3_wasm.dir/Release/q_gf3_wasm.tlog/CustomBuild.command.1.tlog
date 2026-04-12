@@ -1,0 +1,10 @@
+^C:\GITHUB\Q_MINI_WASM_V2\Q_MINI_WASM_V2\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2 -BC:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final --check-stamp-file C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

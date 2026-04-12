@@ -13,9 +13,9 @@
 
 [system.memory]
 # ? Size of the unified memory arena in megabytes
-# Tab: Select from [128, 256, 512, 1024, 2048]
+# Large-scale training: 512GB arena for 100B+ parameter models
 # This memory is shared across WASM, C++, and SYCL layers via USM
-arena_size_mb = 512
+arena_size_mb = 524288
 
 # ? Enable Unified Shared Memory for zero-copy access
 # Tab: [true, false]
@@ -260,9 +260,9 @@ num_experts = 243
 
 # ? Total parameters in model (billions)
 # Ternary efficiency: ~10x compression vs 32-bit float
-# 1 trillion params fits in ~100GB unified memory
+# 100B parameters = ~1TB unified memory at full scale
 # Tab: [0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000]
-model_size_b = 10
+model_size_b = 100
 
 # ? Maximum message passing iterations
 # QGNN converges efficiently, can push hard

@@ -25,6 +25,9 @@
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\moe\router.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\moe\self_organizing_expert.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\learning\forward_forward.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -70,6 +73,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\moe\router.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\moe\self_organizing_expert.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\learning\forward_forward.hpp">

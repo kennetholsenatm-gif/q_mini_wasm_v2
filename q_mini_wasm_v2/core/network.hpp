@@ -51,6 +51,16 @@ public:
     void train(const std::vector<std::vector<double>>& positive_data, size_t epochs = 1);
 
     /**
+     * @brief Train on specific expert indices (topic-aware specialization)
+     * @param sample Single input sample to train
+     * @param expert_indices Specific expert indices to train (domain specialists)
+     * @param epochs Number of FF passes
+     */
+    void train_on_experts(const std::vector<double>& sample, 
+                          const std::vector<size_t>& expert_indices, 
+                          size_t epochs = 1);
+
+    /**
      * @brief Infer (predict) using the trained network
      * @param input Continuous input vector
      * @return Output ternary activations from the final layer

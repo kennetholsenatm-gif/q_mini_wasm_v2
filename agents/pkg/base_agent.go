@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,21 +22,21 @@ const (
 
 // TaskResult represents result of an agent task execution
 type TaskResult struct {
-	Success   bool                   `json:"success"`
-	Data      map[string]interface{} `json:"data"`
-	Errors    []string               `json:"errors"`
-	Metrics   map[string]float64     `json:"metrics"`
-	Timestamp time.Time              `json:"timestamp"`
+	SuccessInt int8                   `json:"success"` // 0/1 instead of bool
+	Data       map[string]interface{} `json:"data"`
+	Errors     []string               `json:"errors"`
+	Metrics    map[string]int64       `json:"metrics"` // Fixed-point (scale 1000 = 1.0)
+	Timestamp  time.Time              `json:"timestamp"`
 }
 
 // NewTaskResult creates a new TaskResult with default values
 func NewTaskResult() *TaskResult {
 	return &TaskResult{
-		Success:   true,
-		Data:      make(map[string]interface{}),
-		Errors:    make([]string, 0),
-		Metrics:   make(map[string]float64),
-		Timestamp: time.Now(),
+		SuccessInt: 1, // true = 1
+		Data:       make(map[string]interface{}),
+		Errors:     make([]string, 0),
+		Metrics:    make(map[string]int64),
+		Timestamp:  time.Now(),
 	}
 }
 
@@ -125,20 +124,20 @@ type AgentConfig struct {
 
 // BaseAgent is the base agent class providing common functionality
 type BaseAgent struct {
-	Config        *AgentConfig
-	State         AgentState
-	Memory        *AgentMemory
-	StartTime     time.Time
-	TaskCount     int
-	mu            sync.Mutex
+	Config    *AgentConfig
+	State     AgentState
+	Memory    *AgentMemory
+	StartTime time.Time
+	TaskCount int
+	mu        sync.Mutex
 
 	// Rate limiting state
 	requestTimestamps []time.Time
 	tokenUsage        int
 	dailyRequests     int
 
-	// Performance tracking
-	performanceMetrics map[string][]float64
+	// Performance tracking (fixed-point)
+	performanceMetrics map[string][]int64
 }
 
 // NewBaseAgent creates a new BaseAgent
@@ -158,7 +157,7 @@ func NewBaseAgent(config *AgentConfig) *BaseAgent {
 		Config:             config,
 		State:              AgentStateIdle,
 		Memory:             NewAgentMemory(),
-		performanceMetrics: make(map[string][]float64),
+		performanceMetrics: make(map[string][]int64),
 	}
 }
 
@@ -239,7 +238,8 @@ func (a *BaseAgent) saveMemory() error {
 }
 
 // CheckRateLimit checks if request is within rate limits
-func (a *BaseAgent) CheckRateLimit(estimatedTokens int) bool {
+// Returns int8: 1 = allowed, 0 = denied (GF(3) compliant)
+func (a *BaseAgent) CheckRateLimit(estimatedTokens int) int8 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -257,15 +257,15 @@ func (a *BaseAgent) CheckRateLimit(estimatedTokens int) bool {
 
 	// Check RPM limit
 	if len(a.requestTimestamps) >= a.Config.RateLimitRPM {
-		return false
+		return 0 // false = 0
 	}
 
 	// Check TPM limit
 	if a.tokenUsage+estimatedTokens > a.Config.RateLimitTPM {
-		return false
+		return 0 // false = 0
 	}
 
-	return true
+	return 1 // true = 1
 }
 
 // RecordRequest records a request for rate limiting
@@ -284,26 +284,26 @@ func (a *BaseAgent) GetPerformanceSummary() map[string]interface{} {
 	defer a.mu.RUnlock()
 
 	summary := map[string]interface{}{
-		"name":               a.Name(),
-		"state":              string(a.State),
-		"uptime_seconds":     a.Uptime(),
-		"total_tasks":        a.TaskCount,
-		"daily_requests":     a.dailyRequests,
-		"token_usage":        a.tokenUsage,
-		"patterns_stored":    len(a.Memory.Patterns),
+		"name":                a.Name(),
+		"state":               string(a.State),
+		"uptime_seconds":      a.Uptime(),
+		"total_tasks":         a.TaskCount,
+		"daily_requests":      a.dailyRequests,
+		"token_usage":         a.tokenUsage,
+		"patterns_stored":     len(a.Memory.Patterns),
 		"improvements_stored": len(a.Memory.Improvements),
 	}
 
-	// Calculate average response time
+	// Calculate average response time (fixed-point)
 	rt, ok := a.performanceMetrics["response_time"]
 	if ok && len(rt) > 0 {
-		sum := 0.0
+		sum := int64(0)
 		for _, t := range rt {
 			sum += t
 		}
-		summary["avg_response_time"] = sum / float64(len(rt))
+		summary["avg_response_time"] = sum / int64(len(rt))
 	} else {
-		summary["avg_response_time"] = 0.0
+		summary["avg_response_time"] = 0
 	}
 
 	return summary

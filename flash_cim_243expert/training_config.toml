@@ -18,7 +18,7 @@ learning_rate_shift = 2
 [features]
 steane_correction = true
 flash_cim = true
-worker_threads = 16
+worker_threads = 32
 
 [apis]
 wolfram = false

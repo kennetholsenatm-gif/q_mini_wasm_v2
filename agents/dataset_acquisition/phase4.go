@@ -13,8 +13,8 @@ func RunPhase4Academia() error {
 
 	// Use ArXiv API to fetch abstracts for quant-ph (Quantum Physics) and math (Mathematics)
 	// Query: quantum computing OR mathematics
-	arxivURL := "http://export.arxiv.org/api/query?search_query=cat:quant-ph+OR+cat:math&start=0&max_results=50"
-	
+	arxivURL := "http://export.arxiv.org/api/query?search_query=cat:quant-ph+OR+cat:math&start=0&max_results=10000"
+
 	log.Printf("Fetching ArXiv abstracts from %s...", arxivURL)
 	body, err := FetchURL(arxivURL)
 	if err != nil {

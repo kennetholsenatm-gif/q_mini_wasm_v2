@@ -113,11 +113,9 @@ public:
         
         curl_easy_cleanup(curl);
 #else
-        // Production builds require libcurl - no mock data fallback
-        response.error = "HTTP client not available - compile with -DHAS_LIBCURL and link with libcurl";
+        // Native HTTP client not available without libcurl
+        response.error = "HTTP client not available - install libcurl or use trainer http_get";
         response.success = false;
-        // No mock data generation - fail explicitly in production
-        throw std::runtime_error("Data acquisition requires libcurl. Install libcurl and rebuild with -DHAS_LIBCURL");
 #endif
         
         return response;

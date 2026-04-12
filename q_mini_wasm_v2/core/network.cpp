@@ -74,31 +74,40 @@ void TernaryNeuralNetwork::train(const std::vector<std::vector<double>>& positiv
             discrete_positive.push_back(preprocess(sample));
         }
 
-        // Layer by layer training
+        // Layer by layer training with MOE routing
         for (size_t layer = 0; layer < config_.num_layers; ++layer) {
-            for (size_t expert_idx = 0; expert_idx < experts_.size(); ++expert_idx) {
-                // Generate negative samples via NPID (Non-Parametric Instance Discrimination)
-                auto discrete_negative = experts_[expert_idx]->generate_negative_samples(discrete_positive);
+            // Process each sample with MOE routing
+            for (const auto& sample : discrete_positive) {
+                // Route sample to select top-K experts
+                auto expert_indices = router_->route_topk(sample);
                 
-                // Submit training task asynchronously to the Runtime Orchestrator
-                auto future_goodness = orchestrator_->submit_ff_training(
-                    *experts_[expert_idx],
-                    layer,
-                    discrete_positive,
-                    discrete_negative
-                );
+                // Train only the selected experts (MOE routing)
+                for (size_t expert_idx : expert_indices) {
+                    // Generate negative samples via NPID (Non-Parametric Instance Discrimination)
+                    std::vector<std::vector<ternary::Trit>> single_sample_positive = {sample};
+                    auto discrete_negative = experts_[expert_idx]->generate_negative_samples(single_sample_positive);
+                    
+                    // Submit training task asynchronously to the Runtime Orchestrator
+                    auto future_goodness = orchestrator_->submit_ff_training(
+                        *experts_[expert_idx],
+                        layer,
+                        single_sample_positive,
+                        discrete_negative
+                    );
 
-                // Wait for the layer training to finish and log
-                auto goodness = future_goodness.get();
-                
-                // Output JSON for the Go server to stream
-                // We map delta to loss, and positive_goodness to reward, negative_goodness to entropy
-                // Include batch_size so UI can show samples processed
-                std::cout << "data: {\"status\": \"epoch\", \"epoch\": " << epoch + 1
-                          << ", \"loss\": " << goodness.delta 
-                          << ", \"reward\": " << goodness.positive_goodness 
-                          << ", \"entropy\": " << goodness.negative_goodness 
-                          << ", \"batch_size\": " << discrete_positive.size() << "}\n\n" << std::flush;
+                    // Wait for the layer training to finish and log
+                    auto goodness = future_goodness.get();
+                    
+                    // Output JSON for the Go server to stream
+                    // We map delta to loss, and positive_goodness to reward, negative_goodness to entropy
+                    std::cout << "data: {\"status\": \"epoch\", \"epoch\": " << epoch + 1
+                              << ", \"layer\": " << layer
+                              << ", \"expert\": " << expert_idx
+                              << ", \"loss\": " << goodness.delta 
+                              << ", \"reward\": " << goodness.positive_goodness 
+                              << ", \"entropy\": " << goodness.negative_goodness 
+                              << ", \"batch_size\": 1}\n\n" << std::flush;
+                }
             }
         }
     }
@@ -147,6 +156,47 @@ learning::ForwardForwardLearner* TernaryNeuralNetwork::get_expert(size_t expert_
         return experts_[expert_id].get();
     }
     return nullptr;
+}
+
+void TernaryNeuralNetwork::train_on_experts(const std::vector<double>& sample, 
+                                             const std::vector<size_t>& expert_indices, 
+                                             size_t epochs) {
+    // Preprocess the single sample
+    auto discrete_sample = preprocess(sample);
+    
+    for (size_t epoch = 0; epoch < epochs; ++epoch) {
+        // Layer by layer training
+        for (size_t layer = 0; layer < config_.num_layers; ++layer) {
+            // Train ONLY the specified domain experts (not using router!)
+            for (size_t expert_idx : expert_indices) {
+                if (expert_idx >= experts_.size()) continue;
+                
+                // Generate negative samples for this expert
+                std::vector<std::vector<ternary::Trit>> single_sample_positive = {discrete_sample};
+                auto discrete_negative = experts_[expert_idx]->generate_negative_samples(single_sample_positive);
+                
+                // Submit training task to orchestrator
+                auto future_goodness = orchestrator_->submit_ff_training(
+                    *experts_[expert_idx],
+                    layer,
+                    single_sample_positive,
+                    discrete_negative
+                );
+                
+                // Wait for training to complete
+                auto goodness = future_goodness.get();
+                
+                // Output domain-specialist training info
+                std::cout << "data: {\"status\": \"specialist_train\", \"epoch\": " << epoch + 1
+                          << ", \"layer\": " << layer
+                          << ", \"expert\": " << expert_idx
+                          << ", \"loss\": " << goodness.delta 
+                          << ", \"reward\": " << goodness.positive_goodness 
+                          << ", \"entropy\": " << goodness.negative_goodness 
+                          << "}\n\n" << std::flush;
+            }
+        }
+    }
 }
 
 } // namespace q_mini_wasm_v2::core
