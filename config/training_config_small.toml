@@ -1,0 +1,48 @@
+[training]
+epochs = 10
+batch_size = 256
+checkpoint_interval = 5
+learning_rate = 10
+
+[model]
+moe_experts = 8
+moe_top_k = 4
+context_window = 512
+entanglement_tokens = 64
+shadow_dim = 256
+num_layers = 4
+neurons_per_layer = 128
+routing_qutrits = 8
+learning_rate_shift = 2
+
+[features]
+steane_correction = true
+flash_cim = false
+worker_threads = 4
+
+[apis]
+enabled = true
+wolfram = false
+pubchem = true
+oeis = true
+wikidata = false
+arxiv = false
+nasa = true
+pdb = true
+github = false
+lean = false
+
+[streaming]
+enabled = true
+port = 9090
+
+[paths]
+base_model = "checkpoints/final_model.json"
+output_dir = "checkpoints/"
+dataset_dir = "datasets/"
+
+[data_sources]
+urls = [
+    "oeis.org",
+    "datasets-server.huggingface.co"
+]

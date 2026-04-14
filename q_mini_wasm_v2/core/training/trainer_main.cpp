@@ -10,10 +10,15 @@
 #include <iomanip>
 #include <cstdio>
 #include <map>
+#include <variant>
+#include <memory>
+#include <random>
 #include "../ternary/trit.hpp"
 #include "../network.hpp"
 #include "../moe/self_organizing_expert.hpp"
 #include "data_synthesizer.hpp"
+#include "dataset_storage.hpp"
+#include "../ingestion/trit_binary_loader.hpp"
 
 // ============================================================================
 // Native HTTP Client - No external dependencies
@@ -228,6 +233,7 @@
 #endif
 
 using namespace q_mini_wasm_v2::core;
+using namespace q_mini_wasm_v2::core::training;
 
 // Simple JSON text extraction for dataset loading
 // Handles: {"text": "content"} or {"text":"content"}
@@ -467,16 +473,48 @@ public:
         return raw_content.substr(quote_start + 1, quote_end - quote_start - 1);
     }
     
-    bool get_bool(const std::string& section, const std::string& key) {
+    bool has_key(const std::string& section, const std::string& key) {
+        return find_in_section(section, key) != std::string::npos;
+    }
+    
+    bool get_bool(const std::string& section, const std::string& key, bool default_val = false) {
         size_t val_pos = find_in_section(section, key);
-        if (val_pos == std::string::npos) return false;
+        if (val_pos == std::string::npos) return default_val;
         
         // Find value
         size_t val_start = raw_content.find_first_not_of(" \t", val_pos);
-        if (val_start == std::string::npos) return false;
+        if (val_start == std::string::npos) return default_val;
         
         std::string val = raw_content.substr(val_start, 5);
         return val.substr(0, 4) == "true" || val.substr(0, 1) == "1";
+    }
+    
+    double get_double(const std::string& section, const std::string& key, double default_val = 0.0, bool sse_mode = false) {
+        size_t val_pos = find_in_section(section, key);
+        if (val_pos == std::string::npos) return default_val;
+        
+        // Find value start (skip whitespace)
+        size_t val_start = raw_content.find_first_not_of(" \t", val_pos);
+        if (val_start == std::string::npos) return default_val;
+        
+        // Find end of number (digits, decimal point, scientific notation)
+        size_t val_end = val_start;
+        while (val_end < raw_content.length() && 
+               (std::isdigit(raw_content[val_end]) || raw_content[val_end] == '.' || 
+                raw_content[val_end] == 'e' || raw_content[val_end] == 'E' || 
+                raw_content[val_end] == '-' || raw_content[val_end] == '+')) {
+            val_end++;
+        }
+        
+        try {
+            double value = std::stod(raw_content.substr(val_start, val_end - val_start));
+            if (sse_mode) {
+                std::cout << "data: {\"status\": \"debug\", \"step\": \"Config read: [" << section << "] " << key << " = " << value << "}\n\n" << std::flush;
+            }
+            return value;
+        } catch (...) {
+            return default_val;
+        }
     }
     
     std::vector<std::string> get_string_array(const std::string& section, const std::string& key) {
@@ -516,7 +554,7 @@ public:
 
 int main(int argc, char* argv[]) {
     // Load config from file FIRST
-    std::string config_path = "flash_cim_243expert/training_config.toml";
+    std::string config_path = "config/training_config.toml";
     
     // SSE mode flag for WUI live streaming
     bool sse_mode = false;
@@ -553,8 +591,8 @@ int main(int argc, char* argv[]) {
     size_t entanglement_tokens = has_config ? config.get_size_t("model", "entanglement_tokens", sse_mode) : 256;
     size_t moe_experts = has_config ? config.get_size_t("model", "moe_experts", sse_mode) : 0;  // Changed default from 243 to 0 to force error if config not read
     size_t moe_top_k = has_config ? config.get_size_t("model", "moe_top_k", sse_mode) : 16;
-    bool steane_correction = has_config ? config.get_bool("features", "steane_correction") : true;
-    bool flash_cim = has_config ? config.get_bool("features", "flash_cim") : true;
+    bool steane_correction = has_config ? config.get_bool("features", "steane_correction", true) : true;
+    bool flash_cim = has_config ? config.get_bool("features", "flash_cim", true) : true;
 
     // Fail fast if config not loaded properly
     if (moe_experts == 0) {
@@ -563,9 +601,14 @@ int main(int argc, char* argv[]) {
     }
     
     std::string dataset_path = "";
-    std::string base_model_path = has_config ? config.get_string("paths", "base_model") : "flash_cim_243expert/checkpoints/final_model.json";
+    std::string base_model_path = has_config ? config.get_string("paths", "base_model") : "checkpoints/final_model.json";
     std::string output_path = "";  // Auto-generated if empty
-    std::string output_dir = has_config ? config.get_string("paths", "output_dir") : "flash_cim_243expert/checkpoints/";
+    std::string output_dir = has_config ? config.get_string("paths", "output_dir") : "checkpoints/";
+    
+    // Read API enablement from config [apis] section (default to true)
+    // Web crawling via APIs is a core feature - enable by default
+    bool enable_web_apis = has_config ? config.get_bool("apis", "enabled", true) : true;
+    bool continuous_mode = false;  // Run indefinitely, accumulating data and training
 
     // Parse CLI arguments
     for (int i = 1; i < argc; ++i) {
@@ -609,6 +652,13 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--config" && i + 1 < argc) {
             // Already processed above, skip
             ++i;
+        } else if (arg == "--enable-web-apis" && i + 1 < argc) {
+            std::string val = argv[++i];
+            enable_web_apis = (val == "true" || val == "1" || val == "yes");
+        } else if (arg == "--disable-web-apis") {
+            enable_web_apis = false;
+        } else if (arg == "--continuous") {
+            continuous_mode = true;
         }
     }
 
@@ -628,94 +678,242 @@ int main(int argc, char* argv[]) {
     net_config.neurons_per_layer = neurons_per_layer;
     net_config.total_experts = moe_experts;
     net_config.active_experts = moe_top_k;
-    net_config.routing_qutrits = 8;
-    net_config.learning_rate_shift = 2; // Fixed shift equivalent to old learning rate approximation
-    net_config.worker_threads = 4;
+    // Read network configuration from TOML (previously hardcoded)
+    net_config.routing_qutrits = has_config ? config.get_size_t("network", "routing_qutrits", sse_mode) : 8;
+    if (net_config.routing_qutrits == 0) net_config.routing_qutrits = 8;
+    
+    net_config.learning_rate_shift = has_config ? config.get_size_t("model", "learning_rate_shift", sse_mode) : 2;
+    if (net_config.learning_rate_shift == 0) net_config.learning_rate_shift = 2;
+    
+    net_config.worker_threads = has_config ? config.get_size_t("features", "worker_threads", sse_mode) : 4;
+    if (net_config.worker_threads == 0) net_config.worker_threads = 4;
     net_config.enable_steane = steane_correction;
     net_config.enable_flash_cim = flash_cim;
 
     try {
+        // Calculate actual memory: sparse tropical edges for active experts only
+        // Tropical geometry: configurable sparsity, ternary weights (2 bits), lazy init
+        size_t sparsity_percent = has_config ? config.get_size_t("model.expert", "sparsity", sse_mode) : 5;
+        if (sparsity_percent == 0) sparsity_percent = 5;  // Default 5% non-zero edges
+        
+        // Read text filter config (previously hardcoded 50 and 100000)
+        size_t min_text_length = has_config ? config.get_size_t("training.data_filter", "min_text_length", sse_mode) : 50;
+        if (min_text_length == 0) min_text_length = 50;
+        size_t max_text_length = has_config ? config.get_size_t("training.data_filter", "max_text_length", sse_mode) : 100000;
+        if (max_text_length == 0) max_text_length = 100000;
+        
+        const size_t active_experts = (std::min)(moe_top_k, moe_experts);
+        const size_t edges_per_layer = (neurons_per_layer * neurons_per_layer * sparsity_percent) / 100;
+        const size_t total_edges = active_experts * num_layers * edges_per_layer;
+        const size_t memory_mb = (total_edges * 2) / (1024 * 1024);  // 2 bytes per edge (uint32 target + int8 weight)
+        
+        log_progress("{\"status\": \"progress\", \"step\": \"Initializing neural network: " + std::to_string(moe_experts) + " experts (" + std::to_string(active_experts) + " active), " + std::to_string(num_layers) + " layers, " + std::to_string(neurons_per_layer) + " neurons each...\"}");
+        log_progress("{\"status\": \"progress\", \"step\": \"Active memory: ~" + std::to_string(memory_mb) + "MB (sparse tropical, " + std::to_string(sparsity_percent) + "% density, lazy init)\"}");
+        
         TernaryNeuralNetwork tnn(net_config);
         
         log_progress("{\"status\": \"progress\", \"step\": \"Network configured. Architecture: MoE Routing, FF Layers, Steane Polling\"}");
 
         // Dataset loading or simulation
         std::vector<std::vector<ternary::Trit>> dataset;
+        log_progress("{\"status\": \"debug\", \"step\": \"Dataset loading section reached\"}");
         if (!dataset_path.empty()) {
             log_progress("{\"status\": \"progress\", \"step\": \"Loading dataset from: " + dataset_path + "\"}");
             
-            std::ifstream file(dataset_path);
-            if (file.is_open()) {
-                std::string line;
-                size_t loaded = 0;
-                size_t lines_read = 0;
-                while (std::getline(file, line) && loaded < batch_size) {
-                    lines_read++;
-                    // Extract text from JSON and convert to trits
-                    std::string text = extract_json_text(line);
-                    if (!text.empty()) {
-                        auto sample = text_to_trits(text, context_window);
-                        dataset.push_back(sample);
+            // Check if it's a binary trit file (.t3b) - case insensitive
+            bool is_t3b = false;
+            std::string ext_debug = "N/A";
+            if (dataset_path.size() > 4) {
+                std::string ext = dataset_path.substr(dataset_path.size() - 4);
+                ext_debug = ext;
+                // Convert to lowercase for comparison
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                is_t3b = (ext == ".t3b");
+            }
+            
+            log_progress("{\"status\": \"debug\", \"step\": \"Extension [" + ext_debug + "] is_t3b=" + std::to_string(is_t3b) + "\"}");
+            
+            if (is_t3b) {
+                // Load binary trit format (fast!)
+                q::ingestion::T3BLoader loader;
+                if (loader.open(dataset_path)) {
+                    size_t loaded = 0;
+                    std::vector<int8_t> trits;
+                    
+                    // Stream samples
+                    loader.stream_samples([&](uint64_t index, const std::vector<int8_t>& trits) -> bool {
+                        if (loaded >= batch_size) return false;
+                        
+                        // Convert int8_t trits to ternary::Trit
+                        std::vector<ternary::Trit> sample;
+                        sample.reserve(trits.size());
+                        for (int8_t t : trits) {
+                            if (t == -1) sample.push_back(ternary::Trit::NEGATIVE);
+                            else if (t == 0) sample.push_back(ternary::Trit::ZERO);
+                            else sample.push_back(ternary::Trit::POSITIVE);
+                        }
+                        dataset.push_back(std::move(sample));
                         loaded++;
-                    }
-                }
-                file.close();
-                
-                if (dataset.empty()) {
-                    log_progress("{\"status\": \"warning\", \"step\": \"Opened file but loaded 0 samples from " + std::to_string(lines_read) + " lines - check JSON format\"}");
+                        
+                        if (loaded % 10000 == 0) {
+                            log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(loaded) + " samples from T3B...\"}");
+                        }
+                        return true;
+                    });
+                    
+                    log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(dataset.size()) + " samples from binary T3B format\"}");
                 } else {
-                    log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(dataset.size()) + " samples from " + std::to_string(lines_read) + " lines\"}");
+                    log_progress("{\"status\": \"error\", \"step\": \"Failed to open T3B file: " + dataset_path + "\"}");
                 }
             } else {
-                log_progress("{\"status\": \"error\", \"step\": \"Could not open dataset file: " + dataset_path + "\"}");
+                // Load JSONL text format
+                std::ifstream file(dataset_path);
+                if (file.is_open()) {
+                    std::string line;
+                    size_t loaded = 0;
+                    size_t lines_read = 0;
+                    while (std::getline(file, line) && loaded < batch_size) {
+                        lines_read++;
+                        // Extract text from JSON and convert to trits
+                        std::string text = extract_json_text(line);
+                        if (!text.empty()) {
+                            auto sample = text_to_trits(text, context_window);
+                            dataset.push_back(sample);
+                            loaded++;
+                        }
+                    }
+                    file.close();
+                    
+                    if (dataset.empty()) {
+                        log_progress("{\"status\": \"warning\", \"step\": \"Opened file but loaded 0 samples from " + std::to_string(lines_read) + " lines - check JSON format\"}");
+                    } else {
+                        log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(dataset.size()) + " samples from " + std::to_string(lines_read) + " lines\"}");
+                    }
+                } else {
+                    log_progress("{\"status\": \"error\", \"step\": \"Could not open dataset file: " + dataset_path + "\"}");
+                }
             }
         }
         
-        // Fetch web data sources from config
-        std::vector<std::string> web_sources = config.get_string_array("data_sources", "urls");
-        if (!web_sources.empty()) {
-            log_progress("{\"status\": \"progress\", \"step\": \"Fetching " + std::to_string(web_sources.size()) + " web data sources...\"}");
-            
-            for (const auto& url : web_sources) {
-                if (url.empty()) continue;
+        // === DATASYNTHESIZER V2 - API-BASED DATA ACQUISITION ===
+        // This replaces the old broken HTML scraping with proper API clients
+        std::unique_ptr<DataSynthesizer> synthesizer;
+        
+        if (enable_web_apis) {
+            try {
+                log_progress("{\"status\": \"progress\", \"step\": \"=== DATASYNTHESIZER V2 INITIALIZING ===\"}");
+                log_progress("{\"status\": \"progress\", \"step\": \"APIs: OpenAlex, Gutendex, USGS, SpaceX, Chronicling America, GBIF, arXiv, Wikidata, OEIS, PubChem, NASA, PDB, GitHub, Lean\"}");
                 
-                log_progress("{\"status\": \"progress\", \"step\": \"Fetching: " + url + "\"}");
+                synthesizer = std::make_unique<DataSynthesizer>();
                 
-                // Fetch using native HTTP client (WinHTTP on Windows)
-                auto response = http_get(url, 30000);
-                if (response.success) {
-                    
-                    // Extract text content (strip HTML tags roughly)
-                    std::string text;
-                    bool in_tag = false;
-                    for (char c : response.body) {
-                        if (c == '<') in_tag = true;
-                        else if (c == '>') in_tag = false;
-                        else if (!in_tag && std::isprint(c)) text += c;
-                    }
-                    
-                    // Split into sentences/samples and convert to trits
-                    size_t samples_added = 0;
-                    std::string sentence;
-                    for (char c : text) {
-                        sentence += c;
-                        if (c == '.' || c == '!' || c == '?') {
-                            if (sentence.length() > 20) {  // Min sentence length
-                                auto sample = text_to_trits(sentence, context_window);
-                                if (!sample.empty() && dataset.size() < batch_size) {
-                                    dataset.push_back(sample);
-                                    samples_added++;
-                                }
-                            }
-                            sentence.clear();
-                        }
-                    }
-                    
-                    log_progress("{\"status\": \"progress\", \"step\": \"Added " + std::to_string(samples_added) + " samples from web source\"}");
+                // Start data acquisition threads (initializes all API clients)
+                synthesizer->start(4, 2);  // 4 acquisition threads, 2 perturbation threads
+                log_progress("{\"status\": \"progress\", \"step\": \"DataSynthesizer started - APIs actively fetching data...\"}");
+            } catch (const std::exception& e) {
+                log_progress("{\"status\": \"error\", \"step\": \"DataSynthesizer initialization failed: " + std::string(e.what()) + "\"}");
+                synthesizer.reset();
+            }
+        }
+        
+        // === PERSISTENT DATASET STORAGE ===
+        // Load existing samples from disk, supplement with APIs, save back
+        DatasetStorage storage(output_dir + "api_dataset");
+        
+        // First: Load any existing samples from previous runs
+        if (storage.has_data()) {
+            std::vector<TopologicalSample> stored = storage.load_samples();
+            for (const auto& s : stored) {
+                if (dataset.size() < batch_size) {
+                    dataset.push_back(s.data);
                 } else {
-                    log_progress("{\"status\": \"warning\", \"step\": \"Failed to fetch: " + url + "\"}");
+                    break;
                 }
             }
+            log_progress("{\"status\": \"progress\", \"step\": \"Loaded " + std::to_string(dataset.size()) + " samples from persistent storage\"}");
+        }
+        
+        // Second: Fetch samples from DataSynthesizer until batch is full
+        size_t web_samples_added = 0;
+        std::vector<TopologicalSample> new_samples_to_save;
+        
+        if (enable_web_apis && synthesizer && dataset.size() < batch_size) {
+            size_t needed = batch_size - dataset.size();
+            log_progress("{\"status\": \"progress\", \"step\": \"Fetching " + std::to_string(needed) + " more samples from APIs (no time limit)...\"}");
+            
+            // Wait for first sample to arrive (no time limit - fetch until batch is full)
+            while (!synthesizer->has_sample()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            
+            // Pull samples from DataSynthesizer queue until batch is full
+            while (dataset.size() < batch_size && synthesizer->has_sample()) {
+                auto sample = synthesizer->get_sample();
+                
+                // DEFENSIVE: Skip invalid/empty samples from failed API calls
+                if (sample.data.index() == std::variant_npos) {
+                    continue;  // Empty variant - API failed
+                }
+                
+                std::vector<ternary::Trit> trits;
+                
+                // Handle both text and vector<float> data from APIs
+                if (std::holds_alternative<std::string_view>(sample.data)) {
+                    std::string text = std::string(std::get<std::string_view>(sample.data));
+                    // DEFENSIVE: Require minimum text length to avoid garbage (loaded from config)
+                    if (text.length() >= min_text_length && text.length() <= max_text_length) {
+                        trits = text_to_trits(text, context_window);
+                    }
+                } else if (std::holds_alternative<std::vector<float>>(sample.data)) {
+                    const auto& vec = std::get<std::vector<float>>(sample.data);
+                    // DEFENSIVE: Validate vector size to prevent buffer issues
+                    if (!vec.empty() && vec.size() <= 10000) {
+                        size_t reserve_size = context_window < vec.size() ? context_window : vec.size();
+                        trits.reserve(reserve_size);
+                        for (float f : vec) {
+                            if (f < -0.3f) trits.push_back(ternary::Trit::NEGATIVE);
+                            else if (f > 0.3f) trits.push_back(ternary::Trit::POSITIVE);
+                            else trits.push_back(ternary::Trit::ZERO);
+                        }
+                        // Pad or trim to exact context_window size
+                        while (trits.size() < context_window) trits.push_back(ternary::Trit::ZERO);
+                        if (trits.size() > context_window) trits.resize(context_window);
+                    }
+                }
+                
+                // DEFENSIVE: Only add valid samples with expected size
+                if (trits.size() == context_window) {
+                    dataset.push_back(trits);
+                    web_samples_added++;
+                    
+                    // Store for persistence
+                    TopologicalSample stored;
+                    stored.data = trits;
+                    stored.source_api = std::string(sample.source_api);
+                    stored.domain = std::string(sample.domain);
+                    stored.timestamp = std::chrono::system_clock::now().time_since_epoch().count();
+                    new_samples_to_save.push_back(std::move(stored));
+                }
+                
+                // Progress log every 100 samples
+                if (web_samples_added % 100 == 0 && web_samples_added > 0) {
+                    log_progress("{\"status\": \"progress\", \"step\": \"Fetched " + std::to_string(web_samples_added) + " API samples...\"}");
+                }
+            }
+            
+            log_progress("{\"status\": \"progress\", \"step\": \"Added " + std::to_string(web_samples_added) + " samples from APIs\"}");
+            
+            // Save new samples to persistent storage
+            if (!new_samples_to_save.empty()) {
+                storage.save_samples(new_samples_to_save);
+                log_progress("{\"status\": \"progress\", \"step\": \"Saved " + std::to_string(new_samples_to_save.size()) + " samples to persistent storage\"}");
+            }
+            
+            // Get DataSynthesizer stats
+            auto ds_stats = synthesizer->get_stats();
+            log_progress("{\"status\": \"data_source_summary\", \"total_acquired\": " + 
+                        std::to_string(ds_stats.total_acquired) + ", \"total_perturbed\": " + 
+                        std::to_string(ds_stats.total_perturbed) + ", \"api_failures\": " + 
+                        std::to_string(ds_stats.api_failures) + "}");
         }
         
         // If no dataset loaded, training cannot proceed
@@ -735,20 +933,33 @@ int main(int argc, char* argv[]) {
         // Log data source breakdown
         log_progress("{\"status\": \"data_source_summary\", \"source_type\": \"" + source_type + "\", "
                     "\"total_samples\": " + std::to_string(total_samples) + ", "
-                    "\"web_sources_fetched\": " + std::to_string(web_sources.size()) + "}");
+                    "\"web_samples_added\": " + std::to_string(web_samples_added) + "}");
         
         // Initialize Self-Organizing Expert Manager with NO FIXED MAXIMUM
         // Experts will be created/destroyed dynamically based on Betti numbers
+        // All values loaded from TOML config (previously hardcoded)
         moe::SelfOrganizingExpertManager::Config som_config;
-        som_config.initial_experts = 8;        // Start with 8 seed experts
-        som_config.split_beta1_threshold = 5;  // Split when β₁ > 5 cycles detected
-        som_config.target_graph_density = 0.15; // 15% connectivity
-        som_config.max_experts_hard_cap = 100000; // Effectively unlimited (100K)
+        som_config.initial_experts = has_config ? config.get_size_t("som", "initial_experts", sse_mode) : 2;
+        if (som_config.initial_experts == 0) som_config.initial_experts = 2;
+        
+        som_config.split_beta1_threshold = has_config ? config.get_size_t("som", "split_beta1_threshold", sse_mode) : 5;
+        if (som_config.split_beta1_threshold == 0) som_config.split_beta1_threshold = 5;
+        
+        som_config.target_graph_density = has_config ? config.get_double("som", "target_graph_density", 0.15, sse_mode) : 0.15;
+        if (som_config.target_graph_density <= 0) som_config.target_graph_density = 0.15;
+        
+        som_config.max_experts_hard_cap = has_config ? config.get_size_t("som", "max_experts_hard_cap", sse_mode) : 100000;
+        if (som_config.max_experts_hard_cap == 0) som_config.max_experts_hard_cap = 100000;
+        
+        som_config.min_graph_density = has_config ? config.get_double("som", "min_graph_density", 0.05, sse_mode) : 0.05;
+        som_config.max_graph_density = has_config ? config.get_double("som", "max_graph_density", 0.40, sse_mode) : 0.40;
+        som_config.merge_min_activation_rate = has_config ? config.get_double("som", "merge_min_activation_rate", 0.001, sse_mode) : 0.001;
         
         learning::FFConfig ff_config;
         ff_config.num_layers = num_layers;
         ff_config.neurons_per_layer = neurons_per_layer;
         ff_config.learning_rate_shift = net_config.learning_rate_shift;
+        ff_config.lazy_init = true;  // Critical: lazy init to prevent OOM
         
         auto som_manager = std::make_unique<moe::SelfOrganizingExpertManager>(som_config, ff_config);
         
@@ -757,28 +968,46 @@ int main(int argc, char* argv[]) {
         
         auto start_time = std::chrono::steady_clock::now();
         
-        // Live checkpointing - saves state every 5000 samples for crash recovery
-        // This activates immediately and protects remaining training time
+        // AGGRESSIVE checkpointing - saves state every N samples for crash recovery
+        // This activates immediately and protects training progress
+        // Checkpoint interval loaded from TOML config (previously hardcoded 500)
         size_t checkpoint_counter = 0;
-        auto save_checkpoint = [&](size_t current_epoch, size_t samples_done, size_t total_experts) {
-            if (output_dir.length() > 0) {
+        size_t checkpoint_interval_samples = has_config ? config.get_size_t("training.data_filter", "checkpoint_interval_samples", sse_mode) : 500;
+        if (checkpoint_interval_samples == 0) checkpoint_interval_samples = 500;
+        
+        auto save_checkpoint = [&](size_t current_epoch, size_t samples_done, size_t total_experts) -> bool {
+            if (output_dir.empty()) {
+                log_progress("{\"status\": \"checkpoint_error\", \"error\": \"output_dir is empty\"}");
+                return false;
+            }
+            
+            try {
                 std::filesystem::create_directories(output_dir);
                 std::string state_path = output_dir + "training_state_live.json";
                 std::ofstream state_file(state_path);
-                if (state_file.is_open()) {
-                    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-                        std::chrono::steady_clock::now() - start_time).count();
-                    state_file << "{\n";
-                    state_file << "  \"checkpoint_version\": 1,\n";
-                    state_file << "  \"epoch\": " << current_epoch << ",\n";
-                    state_file << "  \"samples_processed_in_epoch\": " << samples_done << ",\n";
-                    state_file << "  \"total_samples_per_epoch\": " << total_samples << ",\n";
-                    state_file << "  \"experts_active\": " << total_experts << ",\n";
-                    state_file << "  \"elapsed_seconds\": " << elapsed << ",\n";
-                    state_file << "  \"checkpoint_time\": \"" << std::time(nullptr) << "\"\n";
-                    state_file << "}\n";
-                    state_file.close();
+                if (!state_file.is_open()) {
+                    log_progress("{\"status\": \"checkpoint_error\", \"error\": \"Failed to open " + state_path + "\"}");
+                    return false;
                 }
+                
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - start_time).count();
+                state_file << "{\n";
+                state_file << "  \"checkpoint_version\": 1,\n";
+                state_file << "  \"epoch\": " << current_epoch << ",\n";
+                state_file << "  \"samples_processed_in_epoch\": " << samples_done << ",\n";
+                state_file << "  \"total_samples_per_epoch\": " << total_samples << ",\n";
+                state_file << "  \"experts_active\": " << total_experts << ",\n";
+                state_file << "  \"elapsed_seconds\": " << elapsed << ",\n";
+                state_file << "  \"checkpoint_time\": \"" << std::time(nullptr) << "\"\n";
+                state_file << "}\n";
+                state_file.close();
+                
+                log_progress("{\"status\": \"checkpoint_saved\", \"path\": \"" + state_path + "\", \"samples\": " + std::to_string(samples_done) + "}");
+                return true;
+            } catch (const std::exception& e) {
+                log_progress("{\"status\": \"checkpoint_error\", \"error\": \"" + std::string(e.what()) + "\"}");
+                return false;
             }
         };
         
@@ -815,7 +1044,118 @@ int main(int argc, char* argv[]) {
         
         // Self-Organizing Training Loop
         // Each sample potentially triggers topology updates
-        for (size_t epoch = 0; epoch < epochs; ++epoch) {
+        
+        // CONTINUOUS MODE: Track global iteration for infinite training
+        size_t global_iteration = 0;
+        size_t total_samples_across_all_runs = 0;
+        bool continuous_running = true;
+        thread_local std::mt19937 rng(std::random_device{}());  // For sample replacement in continuous mode
+        
+        while (continuous_running) {
+            // In continuous mode, after each full epoch cycle, we fetch more data and continue
+            if (continuous_mode && global_iteration > 0) {
+                log_progress("{\"status\": \"continuous_cycle\", \"iteration\": " + std::to_string(global_iteration) + 
+                            ", \"message\": \"Fetching more data for continuous training...\"}");
+                
+                // Fetch more samples from APIs in continuous mode
+                if (enable_web_apis && synthesizer) {
+                    size_t additional_needed = batch_size;  // Fetch another full batch
+                    size_t fetched_this_cycle = 0;
+                    std::vector<TopologicalSample> new_samples_to_save;
+                    
+                    log_progress("{\"status\": \"progress\", \"step\": \"Continuous mode: fetching " + 
+                                std::to_string(additional_needed) + " more samples...\"}");
+                    
+                    // Pull samples until we get the additional batch or queue empties
+                    auto fetch_start = std::chrono::steady_clock::now();
+                    while (fetched_this_cycle < additional_needed && synthesizer->has_sample()) {
+                        auto sample = synthesizer->get_sample();
+                        
+                        // DEFENSIVE: Skip invalid/empty samples from failed API calls
+                        if (sample.data.index() == std::variant_npos) {
+                            continue;
+                        }
+                        
+                        std::vector<ternary::Trit> trits;
+                        
+                        // Handle both text and vector<float> data from APIs
+                        if (std::holds_alternative<std::string_view>(sample.data)) {
+                            std::string text = std::string(std::get<std::string_view>(sample.data));
+                            // DEFENSIVE: Require minimum text length (loaded from config)
+                            if (text.length() >= min_text_length && text.length() <= max_text_length) {
+                                trits = text_to_trits(text, context_window);
+                            }
+                        } else if (std::holds_alternative<std::vector<float>>(sample.data)) {
+                            const auto& vec = std::get<std::vector<float>>(sample.data);
+                            // DEFENSIVE: Validate vector size
+                            if (!vec.empty() && vec.size() <= 10000) {
+                                size_t reserve_size = context_window < vec.size() ? context_window : vec.size();
+                                trits.reserve(reserve_size);
+                                for (float f : vec) {
+                                    if (f < -0.3f) trits.push_back(ternary::Trit::NEGATIVE);
+                                    else if (f > 0.3f) trits.push_back(ternary::Trit::POSITIVE);
+                                    else trits.push_back(ternary::Trit::ZERO);
+                                }
+                                while (trits.size() < context_window) trits.push_back(ternary::Trit::ZERO);
+                                if (trits.size() > context_window) trits.resize(context_window);
+                            }
+                        }
+                        
+                        // DEFENSIVE: Only process valid samples with exact size
+                        if (trits.size() == context_window) {
+                            // In continuous mode, replace oldest samples to keep dataset size fixed
+                            if (dataset.size() >= batch_size * 2) {
+                                // Replace a random sample to maintain diversity
+                                std::uniform_int_distribution<size_t> dist(0, dataset.size() - 1);
+                                dataset[dist(rng)] = trits;
+                            } else {
+                                dataset.push_back(trits);
+                            }
+                            fetched_this_cycle++;
+                            total_samples_across_all_runs++;
+                            
+                            // Store for persistence
+                            TopologicalSample stored;
+                            stored.data = trits;
+                            stored.source_api = std::string(sample.source_api);
+                            stored.domain = std::string(sample.domain);
+                            stored.timestamp = std::chrono::system_clock::now().time_since_epoch().count();
+                            new_samples_to_save.push_back(std::move(stored));
+                        }
+                        
+                        // Progress log every 100 samples
+                        if (fetched_this_cycle % 100 == 0 && fetched_this_cycle > 0) {
+                            auto elapsed_fetch = std::chrono::duration_cast<std::chrono::seconds>(
+                                std::chrono::steady_clock::now() - fetch_start).count();
+                            log_progress("{\"status\": \"progress\", \"step\": \"Fetched " + 
+                                        std::to_string(fetched_this_cycle) + " additional samples in " + 
+                                        std::to_string(elapsed_fetch) + "s...\"}");
+                        }
+                    }
+                    
+                    // Save new samples to persistent storage
+                    if (!new_samples_to_save.empty()) {
+                        storage.save_samples(new_samples_to_save);
+                        // Clear vector to free memory after saving
+                        new_samples_to_save.clear();
+                        new_samples_to_save.shrink_to_fit();
+                    }
+                    
+                    auto fetch_elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now() - fetch_start).count();
+                    log_progress("{\"status\": \"continuous_data_fetched\", \"count\": " + 
+                                std::to_string(fetched_this_cycle) + ", \"dataset_size\": " + 
+                                std::to_string(dataset.size()) + ", \"time_s\": " + 
+                                std::to_string(fetch_elapsed) + "}");
+                }
+                
+                // Reset resume state for new cycle
+                resume_epoch = 0;
+                resume_sample_index = 0;
+            }
+            
+            // Run the requested number of epochs
+            for (size_t epoch = 0; epoch < epochs; ++epoch) {
             size_t samples_this_epoch = 0;
             size_t topology_updates = 0;
             
@@ -854,14 +1194,15 @@ int main(int argc, char* argv[]) {
                 if (samples_this_epoch % 100 == 0) {
                     auto stats = som_manager->get_stats();
                     log_progress("{\"status\": \"sample_processed\", \"epoch\": " + std::to_string(epoch + 1) + 
+                                ", \"samples_processed\": " + std::to_string(samples_this_epoch) +
                                 ", \"sample_num\": " + std::to_string(samples_this_epoch) + 
                                 ", \"topic\": \"" + detected_topic + "\", "
                                 "\"experts_active\": " + std::to_string(stats.num_experts) + 
                                 ", \"experts_activated\": " + std::to_string(activated_experts) + "}");
                 }
                 
-                // Periodic topology analysis and progress logging (every 1000 samples)
-                if (samples_this_epoch % 1000 == 0) {
+                // Periodic topology analysis and progress logging (every 10000 samples)
+                if (samples_this_epoch % 10000 == 0) {
                     som_manager->update_topology();
                     topology_updates++;
                     
@@ -872,16 +1213,17 @@ int main(int argc, char* argv[]) {
                                 ", \"total_samples\": " + std::to_string(total_samples) + 
                                 ", \"epoch_progress_pct\": " + std::to_string(progress_pct) + 
                                 ", \"topology_updates\": " + std::to_string(topology_updates) + "}");
-                    
-                    // Live checkpoint every 5000 samples - protects against crashes
-                    if (samples_this_epoch % 5000 == 0) {
-                        auto stats = som_manager->get_stats();
-                        save_checkpoint(epoch + 1, samples_this_epoch, stats.num_experts);
-                        checkpoint_counter++;
-                        log_progress("{\"status\": \"checkpoint\", \"epoch\": " + std::to_string(epoch + 1) + 
-                                    ", \"samples\": " + std::to_string(samples_this_epoch) + 
-                                    ", \"checkpoint_number\": " + std::to_string(checkpoint_counter) + "}");
-                    }
+                }
+                
+                // AGGRESSIVE Live checkpoint every 1000 samples - protects against crashes
+                // This is OUTSIDE the 10000-sample block so it fires reliably
+                if (samples_this_epoch % checkpoint_interval_samples == 0) {
+                    auto stats = som_manager->get_stats();
+                    save_checkpoint(epoch + 1, samples_this_epoch, stats.num_experts);
+                    checkpoint_counter++;
+                    log_progress("{\"status\": \"live_checkpoint\", \"epoch\": " + std::to_string(epoch + 1) + 
+                                ", \"samples\": " + std::to_string(samples_this_epoch) + 
+                                ", \"checkpoint_number\": " + std::to_string(checkpoint_counter) + "}");
                 }
             }
             
@@ -931,7 +1273,33 @@ int main(int argc, char* argv[]) {
                         ", \"density\": " + std::to_string(stats.graph_density) + 
                         ", \"max_beta_1\": " + std::to_string(stats.max_beta_1) + "}");
             
-            // Save checkpoint if checkpoint_interval is set and this is a checkpoint epoch
+            // ALWAYS save lightweight epoch checkpoint at end of every epoch
+            // This allows resuming from any epoch, not just checkpoint_interval boundaries
+            if (output_dir.length() > 0) {
+                std::string epoch_ckpt_path = output_dir + "checkpoint_latest.json";
+                std::ofstream epoch_ckpt(epoch_ckpt_path);
+                if (epoch_ckpt.is_open()) {
+                    epoch_ckpt << "{\n";
+                    epoch_ckpt << "  \"checkpoint_type\": \"epoch_end\",\n";
+                    epoch_ckpt << "  \"epoch\": " << (epoch + 1) << ",\n";
+                    epoch_ckpt << "  \"total_epochs\": " << epochs << ",\n";
+                    epoch_ckpt << "  \"experts\": " << stats.num_experts << ",\n";
+                    epoch_ckpt << "  \"edges\": " << stats.num_edges << ",\n";
+                    epoch_ckpt << "  \"density\": " << stats.graph_density << ",\n";
+                    epoch_ckpt << "  \"elapsed_seconds\": " << elapsed << ",\n";
+                    epoch_ckpt << "  \"checkpoint_time\": \"" << std::time(nullptr) << "\"\n";
+                    epoch_ckpt << "}\n";
+                    epoch_ckpt.close();
+                }
+                
+                // Also update the live checkpoint to mark epoch as complete
+                save_checkpoint(epoch + 1, total_samples, stats.num_experts);
+                
+                log_progress("{\"status\": \"epoch_complete\", \"epoch\": " + std::to_string(epoch + 1) + 
+                            ", \"experts\": " + std::to_string(stats.num_experts) + "}");
+            }
+            
+            // Save FULL checkpoint with weights if checkpoint_interval is set and this is a checkpoint epoch
             if (checkpoint_interval > 0 && output_dir.length() > 0 && (epoch + 1) % checkpoint_interval == 0) {
                 // Create checkpoint filename
                 std::string checkpoint_path = output_dir + "checkpoint_epoch" + std::to_string(epoch + 1) + ".bin";
@@ -952,7 +1320,9 @@ int main(int argc, char* argv[]) {
                     ckpt_file << "---WEIGHTS---\n";
                     
                     size_t total_params = 0;
-                    for (size_t expert_id = 0; expert_id < moe_experts; ++expert_id) {
+                    // Only save experts that have been initialized (lazy init protection)
+                    auto initialized_experts = tnn.get_initialized_expert_ids();
+                    for (size_t expert_id : initialized_experts) {
                         auto expert = tnn.get_expert(expert_id);
                         if (expert) {
                             auto weights_data = expert->serialize_weights();
@@ -969,10 +1339,76 @@ int main(int argc, char* argv[]) {
                     ckpt_file << "total_params: " << total_params << "\n";
                     ckpt_file.close();
                     
-                    log_progress("{\"status\": \"checkpoint\", \"epoch\": " + std::to_string(epoch + 1) + ", \"path\": \"" + checkpoint_path + "\"}");
+                    log_progress("{\"status\": \"full_checkpoint\", \"epoch\": " + std::to_string(epoch + 1) + 
+                                ", \"path\": \"" + checkpoint_path + "\", \"experts\": " + 
+                                std::to_string(stats.num_experts) + "}");
                 }
             }
-        }
+        }  // End epoch loop
+            
+            // Save model at end of each full training cycle
+            if (!output_path.empty()) {
+                std::string cycle_output_path = output_path;
+                if (continuous_mode) {
+                    // In continuous mode, save with iteration number
+                    cycle_output_path = output_path + "_cycle" + std::to_string(global_iteration);
+                }
+                
+                std::ofstream out_file(cycle_output_path, std::ios::binary);
+                if (out_file.is_open()) {
+                    out_file << "QMINI_TNN_MODEL v1.0\n";
+                    out_file << "experts: " << moe_experts << "\n";
+                    out_file << "top_k: " << moe_top_k << "\n";
+                    out_file << "context_window: " << context_window << "\n";
+                    out_file << "epochs_trained: " << epochs << "\n";
+                    out_file << "continuous_iteration: " << global_iteration << "\n";
+                    out_file << "total_samples: " << dataset.size() << "\n";
+                    out_file << "training_time_s: " << std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now() - start_time).count() << "\n";
+                    out_file << "---WEIGHTS---\n";
+                    
+                    size_t total_params = 0;
+                    // Only save experts that have been initialized (lazy init protection)
+                    auto initialized_experts = tnn.get_initialized_expert_ids();
+                    for (size_t expert_id : initialized_experts) {
+                        auto expert = tnn.get_expert(expert_id);
+                        if (expert) {
+                            auto weights_data = expert->serialize_weights();
+                            out_file << "EXPERT_" << expert_id << "\n";
+                            out_file << "params: " << expert->parameter_count() << "\n";
+                            out_file << "bytes: " << weights_data.size() << "\n";
+                            out_file.write(reinterpret_cast<const char*>(weights_data.data()), 
+                                         weights_data.size());
+                            out_file << "\n";
+                            total_params += expert->parameter_count();
+                        }
+                    }
+                    
+                    out_file << "---END---\n";
+                    out_file << "total_params: " << total_params << "\n";
+                    out_file.close();
+                    
+                    log_progress("{\"status\": \"progress\", \"step\": \"Saved model to " + cycle_output_path + " with " + std::to_string(initialized_experts.size()) + " experts\"}");
+                }
+            }
+            
+            // In continuous mode, increment iteration and continue
+            if (continuous_mode) {
+                global_iteration++;
+                auto total_elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - start_time).count();
+                log_progress("{\"status\": \"continuous_cycle_complete\", \"iteration\": " + 
+                            std::to_string(global_iteration) + ", \"total_samples\": " + 
+                            std::to_string(dataset.size()) + ", \"total_time_s\": " + 
+                            std::to_string(total_elapsed) + ", \"message\": \"Starting next cycle...\"}");
+                
+                // Continue the while loop - never exit in continuous mode
+                continuous_running = true;
+            } else {
+                // Non-continuous mode: exit after one cycle
+                continuous_running = false;
+            }
+        }  // End continuous while loop
         
         auto end_time = std::chrono::steady_clock::now();
         std::chrono::duration<double> elapsed = end_time - start_time;
@@ -990,10 +1426,10 @@ int main(int argc, char* argv[]) {
                 out_file << "training_time_s: " << elapsed.count() << "\n";
                 out_file << "---WEIGHTS---\n";
                 
-                // Serialize actual model weights from all experts
-                // Each expert is a ForwardForwardLearner with ternary weights
+                // Serialize actual model weights from initialized experts only (lazy init protection)
                 size_t total_params = 0;
-                for (size_t expert_id = 0; expert_id < moe_experts; ++expert_id) {
+                auto initialized_experts = tnn.get_initialized_expert_ids();
+                for (size_t expert_id : initialized_experts) {
                     // Get expert weights from TNN
                     auto expert = tnn.get_expert(expert_id);
                     if (expert) {
@@ -1017,14 +1453,19 @@ int main(int argc, char* argv[]) {
                 out_file << "total_params: " << total_params << "\n";
                 out_file.close();
                 
-                log_progress("{\"status\": \"progress\", \"step\": \"Saved trained MoE model to " + output_path + "\"}");
+                std::string save_msg = "{\"status\": \"progress\", \"step\": \"Saved trained MoE model to " + output_path + " with " + std::to_string(initialized_experts.size()) + " experts\"}";
+                log_progress(save_msg);
             } else {
-                log_progress("{\"status\": \"error\", \"step\": \"Failed to save model to " + output_path + "\"}");
+                std::string err_msg = "{\"status\": \"error\", \"step\": \"Failed to save model to " + output_path + "\"}";
+                log_progress(err_msg);
             }
             std::cout.flush();
         }
 
-        log_progress("{\"status\": \"complete\", \"message\": \"Training complete\", \"time_s\": " + std::to_string(elapsed.count()) + "}");
+        auto final_elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - start_time).count();
+        std::string complete_msg = "{\"status\": \"complete\", \"message\": \"Training complete\", \"time_s\": " + std::to_string(final_elapsed) + "}";
+        log_progress(complete_msg);
     } catch (const std::exception& e) {
         log_progress("{\"status\": \"error\", \"message\": \"Exception: " + std::string(e.what()) + "\"}");
         return 1;

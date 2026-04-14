@@ -336,3 +336,20 @@ dmypy.json
 .pyre/
 # Agent memory (runtime state)
 agents/memory/
+
+# Downloaded datasets (Project Gutenberg books)
+datasets/book_pg_*.txt
+datasets/*.jsonl
+datasets/*.t3b
+datasets/gutenberg_corpus.jsonl
+
+# Build artifacts
+q_mini_wasm_v2_trainer.exe
+*.exe
+q_mini_wasm_v2/build/
+q_mini_wasm_v2/build-*/
+
+# Large data files
+seed_massive.jsonl
+checkpoints/*.json
+checkpoints/*.t3b

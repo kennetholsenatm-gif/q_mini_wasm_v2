@@ -1,0 +1,132 @@
+[training]
+epochs = 100
+batch_size = 16384
+checkpoint_interval = 10
+learning_rate = 10
+
+[model]
+moe_experts = 8192
+moe_top_k = 128
+context_window = 8192
+entanglement_tokens = 1024
+shadow_dim = 4096
+num_layers = 64
+neurons_per_layer = 2048
+routing_qutrits = 12
+learning_rate_shift = 2
+
+[features]
+steane_correction = true
+flash_cim = false
+worker_threads = 32
+
+[apis]
+enabled = false
+wolfram = false
+pubchem = false
+oeis = false
+wikidata = false
+arxiv = false
+nasa = false
+pdb = false
+github = false
+lean = false
+
+[streaming]
+enabled = true
+port = 9090
+
+[paths]
+base_model = "checkpoints/final_model.json"
+output_dir = "checkpoints/"
+dataset_dir = "datasets/"
+
+# =============================================================================
+# Previously Hardcoded Values - Now Configurable
+# =============================================================================
+
+[model.expert]
+sparsity = 0.05              # Tropical sparse edge density (5%)
+neurons_per_layer = 2048   # Experts: neurons per layer
+learning_rate_shift = 2    # Fixed-point learning rate shift
+
+[som]
+initial_experts = 2              # Seed experts to start with
+split_beta1_threshold = 5        # Split when β₁ > 5 cycles detected
+target_graph_density = 0.15      # 15% connectivity (sparse but connected)
+min_graph_density = 0.05         # Below 5% = too sparse, add edges
+max_graph_density = 0.40         # Above 40% = too dense, remove edges
+max_experts_hard_cap = 100000    # Safety cap for expert count
+merge_min_activation_rate = 0.001 # Merge experts with < 0.1% activation
+
+[graph]
+initial_nodes = 64   # Initial graph topology nodes
+initial_edges = 112  # Initial graph topology edges (tree-like + cycles)
+
+[training.data_filter]
+min_text_length = 50      # Minimum text length for training samples
+max_text_length = 100000  # Maximum text length for training samples
+checkpoint_interval_samples = 500  # Checkpoint every N samples
+
+[network]
+http_timeout_ms = 30000  # HTTP request timeout
+https_port = 443         # Default HTTPS port
+routing_qutrits = 8      # Qutrits for MoE routing
+
+[apis.limits]
+rate_limit_daily = 100000  # API calls per day limit
+backoff_ms = 100           # Initial backoff between retries
+http_timeout_ms = 5000     # API HTTP timeout
+
+[sycl]
+work_group_size = 256   # SYCL kernel work group size
+local_mem_nodes = 32    # SYCL local memory nodes
+
+[flash_cim]
+num_blocks = 1024              # Simulated Flash-CIM blocks
+energy_fixed_point_scale = 1000000  # Fixed-point energy calculation scale
+
+[memory]
+arena_mb = 512  # Memory arena size in MB
+
+[bridge]
+mcp_timeout_ms = 15000  # MCP request timeout
+
+[data_sources]
+urls = [
+    "arxiv.org/abs/quant-ph",
+    "mathworld.wolfram.com",
+    "oeis.org",
+    "datasets-server.huggingface.co",
+    "huggingface.co/datasets/bigcode/the-stack",
+    "ebi.ac.uk/chembl",
+    "materialsproject.org",
+    "dbpedia.org",
+    "yago-knowledge.org",
+    "ensembl.org",
+    "dbpedia.org",
+    "yago-knowledge.org",
+    "ensembl.org",
+    "gamma.sympy.org",
+    "github.com/leanprover-community/mathlib4",
+    "arxiv.org",
+    "wolframalpha.com",
+    "wikidata.org",
+    "pubchem.ncbi.nlm.nih.gov",
+    "rcsb.org",
+    "oeis.org",
+    "export.arxiv.org",
+    "query.wikidata.org",
+    "oeis.org",
+    "api.openalex.org",
+    "gutendex.com",
+    "earthquake.usgs.gov",
+    "api.spacexdata.com",
+    "chroniclingamerica.loc.gov",
+    "api.gbif.org",
+    "data/wikipedia_math",
+    "data/stackexchange_physics"
+]
+recursive = true
+max_depth = 5
+max_pages_per_source = 50000

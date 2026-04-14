@@ -60,6 +60,8 @@ set(CORE_SOURCES
     core/ingestion/absmean_quantizer.cpp
     core/ingestion/clifford_shadow.hpp
     core/ingestion/clifford_shadow.cpp
+    core/ingestion/trit_binary_loader.hpp
+    core/ingestion/trit_binary_loader.cpp
     core/learning/entropy_goodness.hpp
     core/learning/entropy_goodness.cpp
     core/moe/router.hpp
@@ -72,6 +74,8 @@ set(CORE_SOURCES
     core/network.cpp
     core/training/data_synthesizer.hpp
     core/training/data_synthesizer.cpp
+    core/training/dataset_storage.hpp
+    core/training/dataset_storage.cpp
     core/qgnn/graph_native.cpp
     core/qgnn/betti_extractor.hpp
     core/qgnn/betti_extractor.cpp
