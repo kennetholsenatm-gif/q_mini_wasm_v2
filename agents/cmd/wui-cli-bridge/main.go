@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,51 @@ type MCPError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
+}
+
+// readConfigInt reads an integer value from training_config.toml
+// section: TOML section name (e.g., "streaming")
+// key: config key name (e.g., "port")
+// defaultVal: value to return if not found
+func readConfigInt(projectRoot, section, key string, defaultVal int) int {
+	tomlPath := filepath.Join(projectRoot, "config", "training_config.toml")
+	content, err := os.ReadFile(tomlPath)
+	if err != nil {
+		return defaultVal
+	}
+
+	// Simple TOML parsing - find section, then key
+	lines := strings.Split(string(content), "\n")
+	inSection := false
+	sectionPrefix := "[" + section + "]"
+	keyPrefix := key + " ="
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && inSection {
+			// New section started, we didn't find the key
+			break
+		}
+		if trimmed == sectionPrefix {
+			inSection = true
+			continue
+		}
+		if inSection && strings.HasPrefix(trimmed, keyPrefix) {
+			parts := strings.Split(trimmed, "=")
+			if len(parts) >= 2 {
+				val := strings.TrimSpace(parts[1])
+				// Remove comments
+				if idx := strings.Index(val, "#"); idx != -1 {
+					val = val[:idx]
+				}
+				val = strings.TrimSpace(val)
+				if intVal, err := strconv.Atoi(val); err == nil {
+					return intVal
+				}
+			}
+		}
+	}
+	return defaultVal
 }
 
 // BridgeClient is an MCP-safe local bridge shim.
@@ -979,6 +1025,13 @@ func (s *MCPServer) registerTools() {
 	s.tools["wui_stop_inference"] = s.handleStopInference
 	s.tools["wui_get_inference_metrics"] = s.handleGetInferenceMetrics
 	s.tools["wui_detect_hardware_limits"] = s.handleDetectHardwareLimits
+
+	// Health check
+	s.tools["ping"] = s.handlePing
+}
+
+func (s *MCPServer) handlePing(params json.RawMessage) (interface{}, error) {
+	return map[string]interface{}{"pong": true, "timestamp": time.Now().Unix()}, nil
 }
 
 func detectProjectRoot() string {
@@ -2635,7 +2688,7 @@ func (s *MCPServer) handleLoadTrainingConfig(params json.RawMessage) (interface{
 	json.Unmarshal(params, &args)
 
 	if args.Path == "" {
-		args.Path = "flash_cim_243expert/training_config.toml"
+		args.Path = "config/training_config.toml"
 	}
 
 	content, err := os.ReadFile(args.Path)
@@ -2661,7 +2714,7 @@ func (s *MCPServer) handleSaveTrainingConfig(params json.RawMessage) (interface{
 	}
 
 	if args.Path == "" {
-		args.Path = "flash_cim_243expert/training_config.toml"
+		args.Path = "config/training_config.toml"
 	}
 
 	// Create directory if needed
@@ -2706,7 +2759,7 @@ func (s *MCPServer) handleStartTrainingWithSSE(params json.RawMessage) (interfac
 	// Generate default output path if not provided
 	if args.OutputPath == "" {
 		timestamp := time.Now().Format("20060102_150405")
-		args.OutputPath = fmt.Sprintf("flash_cim_243expert/checkpoints/trained_%s.bbin", timestamp)
+		args.OutputPath = fmt.Sprintf("checkpoints/trained_%s.bbin", timestamp)
 	}
 	if args.CheckpointInterval == 0 {
 		args.CheckpointInterval = 5 // Save every 5 epochs by default
@@ -2715,9 +2768,14 @@ func (s *MCPServer) handleStartTrainingWithSSE(params json.RawMessage) (interfac
 	// Build trainer arguments
 	trainerArgs := []string{"--sse-mode"}
 
-	if args.ConfigPath != "" {
-		trainerArgs = append(trainerArgs, "--config", args.ConfigPath)
+	// Default config path if not specified
+	if args.ConfigPath == "" {
+		args.ConfigPath = "config/training_config.toml"
 	}
+	trainerArgs = append(trainerArgs, "--config", args.ConfigPath)
+
+	// Enable web APIs for data acquisition (OpenAlex, NASA, PubChem, etc.)
+	trainerArgs = append(trainerArgs, "--enable-web-apis", "true")
 	if args.Epochs > 0 {
 		trainerArgs = append(trainerArgs, "--epochs", fmt.Sprintf("%d", args.Epochs))
 	}
@@ -2833,7 +2891,7 @@ func (s *MCPServer) handleLoadModel(params json.RawMessage) (interface{}, error)
 	inferenceState.mu.Lock()
 	defer inferenceState.mu.Unlock()
 
-	checkpointPath := filepath.Join(s.projectRoot, "flash_cim_243expert", "checkpoints", args.ModelFile)
+	checkpointPath := filepath.Join(s.projectRoot, "checkpoints", args.ModelFile)
 	if _, err := os.Stat(checkpointPath); os.IsNotExist(err) {
 		// Try alternative paths
 		checkpointPath = filepath.Join(s.projectRoot, args.ModelFile)
@@ -2879,7 +2937,7 @@ func (s *MCPServer) handleUnloadModel(params json.RawMessage) (interface{}, erro
 
 // handleListModels lists available model checkpoints
 func (s *MCPServer) handleListModels(params json.RawMessage) (interface{}, error) {
-	checkpointDir := filepath.Join(s.projectRoot, "flash_cim_243expert", "checkpoints")
+	checkpointDir := filepath.Join(s.projectRoot, "checkpoints")
 
 	models := []map[string]interface{}{}
 
@@ -2977,25 +3035,8 @@ func (s *MCPServer) handleGetInferenceMetrics(params json.RawMessage) (interface
 
 // handleDetectHardwareLimits detects hardware capabilities
 func (s *MCPServer) handleDetectHardwareLimits(params json.RawMessage) (interface{}, error) {
-	// Get system memory info from TOML
-	tomlPath := filepath.Join(s.projectRoot, "config", "system.toml")
-	content, err := os.ReadFile(tomlPath)
-
-	arenaMB := 512 // default
-	if err == nil {
-		// Simple parse for arena_size_mb
-		contentStr := string(content)
-		if idx := strings.Index(contentStr, "arena_size_mb"); idx != -1 {
-			after := contentStr[idx:]
-			if eqIdx := strings.Index(after, "="); eqIdx != -1 {
-				valStr := strings.TrimSpace(after[eqIdx+1:])
-				if endIdx := strings.IndexAny(valStr, "\n#"); endIdx != -1 {
-					valStr = valStr[:endIdx]
-				}
-				fmt.Sscanf(valStr, "%d", &arenaMB)
-			}
-		}
-	}
+	// Read arena size from training_config.toml [memory] section (previously in system.toml)
+	arenaMB := readConfigInt(s.projectRoot, "memory", "arena_mb", 512)
 
 	// Estimate max parameters based on arena size
 	// Ternary: ~10x compression, 1B params ~ 1-2GB
@@ -3030,8 +3071,9 @@ type WUIHTTPServer struct {
 
 // NewWUIHTTPServer creates a new WUI HTTP server
 func NewWUIHTTPServer(port int, assetDir string) *WUIHTTPServer {
+	// Port 7345 is hardcoded default; should be read from config by caller
 	if port <= 0 {
-		port = 7345 // Default port
+		port = 7345 // Default port (legacy - use readConfigInt to get from TOML)
 	}
 	if assetDir == "" {
 		assetDir = "extracted-assets"
@@ -3271,6 +3313,41 @@ func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interfa
 		}
 	case "ping":
 		result = map[string]interface{}{"pong": true}
+	// Dashboard unified data methods - delegate to SSE server
+	case "wui_get_training_status":
+		if sseServer != nil {
+			result = sseServer.getTrainingStatus()
+		} else {
+			result = map[string]interface{}{
+				"running": false, "epoch": 0, "samples_processed": 0,
+				"total_samples": 0, "experts_active": 0, "elapsed_seconds": 0,
+			}
+		}
+	case "wui_get_dataset_stats":
+		if sseServer != nil {
+			result = sseServer.getDatasetStats()
+		} else {
+			result = map[string]interface{}{
+				"total_samples": 0, "chunks": 0, "storage_size_mb": 0.0, "sources": map[string]int{},
+			}
+		}
+	case "wui_get_model_topology":
+		if sseServer != nil {
+			result = sseServer.getModelTopology()
+		} else {
+			result = map[string]interface{}{
+				"experts_total": 8192, "experts_active": 8, "generations_max": 1,
+				"splits_total": 0, "avg_beta_1": 0.0, "max_beta_1": 0, "graph_density": 0.0,
+			}
+		}
+	case "wui_get_api_health":
+		if sseServer != nil {
+			result = sseServer.getAPIHealth()
+		} else {
+			result = map[string]interface{}{
+				"apis": map[string]interface{}{}, "errors_last_hour": 0,
+			}
+		}
 	default:
 		err = fmt.Errorf("unknown method: %s", method)
 	}
@@ -3289,16 +3366,26 @@ func (s *MCPServer) handleWSMessage(conn *websocket.Conn, msg map[string]interfa
 }
 
 // injectMCPScript wraps the file server and injects the WebSocket MCP script into HTML files
-func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
+func injectMCPScript(h http.Handler, assetPath string, port int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check if request is for an HTML file
-		path := r.URL.Path
-		if path == "/" || strings.HasSuffix(path, ".html") {
-			// Read the file content
-			recorder := &responseRecorder{ResponseWriter: w, statusCode: 200}
-			h.ServeHTTP(recorder, r)
+		reqPath := r.URL.Path
+		if reqPath == "/" || strings.HasSuffix(reqPath, ".html") {
+			// Determine file path
+			filePath := filepath.Join(assetPath, reqPath)
+			if reqPath == "/" {
+				filePath = filepath.Join(assetPath, "index.html")
+			}
 
-			if recorder.statusCode == 200 && strings.Contains(string(recorder.body), "</head>") {
+			// Read file directly
+			content, err := os.ReadFile(filePath)
+			if err != nil {
+				// Fall back to normal file server
+				h.ServeHTTP(w, r)
+				return
+			}
+
+			if strings.Contains(string(content), "</head>") {
 				// Inject the MCP script before </head>
 				script := fmt.Sprintf(`<script>
 (function() {
@@ -3390,6 +3477,10 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 	// wsBridge compatibility for index.html dashboard
 	window.wsBridge = {
 		isConnected: false,
+		callTool: function(name, args) {
+			// Route to qMiniMcpHost
+			return window.qMiniMcpHost.callTool(name, args);
+		},
 		send: function(msg) {
 			// Route via callTool
 			return window.qMiniMcpHost.callTool(msg.type || 'send', msg);
@@ -3430,20 +3521,25 @@ func injectMCPScript(h http.Handler, port int) http.HandlerFunc {
 })();
 </script>`, port)
 
-				content := string(recorder.body)
-				content = strings.Replace(content, "</head>", script+"</head>", 1)
+				modified := strings.Replace(string(content), "</head>", script+"</head>", 1)
 
-				// Copy headers from recorder and write response
-				for k, v := range recorder.Header() {
-					w.Header()[k] = v
-				}
-				w.WriteHeader(recorder.statusCode)
-				w.Write([]byte(content))
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Content-Length", strconv.Itoa(len(modified)))
+				w.WriteHeader(200)
+				w.Write([]byte(modified))
+				fmt.Printf("[DEBUG] Injected MCP script into %s\n", reqPath)
 				return
 			}
+
+			// No </head> tag - serve original
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+			w.WriteHeader(200)
+			w.Write(content)
+			return
 		}
 
-		// Pass through normally
+		// Pass through normally for non-HTML files
 		h.ServeHTTP(w, r)
 	}
 }
@@ -3551,12 +3647,13 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 	}
 
 	// Determine asset directory - try multiple locations
+	// PRIORITY: Main wui folder (newest), then extracted-assets (older bundled version)
 	possiblePaths := []string{
-		// Current directory (if running from extracted-assets)
+		// Main wui folder from project root (NEWEST - development version)
+		filepath.Join(projectRoot, "wui"),
+		// Current directory (if running standalone)
 		"wui",
-		// From project root via assetDir
-		filepath.Join(projectRoot, s.assetDir, "wui"),
-		// From project root via releases path
+		// From project root via releases path (older bundled version)
 		filepath.Join(projectRoot, "releases", "desktop", "extracted-assets", "wui"),
 		// Parent directory (if running from runtime/native)
 		"..\\..\\..\\wui",
@@ -3577,9 +3674,9 @@ func (s *WUIHTTPServer) Start(projectRoot string) error {
 	// Create router
 	mux := http.NewServeMux()
 
-	// Static file server - direct serving without injection
+	// Static file server WITH MCP script injection
 	fs := http.FileServer(http.Dir(assetPath))
-	mux.Handle("/", fs)
+	mux.Handle("/", injectMCPScript(fs, assetPath, s.port))
 
 	// API endpoints
 	mux.HandleFunc("/api/browse", s.handleBrowseFiles)
@@ -3662,46 +3759,11 @@ var globalMcpServer *MCPServer
 
 // InitWUIHTTPServer initializes the WUI HTTP server from TOML config
 func InitWUIHTTPServer(projectRoot string) error {
-	// Read TOML config to get port
-	tomlPath := filepath.Join(projectRoot, "config", "system.toml")
-	content, err := os.ReadFile(tomlPath)
-	if err != nil {
-		// Use default port if TOML not found
-		wuiHTTPServer = NewWUIHTTPServer(7345, "")
-		wuiHTTPServer.mcpServer = globalMcpServer
-		return wuiHTTPServer.Start(projectRoot)
-	}
-
-	// Parse TOML to find http_port
-	port := 7345 // Default
-	contentStr := string(content)
-
-	// Simple TOML parsing for http_port in [system.wui] section
-	lines := strings.Split(contentStr, "\n")
-	inWUISection := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "[system.wui]" {
-			inWUISection = true
-			continue
-		}
-		if inWUISection && strings.HasPrefix(trimmed, "[") {
-			break // New section
-		}
-		if inWUISection && strings.HasPrefix(trimmed, "http_port") {
-			parts := strings.Split(trimmed, "=")
-			if len(parts) == 2 {
-				val := strings.TrimSpace(parts[1])
-				val = strings.Trim(val, `"`)
-				if p, err := fmt.Sscanf(val, "%d", &port); p == 1 && err == nil {
-					break
-				}
-			}
-		}
-	}
+	// Read port from training_config.toml [streaming] section (previously in system.toml)
+	port := readConfigInt(projectRoot, "streaming", "port", 9090)
 
 	if port == 0 {
-		fmt.Println("[WUI HTTP] Disabled (http_port = 0 in system.toml)")
+		fmt.Println("[WUI HTTP] Disabled (port = 0 in training_config.toml)")
 		return nil
 	}
 

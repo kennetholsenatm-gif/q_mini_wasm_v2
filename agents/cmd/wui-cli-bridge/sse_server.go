@@ -7,10 +7,83 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+// parseTOMLValue extracts a string value from TOML config
+func parseTOMLValue(data []byte, key string) string {
+	// Match patterns like: key = "value" or key = 'value'
+	pattern := fmt.Sprintf(`(?m)^\s*%s\s*=\s*["']([^"']+)["']`, regexp.QuoteMeta(key))
+	re := regexp.MustCompile(pattern)
+	matches := re.FindSubmatch(data)
+	if len(matches) > 1 {
+		return string(matches[1])
+	}
+	return ""
+}
+
+// readTOMLInt reads an integer value from training_config.toml
+func readTOMLInt(section, key string, defaultVal int) int {
+	configPath := filepath.Join("config", "training_config.toml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return defaultVal
+	}
+
+	lines := strings.Split(string(data), "\n")
+	inSection := false
+	sectionPrefix := "[" + section + "]"
+	keyPrefix := key + " ="
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && inSection {
+			break
+		}
+		if trimmed == sectionPrefix {
+			inSection = true
+			continue
+		}
+		if inSection && strings.HasPrefix(trimmed, keyPrefix) {
+			parts := strings.Split(trimmed, "=")
+			if len(parts) >= 2 {
+				val := strings.TrimSpace(parts[1])
+				if idx := strings.Index(val, "#"); idx != -1 {
+					val = val[:idx]
+				}
+				val = strings.TrimSpace(val)
+				if intVal, err := strconv.Atoi(val); err == nil {
+					return intVal
+				}
+			}
+		}
+	}
+	return defaultVal
+}
+
+// getDatasetDir reads dataset_dir from config/training_config.toml
+func getDatasetDir() string {
+	configPath := filepath.Join("config", "training_config.toml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return "datasets" // fallback default
+	}
+	dir := parseTOMLValue(data, "dataset_dir")
+	if dir == "" {
+		return "datasets"
+	}
+	return dir
+}
+
+// getSSEPort reads SSE port from training_config.toml [streaming] section
+func getSSEPort() string {
+	port := readTOMLInt("streaming", "port", 9090)
+	return strconv.Itoa(port)
+}
 
 // SSEServer manages Server-Sent Events for training progress streaming
 type SSEServer struct {
@@ -25,7 +98,7 @@ type SSEServer struct {
 // NewSSEServer creates a new SSE server
 func NewSSEServer(port string) *SSEServer {
 	if port == "" {
-		port = "9090"
+		port = getSSEPort() // Read from training_config.toml [streaming] section
 	}
 	return &SSEServer{
 		clients: make(map[chan string]bool),
@@ -112,11 +185,24 @@ func (s *SSEServer) handleMCPMethod(method string, params json.RawMessage) (inte
 
 		// Start actual training process
 		args := []string{"--sse-mode"} // Enable SSE output format for WUI
-		if p.DatasetPath != "" {
-			args = append(args, "--dataset", p.DatasetPath)
+
+		// Use provided dataset path, or look for seed.jsonl in configured dataset_dir
+		datasetPath := p.DatasetPath
+		if datasetPath == "" {
+			datasetDir := getDatasetDir()
+			seedPath := filepath.Join(datasetDir, "seed.jsonl")
+			if _, err := os.Stat(seedPath); err == nil {
+				datasetPath = seedPath
+			}
 		}
+		if datasetPath != "" {
+			args = append(args, "--dataset", datasetPath)
+		}
+
 		// Add config file path
-		args = append(args, "--config", "flash_cim_243expert/training_config.toml")
+		args = append(args, "--config", "config/training_config.toml")
+		// Disable web APIs for now (causing crashes)
+		// args = append(args, "--enable-web-apis", "true")
 
 		// Get project root (current directory)
 		projectRoot, _ := os.Getwd()
@@ -137,6 +223,26 @@ func (s *SSEServer) handleMCPMethod(method string, params json.RawMessage) (inte
 		}
 		s.Broadcast(`{"status": "stopped", "message": "Training stopped"}`)
 		return map[string]interface{}{"stopped": true}, nil
+
+	case "wui_get_training_status":
+		// Return current training status from checkpoint file
+		status := s.getTrainingStatus()
+		return status, nil
+
+	case "wui_get_dataset_stats":
+		// Return dataset accumulation stats
+		stats := s.getDatasetStats()
+		return stats, nil
+
+	case "wui_get_model_topology":
+		// Return model topology stats
+		topology := s.getModelTopology()
+		return topology, nil
+
+	case "wui_get_api_health":
+		// Return API health status
+		health := s.getAPIHealth()
+		return health, nil
 
 	case "wui_list_models":
 		return map[string]interface{}{"models": []interface{}{}}, nil
@@ -167,7 +273,7 @@ func (s *SSEServer) handleMCPMethod(method string, params json.RawMessage) (inte
 
 	case "wui_get_training_config":
 		// Load training config from file
-		configPath := filepath.Join("flash_cim_243expert", "training_config.toml")
+		configPath := filepath.Join("config", "training_config.toml")
 		data, err := os.ReadFile(configPath)
 		if err != nil {
 			return map[string]interface{}{"config": ""}, nil
@@ -180,7 +286,7 @@ func (s *SSEServer) handleMCPMethod(method string, params json.RawMessage) (inte
 			Config string `json:"config"`
 		}
 		json.Unmarshal(params, &p)
-		configDir := "flash_cim_243expert"
+		configDir := "config"
 		os.MkdirAll(configDir, 0755)
 		configPath := filepath.Join(configDir, "training_config.toml")
 		if err := os.WriteFile(configPath, []byte(p.Config), 0644); err != nil {
@@ -300,9 +406,15 @@ func (s *SSEServer) StartTraining(projectRoot string, args []string) error {
 	}
 
 	trainerPath := filepath.Join(projectRoot, "q_mini_wasm_v2", "build_final", "Release", "q_mini_wasm_v2_trainer.exe")
+	altTrainerPath := filepath.Join(projectRoot, "q_mini_wasm_v2_trainer.exe")
+
+	// Check if trainer exists at primary path
 	if _, err := os.Stat(trainerPath); os.IsNotExist(err) {
 		// Try alternative path
-		trainerPath = filepath.Join(projectRoot, "q_mini_wasm_v2_trainer.exe")
+		if _, err := os.Stat(altTrainerPath); os.IsNotExist(err) {
+			return fmt.Errorf("trainer executable not found at either:\n  - %s\n  - %s\n\nPlease build the trainer: cmake --build q_mini_wasm_v2/build_final --target q_mini_wasm_v2_trainer", trainerPath, altTrainerPath)
+		}
+		trainerPath = altTrainerPath
 	}
 
 	s.trainingCmd = exec.Command(trainerPath, args...)
@@ -324,7 +436,7 @@ func (s *SSEServer) StartTraining(projectRoot string, args []string) error {
 	}
 
 	s.isRunning = true
-	s.Broadcast(`{"status": "init", "message": "Training process started"}`)
+	s.Broadcast(fmt.Sprintf(`{"status": "init", "message": "Training started: %s", "args": %q}`, trainerPath, args))
 
 	// Stream stdout to SSE clients with proper line buffering
 	go func() {
@@ -410,6 +522,185 @@ func (s *SSEServer) StopTraining() error {
 // IsRunning returns whether training is active
 func (s *SSEServer) IsRunning() bool {
 	return s.isRunning
+}
+
+// getTrainingStatus reads current training state from checkpoint file
+func (s *SSEServer) getTrainingStatus() map[string]interface{} {
+	status := map[string]interface{}{
+		"running":           s.isRunning,
+		"epoch":             0,
+		"samples_processed": 0,
+		"total_samples":     0,
+		"experts_active":    0,
+		"elapsed_seconds":   0,
+		"timestamp":         time.Now().Format(time.RFC3339),
+	}
+
+	// Read from checkpoint file if exists
+	checkpointPath := filepath.Join("flash_cim_243expert", "checkpoints", "training_state_live.json")
+	if data, err := os.ReadFile(checkpointPath); err == nil {
+		// Simple JSON parsing for key fields
+		content := string(data)
+		if matches := extractJSONInt(content, `"epoch"`); matches >= 0 {
+			status["epoch"] = matches
+		}
+		if matches := extractJSONInt(content, `"samples_processed_in_epoch"`); matches >= 0 {
+			status["samples_processed"] = matches
+		}
+		if matches := extractJSONInt(content, `"total_samples_per_epoch"`); matches >= 0 {
+			status["total_samples"] = matches
+		}
+		if matches := extractJSONInt(content, `"experts_active"`); matches >= 0 {
+			status["experts_active"] = matches
+		}
+		if matches := extractJSONInt(content, `"elapsed_seconds"`); matches >= 0 {
+			status["elapsed_seconds"] = matches
+		}
+	}
+
+	return status
+}
+
+// getDatasetStats reads dataset accumulation stats
+func (s *SSEServer) getDatasetStats() map[string]interface{} {
+	stats := map[string]interface{}{
+		"total_samples":   0,
+		"chunks":          0,
+		"storage_size_mb": 0.0,
+		"sources":         map[string]int{},
+		"last_updated":    time.Now().Format(time.RFC3339),
+	}
+
+	// Check dataset directory
+	datasetDir := filepath.Join("flash_cim_243expert", "checkpoints", "api_dataset")
+	if entries, err := os.ReadDir(datasetDir); err == nil {
+		chunks := 0
+		totalSize := int64(0)
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".bin") {
+				chunks++
+				if info, err := entry.Info(); err == nil {
+					totalSize += info.Size()
+				}
+			}
+		}
+		stats["chunks"] = chunks
+		stats["storage_size_mb"] = float64(totalSize) / (1024 * 1024)
+	}
+
+	// Read index file for sample count
+	indexPath := filepath.Join(datasetDir, "dataset_index.bin")
+	if data, err := os.ReadFile(indexPath); err == nil && len(data) >= 12 {
+		// Binary format: uint32 next_chunk, uint64 total_samples
+		totalSamples := uint64(0)
+		for i := 0; i < 8 && i+4 < len(data); i++ {
+			totalSamples |= uint64(data[i+4]) << (i * 8)
+		}
+		stats["total_samples"] = int(totalSamples)
+	}
+
+	return stats
+}
+
+// getModelTopology reads model topology from checkpoint
+func (s *SSEServer) getModelTopology() map[string]interface{} {
+	topology := map[string]interface{}{
+		"experts_total":   8192,
+		"experts_active":  8,
+		"generations_max": 1,
+		"splits_total":    0,
+		"avg_beta_1":      0.0,
+		"max_beta_1":      0,
+		"graph_density":   0.0,
+		"edges":           0,
+		"timestamp":       time.Now().Format(time.RFC3339),
+	}
+
+	// Read from checkpoint file
+	checkpointPath := filepath.Join("flash_cim_243expert", "checkpoints", "training_state_live.json")
+	if data, err := os.ReadFile(checkpointPath); err == nil {
+		content := string(data)
+		if matches := extractJSONInt(content, `"experts_active"`); matches >= 0 {
+			topology["experts_active"] = matches
+		}
+		if matches := extractJSONFloat(content, `"avg_beta_1"`); matches >= 0 {
+			topology["avg_beta_1"] = matches
+		}
+		if matches := extractJSONFloat(content, `"graph_density"`); matches >= 0 {
+			topology["graph_density"] = matches
+		}
+	}
+
+	return topology
+}
+
+// getAPIHealth returns API health status (mock for now, could be enhanced)
+func (s *SSEServer) getAPIHealth() map[string]interface{} {
+	return map[string]interface{}{
+		"apis": map[string]interface{}{
+			"wikidata": map[string]interface{}{"status": "active", "last_fetch": time.Now().Add(-5 * time.Minute).Format(time.RFC3339)},
+			"pubchem":  map[string]interface{}{"status": "active", "last_fetch": time.Now().Add(-3 * time.Minute).Format(time.RFC3339)},
+			"oeis":     map[string]interface{}{"status": "active", "last_fetch": time.Now().Add(-2 * time.Minute).Format(time.RFC3339)},
+			"arxiv":    map[string]interface{}{"status": "standby", "last_fetch": time.Now().Add(-10 * time.Minute).Format(time.RFC3339)},
+			"nasa":     map[string]interface{}{"status": "standby", "last_fetch": time.Now().Add(-15 * time.Minute).Format(time.RFC3339)},
+		},
+		"errors_last_hour": 0,
+		"timestamp":        time.Now().Format(time.RFC3339),
+	}
+}
+
+// Helper functions for JSON parsing
+func extractJSONInt(content, key string) int {
+	idx := strings.Index(content, key)
+	if idx < 0 {
+		return -1
+	}
+	// Find colon after key
+	colonIdx := strings.Index(content[idx:], ":")
+	if colonIdx < 0 {
+		return -1
+	}
+	start := idx + colonIdx + 1
+	// Skip whitespace
+	for start < len(content) && (content[start] == ' ' || content[start] == '\t') {
+		start++
+	}
+	// Parse number
+	end := start
+	for end < len(content) && (content[end] >= '0' && content[end] <= '9') {
+		end++
+	}
+	if end > start {
+		var val int
+		fmt.Sscanf(content[start:end], "%d", &val)
+		return val
+	}
+	return -1
+}
+
+func extractJSONFloat(content, key string) float64 {
+	idx := strings.Index(content, key)
+	if idx < 0 {
+		return -1
+	}
+	colonIdx := strings.Index(content[idx:], ":")
+	if colonIdx < 0 {
+		return -1
+	}
+	start := idx + colonIdx + 1
+	for start < len(content) && (content[start] == ' ' || content[start] == '\t') {
+		start++
+	}
+	end := start
+	for end < len(content) && ((content[end] >= '0' && content[end] <= '9') || content[end] == '.') {
+		end++
+	}
+	if end > start {
+		var val float64
+		fmt.Sscanf(content[start:end], "%f", &val)
+		return val
+	}
+	return -1
 }
 
 // Global SSE server instance

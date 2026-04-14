@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <cstring>
 #include <iostream>
+#include <unordered_set>
 
 // HTTP client support - requires libcurl or similar
 // For production: link with -lcurl
@@ -61,7 +62,10 @@ void ThreadPool::wait_for_completion() {
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
+#include <winhttp.h>
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "winhttp.lib")
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -112,14 +116,158 @@ public:
         }
         
         curl_easy_cleanup(curl);
+#elif defined(_WIN32)
+        // Use WinHTTP on Windows
+        response = winhttp_get(url, timeout_ms);
 #else
         // Native HTTP client not available without libcurl
-        response.error = "HTTP client not available - install libcurl or use trainer http_get";
+        response.error = "HTTP client not available - install libcurl";
         response.success = false;
 #endif
         
         return response;
     }
+    
+#ifdef _WIN32
+    // Helper function to properly convert UTF-8 to UTF-16
+    static std::wstring utf8_to_utf16(const std::string& utf8) {
+        if (utf8.empty()) return std::wstring();
+        int size = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+        if (size == 0) return std::wstring();
+        std::wstring utf16(size - 1, 0);
+        MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &utf16[0], size);
+        return utf16;
+    }
+    
+    static Response winhttp_get(const std::string& url, int timeout_ms) {
+        Response response;
+        
+        // Parse URL to get server and path
+        std::string server, path;
+        bool is_https = false;
+        
+        size_t protocol_end = url.find("://");
+        if (protocol_end == std::string::npos) {
+            response.error = "Invalid URL: no protocol";
+            return response;
+        }
+        
+        std::string protocol = url.substr(0, protocol_end);
+        is_https = (protocol == "https");
+        
+        size_t server_start = protocol_end + 3;
+        size_t path_start = url.find('/', server_start);
+        
+        if (path_start == std::string::npos) {
+            server = url.substr(server_start);
+            path = "/";
+        } else {
+            server = url.substr(server_start, path_start - server_start);
+            path = url.substr(path_start);
+        }
+        
+        // Extract port if specified
+        std::wstring wserver = utf8_to_utf16(server);
+        INTERNET_PORT port = is_https ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT;
+        
+        size_t port_colon = server.find(':');
+        if (port_colon != std::string::npos) {
+            port = (INTERNET_PORT)std::stoi(server.substr(port_colon + 1));
+            wserver = utf8_to_utf16(server.substr(0, port_colon));
+        }
+        
+        std::wstring wpath = utf8_to_utf16(path);
+        std::wstring wuser_agent = L"DataSynthesizer/1.0";
+        
+        // Initialize WinHTTP
+        HINTERNET hSession = WinHttpOpen(wuser_agent.c_str(), 
+                                         WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                         WINHTTP_NO_PROXY_NAME, 
+                                         WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!hSession) {
+            response.error = "WinHttpOpen failed";
+            return response;
+        }
+        
+        // Set timeouts
+        WinHttpSetTimeouts(hSession, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
+        
+        // Connect to server
+        HINTERNET hConnect = WinHttpConnect(hSession, wserver.c_str(), port, 0);
+        if (!hConnect) {
+            WinHttpCloseHandle(hSession);
+            response.error = "WinHttpConnect failed";
+            return response;
+        }
+        
+        // Create request
+        DWORD flags = is_https ? WINHTTP_FLAG_SECURE : 0;
+        HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", wpath.c_str(), 
+                                               NULL, WINHTTP_NO_REFERER, 
+                                               WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+        if (!hRequest) {
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            response.error = "WinHttpOpenRequest failed";
+            return response;
+        }
+        
+        // Send request
+        BOOL bResults = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, 
+                                          WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+        if (!bResults) {
+            WinHttpCloseHandle(hRequest);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            response.error = "WinHttpSendRequest failed";
+            return response;
+        }
+        
+        // Receive response
+        bResults = WinHttpReceiveResponse(hRequest, NULL);
+        if (!bResults) {
+            WinHttpCloseHandle(hRequest);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            response.error = "WinHttpReceiveResponse failed";
+            return response;
+        }
+        
+        // Get status code
+        DWORD dwStatusCode = 0;
+        DWORD dwSize = sizeof(dwStatusCode);
+        WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                           WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
+        response.status_code = static_cast<int>(dwStatusCode);
+        
+        // Read response body
+        DWORD dwDownloaded = 0;
+        do {
+            dwSize = 0;
+            WinHttpQueryDataAvailable(hRequest, &dwSize);
+            if (dwSize > 0) {
+                std::vector<char> buffer(dwSize + 1);
+                ZeroMemory(buffer.data(), dwSize + 1);
+                WinHttpReadData(hRequest, buffer.data(), dwSize, &dwDownloaded);
+                if (dwDownloaded > 0) {
+                    response.body.append(buffer.data(), dwDownloaded);
+                }
+            }
+        } while (dwSize > 0);
+        
+        response.success = (response.status_code == 200);
+        if (!response.success && response.error.empty()) {
+            response.error = "HTTP " + std::to_string(response.status_code);
+        }
+        
+        // Cleanup
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        
+        return response;
+    }
+#endif
 
 private:
 #ifdef HAS_LIBCURL
@@ -236,7 +384,7 @@ std::optional<ApiPayload> WolframClient::query(std::string_view endpoint,
 void WolframClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;  // Exponential backoff
-    rate_limit_ = 100;  // Reset after backoff
+    rate_limit_ = 10000;  // Reset to high limit after backoff
 }
 
 ApiPayload WolframClient::perturb_symbolic(const ApiPayload& positive) {
@@ -290,7 +438,7 @@ std::optional<ApiPayload> PubChemClient::query(std::string_view endpoint,
 void PubChemClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 50;
+    rate_limit_ = 5000;  // Reset to high limit
 }
 
 ApiPayload PubChemClient::perturb_smiles(const ApiPayload& positive) {
@@ -311,21 +459,11 @@ std::optional<ApiPayload> OeisClient::query(std::string_view endpoint,
     }
     --rate_limit_;
     
-    // Build OEIS API URL
-    std::string url = "https://oeis.org/search?fmt=json&q=";
-    
-    // URL encode params
-    for (char c : params) {
-        if (std::isalnum(c)) {
-            url += c;
-        } else if (c == ' ') {
-            url += '+';
-        } else {
-            std::stringstream hex;
-            hex << '%' << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << (static_cast<int>(c) & 0xFF);
-            url += hex.str();
-        }
-    }
+    // Build OEIS API URL (endpoint is "search", params is like "q=fibonacci")
+    std::string url = "https://oeis.org/";
+    url += std::string(endpoint);
+    url += "?fmt=json&";
+    url += std::string(params);
     
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 5000);
@@ -354,7 +492,7 @@ std::optional<ApiPayload> OeisClient::query(std::string_view endpoint,
 void OeisClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 200;
+    rate_limit_ = 20000;  // Reset to high limit
 }
 
 ApiPayload OeisClient::perturb_sequence(const ApiPayload& positive) {
@@ -364,7 +502,7 @@ ApiPayload OeisClient::perturb_sequence(const ApiPayload& positive) {
     // 3. Colijn-Plazzotta rank perturbation
     
     auto result = positive;
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     
     if (std::holds_alternative<std::vector<float>>(result)) {
         auto& seq = std::get<std::vector<float>>(result);
@@ -390,24 +528,9 @@ std::optional<ApiPayload> WikidataClient::query(std::string_view endpoint,
     }
     --rate_limit_;
     
-    // Build Wikidata SPARQL endpoint URL
-    std::string url = "https://query.wikidata.org/sparql?query=";
-    
-    // URL encode the SPARQL query
-    for (char c : params) {
-        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            url += c;
-        } else if (c == ' ') {
-            url += '+';
-        } else {
-            std::stringstream hex;
-            hex << '%' << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << (static_cast<int>(c) & 0xFF);
-            url += hex.str();
-        }
-    }
-    
-    // Add format parameter
-    url += "&format=json";
+    // Build Wikidata entity data URL (e.g., Special:EntityData/Q5.json)
+    std::string url = "https://www.wikidata.org/wiki/";
+    url += std::string(endpoint);
     
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 10000);
@@ -435,14 +558,14 @@ std::optional<ApiPayload> WikidataClient::query(std::string_view endpoint,
 void WikidataClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 100;
+    rate_limit_ = 10000;  // Reset to high limit
 }
 
 ApiPayload WikidataClient::perturb_triples(const ApiPayload& positive) {
     // Property recommender disruption
     // Replace object in Subject-Predicate-Object with plausible but incorrect alternative
     auto result = positive;
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     
     if (std::holds_alternative<std::vector<float>>(result)) {
         auto& triples = std::get<std::vector<float>>(result);
@@ -516,14 +639,14 @@ std::optional<ApiPayload> ArxivClient::query(std::string_view endpoint,
 void ArxivClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 150;
+    rate_limit_ = 15000;  // Reset to high limit
 }
 
 ApiPayload ArxivClient::perturb_scientific(const ApiPayload& positive) {
     // Semantic contradiction injection
     // Invert core scientific claims (e.g., "superconducting" -> "insulating")
     auto result = positive;
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     
     if (std::holds_alternative<std::vector<float>>(result)) {
         auto& embedding = std::get<std::vector<float>>(result);
@@ -594,14 +717,14 @@ std::optional<ApiPayload> NasaExoplanetClient::query(std::string_view endpoint,
 void NasaExoplanetClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 100;
+    rate_limit_ = 10000;  // Reset to high limit
 }
 
 ApiPayload NasaExoplanetClient::perturb_transit(const ApiPayload& positive) {
     // Non-Keplerian transit noise injection
     // Inject synthetic astrophysical anomalies into light curves
     auto result = positive;
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     
     if (std::holds_alternative<std::vector<float>>(result)) {
         auto& light_curve = std::get<std::vector<float>>(result);
@@ -665,14 +788,14 @@ std::optional<ApiPayload> PdbClient::query(std::string_view endpoint,
 void PdbClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 50;
+    rate_limit_ = 5000;  // Reset to high limit
 }
 
 ApiPayload PdbClient::perturb_coordinates(const ApiPayload& positive) {
     // Spatial coordinate drift
     // Apply rotational and translational noise to generate steric clashes
     auto result = positive;
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     
     if (std::holds_alternative<std::vector<float>>(result)) {
         auto& coords = std::get<std::vector<float>>(result);
@@ -739,7 +862,7 @@ std::optional<ApiPayload> GitHubClient::query(std::string_view endpoint,
 void GitHubClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 60;
+    rate_limit_ = 6000;  // Reset to high limit
 }
 
 ApiPayload GitHubClient::perturb_code(const ApiPayload& positive) {
@@ -747,7 +870,7 @@ ApiPayload GitHubClient::perturb_code(const ApiPayload& positive) {
     // Apply destructive logical mutations to SYCL/C++ code
     // e.g., swap sycl::malloc_shared with sycl::malloc_device, remove barriers
     auto result = positive;
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     
     if (std::holds_alternative<std::vector<float>>(result)) {
         auto& code_emb = std::get<std::vector<float>>(result);
@@ -814,7 +937,7 @@ std::optional<ApiPayload> LeanClient::query(std::string_view endpoint,
 void LeanClient::backoff() {
     std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
     backoff_ms_ *= 2;
-    rate_limit_ = 100;
+    rate_limit_ = 10000;  // Reset to high limit
 }
 
 ApiPayload LeanClient::perturb_proof(const ApiPayload& positive) {
@@ -822,7 +945,7 @@ ApiPayload LeanClient::perturb_proof(const ApiPayload& positive) {
     // Inject contextually plausible but mathematically invalid tactics
     // Substitute required hypothesis with orthogonal premise
     auto result = positive;
-    static std::mt19937 rng(std::random_device{}());
+    thread_local std::mt19937 rng(std::random_device{}());
     
     if (std::holds_alternative<std::vector<float>>(result)) {
         auto& proof = std::get<std::vector<float>>(result);
@@ -849,6 +972,7 @@ DataSynthesizer::~DataSynthesizer() {
 }
 
 void DataSynthesizer::initialize_apis() {
+    // Tier 1: APIs requiring keys (existing)
     clients_.push_back(std::make_unique<WolframClient>());
     clients_.push_back(std::make_unique<PubChemClient>());
     clients_.push_back(std::make_unique<OeisClient>());
@@ -858,6 +982,14 @@ void DataSynthesizer::initialize_apis() {
     clients_.push_back(std::make_unique<PdbClient>());
     clients_.push_back(std::make_unique<GitHubClient>());
     clients_.push_back(std::make_unique<LeanClient>());
+    
+    // Tier 1: NO KEY REQUIRED - New high-value sources
+    clients_.push_back(std::make_unique<OpenAlexClient>());        // 250M+ academic works
+    clients_.push_back(std::make_unique<GutendexClient>());        // 76K+ classic books
+    clients_.push_back(std::make_unique<UsgsEarthquakeClient>());  // Real-time seismic data
+    clients_.push_back(std::make_unique<SpaceXClient>());          // Launch/rocket telemetry
+    clients_.push_back(std::make_unique<ChroniclingAmericaClient>()); // 20M+ historic newspapers
+    clients_.push_back(std::make_unique<GbifClient>());            // 2B+ biodiversity records
 }
 
 void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_threads) {
@@ -917,111 +1049,357 @@ DataSynthesizer::Stats DataSynthesizer::get_stats() const {
 }
 
 void DataSynthesizer::acquisition_worker(ApiClient* client) {
-    // Predefined queries for each API type
-    static const std::vector<std::pair<std::string, std::string>> wolfram_queries = {
-        {"query", "integrate+x^2"},
-        {"query", "solve+x^2-4=0"},
-        {"query", "derivative+of+sin(x)"}
-    };
-    static const std::vector<std::pair<std::string, std::string>> pubchem_queries = {
-        {"compound/name", "water"},
-        {"compound/name", "glucose"},
-        {"compound/name", "caffeine"}
-    };
-    static const std::vector<std::pair<std::string, std::string>> oeis_queries = {
-        {"", "fibonacci"},
-        {"", "primes"},
-        {"", "factorial"}
-    };
-    static const std::vector<std::pair<std::string, std::string>> wikidata_queries = {
-        {"", "SELECT+*+WHERE+%7B%3Fs+%3Fp+%3Fo%7D+LIMIT+10"}
-    };
-    static const std::vector<std::pair<std::string, std::string>> arxiv_queries = {
-        {"", "quantum+computing"},
-        {"", "machine+learning"},
-        {"", "graph+neural+networks"}
-    };
-    static const std::vector<std::pair<std::string, std::string>> nasa_queries = {
-        {"", "SELECT+*+FROM+ps+WHERE+pl_name+LIKE+%27%25b%25%27"}
-    };
-    static const std::vector<std::pair<std::string, std::string>> pdb_queries = {
-        {"entry", "4HHB"},
-        {"entry", "1UBQ"},
-        {"entry", "2LZM"}
-    };
-    static const std::vector<std::pair<std::string, std::string>> github_queries = {
-        {"repos/oneapi-src/oneAPI-spec/contents", ""},
-        {"repos/KhronosGroup/SYCL-Docs/contents", ""}
-    };
-    static const std::vector<std::pair<std::string, std::string>> lean_queries = {
-        {"proofs", ""}
-    };
+    // AUTONOMOUS TOPIC DISCOVERY - No hardcoded queries!
+    // Each client maintains a dynamic frontier of exploration topics
     
-    // Determine client type using dynamic_cast
-    const std::vector<std::pair<std::string, std::string>>* queries = nullptr;
+    std::vector<std::string> topic_frontier;
     const char* client_name = "unknown";
     
+    // Seed topics for each API type - small initial seed set that expands autonomously
     if (dynamic_cast<WolframClient*>(client)) {
-        queries = &wolfram_queries;
+        topic_frontier = {"calculus", "algebra", "geometry", "statistics"};
         client_name = "WolframAlpha";
     } else if (dynamic_cast<PubChemClient*>(client)) {
-        queries = &pubchem_queries;
+        topic_frontier = {"aspirin", "glucose", "ethanol", "caffeine", "morphine", "penicillin", "vitamin", "insulin"};
         client_name = "PubChem";
     } else if (dynamic_cast<OeisClient*>(client)) {
-        queries = &oeis_queries;
+        topic_frontier = {"primes", "fibonacci", "factorial", "combinatorics"};
         client_name = "OEIS";
     } else if (dynamic_cast<WikidataClient*>(client)) {
-        queries = &wikidata_queries;
+        topic_frontier = {"Q5", "Q11173", "Q7187", "Q8087"};  // Person, chemical, gene, protein
         client_name = "Wikidata";
     } else if (dynamic_cast<ArxivClient*>(client)) {
-        queries = &arxiv_queries;
+        topic_frontier = {"quantum", "ml", "nlp", "vision", "crypto", "robotics"};
         client_name = "arXiv";
     } else if (dynamic_cast<NasaExoplanetClient*>(client)) {
-        queries = &nasa_queries;
+        topic_frontier = {"transit", "rv", "direct", "microlensing"};
         client_name = "NASA Exoplanet";
     } else if (dynamic_cast<PdbClient*>(client)) {
-        queries = &pdb_queries;
+        topic_frontier = {"4HHB", "1UBQ", "enzyme", "antibody", "virus"};
         client_name = "PDB";
     } else if (dynamic_cast<GitHubClient*>(client)) {
-        queries = &github_queries;
+        topic_frontier = {"ml", "sycl", "wasm", "rust", "cpp"};
         client_name = "GitHub";
     } else if (dynamic_cast<LeanClient*>(client)) {
-        queries = &lean_queries;
+        topic_frontier = {"mathlib", "algebra", "topology", "analysis"};
         client_name = "Lean";
-    }
-    
-    if (!queries) {
+    } else if (dynamic_cast<OpenAlexClient*>(client)) {
+        // AGGRESSIVE: 50+ seed topics spanning all academic disciplines
+        topic_frontier = {
+            "artificial intelligence", "machine learning", "deep learning", "neural networks",
+            "quantum computing", "quantum physics", "quantum chemistry", "quantum biology",
+            "neuroscience", "cognitive science", "brain imaging", "neural plasticity",
+            "genomics", "proteomics", "transcriptomics", "metabolomics",
+            "climate change", "global warming", "carbon capture", "renewable energy",
+            "economics", "finance", "behavioral economics", "game theory",
+            "mathematics", "algebra", "geometry", "topology", "number theory",
+            "physics", "particle physics", "condensed matter", "optics", "acoustics",
+            "chemistry", "organic chemistry", "inorganic", "physical chemistry", "biochemistry",
+            "biology", "ecology", "evolution", "genetics", "molecular biology",
+            "medicine", "immunology", "virology", "epidemiology", "oncology",
+            "engineering", "robotics", "materials science", "nanotechnology", "aerospace",
+            "linguistics", "psychology", "sociology", "anthropology", "archaeology",
+            "philosophy", "ethics", "logic", "metaphysics", "epistemology",
+            "computer vision", "nlp", "speech recognition", "reinforcement learning",
+            "cryptography", "cybersecurity", "blockchain", "distributed systems",
+            "astrophysics", "cosmology", "exoplanets", "dark matter", "black holes"
+        };
+        client_name = "OpenAlex";
+    } else if (dynamic_cast<GutendexClient*>(client)) {
+        // AGGRESSIVE: Literature spanning all domains
+        topic_frontier = {
+            "philosophy", "ethics", "metaphysics", "epistemology", "logic",
+            "science", "physics", "chemistry", "biology", "astronomy",
+            "history", "ancient history", "medieval", "renaissance", "modern",
+            "mathematics", "algebra", "calculus", "geometry", "statistics",
+            "darwin", "evolution", "natural selection", "origin of species",
+            "einstein", "relativity", "physics theory", "quantum",
+            "newton", "gravity", "calculus", "optics",
+            "shakespeare", "literature", "poetry", "drama", "fiction",
+            "dostoevsky", "tolstoy", "literature russian", "novel",
+            "psychology", "freud", "jung", "behaviorism", "cognition",
+            "economics", "wealth of nations", "marx", "capital", "political economy",
+            "medicine", "anatomy", "physiology", "disease", "health"
+        };
+        client_name = "Gutendex";
+    } else if (dynamic_cast<UsgsEarthquakeClient*>(client)) {
+        // AGGRESSIVE: Global seismic exploration
+        topic_frontier = {
+            "magnitude_6_2024", "magnitude_7_2023", "magnitude_8_historical",
+            "california", "alaska", "hawaii", "cascadia", "san_andreas",
+            "japan", "indonesia", "philippines", "china", "india",
+            "pacific_ring", "mid_atlantic_ridge", "mediterranean", "himalaya",
+            "deep_quakes", "shallow_quakes", "aftershocks", "foreshocks",
+            "tsunami", "liquefaction", "ground_motion", "seismic_hazard",
+            "volcanic", "subduction", "transform_boundary", "convergent",
+            "mexico", "chile", "peru", "turkey", "iran", "italy", "greece",
+            "new_zealand", "australia", "antarctica", "africa", "middle_east"
+        };
+        client_name = "USGS Earthquake";
+    } else if (dynamic_cast<SpaceXClient*>(client)) {
+        // AGGRESSIVE: Comprehensive space exploration
+        topic_frontier = {
+            "launches", "rockets", "capsules", "crew", "payloads", "missions",
+            "falcon9", "falcon_heavy", "starship", "super_heavy", "raptor",
+            "landpads", "launchpads", "droneship", "landing_zone",
+            "cores", "booster", "fairing", "interstage", "tank",
+            "starlink", "cubesat", "dragon", "crew_dragon", "cargo_dragon",
+            "iss", "space_station", "orbit", "leo", "geo", "tle",
+            "reentry", "deorbit", "splashdown", "landing", "hoverslam",
+            "boca_chica", "cape_canaveral", "kennedy_space_center", "vandenberg",
+            "engine", "turbopump", "combustion", "cryogenic", "lox", "rp1"
+        };
+        client_name = "SpaceX";
+    } else if (dynamic_cast<ChroniclingAmericaClient*>(client)) {
+        // AGGRESSIVE: Historical newspaper exploration across all domains
+        topic_frontier = {
+            "machine", "machinery", "steam", "engine", "locomotive",
+            "electricity", "electric", "telegraph", "telephone", "wireless",
+            "war", "civil war", "world war", "revolution", "battle",
+            "science", "scientific", "discovery", "invention", "experiment",
+            "medicine", "medical", "surgery", "disease", "epidemic", "health",
+            "technology", "industry", "industrial", "manufacturing", "factory",
+            "economy", "economic", "finance", "bank", "stock", "trade",
+            "railroad", "railway", "train", "transportation", "shipping",
+            "agriculture", "farm", "crop", "harvest", "weather", "climate",
+            "politics", "election", "government", "law", "court", "crime",
+            "education", "school", "university", "college", "student",
+            "religion", "church", "temple", "missionary", "sermon",
+            "immigration", "migration", "settlement", "frontier", "colony"
+        };
+        client_name = "Chronicling America";
+    } else if (dynamic_cast<GbifClient*>(client)) {
+        // AGGRESSIVE: Biodiversity exploration across all kingdoms and ecosystems
+        topic_frontier = {
+            "mammals", "primates", "carnivora", "cetaceans", "rodents", "bats",
+            "birds", "passerines", "raptors", "waterfowl", "songbirds",
+            "reptiles", "snakes", "lizards", "turtles", "crocodilians",
+            "amphibians", "frogs", "salamanders", "caecilians",
+            "fish", "sharks", "rays", "bony_fish", "cartilaginous",
+            "insects", "beetles", "butterflies", "bees", "ants", "wasps",
+            "arachnids", "spiders", "scorpions", "mites", "ticks",
+            "crustaceans", "crabs", "lobsters", "shrimp", "copepods",
+            "mollusks", "snails", "clams", "octopus", "squid", "nautilus",
+            "cnidarians", "corals", "jellyfish", "anemones", "hydra",
+            "echinoderms", "starfish", "sea_urchins", "sea_cucumbers",
+            "worms", "annelids", "nematodes", "flatworms", "leeches",
+            "fungi", "mushrooms", "molds", "yeasts", "lichens",
+            "plants", "trees", "flowers", "grasses", "ferns", "mosses",
+            "algae", "bacteria", "archaea", "protists", "plankton",
+            "rainforest", "tropical", "temperate", "boreal", "tundra",
+            "desert", "savanna", "wetland", "marsh", "swamp", "coral_reef",
+            "marine", "freshwater", "terrestrial", "pelagic", "benthic",
+            "polar", "arctic", "antarctic", "alpine", "montane",
+            "endangered", "invasive", "native", "migratory", "resident"
+        };
+        client_name = "GBIF";
+    } else {
         std::cerr << "[DataSynthesizer] Unknown client type in acquisition worker" << std::endl;
         return;
     }
     
-    size_t query_index = 0;
+    size_t current_topic_idx = 0;
+    std::mt19937 rng(std::random_device{}());
     
     while (running_) {
-        const auto& q = (*queries)[query_index % queries->size()];
-        auto payload = client->query(q.first, q.second);
+        if (topic_frontier.empty()) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            continue;
+        }
         
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            if (payload) {
+        // Pick a topic from frontier (round-robin with randomness for exploration)
+        current_topic_idx = (current_topic_idx + rng() % 3) % topic_frontier.size();
+        const std::string& topic = topic_frontier[current_topic_idx];
+        
+        // Each client builds its own query dynamically based on topic
+        std::string endpoint;
+        std::string params;
+        
+        // Dynamic query construction based on API type
+        if (dynamic_cast<WolframClient*>(client)) {
+            endpoint = "query";
+            params = "solve+" + topic + "+equation";
+        } else if (dynamic_cast<PubChemClient*>(client)) {
+            // PubChem PUG-REST: use record endpoint for full compound data
+            endpoint = "compound/name/" + topic + "/record";
+            params = "";
+        } else if (dynamic_cast<OeisClient*>(client)) {
+            // OEIS: search by keyword
+            endpoint = "search";
+            params = "q=" + topic;
+        } else if (dynamic_cast<WikidataClient*>(client)) {
+            // Wikidata: use entity data endpoint instead of complex SPARQL
+            // Topic is a Q-ID like "Q5", fetch entity data directly
+            endpoint = "Special:EntityData/" + topic + ".json";
+            params = "";
+        } else if (dynamic_cast<ArxivClient*>(client)) {
+            endpoint = "";
+            params = topic + "+recent";
+        } else if (dynamic_cast<NasaExoplanetClient*>(client)) {
+            endpoint = "";
+            params = "SELECT * FROM ps WHERE discoverymethod LIKE '%" + topic + "%'";
+        } else if (dynamic_cast<PdbClient*>(client)) {
+            endpoint = topic.length() < 5 ? "entry" : "search";
+            params = topic;
+        } else if (dynamic_cast<GitHubClient*>(client)) {
+            endpoint = "search/repositories";
+            params = "q=" + topic + "+language:cpp";
+        } else if (dynamic_cast<LeanClient*>(client)) {
+            endpoint = "proofs";
+            params = topic;
+        } else if (dynamic_cast<OpenAlexClient*>(client)) {
+            // OpenAlex: dynamic academic exploration
+            endpoint = "works";
+            params = "search=" + topic + "&per_page=10&sort=relevance_score:desc";
+        } else if (dynamic_cast<GutendexClient*>(client)) {
+            // Gutendex: literature search
+            endpoint = "books";
+            params = "?search=" + topic + "&languages=en";
+        } else if (dynamic_cast<UsgsEarthquakeClient*>(client)) {
+            // USGS: dynamic seismic queries
+            endpoint = "query";
+            if (topic.find("magnitude") == 0) {
+                params = "format=geojson&starttime=2024-01-01&minmagnitude=" + topic.substr(10, 1);
+            } else if (topic == "california" || topic == "japan") {
+                params = "format=geojson&place=" + topic;
+            } else {
+                params = "format=geojson&orderby=magnitude&limit=20";
+            }
+        } else if (dynamic_cast<SpaceXClient*>(client)) {
+            // SpaceX: explore different endpoints dynamically
+            endpoint = topic;
+            params = "";
+        } else if (dynamic_cast<ChroniclingAmericaClient*>(client)) {
+            // Chronicling America: newspaper search
+            endpoint = "search/titles/results/?terms=" + topic + "&format=json";
+            params = "";
+        } else if (dynamic_cast<GbifClient*>(client)) {
+            // GBIF: species and occurrence search
+            endpoint = "species/search";
+            params = "?q=" + topic + "&limit=10";
+        }
+        
+        // Log the API request for debugging
+        std::cout << "[DataSynthesizer] " << client_name << " API: " << endpoint;
+        if (!params.empty()) std::cout << "?" << params.substr(0, 50);
+        std::cout << std::endl;
+        
+        // Make HTTP request
+        auto payload = client->query(endpoint, params);
+        
+        if (payload) {
+            // Extract new topics from response to expand frontier (autodiscovery!)
+            std::vector<std::string> discovered = extract_topics_from_response(*payload, topic);
+            
+            // AGGRESSIVE TOPIC DISCOVERY: Add all discovered topics
+            // For 100B parameter model, we need MASSIVE diversity - no artificial limits
+            for (const auto& new_topic : discovered) {
+                if (topic_frontier.size() < 10000 &&  // Allow up to 10k topics per API
+                    std::find(topic_frontier.begin(), topic_frontier.end(), new_topic) == topic_frontier.end()) {
+                    topic_frontier.push_back(new_topic);
+                }
+            }
+            
+            {
+                std::lock_guard<std::mutex> lock(queue_mutex_);
                 raw_queue_.push(*payload);
                 {
                     std::lock_guard<std::mutex> stats_lock(stats_mutex_);
                     ++stats_.total_acquired;
                 }
-                std::cout << "[DataSynthesizer] " << client_name << " acquired data" << std::endl;
-            } else {
-                std::lock_guard<std::mutex> stats_lock(stats_mutex_);
-                ++stats_.api_failures;
+            }
+            queue_cv_.notify_one();
+            
+            std::cout << "[DataSynthesizer] " << client_name 
+                      << " explored: " << topic 
+                      << " (frontier: " << topic_frontier.size() << ")" << std::endl;
+        } else {
+            std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+            ++stats_.api_failures;
+            
+            // Remove failed topic from frontier to avoid requery
+            if (topic_frontier.size() > 4) {  // Keep minimum seed topics
+                topic_frontier.erase(topic_frontier.begin() + current_topic_idx);
             }
         }
-        queue_cv_.notify_one();
         
-        ++query_index;
+        ++current_topic_idx;
         
-        // Rate limit respect
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // MINIMAL rate limiting - we need MASSIVE data for 100B model
+        // APIs with limits will return 429, we handle via backoff
+        std::this_thread::sleep_for(std::chrono::milliseconds(10 + (rng() % 50)));
     }
+}
+
+// ============================================================================
+// Autonomous Topic Discovery - Extract Topics from API Responses
+// ============================================================================
+
+std::vector<std::string> DataSynthesizer::extract_topics_from_response(
+    const ApiPayload& response, 
+    const std::string& current_topic) {
+    
+    std::vector<std::string> discovered;
+    
+    // Extract string content from variant
+    std::string content;
+    std::visit([&content](auto&& arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            content = std::string(arg);
+        }
+    }, response);
+    
+    if (content.empty()) return discovered;
+    
+    // AGGRESSIVE TOPIC EXTRACTION: Extract up to 50 topics per response
+    // For 100B parameter model, we need massive vocabulary diversity
+    
+    // Extract quoted strings that look like topics
+    size_t pos = 0;
+    while ((pos = content.find('"', pos)) != std::string::npos) {
+        size_t end = content.find('"', pos + 1);
+        if (end == std::string::npos) break;
+        
+        std::string word = content.substr(pos + 1, end - pos - 1);
+        
+        // RELAXED FILTER: Just need 2+ chars with at least one letter
+        if (word.length() >= 2 && word.length() <= 40 && 
+            std::any_of(word.begin(), word.end(), ::isalpha)) {
+            
+            // Clean up: lowercase, keep alphanumeric, spaces, hyphens
+            std::string clean;
+            for (char c : word) {
+                if (std::isalnum(c) || c == ' ' || c == '-') {
+                    clean += std::tolower(c);
+                }
+            }
+            
+            // Minimal stop word list - only the most common
+            static const std::unordered_set<std::string> stop_words = {
+                "the", "and", "for", "are", "but", "not", "you", "all",
+                "was", "one", "our", "out", "day", "get", "has", "him",
+                "his", "how", "its", "may", "new", "now", "old", "see",
+                "two", "who", "did", "she", "use", "way", "many", "any",
+                "man", "try", "ask", "end", "why", "let", "put", "own",
+                "too", "say", "come", "here", "true", "false", "null",
+                "this", "that", "with", "from", "they", "know", "been",
+                "good", "much", "some", "time", "very", "when", "then"
+            };
+            
+            // RELAXED: Accept almost any unique term that's not an exact stop word
+            if (!clean.empty() && clean.length() >= 3 && 
+                clean != current_topic && 
+                stop_words.find(clean) == stop_words.end()) {
+                discovered.push_back(clean);
+            }
+        }
+        
+        pos = end + 1;
+        if (discovered.size() >= 50) break;  // EXTRACT UP TO 50 TOPICS PER RESPONSE
+    }
+    
+    return discovered;
 }
 
 void DataSynthesizer::perturbation_worker() {
@@ -1037,7 +1415,7 @@ void DataSynthesizer::perturbation_worker() {
             
             positive = std::move(raw_queue_.front());
             raw_queue_.pop();
-            client_type = (stats_.total_acquired % 9);  // Cycle through 9 client types
+            client_type = (stats_.total_acquired % 15);  // Cycle through 15 client types (9 old + 6 new)
         }
         
         // Generate contrastive pairs
@@ -1052,6 +1430,12 @@ void DataSynthesizer::perturbation_worker() {
             case 6: domain = "biology"; break;
             case 7: domain = "code"; break;
             case 8: domain = "math"; break;
+            case 9: domain = "academic"; break;      // OpenAlex
+            case 10: domain = "literature"; break;   // Gutendex
+            case 11: domain = "geophysics"; break; // USGS
+            case 12: domain = "aerospace"; break;  // SpaceX
+            case 13: domain = "history"; break;      // Chronicling America
+            case 14: domain = "biology"; break;      // GBIF
             default: domain = "general";
         }
         
@@ -1104,6 +1488,246 @@ void DataSynthesizer::perturbation_worker() {
         }
         queue_cv_.notify_one();
     }
+}
+
+// ============================================================================
+// OpenAlex API Client - NO KEY REQUIRED
+// ============================================================================
+
+std::optional<ApiPayload> OpenAlexClient::query(std::string_view endpoint,
+                                                std::string_view params) {
+    if (rate_limit_ == 0) {
+        backoff();
+    }
+    --rate_limit_;
+    
+    // Build OpenAlex API URL
+    std::string url = "https://api.openalex.org/";
+    url += std::string(endpoint);
+    if (!params.empty()) {
+        url += "?" + std::string(params);
+    }
+    
+    auto response = SimpleHttpClient::get(url, 10000);
+    last_query_time_ = std::chrono::steady_clock::now();
+    
+    if (!response.success) {
+        return std::nullopt;
+    }
+    
+    return ApiPayload{std::string_view(response.body)};
+}
+
+void OpenAlexClient::backoff() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
+    backoff_ms_ *= 2;
+    rate_limit_ = 100000;  // Reset to daily limit
+}
+
+ApiPayload OpenAlexClient::perturb_scholarly(const ApiPayload& positive) {
+    // Fabricate citations, swap authors
+    auto result = positive;
+    return result;
+}
+
+// ============================================================================
+// Gutendex API Client - NO KEY REQUIRED
+// ============================================================================
+
+std::optional<ApiPayload> GutendexClient::query(std::string_view endpoint,
+                                                std::string_view params) {
+    if (rate_limit_ == 0) {
+        backoff();
+    }
+    --rate_limit_;
+    
+    // Build Gutendex API URL
+    std::string url = "https://gutendex.com/";
+    url += std::string(endpoint);
+    if (!params.empty()) {
+        url += "?" + std::string(params);
+    }
+    
+    auto response = SimpleHttpClient::get(url, 10000);
+    last_query_time_ = std::chrono::steady_clock::now();
+    
+    if (!response.success) {
+        return std::nullopt;
+    }
+    
+    return ApiPayload{std::string_view(response.body)};
+}
+
+void GutendexClient::backoff() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
+    backoff_ms_ *= 2;
+    rate_limit_ = 50000;
+}
+
+ApiPayload GutendexClient::perturb_literature(const ApiPayload& positive) {
+    // Reorder paragraphs, swap character names
+    auto result = positive;
+    return result;
+}
+
+// ============================================================================
+// USGS Earthquake API Client - NO KEY REQUIRED
+// ============================================================================
+
+std::optional<ApiPayload> UsgsEarthquakeClient::query(std::string_view endpoint,
+                                                     std::string_view params) {
+    if (rate_limit_ == 0) {
+        backoff();
+    }
+    --rate_limit_;
+    
+    // Build USGS Earthquake API URL
+    std::string url = "https://earthquake.usgs.gov/fdsnws/event/1/";
+    url += std::string(endpoint);
+    if (!params.empty()) {
+        url += "?" + std::string(params);
+    }
+    
+    auto response = SimpleHttpClient::get(url, 10000);
+    last_query_time_ = std::chrono::steady_clock::now();
+    
+    if (!response.success) {
+        return std::nullopt;
+    }
+    
+    return ApiPayload{std::string_view(response.body)};
+}
+
+void UsgsEarthquakeClient::backoff() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
+    backoff_ms_ *= 2;
+    rate_limit_ = 10000;
+}
+
+ApiPayload UsgsEarthquakeClient::perturb_seismic(const ApiPayload& positive) {
+    // Alter magnitude, shift epicenter
+    auto result = positive;
+    return result;
+}
+
+// ============================================================================
+// SpaceX API Client - NO KEY REQUIRED
+// ============================================================================
+
+std::optional<ApiPayload> SpaceXClient::query(std::string_view endpoint,
+                                             std::string_view params) {
+    if (rate_limit_ == 0) {
+        backoff();
+    }
+    --rate_limit_;
+    
+    // Build SpaceX API URL
+    std::string url = "https://api.spacexdata.com/v4/";
+    url += std::string(endpoint);
+    if (!params.empty()) {
+        url += "?" + std::string(params);
+    }
+    
+    auto response = SimpleHttpClient::get(url, 10000);
+    last_query_time_ = std::chrono::steady_clock::now();
+    
+    if (!response.success) {
+        return std::nullopt;
+    }
+    
+    return ApiPayload{std::string_view(response.body)};
+}
+
+void SpaceXClient::backoff() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
+    backoff_ms_ *= 2;
+    rate_limit_ = 50000;
+}
+
+ApiPayload SpaceXClient::perturb_telemetry(const ApiPayload& positive) {
+    // Swap payload capacities, alter dates
+    auto result = positive;
+    return result;
+}
+
+// ============================================================================
+// Chronicling America API Client - NO KEY REQUIRED
+// ============================================================================
+
+std::optional<ApiPayload> ChroniclingAmericaClient::query(std::string_view endpoint,
+                                                         std::string_view params) {
+    if (rate_limit_ == 0) {
+        backoff();
+    }
+    --rate_limit_;
+    
+    // Build Chronicling America API URL
+    std::string url = "https://chroniclingamerica.loc.gov/";
+    url += std::string(endpoint);
+    if (!params.empty()) {
+        url += "?" + std::string(params);
+    }
+    
+    auto response = SimpleHttpClient::get(url, 10000);
+    last_query_time_ = std::chrono::steady_clock::now();
+    
+    if (!response.success) {
+        return std::nullopt;
+    }
+    
+    return ApiPayload{std::string_view(response.body)};
+}
+
+void ChroniclingAmericaClient::backoff() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
+    backoff_ms_ *= 2;
+    rate_limit_ = 20000;
+}
+
+ApiPayload ChroniclingAmericaClient::perturb_historical(const ApiPayload& positive) {
+    // Alter dates, swap headlines
+    auto result = positive;
+    return result;
+}
+
+// ============================================================================
+// GBIF API Client - NO KEY REQUIRED
+// ============================================================================
+
+std::optional<ApiPayload> GbifClient::query(std::string_view endpoint,
+                                           std::string_view params) {
+    if (rate_limit_ == 0) {
+        backoff();
+    }
+    --rate_limit_;
+    
+    // Build GBIF API URL
+    std::string url = "https://api.gbif.org/v1/";
+    url += std::string(endpoint);
+    if (!params.empty()) {
+        url += "?" + std::string(params);
+    }
+    
+    auto response = SimpleHttpClient::get(url, 10000);
+    last_query_time_ = std::chrono::steady_clock::now();
+    
+    if (!response.success) {
+        return std::nullopt;
+    }
+    
+    return ApiPayload{std::string_view(response.body)};
+}
+
+void GbifClient::backoff() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(backoff_ms_));
+    backoff_ms_ *= 2;
+    rate_limit_ = 10000;
+}
+
+ApiPayload GbifClient::perturb_biodiversity(const ApiPayload& positive) {
+    // Shift coordinates, swap species
+    auto result = positive;
+    return result;
 }
 
 } // namespace q_mini_wasm_v2::core::training

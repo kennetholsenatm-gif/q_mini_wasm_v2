@@ -102,7 +102,7 @@ void test_forward_forward() {
     using namespace core::learning;
     using namespace core::ternary;
     
-    FFConfig config{2, 8, 0.1, 1.0, -1.0};
+    FFConfig config{2, 8, 2, 2, 0}; // layers, neurons, shift, pos_thresh, neg_thresh
     auto learner = create_ff_learner(config);
     
     // Create sample data
@@ -120,8 +120,8 @@ void test_forward_forward() {
     assert(output.size() == 8);
     
     // Test goodness computation
-    double goodness = learner->compute_goodness(output);
-    assert(goodness >= 0.0);
+    uint32_t goodness = learner->compute_goodness(output);
+    assert(goodness >= 0);
     
     std::cout << "  Forward-Forward learning: PASSED" << std::endl;
 }

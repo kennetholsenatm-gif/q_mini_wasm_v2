@@ -5,6 +5,7 @@
 #include <queue>
 #include <random>
 #include <iostream>
+#include <mutex>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -22,16 +23,24 @@ DynamicExpert::DynamicExpert(size_t id_, const learning::FFConfig& config)
     , last_activation(std::chrono::steady_clock::now())
     , learner(nullptr)
 {
+    std::cerr << "[DynamicExpert] Constructor start for id=" << id_ << std::endl;
+    
     // Safety check for config
     size_t neuron_count = config.neurons_per_layer > 0 ? config.neurons_per_layer : 64;
+    std::cerr << "[DynamicExpert] neuron_count=" << neuron_count << std::endl;
     
     // Initialize centroid with valid size
+    std::cerr << "[DynamicExpert] Resizing centroid..." << std::endl;
     centroid.resize(neuron_count, 0.0);
+    std::cerr << "[DynamicExpert] Centroid resized to " << centroid.size() << std::endl;
     
     // Create learner only if config is valid
     if (config.num_layers > 0 && neuron_count > 0) {
+        std::cerr << "[DynamicExpert] Creating ForwardForwardLearner (lazy_init=" << config.lazy_init << ")..." << std::endl;
         learner = std::make_unique<learning::ForwardForwardLearner>(config);
+        std::cerr << "[DynamicExpert] ForwardForwardLearner created" << std::endl;
     }
+    std::cerr << "[DynamicExpert] Constructor complete" << std::endl;
 }
 
 // ====================================================================
@@ -109,13 +118,17 @@ std::vector<size_t> SelfOrganizingExpertManager::route_sample(
     const TopologicalSample& sample, 
     size_t top_k
 ) {
-    // Compute distances to all expert centroids
+    // Compute distances to all expert centroids (thread-safe)
     std::vector<std::pair<double, size_t>> distances;
-    distances.reserve(experts_.size());
     
-    for (const auto& [id, expert] : experts_) {
-        double dist = centroid_distance(sample.embedding, expert->centroid);
-        distances.push_back({dist, id});
+    {
+        std::lock_guard<std::mutex> lock(experts_mutex_);
+        distances.reserve(experts_.size());
+        
+        for (const auto& [id, expert] : experts_) {
+            double dist = centroid_distance(sample.embedding, expert->centroid);
+            distances.push_back({dist, id});
+        }
     }
     
     // Sort by distance (ascending)
@@ -144,12 +157,13 @@ size_t SelfOrganizingExpertManager::process_sample(
     sample.embedding = compute_sample_embedding(raw_data);
     sample.timestamp = std::chrono::steady_clock::now();
     
-    // Route to nearest experts
+    // Route to nearest experts (thread-safe)
     auto expert_ids = route_sample(sample, /*top_k=*/3);  // Route to 3 nearest
     sample.assigned_experts = std::set<size_t>(expert_ids.begin(), expert_ids.end());
     
-    // Train each assigned expert
+    // Train each assigned expert (thread-safe)
     size_t activated_count = 0;
+    std::lock_guard<std::mutex> lock(experts_mutex_);
     for (size_t expert_id : expert_ids) {
         auto* expert = get_expert(expert_id);
         if (!expert) continue;

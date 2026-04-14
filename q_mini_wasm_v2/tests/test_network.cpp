@@ -18,7 +18,7 @@ int main() {
     config.total_experts = 4;
     config.active_experts = 2;
     config.routing_qutrits = 4;
-    config.learning_rate = 0.01;
+    config.learning_rate_shift = 2;
     config.worker_threads = 4;
 
     try {

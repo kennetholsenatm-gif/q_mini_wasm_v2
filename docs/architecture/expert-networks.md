@@ -2,16 +2,29 @@
 
 ## Overview
 
-This guide describes how to design and implement expert networks for the 243-expert MoE (Mixture of Experts) system in q_mini_wasm_v2.
+This guide describes how to design and implement expert networks for the q_mini_wasm_v2 MoE (Mixture of Experts) system. **Target capacity: 8192 experts** (current production-tested: 243).
 
 ## Expert Network Basics
 
 ### What is an Expert?
 
 An **expert** is a specialized neural network that handles specific types of inputs. In the MoE framework:
-- Each of the 243 experts specializes in different input patterns
-- The router directs inputs to the most appropriate experts (typically 16 out of 243)
+- Each expert specializes in different input patterns
+- The router directs inputs to the most appropriate experts (top-K selection)
 - Experts train independently using Forward-Forward learning
+- Topology is dynamically optimized via Betti-guided graph adjustment
+
+### Supported Scales
+
+| Scale | Experts | Topology | Status |
+|-------|---------|----------|--------|
+| Small | 16 | RING | Tested |
+| Medium | 64 | SMALL_WORLD | Tested |
+| Production | 243 | HIERARCHICAL | Production-tested |
+| Target | 8192 | HIERARCHICAL + Betti | In development |
+
+At 243-expert scale: top-16 experts are activated per forward pass (6.6% sparsity).  
+At 8192-expert scale: target top-64 activation (0.78% sparsity).
 
 ### Expert Network Interface
 
@@ -264,6 +277,7 @@ Total: ~2 KB per layer
 
 3-layer expert with 64-dim: ~6 KB
 243 experts × 6 KB = ~1.5 MB (excluding overhead)
+8192 experts × 6 KB = ~48 MB base (excluding overhead)
 ```
 
 ### Computation per Forward Pass

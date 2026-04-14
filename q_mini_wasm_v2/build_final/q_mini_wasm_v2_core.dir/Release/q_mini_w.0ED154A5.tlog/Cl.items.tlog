@@ -10,6 +10,7 @@ C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\moe\self_organizing_expert.cpp;C:\G
 C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\learning\forward_forward.cpp;C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\build_final\q_mini_wasm_v2_core.dir\Release\forward_forward.obj
 C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\network.cpp;C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\build_final\q_mini_wasm_v2_core.dir\Release\network.obj
 C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\data_synthesizer.cpp;C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\build_final\q_mini_wasm_v2_core.dir\Release\data_synthesizer.obj
+C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\training\dataset_storage.cpp;C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\build_final\q_mini_wasm_v2_core.dir\Release\dataset_storage.obj
 C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\graph_native.cpp;C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\build_final\q_mini_wasm_v2_core.dir\Release\graph_native.obj
 C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\core\qgnn\betti_extractor.cpp;C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\build_final\q_mini_wasm_v2_core.dir\Release\betti_extractor.obj
 C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\runtime\orchestrator.cpp;C:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2\build_final\q_mini_wasm_v2_core.dir\Release\orchestrator.obj

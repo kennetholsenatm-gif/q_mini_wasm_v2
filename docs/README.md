@@ -94,9 +94,13 @@ Detailed architecture documentation:
 
 ### Guides
 Step-by-step guides for using the framework:
-- Quick Start - Get started in minutes
-- Building - Build instructions for all platforms
-- SYCL Setup - GPU acceleration setup
+- [Quick Start](guides/quick-start.md) - Get started in minutes
+- [Building](guides/building.md) - Build instructions for all platforms
+- [Expert Configuration](guides/expert-configuration.md) - 16/64/243/8192 expert setup
+- [MoE Training](guides/moe-training.md) - Training modes and CLI options
+- [Autonomous Training Pipeline](guides/autonomous-pipeline.md) - Continuous training mode
+- [Data Synthesizer](guides/data-synthesizer.md) - 15 knowledge engine APIs
+- [SYCL Setup](guides/sycl-setup.md) - GPU acceleration setup
 - [Contributing](guides/contributing.md) - Development workflow
 
 ### Decisions
@@ -247,6 +251,11 @@ int main() {
 - Teacherless SSL: No backpropagation, local layer-wise learning
 - Tropical inner product: Goodness metric via max-plus algebra
 - Hebbian updates: Gradient-free weight modifications
+- **Two Training Modes:**
+  - Epoch-based: Fixed-duration with pre-loaded dataset
+  - Continuous (`--continuous`): Indefinite with live API data
+- **15 Knowledge Engine APIs**: OpenAlex, arXiv, PubChem, NASA, GitHub, etc.
+- **Betti-Guided Topology**: Dynamic optimization via algebraic topology (β₀, β₁, β₂)
 
 ### 8. SYCL Multi-Core Acceleration
 - Parallel tableau updates: Distribute 2n×2n matrix operations

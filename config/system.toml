@@ -285,7 +285,7 @@ goodness_threshold = 5.0
 entanglement_graph = "scale_free"
 
 # ? Model checkpoint directory
-checkpoint_path = "flash_cim_243expert/checkpoints"
+checkpoint_path = "checkpoints"
 
 # ? Auto-load model on startup
 # "latest" = most recent checkpoint

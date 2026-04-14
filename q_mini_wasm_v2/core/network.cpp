@@ -20,15 +20,16 @@ TernaryNeuralNetwork::TernaryNeuralNetwork(const NetworkConfig& config)
     };
     router_ = std::make_unique<moe::MoERouter>(router_config);
 
-    // Initialize Experts
-    learning::FFConfig ff_config{
-        config.num_layers,
-        config.neurons_per_layer,
-        config.learning_rate_shift
-    };
-    for (size_t i = 0; i < config.total_experts; ++i) {
-        experts_.push_back(std::make_unique<learning::ForwardForwardLearner>(ff_config));
-    }
+    // Store expert config for lazy initialization (MoE: only create experts when actually used)
+    expert_config_.num_layers = config.num_layers;
+    expert_config_.neurons_per_layer = config.neurons_per_layer;
+    expert_config_.learning_rate_shift = static_cast<int>(config.learning_rate_shift);
+    expert_config_.sparsity = 0.05f;  // 5% tropical sparse edges
+    expert_config_.lazy_init = true;  // create weights only on first use
+    // Resize to total_experts slots, but all empty (lazy init)
+    experts_.resize(config.total_experts);
+    std::cerr << "[INIT] MoE Router ready: " << config.total_experts << " expert slots, "
+              << config.active_experts << " active per forward pass. (Lazy initialization enabled)" << std::endl;
 
     // Initialize Steane Code
     steane_ = std::make_unique<steane::QutritSteaneCode>();
@@ -83,13 +84,16 @@ void TernaryNeuralNetwork::train(const std::vector<std::vector<double>>& positiv
                 
                 // Train only the selected experts (MOE routing)
                 for (size_t expert_idx : expert_indices) {
+                    auto* expert = ensure_expert(expert_idx);
+                    if (!expert) continue;
+                    
                     // Generate negative samples via NPID (Non-Parametric Instance Discrimination)
                     std::vector<std::vector<ternary::Trit>> single_sample_positive = {sample};
-                    auto discrete_negative = experts_[expert_idx]->generate_negative_samples(single_sample_positive);
+                    auto discrete_negative = expert->generate_negative_samples(single_sample_positive);
                     
                     // Submit training task asynchronously to the Runtime Orchestrator
                     auto future_goodness = orchestrator_->submit_ff_training(
-                        *experts_[expert_idx],
+                        *expert,
                         layer,
                         single_sample_positive,
                         discrete_negative
@@ -138,7 +142,9 @@ std::vector<ternary::Trit> TernaryNeuralNetwork::infer(const std::vector<double>
     std::vector<ternary::Trit> output(config_.neurons_per_layer, ternary::Trit::ZERO);
 
     for (size_t expert_idx : expert_indices) {
-        auto expert_out = experts_[expert_idx]->forward(discrete_input);
+        auto* expert = ensure_expert(expert_idx);
+        if (!expert) continue;
+        auto expert_out = expert->forward(discrete_input);
         for (size_t i = 0; i < output.size(); ++i) {
             // Tropical accumulation
             int sum = static_cast<int>(output[i]) + static_cast<int>(expert_out[i]);
@@ -151,11 +157,35 @@ std::vector<ternary::Trit> TernaryNeuralNetwork::infer(const std::vector<double>
     return output;
 }
 
-learning::ForwardForwardLearner* TernaryNeuralNetwork::get_expert(size_t expert_id) {
-    if (expert_id < experts_.size()) {
-        return experts_[expert_id].get();
+bool TernaryNeuralNetwork::has_expert(size_t expert_id) const {
+    if (expert_id >= experts_.size()) return false;
+    return experts_[expert_id].has_value();
+}
+
+std::vector<size_t> TernaryNeuralNetwork::get_initialized_expert_ids() const {
+    std::vector<size_t> ids;
+    ids.reserve(experts_.size() / 10);  // Reserve roughly 10% capacity
+    for (size_t i = 0; i < experts_.size(); ++i) {
+        if (experts_[i].has_value()) {
+            ids.push_back(i);
+        }
     }
-    return nullptr;
+    return ids;
+}
+
+learning::ForwardForwardLearner* TernaryNeuralNetwork::ensure_expert(size_t expert_id) {
+    if (expert_id >= experts_.size()) return nullptr;
+    
+    // Lazy initialization: create expert on first access
+    if (!experts_[expert_id].has_value()) {
+        experts_[expert_id] = std::make_unique<learning::ForwardForwardLearner>(expert_config_);
+        std::cerr << "[INIT] Lazy-created expert " << (expert_id + 1) << "/" << experts_.size() << std::endl;
+    }
+    return experts_[expert_id].value().get();
+}
+
+learning::ForwardForwardLearner* TernaryNeuralNetwork::get_expert(size_t expert_id) {
+    return ensure_expert(expert_id);
 }
 
 void TernaryNeuralNetwork::train_on_experts(const std::vector<double>& sample, 
@@ -169,15 +199,16 @@ void TernaryNeuralNetwork::train_on_experts(const std::vector<double>& sample,
         for (size_t layer = 0; layer < config_.num_layers; ++layer) {
             // Train ONLY the specified domain experts (not using router!)
             for (size_t expert_idx : expert_indices) {
-                if (expert_idx >= experts_.size()) continue;
+                auto* expert = ensure_expert(expert_idx);
+                if (!expert) continue;
                 
                 // Generate negative samples for this expert
                 std::vector<std::vector<ternary::Trit>> single_sample_positive = {discrete_sample};
-                auto discrete_negative = experts_[expert_idx]->generate_negative_samples(single_sample_positive);
+                auto discrete_negative = expert->generate_negative_samples(single_sample_positive);
                 
                 // Submit training task to orchestrator
                 auto future_goodness = orchestrator_->submit_ff_training(
-                    *experts_[expert_idx],
+                    *expert,
                     layer,
                     single_sample_positive,
                     discrete_negative

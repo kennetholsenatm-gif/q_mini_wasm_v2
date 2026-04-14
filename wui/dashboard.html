@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q-Mini WASM v2 - Training Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        :root {
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --bg-hover: #21262d;
+            --border: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent: #4ecca3;
+            --accent-hover: #3db892;
+            --warning: #f0883e;
+            --error: #f85149;
+            --success: #3fb950;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+        
+        header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        header h1::before {
+            content: "◈";
+            color: var(--accent);
+            font-size: 1.5rem;
+        }
+        
+        .status-bar {
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--error);
+        }
+        
+        .status-indicator.active {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+        
+        .status-indicator.training {
+            background: var(--warning);
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        nav {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+            display: flex;
+            gap: 0;
+        }
+        
+        nav button {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 0.875rem 1.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        nav button:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+        
+        nav button.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+        
+        main {
+            padding: 1.5rem 2rem;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+        
+        .panel {
+            display: none;
+        }
+        
+        .panel.active {
+            display: block;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        
+        .metric {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .metric-value.accent {
+            color: var(--accent);
+        }
+        
+        button {
+            background: var(--accent);
+            color: var(--bg-dark);
+            border: none;
+            padding: 0.625rem 1.25rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: var(--accent-hover);
+        }
+        
+        button.secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        button.secondary:hover {
+            background: var(--border);
+        }
+        
+        button.danger {
+            background: var(--error);
+            color: white;
+        }
+        
+        .control-group {
+            margin-bottom: 1.25rem;
+        }
+        
+        .control-group label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.625rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .log-container {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.75rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            margin-bottom: 0.375rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-time {
+            color: var(--text-secondary);
+        }
+        
+        .log-info { color: var(--accent); }
+        .log-warn { color: var(--warning); }
+        .log-error { color: var(--error); }
+        
+        .progress-bar {
+            background: var(--bg-dark);
+            border-radius: 4px;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        
+        .progress-fill {
+            background: var(--accent);
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+        
+        .api-item {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.75rem;
+            text-align: center;
+            font-size: 0.75rem;
+        }
+        
+        .api-item.active {
+            border-color: var(--accent);
+            background: rgba(78, 204, 163, 0.1);
+        }
+        
+        .topology-viz {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .two-thirds {
+            grid-column: span 2;
+        }
+        
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+            .two-thirds { grid-column: 1; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Q-Mini WASM v2</h1>
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-indicator" id="backend-status"></span>
+                <span id="backend-text">Backend: Disconnected</span>
+            </div>
+            <div class="status-item">
+                <span>Experts: <span id="expert-count">0</span></span>
+            </div>
+            <div class="status-item">
+                <span>Memory: <span id="memory-usage">~21MB</span></span>
+            </div>
+        </div>
+    </header>
+    
+    <nav>
+        <button class="active" onclick="showPanel('training')">Training</button>
+        <button onclick="showPanel('inference')">Inference</button>
+        <button onclick="showPanel('topology')">Topology</button>
+        <button onclick="showPanel('data')">Data Sources</button>
+        <button onclick="showPanel('logs')">Logs</button>
+    </nav>
+    
+    <main>
+        <!-- TRAINING PANEL -->
+        <div id="training-panel" class="panel active">
+            <div class="grid">
+                <!-- Training Control -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">⚡ Training Control</span>
+                        <span class="status-indicator" id="training-status"></span>
+                    </div>
+                    <div class="control-group">
+                        <label>Configuration</label>
+                        <select id="config-select">
+                            <option value="config/training_config.toml">Default Training Config</option>
+                            <option value="custom">Custom Configuration</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Epochs</label>
+                        <input type="number" id="epochs" value="100" min="1">
+                    </div>
+                    <div class="control-group">
+                        <label>Batch Size</label>
+                        <input type="number" id="batch-size" value="8192" min="100" step="100">
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                        <button onclick="startTraining()">Start Training</button>
+                        <button class="secondary" onclick="pauseTraining()">Pause</button>
+                        <button class="danger" onclick="stopTraining()">Stop</button>
+                    </div>
+                </div>
+                
+                <!-- Live Metrics -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📊 Live Metrics</span>
+                    </div>
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <div class="metric-label">Epoch</div>
+                            <div class="metric-value" id="current-epoch">0/100</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Progress</div>
+                            <div class="metric-value accent" id="progress-pct">0%</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progress-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Active Experts</div>
+                            <div class="metric-value" id="active-experts">8</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Topology Updates</div>
+                            <div class="metric-value" id="topology-updates">0</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Betti Metrics -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">🔄 Betti Topology</span>
+                    </div>
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <div class="metric-label">β₁ (avg/max)</div>
+                            <div class="metric-value" id="betti-stats">0.0 / 0</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Graph Density</div>
+                            <div class="metric-value" id="graph-density">0%</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Edges</div>
+                            <div class="metric-value" id="edge-count">0</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Expert Splits</div>
+                            <div class="metric-value" id="split-count">0</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Checkpoint Management -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">💾 Checkpoints</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Checkpoint Interval</label>
+                        <input type="number" id="checkpoint-interval" value="1" min="1">
+                    </div>
+                    <div class="control-group">
+                        <label>Output Directory</label>
+                        <input type="text" id="output-dir" value="checkpoints/">
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <button class="secondary" onclick="browseCheckpoints()">Browse Checkpoints</button>
+                    </div>
+                    <div id="checkpoint-list" style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
+                        No checkpoints loaded
+                    </div>
+                </div>
+                
+                <!-- Training Config -->
+                <div class="card two-thirds">
+                    <div class="card-header">
+                        <span class="card-title">⚙️ Model Configuration</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                        <div class="control-group">
+                            <label>Total Experts</label>
+                            <input type="number" value="8192" readonly>
+                        </div>
+                        <div class="control-group">
+                            <label>Active Experts (Top-K)</label>
+                            <input type="number" value="128" readonly>
+                        </div>
+                        <div class="control-group">
+                            <label>Layers per Expert</label>
+                            <input type="number" value="64" readonly>
+                        </div>
+                        <div class="control-group">
+                            <label>Neurons per Layer</label>
+                            <input type="number" value="2048" readonly>
+                        </div>
+                        <div class="control-group">
+                            <label>Context Window</label>
+                            <input type="number" value="8192" readonly>
+                        </div>
+                        <div class="control-group">
+                            <label>Sparsity</label>
+                            <input type="text" value="5%" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- INFERENCE PANEL -->
+        <div id="inference-panel" class="panel">
+            <div class="grid">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">🔮 Inference</span>
+                    </div>
+                    <div class="control-group">
+                        <label>Input Text</label>
+                        <textarea id="inference-input" rows="6" placeholder="Enter text for inference..."></textarea>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <button onclick="runInference()">Run Inference</button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📤 Output</span>
+                    </div>
+                    <div id="inference-output" style="background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; min-height: 200px; font-family: monospace; font-size: 0.875rem;">
+                        Inference output will appear here...
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">🎯 Expert Activation</span>
+                    </div>
+                    <div id="expert-activation" class="topology-viz">
+                        Expert activation visualization
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- TOPOLOGY PANEL -->
+        <div id="topology-panel" class="panel">
+            <div class="grid">
+                <div class="card two-thirds">
+                    <div class="card-header">
+                        <span class="card-title">🕸️ Self-Organizing Expert Topology</span>
+                    </div>
+                    <div class="topology-viz" style="height: 500px;">
+                        <div>Live topology graph visualization<br>Expert nodes and connections based on Betti guidance</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📈 Topology Evolution</span>
+                    </div>
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <div class="metric-label">Seed Experts</div>
+                            <div class="metric-value">8</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Current Experts</div>
+                            <div class="metric-value" id="current-experts">8</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Max Experts</div>
+                            <div class="metric-value">100K</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Split Threshold</div>
+                            <div class="metric-value">β₁ > 5</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- DATA SOURCES PANEL -->
+        <div id="data-panel" class="panel">
+            <div class="grid">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">🌐 DataSynthesizer V2 - API Sources</span>
+                    </div>
+                    <div class="api-grid">
+                        <div class="api-item active">OpenAlex</div>
+                        <div class="api-item active">Gutendex</div>
+                        <div class="api-item active">USGS Earthquake</div>
+                        <div class="api-item active">SpaceX</div>
+                        <div class="api-item active">Chronicling America</div>
+                        <div class="api-item active">GBIF</div>
+                        <div class="api-item active">arXiv</div>
+                        <div class="api-item active">Wikidata</div>
+                        <div class="api-item active">OEIS</div>
+                        <div class="api-item active">PubChem</div>
+                        <div class="api-item active">NASA</div>
+                        <div class="api-item active">PDB</div>
+                        <div class="api-item active">GitHub</div>
+                        <div class="api-item active">Lean</div>
+                    </div>
+                    <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
+                        <button onclick="toggleDataSynthesizer()">Start Data Acquisition</button>
+                        <button class="secondary" onclick="browseDataset()">Browse Dataset</button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">📊 Data Stats</span>
+                    </div>
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <div class="metric-label">Total Acquired</div>
+                            <div class="metric-value" id="data-acquired">0</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Perturbed Samples</div>
+                            <div class="metric-value" id="data-perturbed">0</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">API Failures</div>
+                            <div class="metric-value" id="api-failures">0</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Active Sources</div>
+                            <div class="metric-value">14</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- LOGS PANEL -->
+        <div id="logs-panel" class="panel">
+            <div class="card full-width">
+                <div class="card-header">
+                    <span class="card-title">📋 Training Logs</span>
+                    <button class="secondary" onclick="clearLogs()">Clear</button>
+                </div>
+                <div class="log-container" id="log-container">
+                    <div class="log-entry">
+                        <span class="log-time">[19:00:00]</span>
+                        <span class="log-info">Dashboard initialized. Ready for training.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        // Panel switching
+        function showPanel(panelName) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            document.getElementById(panelName + '-panel').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        // Training controls
+        function startTraining() {
+            log('Training started', 'info');
+            document.getElementById('training-status').className = 'status-indicator training';
+            // Training logic here
+        }
+        
+        function pauseTraining() {
+            log('Training paused', 'warn');
+            document.getElementById('training-status').className = 'status-indicator';
+        }
+        
+        function stopTraining() {
+            log('Training stopped', 'error');
+            document.getElementById('training-status').className = 'status-indicator';
+        }
+        
+        function browseCheckpoints() {
+            log('Browsing checkpoints...', 'info');
+        }
+        
+        function runInference() {
+            const input = document.getElementById('inference-input').value;
+            document.getElementById('inference-output').textContent = 
+                'Processing: ' + input.substring(0, 50) + '...';
+            log('Inference request sent', 'info');
+        }
+        
+        function toggleDataSynthesizer() {
+            log('DataSynthesizer toggled', 'info');
+        }
+        
+        function browseDataset() {
+            log('Browsing dataset...', 'info');
+        }
+        
+        function clearLogs() {
+            document.getElementById('log-container').innerHTML = '';
+        }
+        
+        // Logging
+        function log(message, level = 'info') {
+            const container = document.getElementById('log-container');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${level}">${message}</span>`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Simulate backend connection
+        setTimeout(() => {
+            document.getElementById('backend-status').className = 'status-indicator active';
+            document.getElementById('backend-text').textContent = 'Backend: Connected';
+            log('Backend connected', 'info');
+        }, 1000);
+        
+        // Update metrics periodically
+        setInterval(() => {
+            // Simulate live metrics updates
+        }, 1000);
+    </script>
+</body>
+</html>

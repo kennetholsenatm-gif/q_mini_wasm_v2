@@ -5,8 +5,8 @@ checkpoint_interval = 10
 learning_rate = 10
 
 [model]
-moe_experts = 512
-moe_top_k = 32
+moe_experts = 8192
+moe_top_k = 128
 context_window = 8192
 entanglement_tokens = 1024
 shadow_dim = 4096
@@ -17,10 +17,11 @@ learning_rate_shift = 2
 
 [features]
 steane_correction = true
-flash_cim = true
+flash_cim = false
 worker_threads = 32
 
 [apis]
+enabled = true
 wolfram = false
 pubchem = true
 oeis = true
@@ -63,6 +64,15 @@ urls = [
     "pubchem.ncbi.nlm.nih.gov",
     "rcsb.org",
     "oeis.org",
+    "export.arxiv.org",
+    "query.wikidata.org",
+    "oeis.org",
+    "api.openalex.org",
+    "gutendex.com",
+    "earthquake.usgs.gov",
+    "api.spacexdata.com",
+    "chroniclingamerica.loc.gov",
+    "api.gbif.org",
     "data/wikipedia_math",
     "data/stackexchange_physics"
 ]

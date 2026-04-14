@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <memory>
+#include <optional>
 #include "ingestion/absmean_quantizer.hpp"
 #include "ingestion/clifford_shadow.hpp"
 #include "moe/router.hpp"
@@ -68,11 +69,21 @@ public:
     std::vector<ternary::Trit> infer(const std::vector<double>& input);
 
     /**
-     * @brief Get expert by ID for weight serialization
+     * @brief Check if expert exists without triggering lazy creation
+     * @param expert_id Expert index
+     * @return true if expert has been initialized
+     */
+    bool has_expert(size_t expert_id) const;
+    
+    /**
+     * @brief Get expert by ID for weight serialization - lazy creates if needed
      * @param expert_id Expert index
      * @return Pointer to expert's ForwardForwardLearner, or nullptr if invalid
      */
     learning::ForwardForwardLearner* get_expert(size_t expert_id);
+    
+    // Get list of all initialized expert IDs (for checkpointing without triggering lazy init)
+    std::vector<size_t> get_initialized_expert_ids() const;
 
 private:
     NetworkConfig config_;
@@ -81,8 +92,12 @@ private:
     std::unique_ptr<ingestion::CliffordShadow> shadow_;
     std::unique_ptr<moe::MoERouter> router_;
     
-    // Each expert is a FF Learner
-    std::vector<std::unique_ptr<learning::ForwardForwardLearner>> experts_;
+    // Each expert is a FF Learner - LAZY INITIALIZED (MoE optimization)
+    std::vector<std::optional<std::unique_ptr<learning::ForwardForwardLearner>>> experts_;
+    learning::FFConfig expert_config_;  // Config for lazy creation
+    
+    // Lazy initialize an expert when first accessed
+    learning::ForwardForwardLearner* ensure_expert(size_t expert_id);
     
     std::unique_ptr<steane::QutritSteaneCode> steane_;
     std::unique_ptr<runtime::RuntimeOrchestrator> orchestrator_;

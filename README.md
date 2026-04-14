@@ -35,11 +35,13 @@ The system achieves <0.5 pJ/op energy efficiency for routing and 57% energy redu
 ## Features
 
 - **Ternary Computing**: GF(3) arithmetic with 99.06% entropy efficiency
+- **Mixture-of-Experts**: Up to 8192 experts (243 production-tested), top-K routing
 - **Quantum-Inspired**: Gottesman-Knill theorem for efficient simulation
 - **Graph-Native MoE**: O(E) complexity expert routing via QGNN
-- **Forward-Forward Learning**: Teacherless self-supervised learning
+- **Forward-Forward Learning**: Local gradient-free training with tropical goodness
+- **Autonomous Training**: Continuous mode with 15 knowledge engine APIs
+- **Betti-Guided Topology**: Dynamic optimization via algebraic topology
 - **Web-Based UI**: Built-in WUI at localhost:7345 for training and inference
-- **Live Data Integration**: Automatic data acquisition from academic APIs (NASA, PubChem, OEIS, etc.)
 
 ## Performance
 
@@ -48,6 +50,24 @@ The system achieves <0.5 pJ/op energy efficiency for routing and 57% energy redu
 | Array-Based (32 experts) | 45 | 1.2 | 1.0x | Baseline |
 | Graph-Native (32 experts) | 28 | 0.7 | 1.6x | 90% |
 | Graph-Native (243 experts) | 65 | 0.9 | 2.8x | 95% |
+| Graph-Native (8192 experts target) | <100 | <1.0 | 10x+ | 98% |
+
+## Training Modes
+
+### Epoch-Based (Default)
+```bash
+./q_mini_wasm_v2_trainer.exe --epochs 100 --moe-experts 243
+```
+
+### Continuous/Autonomous (Production)
+```bash
+./q_mini_wasm_v2_trainer.exe --continuous --moe-experts 243 --enable-web-apis
+```
+
+- Runs indefinitely with background training thread
+- Pause/resume capability
+- Live Betti-guided topology optimization
+- Automatic data acquisition from 15 knowledge APIs
 
 ## Documentation
 
@@ -56,6 +76,9 @@ See the [docs/](docs/) directory for detailed documentation:
 - [API Reference](docs/api/core-reference.md) - Complete API documentation
 - [Architecture Overview](docs/architecture/overview.md) - System design
 - [QGNN Architecture](docs/architecture/qgnn-architecture.md) - Graph-native quantum neural networks
+- [Expert Configuration](docs/guides/expert-configuration.md) - 16/64/243/8192 expert setup
+- [Autonomous Training](docs/guides/autonomous-pipeline.md) - Continuous training mode
+- [Data Synthesizer](docs/guides/data-synthesizer.md) - 15 knowledge engine APIs
 - [Quick Start Guide](docs/guides/quick-start.md) - Detailed setup instructions
 
 ## Building from Source

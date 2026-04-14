@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <set>
 #include <chrono>
+#include <mutex>
 #include "../ternary/trit.hpp"
 #include "../learning/forward_forward.hpp"
 
@@ -227,6 +228,9 @@ public:
 private:
     Config config_;
     learning::FFConfig learner_config_;
+    
+    // Thread safety
+    mutable std::mutex experts_mutex_;
     
     // Expert storage - key is expert ID (monotonically increasing)
     std::unordered_map<size_t, std::unique_ptr<DynamicExpert>> experts_;

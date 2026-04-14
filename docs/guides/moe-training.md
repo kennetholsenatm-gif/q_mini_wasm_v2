@@ -2,44 +2,98 @@
 
 ## Overview
 
-This guide covers end-to-end training of 243-expert Mixture of Experts (MoE) models using Forward-Forward learning.
+This guide covers end-to-end training of MoE models using Forward-Forward learning. Supports both epoch-based and continuous (autonomous) training modes.
 
-## Training Pipeline
+**Supported Scales:** 16 → 64 → 243 → 8192 experts  
+**Training Modes:** Epoch-based (default) or Continuous (`--continuous`)
 
+## Training Modes
+
+### Mode A: Epoch-Based (Default)
+
+Fixed-duration training with pre-loaded dataset.
+
+```bash
+q_mini_wasm_v2_trainer.exe --epochs 100 --moe-experts 243
 ```
-Data Preparation → Router Initialization → Expert Training → Load Balancing → Evaluation
+
+### Mode B: Continuous/Autonomous (Recommended for Production)
+
+Indefinite training with continuous data acquisition from knowledge engines.
+
+```bash
+q_mini_wasm_v2_trainer.exe --continuous --moe-experts 243 --enable-web-apis true
 ```
+
+**Features of Continuous Mode:**
+- Background training thread
+- Pause/resume capability
+- Live Betti-guided topology optimization
+- Continuous API data acquisition
+
+See [Autonomous Training Pipeline](autonomous-pipeline.md) for full API details.
 
 ## Quick Start
 
-### Minimal Training Example
+### Epoch-Based Training
 
 ```cpp
 #include "core/moe/moe_trainer.hpp"
 #include "core/moe/unified_router.hpp"
 
-// 1. Create 243-expert router
-auto router = Create243ExpertRouter();
+// Create router (supports up to 8192 experts)
+auto router = Create243ExpertRouter();  // 243-expert pre-configured
 
-// 2. Setup trainer
+// Setup trainer
 MoETrainingConfig config;
 config.learning_rate = 1;
 config.training_batch_size = 64;
 
 auto trainer = CreateMoETrainer(*router, config);
 
-// 3. Initialize experts
+// Initialize experts
 trainer->InitializeExperts(42);
 
-// 4. Load data
+// Load data
 auto data = LoadData("training_data.bin");
 
-// 5. Train
+// Train for 100 epochs
 auto metrics = trainer->Train(data, 100);
 
-// 6. Save
+// Save
 router->SaveCheckpoint("trained_moe.chk");
 ```
+
+### Continuous Training with Autonomous Pipeline
+
+```cpp
+#include "core/training/autonomous_training_pipeline.hpp"
+
+// Configure for continuous training
+PipelineConfig config;
+config.moe_num_experts = 243;           // Current: 243, Target: 8192
+config.enable_knowledge_engine = true;  // Use DataSynthesizer APIs
+config.enable_betti_guidance = true;    // Auto-optimize topology
+
+AutonomousTrainingPipeline pipeline;
+pipeline.initialize(config);
+
+// Start background training
+pipeline.start_training();
+
+// Monitor progress
+while (pipeline.get_state() == PipelineState::TRAINING) {
+    auto metrics = pipeline.get_metrics();
+    // Check goodness delta, Betti numbers, etc.
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+}
+
+// Save and stop
+pipeline.export_model("trained_model.bin");
+pipeline.stop_training();
+```
+
+See [Data Synthesizer](data-synthesizer.md) for the 15 implemented API integrations.
 
 ## Data Preparation
 
@@ -543,6 +597,58 @@ for (const auto& sample : test_data) {
     avg_latency += std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 }
 avg_latency /= test_data.size();
+```
+
+## Command-Line Interface
+
+The trainer executable supports these options (from `trainer_main.cpp:586-631`):
+
+### Training Control
+```bash
+--epochs N                    # Number of epochs (default: from config)
+--batch-size N                # Samples per batch (default: 8192)
+--continuous                  # Run indefinitely, accumulating data
+--learning-rate N             # 0-33=LOW, 34-66=MED, 67-100=HIGH
+--checkpoint-every N          # Save checkpoint every N epochs
+```
+
+### Model Configuration
+```bash
+--moe-experts N               # Total expert count (REQUIRED)
+--moe-top-k N                 # Active experts per forward pass (default: 16)
+--context-window N            # Input dimension (default: 4096)
+--entanglement-tokens N       # Hash dimension (default: 256)
+```
+
+### Data Sources
+```bash
+--enable-web-apis true        # Use DataSynthesizer APIs (default: true)
+--disable-web-apis            # Disable API fetching (offline mode)
+--dataset PATH                # Local dataset file (JSONL format)
+--base-model PATH             # Checkpoint to resume from
+```
+
+### Features
+```bash
+--steane-correction true      # Enable quantum error correction
+--flash-cim true              # Use Flash-CiM acceleration
+--sse-mode                    # Enable SSE optimizations
+```
+
+### Examples
+
+```bash
+# Epoch-based training with 243 experts
+q_mini_wasm_v2_trainer.exe --epochs 100 --moe-experts 243
+
+# Continuous training with web APIs
+q_mini_wasm_v2_trainer.exe --continuous --moe-experts 243 --enable-web-apis true
+
+# Offline training from local dataset
+q_mini_wasm_v2_trainer.exe --epochs 50 --moe-experts 64 --dataset data.jsonl --disable-web-apis
+
+# Resume from checkpoint
+q_mini_wasm_v2_trainer.exe --continuous --moe-experts 243 --base-model checkpoint.chk
 ```
 
 ## Troubleshooting

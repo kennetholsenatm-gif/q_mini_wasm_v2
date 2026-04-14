@@ -1,0 +1,10 @@
+{
+  "checkpoint_type": "epoch_end",
+  "epoch": 1,
+  "total_epochs": 1,
+  "experts": 8,
+  "edges": 8,
+  "density": 0.285714,
+  "elapsed_seconds": 40,
+  "checkpoint_time": "1776123908"
+}

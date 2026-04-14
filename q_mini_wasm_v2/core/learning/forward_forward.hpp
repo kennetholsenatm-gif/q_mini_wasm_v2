@@ -4,16 +4,31 @@
 #include <memory>
 #include <cstdint>
 #include <algorithm>
+#include <unordered_map>
 #include "../ternary/trit.hpp"
 #include "../stabilizer/tableau.hpp"
 
 namespace q_mini_wasm_v2::core::learning {
 
+// Tropical sparse edge - only non-zero connections stored
+struct TropicalEdge {
+    uint32_t target;       // Target neuron index
+    ternary::Trit weight; // {-1, +1} - ZERO means no edge (sparse!)
+};
+
+// Sparse adjacency list per neuron - tropical geometry structure
+struct TropicalLayer {
+    std::vector<std::vector<TropicalEdge>> outgoing;  // [source][edges to targets]
+    std::vector<ternary::Trit> biases;
+};
+
 struct FFConfig {
     size_t num_layers = 3;
     size_t neurons_per_layer = 128;
-    int learning_rate = 1;  // GF(3) fixed-point Q24.8 representation
-    int learning_rate_shift = 3;  // For fixed-point arithmetic (divide by 8)
+    int learning_rate = 1;
+    int learning_rate_shift = 3;
+    float sparsity = 0.05f;  // Reduced: 5% for experts (ultra-sparse tropical)
+    bool lazy_init = true;  // Don't init weights until first use (MoE optimization)
 };
 
 struct LayerGoodness {
@@ -55,7 +70,7 @@ public:
     std::vector<ternary::Trit> entangled_forward(stabilizer::StabilizerTableau& tableau, const std::vector<ternary::Trit>& input);
 
     // Weight management
-    const std::vector<std::vector<ternary::Trit>>& get_weights(size_t layer_idx) const;
+    const std::vector<std::vector<TropicalEdge>>& get_tropical_weights(size_t layer_idx) const;
     void update_weights_hebbian(size_t layer_idx, const std::vector<ternary::Trit>& activations, int32_t delta);
     void reset_weights();
 
@@ -83,13 +98,19 @@ public:
 
 private:
     FFConfig config_;
-    std::vector<std::vector<std::vector<ternary::Trit>>> layer_weights_;
-    std::vector<std::vector<ternary::Trit>> layer_biases_;
+    // Sparse tropical geometry: only non-zero edges stored
+    std::vector<TropicalLayer> tropical_layers_;  // [layer] -> sparse adjacency
+    bool weights_initialized_;  // For lazy initialization (MoE memory optimization)
 
-    void initialize_weights();
-    ternary::Trit ternary_activation(int32_t x);
+    void initialize_tropical_weights();
+    void ensure_weights_initialized();  // Lazy init on first use
+    void add_tropical_edge(size_t layer, uint32_t source, uint32_t target, ternary::Trit weight);
+    ternary::Trit tropical_activation(int32_t x);
     ternary::Trit compute_weight_update(ternary::Trit pre_synaptic, ternary::Trit post_synaptic);
     ternary::Trit clip_to_ternary(int value);
+    
+    // Min-plus tropical convolution for forward pass
+    std::vector<ternary::Trit> tropical_forward_layer(size_t layer_idx, const std::vector<ternary::Trit>& input);
 };
 
 std::unique_ptr<ForwardForwardLearner> create_ff_learner(const FFConfig& config);

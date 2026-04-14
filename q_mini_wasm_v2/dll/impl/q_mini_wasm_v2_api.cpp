@@ -29,7 +29,10 @@ Q_MINI_WASM_V2_API size_t moe_router_llep_route(
     
     MoERouter* router = static_cast<MoERouter*>(handle);
     
-    std::vector<double> logit_vec(logits, logits + num_experts);
+    std::vector<int32_t> logit_vec(num_experts);
+    for (size_t i = 0; i < num_experts; ++i) {
+        logit_vec[i] = static_cast<int32_t>(logits[i]);
+    }
     std::vector<size_t> load_vec(expert_loads, expert_loads + num_experts);
     
     std::vector<size_t> result = router->llep_route(logit_vec, load_vec, std::min(k, max_selected));
@@ -695,7 +698,7 @@ Q_MINI_WASM_V2_API double ff_learner_goodness(
             activations_vec[i] = static_cast<core::ternary::Trit>(activations[i]);
         }
         
-        return learner->compute_goodness(activations_vec);
+        return static_cast<double>(learner->compute_goodness(activations_vec));
     } catch (...) {
         return 0.0;
     }

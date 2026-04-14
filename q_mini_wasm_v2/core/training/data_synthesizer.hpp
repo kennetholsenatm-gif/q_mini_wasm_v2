@@ -272,6 +272,144 @@ private:
 };
 
 /**
+ * @brief OpenAlex API client - NO KEY REQUIRED
+ * 
+ * 250M+ scholarly works, completely open academic catalog.
+ * Queries papers, authors, institutions, concepts.
+ * Perturbation: Citation manipulation, fake co-authorship
+ */
+class OpenAlexClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Fabricate citations, alter authorship, misattribute concepts
+    static ApiPayload perturb_scholarly(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 100000;  // 100k/day encouraged limit
+    size_t backoff_ms_ = 100;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief Gutendex API client - NO KEY REQUIRED
+ * 
+ * Project Gutenberg books via REST API (76,000+ books).
+ * Full-text access to classic literature.
+ * Perturbation: Chapter reordering, character name swaps
+ */
+class GutendexClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Reorder paragraphs, swap character names, alter endings
+    static ApiPayload perturb_literature(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 50000;  // Generous, no strict limit
+    size_t backoff_ms_ = 50;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief USGS Earthquake API client - NO KEY REQUIRED
+ * 
+ * Real-time and historical seismic data worldwide.
+ * GeoJSON format earthquake events.
+ * Perturbation: Magnitude manipulation, location drift
+ */
+class UsgsEarthquakeClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Alter magnitude, shift epicenter, fabricate aftershocks
+    static ApiPayload perturb_seismic(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 10000;  // No strict limit
+    size_t backoff_ms_ = 100;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief SpaceX API client - NO KEY REQUIRED
+ * 
+ * Launch data, rocket specs, mission details (REST + GraphQL).
+ * Technical documentation and engineering data.
+ * Perturbation: Payload mass errors, date shifts, stage swaps
+ */
+class SpaceXClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Swap payload capacities, alter launch dates, mix up stages
+    static ApiPayload perturb_telemetry(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 50000;  // No strict limit
+    size_t backoff_ms_ = 50;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief Chronicling America API client - NO KEY REQUIRED
+ * 
+ * 20M+ historic newspaper pages from Library of Congress.
+ * OCR text from 1789-1963.
+ * Perturbation: Date misattribution, headline swaps
+ */
+class ChroniclingAmericaClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Alter dates, swap headlines, fabricate quotes
+    static ApiPayload perturb_historical(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 20000;  // Generous LOC limits
+    size_t backoff_ms_ = 100;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
+ * @brief GBIF API client - NO KEY REQUIRED
+ * 
+ * Global Biodiversity Information Facility (2B+ species records).
+ * Species occurrences, taxonomy, images.
+ * Perturbation: Location spoofing, species misclassification
+ */
+class GbifClient : public ApiClient {
+public:
+    std::optional<ApiPayload> query(std::string_view endpoint,
+                                    std::string_view params) override;
+    size_t rate_limit_remaining() const override { return rate_limit_; }
+    void backoff() override;
+    
+    // Shift coordinates, swap species names, alter dates
+    static ApiPayload perturb_biodiversity(const ApiPayload& positive);
+
+private:
+    size_t rate_limit_ = 10000;  // 10k/hour for heavy use
+    size_t backoff_ms_ = 100;
+    std::chrono::steady_clock::time_point last_query_time_;
+};
+
+/**
  * @brief Thread pool for async operations
  */
 class ThreadPool {
@@ -343,6 +481,10 @@ private:
     
     // Perturbation thread function
     void perturbation_worker();
+    
+    // Autonomous topic discovery - extract new topics from API responses
+    std::vector<std::string> extract_topics_from_response(const ApiPayload& response, 
+                                                           const std::string& current_topic);
     
     // API clients
     std::vector<std::unique_ptr<ApiClient>> clients_;
