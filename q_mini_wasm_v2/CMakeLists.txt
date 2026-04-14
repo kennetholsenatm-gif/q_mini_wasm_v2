@@ -48,6 +48,8 @@ option(BUILD_DLL "Build DLL with C API" ON)
 
 set(CORE_SOURCES
     core/ternary/trit.hpp
+    core/ternary/packing.hpp
+    core/ternary/packing.cpp
     core/qutrit_stabilizer.h
     core/qutrit_stabilizer.cpp
     core/stabilizer/tableau.hpp
