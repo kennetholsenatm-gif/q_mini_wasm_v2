@@ -3,7 +3,27 @@
 **Version:** 2.0.0-alpha  
 **Last Updated:** April 21, 2026  
 **Repository:** https://github.com/kennetholsenatm-gif/q_mini_wasm_v2  
-**Status:** Active Development - NOT PRODUCTION READY
+**Status:** Active Development - NOT PRODUCTION READY  
+**Status Legend:** ✅ = Working | ⚠️ = Partial/Stubbed | ❌ = Not Working | 🔄 = In Progress
+
+---
+
+## QUICK START (First 5 Minutes)
+
+```powershell
+# 1. Clone and enter directory
+git clone https://github.com/kennetholsenatm-gif/q_mini_wasm_v2.git
+cd q_mini_wasm_v2
+
+# 2. Run pre-built executable (if available)
+.\qminiwasm.exe
+
+# 3. Open browser to http://localhost:9090
+# 4. Check that dashboard loads without errors
+# 5. Try clicking "System Check" - should return data
+```
+
+**Expected Result:** WUI loads. Training won't work (stubbed), but UI should respond.
 
 ---
 
@@ -41,6 +61,11 @@ Q-MINI WASM v2 is a quantum-inspired AI framework implementing ternary (GF(3)) c
 - SSE streaming endpoint for progress updates
 - Subprocess spawning for external tools
 
+**LEGEND:**
+- **STUBBED** = Code structure exists but logic is empty/echo
+- **NOT IMPLEMENTED** = No code exists for this feature
+- **CONTROL PLANE** = Orchestration works, execution doesn't
+
 **STUBBED/NOT IMPLEMENTED:**
 - Actual neural network forward pass (echo responses only)
 - Real gradient computation and weight updates
@@ -48,6 +73,20 @@ Q-MINI WASM v2 is a quantum-inspired AI framework implementing ternary (GF(3)) c
 - Flash-CIM hardware interface (placeholder)
 - WASM GPU kernels (SYCL placeholders)
 - Quantum circuit execution (stabilizer structure exists, operations stubbed)
+
+---
+
+## 1.X SECURITY NOTICE
+
+**⚠️ IMPORTANT:** This is research code with known security limitations:
+
+- Hardcoded paths (`C:\q_mini_data\`)
+- No authentication on API endpoints
+- CGO DLL loading from relative paths
+- No input sanitization on MCP handlers
+- File operations use paths from client input
+
+**DO NOT expose to untrusted networks or production environments.**
 
 ---
 
@@ -98,8 +137,8 @@ core/
 | Executable | Language | Purpose | Status |
 |------------|----------|---------|--------|
 | `qminiwasm.exe` | Go (CGO) | WUI server + MCP + SSE | ✅ BUILDS & RUNS |
-| `q_mini_wasm_v2_trainer.exe` | C++ | Training standalone | ⚠️ STUBBED - control plane only |
-| `q_mini_wasm_v2_infer.exe` | C++ | Inference standalone | ⚠️ STUBBED - echo only |
+| `q_mini_wasm_v2_trainer.exe` | C++ | Training standalone | ⚠️ STUBBED - parses args but no training loop |
+| `q_mini_wasm_v2_infer.exe` | C++ | Inference standalone | ❌ NOT IMPLEMENTED - no source file found |
 
 **NOTE:** The Go binary (`qminiwasm.exe`) is the ONLY user-facing executable. All others are internal.
 
@@ -107,6 +146,8 @@ core/
 
 **OLD (DELETED):** Static HTML files (api-docs.html, dashboard.html, etc.)
 **NEW (ACTIVE):** React-based SPA in `wui/react-wui/`
+
+**Status:** Source code present, requires `npm install && npm run build` to generate production assets. Development server works with Vite.
 
 ```
 wui/
@@ -231,11 +272,16 @@ wui/
 
 ### 5.1 Prerequisites
 
+**Native Build:**
 - Windows 10/11 (primary development platform)
 - Visual Studio 2022 with C++20 support
 - CMake 3.20+
 - Go 1.26+
-- Node.js 18+ (for React WUI)
+- Node.js 18+ (for React WUI development)
+
+**Container Deployment (Alternative):**
+- Incus/LXD container runtime
+- See `q_mini_incus/` for container definitions
 
 ### 5.2 Build Commands
 
@@ -282,6 +328,14 @@ C:\q_mini_data\
 └── logs\                 # Runtime logs
 ```
 
+**Log File Locations:**
+| Log File | Location | Purpose |
+|----------|----------|---------|
+| `server.log` | Project root | Go server output |
+| `qmini.err` | Project root | C++ errors |
+| `training_output.log` | Project root | Training verbose output |
+| `continuous_errors.log` | Project root | Continuous mode errors |
+
 ---
 
 ## 6. API ENDPOINTS
@@ -311,7 +365,10 @@ C:\q_mini_data\
 
 ### 6.2 SSE Endpoint
 
-- **URL:** `http://localhost:9090/training-stream`
+**Development Server:** `http://localhost:9090` (Go server default)
+**Production/Release:** `http://localhost:7345` (as documented in README)
+
+- **URL:** `/training-stream` (SSE endpoint, relative to server base)
 - **Format:** Server-Sent Events
 - **Data:** Training progress, epoch updates, loss values
 
@@ -477,8 +534,39 @@ Do not market this as production-ready. It is a research framework with a functi
 
 ---
 
+## 13. TROUBLESHOOTING
+
+### "Port already in use"
+**Symptom:** `bind: address already in use`
+**Fix:** Kill existing qminiwasm.exe process or change port in code
+
+### "DLL not found"
+**Symptom:** CGO error about q_training.dll
+**Fix:** Ensure `q_mini_wasm_v2/build_final/Release/q_training.dll` exists and is in PATH
+
+### "Training not starting"
+**Symptom:** Click start, nothing happens
+**Cause:** Training loop is stubbed (see Section 4.1)
+**Fix:** This is expected behavior until real training is implemented
+
+### "React WUI not loading"
+**Symptom:** Blank page or 404 errors
+**Fix:** Check if `wui/react-wui/dist/` exists (requires `npm run build`)
+
+---
+
 **Document History:**
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-04-21 | 1.0 | Initial creation with honest assessment |
+| 2026-04-21 | 1.1 | Added troubleshooting, security notice, quick start |
+
 - Created: April 21, 2026
 - Purpose: Single source of truth for project state
 - Update Policy: Regenerate when major changes occur
 - Authority: This document supersedes all other status reports
+
+**How to Contribute Updates:**
+1. Edit this file directly for factual corrections
+2. Run `git commit -m "docs: update GROUND_TRUTH with X"`
+3. Major changes require review against actual codebase
