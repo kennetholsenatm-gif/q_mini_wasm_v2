@@ -1,0 +1,1 @@
+using System;`nusing System.IO;`nclass Program {`n    static int Main() {`n        File.WriteAllText("C:/q_mini_data/trainer_cs_test.txt", "C# trainer works");`n        Console.Error.WriteLine("[CS] Success");`n        return 0;`n    }`n}
