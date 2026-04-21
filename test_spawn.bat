@@ -1,0 +1,1 @@
+@echo off`necho [BATCH] Starting trainer spawn test > C:\q_mini_data\batch_spawn_test.txt`necho [BATCH] About to run trainer >> C:\q_mini_data\batch_spawn_test.txt`nC:\GitHub\q_mini_wasm_v2\q_mini_wasm_v2_trainer.exe --config C:\q_mini_data\config\training_config.toml 2>&1`necho [BATCH] Trainer exited with code %ERRORLEVEL% >> C:\q_mini_data\batch_spawn_test.txt

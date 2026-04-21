@@ -22,6 +22,8 @@ DynamicExpert::DynamicExpert(size_t id_, const learning::FFConfig& config)
     , local_beta_1(0)
     , last_activation(std::chrono::steady_clock::now())
     , learner(nullptr)
+    , learner_config_(config)  // Store config for lazy init
+    , learner_initialized_(false)
 {
     std::cerr << "[DynamicExpert] Constructor start for id=" << id_ << std::endl;
     
@@ -29,18 +31,25 @@ DynamicExpert::DynamicExpert(size_t id_, const learning::FFConfig& config)
     size_t neuron_count = config.neurons_per_layer > 0 ? config.neurons_per_layer : 64;
     std::cerr << "[DynamicExpert] neuron_count=" << neuron_count << std::endl;
     
-    // Initialize centroid with valid size
+    // Initialize centroid with valid size (lightweight)
     std::cerr << "[DynamicExpert] Resizing centroid..." << std::endl;
     centroid.resize(neuron_count, 0.0);
     std::cerr << "[DynamicExpert] Centroid resized to " << centroid.size() << std::endl;
     
-    // Create learner only if config is valid
-    if (config.num_layers > 0 && neuron_count > 0) {
-        std::cerr << "[DynamicExpert] Creating ForwardForwardLearner (lazy_init=" << config.lazy_init << ")..." << std::endl;
-        learner = std::make_unique<learning::ForwardForwardLearner>(config);
-        std::cerr << "[DynamicExpert] ForwardForwardLearner created" << std::endl;
+    // LAZY: Don't create learner here - only when first used
+    // This prevents 8192 experts x 64 layers initialization hang
+    std::cerr << "[DynamicExpert] Constructor complete - learner will be created lazily" << std::endl;
+}
+
+void DynamicExpert::ensure_learner_initialized() {
+    if (!learner_initialized_ && !learner) {
+        if (learner_config_.num_layers > 0 && learner_config_.neurons_per_layer > 0) {
+            std::cerr << "[DynamicExpert] Lazy initializing ForwardForwardLearner for id=" << id << std::endl;
+            learner = std::make_unique<learning::ForwardForwardLearner>(learner_config_);
+            std::cerr << "[DynamicExpert] ForwardForwardLearner created lazily" << std::endl;
+        }
+        learner_initialized_ = true;
     }
-    std::cerr << "[DynamicExpert] Constructor complete" << std::endl;
 }
 
 // ====================================================================
@@ -559,6 +568,56 @@ SelfOrganizingExpertManager::get_stats() const {
     stats.avg_beta_1 = stats.num_experts > 0 ? sum_beta_1 / stats.num_experts : 0.0;
     
     return stats;
+}
+
+std::string SelfOrganizingExpertManager::export_topology_json() const {
+    std::lock_guard<std::mutex> lock(experts_mutex_);
+    
+    std::ostringstream json;
+    json << "{\"nodes\":[";
+    
+    // Export nodes (experts)
+    bool first_node = true;
+    for (const auto& [id, expert] : experts_) {
+        if (!first_node) json << ",";
+        first_node = false;
+        
+        // Generate a pseudo-position for visualization (simple layout)
+        // In a real implementation, you'd use force-directed layout or similar
+        double x = (id % 10) * 50.0 + 100.0;
+        double y = (id / 10) * 50.0 + 100.0;
+        
+        json << "{\"id\":" << id << ",";
+        json << "\"generation\":" << expert->generation << ",";
+        json << "\"activation_count\":" << expert->activation_count << ",";
+        json << "\"beta_1\":" << expert->local_beta_1 << ",";
+        json << "\"goodness\":" << expert->average_goodness() << ",";
+        json << "\"x\":" << x << ",";
+        json << "\"y\":" << y << "}";
+    }
+    
+    json << "],\"edges\":[";
+    
+    // Export edges (connections)
+    bool first_edge = true;
+    for (const auto& [id, expert] : experts_) {
+        for (size_t connected_id : expert->connected_experts) {
+            // Avoid duplicate edges (only output if id < connected_id)
+            if (id < connected_id) {
+                if (!first_edge) json << ",";
+                first_edge = false;
+                
+                json << "{\"source\":" << id << ",";
+                json << "\"target\":" << connected_id << "}";
+            }
+        }
+    }
+    
+    json << "],\"stats\":{\"num_experts\":" << get_expert_count() << ",";
+    json << "\"num_edges\":" << get_edge_count() << ",";
+    json << "\"graph_density\":" << get_graph_density() << "}}";
+    
+    return json.str();
 }
 
 } // namespace q_mini_wasm_v2::core::moe

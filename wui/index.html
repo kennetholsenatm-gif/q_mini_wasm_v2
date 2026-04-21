@@ -3,36 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Q-Mini WASM v2 - Training Dashboard</title>
+    <title>Q-Mini-WASM-v2 Production Control Plane</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        
         :root {
-            --bg-dark: #0d1117;
-            --bg-card: #161b22;
-            --bg-hover: #21262d;
-            --border: #30363d;
-            --text-primary: #c9d1d9;
-            --text-secondary: #8b949e;
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #151520;
+            --bg-tertiary: #1a1a2e;
+            --border-color: #2d2d44;
             --accent: #4ecca3;
             --accent-hover: #3db892;
-            --warning: #f0883e;
-            --error: #f85149;
-            --success: #3fb950;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --error: #ff4444;
+            --warning: #ffaa00;
+            --success: #4ecca3;
         }
-        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg-dark);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+            background: var(--bg-primary);
             color: var(--text-primary);
             line-height: 1.5;
             min-height: 100vh;
         }
         
-        header {
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            padding: 1rem 2rem;
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -40,1691 +39,2457 @@
             top: 0;
             z-index: 100;
         }
-        
-        header h1 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        
-        header h1::before {
-            content: "◈";
+        .header h1 {
+            font-size: 1.1rem;
             color: var(--accent);
-            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
         }
-        
         .status-bar {
             display: flex;
             gap: 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
+            align-items: center;
+            font-size: 0.8rem;
         }
-        
-        .status-item {
+        .status-indicator {
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
-        
-        .status-indicator {
+        .status-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: var(--text-secondary);
+            background: #666;
+            transition: all 0.3s ease;
         }
-        
-        .status-indicator.idle {
-            background: var(--text-secondary);
-        }
-        
-        .status-indicator.active {
-            background: var(--success);
-            box-shadow: 0 0 8px var(--success);
-        }
-        
-        .status-indicator.training {
-            background: var(--warning);
-            animation: pulse 1.5s infinite;
-        }
-        
-        .status-indicator.error {
-            background: var(--error);
-        }
-        
+        .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .status-dot.training { background: var(--warning); animation: pulse 1.5s infinite; }
+        .status-dot.error { background: var(--error); }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            50% { opacity: 0.4; }
         }
         
-        nav {
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            padding: 0 2rem;
+        /* Connection Banner */
+        .conn-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--error);
+            color: white;
+            text-align: center;
+            padding: 0.5rem;
+            font-size: 0.85rem;
+            z-index: 1000;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+        .conn-banner.visible { transform: translateY(0); }
+        /* Main Layout */
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        
+        /* Tab Navigation */
+        .tabs {
             display: flex;
-            gap: 0;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            overflow-x: auto;
+            background: var(--bg-secondary);
+            padding: 0.5rem 1rem 0;
+            border-radius: 8px 8px 0 0;
         }
-        
-        nav button {
+        .tab {
+            padding: 0.6rem 1.25rem;
             background: transparent;
             border: none;
             color: var(--text-secondary);
-            padding: 0.875rem 1.5rem;
             cursor: pointer;
-            font-size: 0.875rem;
+            font-size: 0.85rem;
             font-weight: 500;
+            white-space: nowrap;
             border-bottom: 2px solid transparent;
             transition: all 0.2s;
+            border-radius: 4px 4px 0 0;
         }
-        
-        nav button:hover {
-            color: var(--text-primary);
-            background: var(--bg-hover);
-        }
-        
-        nav button.active {
+        .tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        .tab.active {
             color: var(--accent);
             border-bottom-color: var(--accent);
+            background: rgba(78, 204, 163, 0.1);
         }
         
-        main {
-            padding: 1.5rem 2rem;
-            max-width: 1800px;
-            margin: 0 auto;
-        }
-        
-        .panel {
-            display: none;
-        }
-        
-        .panel.active {
-            display: block;
-        }
-        
-        .grid {
+        /* Panel Grid & Layout */
+        .panel-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 1.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 1rem;
         }
-        
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
+        .panel-grid.wide {
+            grid-template-columns: 1fr;
         }
-        
-        .card-header {
+        .panel-grid.split {
+            grid-template-columns: 1fr 1fr;
+        }
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-header {
+            background: var(--bg-tertiary);
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 600;
+            color: var(--accent);
+            font-size: 0.9rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.25rem;
-            padding-bottom: 0.75rem;
-            border-bottom: 1px solid var(--border);
+        }
+        .panel-body {
+            padding: 1rem;
+            flex: 1;
         }
         
-        .card-header-actions {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-        
-        .card-title {
-            font-size: 1rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .copy-btn {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .copy-btn:hover {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-            border-color: var(--accent);
-        }
-        
-        .copy-btn.copied {
-            background: var(--success);
-            color: white;
-            border-color: var(--success);
-        }
-        
+        /* Metrics */
         .metric-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 1rem;
         }
-        
+        .metric-grid.wide { grid-template-columns: repeat(4, 1fr); }
         .metric {
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 8px;
+            text-align: center;
             padding: 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
         }
-        
+        .metric-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--accent);
+            font-family: 'SF Mono', Monaco, monospace;
+        }
         .metric-label {
             font-size: 0.75rem;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0.5rem;
+            letter-spacing: 0.05em;
+            margin-top: 0.25rem;
         }
         
-        .metric-value {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .metric-value.accent {
-            color: var(--accent);
-        }
-        
-        button {
-            background: var(--accent);
-            color: var(--bg-dark);
+        /* Controls */
+        .btn {
+            padding: 0.5rem 1rem;
             border: none;
-            padding: 0.625rem 1.25rem;
             border-radius: 6px;
-            font-size: 0.875rem;
-            font-weight: 600;
             cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
             transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
         }
-        
-        button:hover {
-            background: var(--accent-hover);
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
-        
-        button.secondary {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-            border: 1px solid var(--border);
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg-primary);
         }
-        
-        button.secondary:hover {
-            background: var(--border);
-        }
-        
-        button.danger {
-            background: var(--error);
+        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+        .btn-danger {
+            background: #5a2d2d;
             color: white;
+            border: 1px solid var(--error);
         }
-        
-        .control-group {
-            margin-bottom: 1.25rem;
-        }
-        
-        .control-group label {
-            display: block;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-        }
-        
-        input, select, textarea {
-            width: 100%;
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 0.625rem 0.875rem;
+        .btn-danger:hover:not(:disabled) { background: #7a3d3d; }
+        .btn-secondary {
+            background: var(--bg-tertiary);
             color: var(--text-primary);
-            font-size: 0.875rem;
+            border: 1px solid var(--border-color);
+        }
+        .btn-secondary:hover:not(:disabled) { background: var(--border-color); }
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
         }
         
-        input:focus, select:focus, textarea:focus {
+        /* Form Elements */
+        input, textarea, select {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus, select:focus {
             outline: none;
             border-color: var(--accent);
         }
-        
-        .log-container {
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem;
-            font-family: 'SF Mono', Monaco, monospace;
-            font-size: 0.75rem;
-            max-height: 400px;
-            overflow-y: auto;
+        input:disabled, textarea:disabled, select:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
-        
-        .log-entry {
-            margin-bottom: 0.375rem;
-            padding: 0.25rem 0;
-            border-bottom: 1px solid var(--border);
+        .form-group {
+            margin-bottom: 0.75rem;
         }
-        
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-        
-        .log-time {
+        .form-group label {
+            display: block;
+            margin-bottom: 0.35rem;
+            font-size: 0.8rem;
             color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .form-group label.toggle {
+            display: flex;
+            margin-bottom: 0;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        .form-row.three { grid-template-columns: repeat(3, 1fr); }
+        
+        /* Toggle Switch */
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            padding: 0.35rem 0;
+        }
+        .toggle input { display: none; }
+        .toggle-slider {
+            width: 44px;
+            height: 24px;
+            background: #444;
+            border-radius: 12px;
+            position: relative;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            border: 2px solid #555;
+        }
+        .toggle-slider::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: #888;
+            border-radius: 50%;
+            top: 1px;
+            left: 1px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        /* ON state - bright green with glow */
+        .toggle input:checked + .toggle-slider { 
+            background: var(--accent); 
+            border-color: var(--accent);
+            box-shadow: 0 0 12px rgba(78, 204, 163, 0.6);
+        }
+        .toggle input:checked + .toggle-slider::after { 
+            transform: translateX(20px); 
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        /* OFF state indicator */
+        .toggle input:not(:checked) + .toggle-slider::before {
+            content: 'OFF';
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 8px;
+            color: #666;
+            font-weight: bold;
+        }
+        /* ON state indicator */
+        .toggle input:checked + .toggle-slider::before {
+            content: 'ON';
+            position: absolute;
+            left: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 8px;
+            color: white;
+            font-weight: bold;
+        }
+        /* Toggle label text */
+        .toggle-text {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            font-weight: 500;
+            user-select: none;
+        }
+        .toggle input:checked ~ .toggle-text {
+            color: var(--accent);
         }
         
-        .log-info { color: var(--accent); }
-        .log-warn { color: var(--warning); }
-        .log-error { color: var(--error); }
+        /* Progress */
+        .progress-container {
+            margin: 1rem 0;
+        }
         
+        /* Pulse animation for status indicators */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .pulse {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
         .progress-bar {
-            background: var(--bg-dark);
-            border-radius: 4px;
-            height: 8px;
+            height: 10px;
+            background: var(--bg-primary);
+            border-radius: 5px;
             overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #2d8a6e);
+            transition: width 0.5s ease;
+            border-radius: 5px;
+        }
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
             margin-top: 0.5rem;
         }
         
-        .progress-fill {
-            background: var(--accent);
-            height: 100%;
-            transition: width 0.3s;
+        /* Log Output */
+        .log-container {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .log-output {
+            padding: 0.75rem;
+            font-family: 'SF Mono', Consolas, monospace;
+            font-size: 0.8rem;
+            max-height: 400px;
+            min-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        .log-entry {
+            margin-bottom: 0.2rem;
+            padding: 0.1rem 0;
+        }
+        .log-entry.error { color: var(--error); }
+        .log-entry.warn { color: var(--warning); }
+        .log-entry.success { color: var(--success); }
+        .log-entry.info { color: #66aaff; }
+        .log-entry.timestamp { color: #666; font-size: 0.75rem; }
+        
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .data-table th, .data-table td {
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .data-table th {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+        .data-table tr:hover { background: rgba(255,255,255,0.03); }
+        .data-table td { color: var(--text-primary); }
+        .data-table .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .status.enabled { background: rgba(78, 204, 163, 0.2); color: var(--accent); }
+        .status.disabled { background: rgba(255, 68, 68, 0.2); color: var(--error); }
+        
+        /* Config Sections */
+        .config-section {
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .config-section-header {
+            background: var(--bg-tertiary);
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .config-section-header:hover { background: var(--border-color); }
+        .config-section-body {
+            padding: 1rem;
+            display: none;
+        }
+        .config-section.expanded .config-section-body { display: block; }
+        .config-section.expanded .config-section-header::after { transform: rotate(180deg); }
+        
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        .modal-body {
+            padding: 1rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .modal-footer {
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
         }
         
-        .api-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 0.75rem;
-        }
-        
-        .api-item {
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
+        /* Validation */
+        .validation-errors {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid var(--error);
             border-radius: 6px;
             padding: 0.75rem;
-            text-align: center;
-            font-size: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+        }
+        .validation-errors ul {
+            margin: 0;
+            padding-left: 1.25rem;
+        }
+        .validation-errors li { color: var(--error); margin-bottom: 0.25rem; }
+        
+        /* Hidden states */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Chat Interface */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background: var(--bg-primary);
+        }
+        .chat-message {
+            margin-bottom: 1rem;
+            max-width: 85%;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .chat-message.user { margin-left: auto; }
+        .chat-message.assistant { margin-right: auto; }
+        .chat-bubble {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            word-wrap: break-word;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .chat-message.user .chat-bubble {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+        .chat-message.assistant .chat-bubble {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+        }
+        .chat-input {
+            display: flex;
+            gap: 0.5rem;
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        .chat-input textarea {
+            flex: 1;
+            resize: none;
+            height: 60px;
+            font-family: inherit;
         }
         
-        .api-item.active {
+        /* Model Cards */
+        .model-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .model-card:hover { border-color: var(--accent); }
+        .model-card.selected {
             border-color: var(--accent);
             background: rgba(78, 204, 163, 0.1);
         }
-        
-        .topology-viz {
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            height: 300px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-secondary);
-        }
-        
-        .full-width {
-            grid-column: 1 / -1;
-        }
-        
-        .two-thirds {
-            grid-column: span 2;
-        }
-        
-        /* CLI Editor Styles */
-        .cli-editor-container {
-            position: relative;
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
-        .cli-help-bar {
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            padding: 0.5rem 1rem;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-        
-        .cli-help-bar kbd {
-            background: var(--bg-hover);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: monospace;
-            border: 1px solid var(--border);
-        }
-        
-        .cli-editor {
-            min-height: 500px;
-            max-height: 600px;
-            overflow-y: auto;
-            padding: 1rem;
-            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            color: var(--text-primary);
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            outline: none;
-        }
-        
-        .cli-editor .comment { color: var(--text-secondary); }
-        .cli-editor .section { color: var(--accent); font-weight: 600; }
-        .cli-editor .key { color: #79c0ff; }
-        .cli-editor .value { color: #a5d6ff; }
-        .cli-editor .string { color: #a5d6ff; }
-        .cli-editor .number { color: #79c0ff; }
-        .cli-editor .boolean { color: #ff7b72; }
-        .cli-editor .cursor {
-            display: inline-block;
-            width: 8px;
-            height: 1.2em;
-            background: var(--accent);
-            animation: blink 1s infinite;
-            vertical-align: text-bottom;
-        }
-        
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
-        }
-        
-        .cli-suggestions {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--bg-card);
-            border-top: 1px solid var(--border);
-            max-height: 150px;
-            overflow-y: auto;
-            padding: 0.5rem;
-            font-family: monospace;
-            font-size: 12px;
-            display: none;
-        }
-        
-        .cli-suggestions.active {
-            display: block;
-        }
-        
-        .cli-suggestion-item {
-            padding: 4px 8px;
-            cursor: pointer;
-            color: var(--text-secondary);
-        }
-        
-        .cli-suggestion-item:hover,
-        .cli-suggestion-item.selected {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-        }
-        
-        .cli-help {
-            position: absolute;
-            right: 1rem;
-            top: 3rem;
-            width: 300px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 1rem;
-            font-size: 0.8rem;
-            display: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-        
-        .cli-help.active {
-            display: block;
-        }
-        
-        .cli-help h4 {
-            color: var(--accent);
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-        }
-        
-        .cli-help p {
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-        }
-        
-        .cli-help .valid-values {
-            color: var(--text-primary);
-            font-family: monospace;
-            background: var(--bg-dark);
-            padding: 0.5rem;
+        .model-card .info { flex: 1; }
+        .model-card .name { font-weight: 500; margin-bottom: 0.25rem; }
+        .model-card .meta { font-size: 0.8rem; color: var(--text-secondary); }
+        .model-card .size {
+            background: var(--bg-primary);
+            padding: 0.25rem 0.5rem;
             border-radius: 4px;
-            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            font-family: monospace;
         }
         
+        /* Responsive */
         @media (max-width: 768px) {
-            .grid { grid-template-columns: 1fr; }
-            .two-thirds { grid-column: 1; }
+            .panel-grid { grid-template-columns: 1fr; }
+            .form-row { grid-template-columns: 1fr; }
+            .tabs { font-size: 0.8rem; }
+            .tab { padding: 0.5rem 0.75rem; }
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Q-Mini WASM v2</h1>
+    <div class="conn-banner" id="conn-banner">Disconnected from server - retrying...</div>
+    
+    <div class="header">
+        <h1>Q-Mini-WASM-v2 Production Control Plane</h1>
         <div class="status-bar">
-            <div class="status-item">
-                <span class="status-indicator" id="backend-status"></span>
-                <span id="backend-text">Backend: Disconnected</span>
+            <div class="status-indicator">
+                <div class="status-dot" id="server-status"></div>
+                <span id="server-text">Connecting...</span>
             </div>
-            <div class="status-item">
-                <span>Experts: <span id="expert-count">0</span></span>
+            <div class="status-indicator">
+                <div class="status-dot" id="training-status"></div>
+                <span id="training-text">Idle</span>
             </div>
-            <div class="status-item">
-                <span>Memory: <span id="memory-usage">~21MB</span></span>
+            <div class="status-indicator">
+                <div class="status-dot" id="model-status"></div>
+                <span id="model-text">No Model</span>
             </div>
         </div>
-    </header>
+    </div>
     
-    <nav>
-        <button class="active" onclick="showPanel('training')">Training</button>
-        <button onclick="showPanel('inference')">Inference</button>
-        <button onclick="showPanel('topology')">Topology</button>
-        <button onclick="showPanel('data')">Data Sources</button>
-        <button onclick="showPanel('config')">Config</button>
-        <button onclick="showPanel('logs')">Logs</button>
-    </nav>
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" data-tab="dashboard">Dashboard</button>
+            <button class="tab" data-tab="training">Training</button>
+            <button class="tab" data-tab="inference">Inference</button>
+            <button class="tab" data-tab="models">Models</button>
+            <button class="tab" data-tab="config">Config</button>
+            <button class="tab" data-tab="data">Data</button>
+            <button class="tab" data-tab="apikeys">API Keys</button>
+        </div>
     
-    <main>
-        <!-- TRAINING PANEL -->
-        <div id="training-panel" class="panel active">
-            <div class="grid">
-                <!-- Training Control -->
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">⚡ Training Control</span>
-                        <div class="card-header-actions">
-                            <button class="copy-btn" onclick="copyCard('training-control')" title="Copy">📋</button>
-                            <span class="status-indicator" id="training-status"></span>
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label>Configuration</label>
-                        <select id="config-select">
-                            <option value="config/training_config.toml">Default Training Config</option>
-                            <option value="custom">Custom Configuration</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label>Epochs</label>
-                        <input type="number" id="epochs" value="100" min="1">
-                    </div>
-                    <div class="control-group">
-                        <label>Batch Size</label>
-                        <input type="number" id="batch-size" value="8192" min="100" step="100">
-                    </div>
-                    <div class="control-group">
-                        <label>
-                            <input type="checkbox" id="continuous-mode" onchange="updateConfigFromCheckbox()"> Continuous Mode (infinite training)
-                        </label>
-                    </div>
-                    <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
-                        <button onclick="startTraining()">Start Training</button>
-                        <button class="secondary" onclick="pauseTraining()">Pause</button>
-                        <button class="danger" onclick="stopTraining()">Stop</button>
-                    </div>
-                </div>
-                
-                <!-- Live Metrics -->
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">📊 Live Metrics</span>
-                        <button class="copy-btn" onclick="copyCard('live-metrics')" title="Copy">📋</button>
-                    </div>
-                    <div class="metric-grid">
-                        <div class="metric">
-                            <div class="metric-label">Epoch</div>
-                            <div class="metric-value" id="current-epoch">0/100</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Progress</div>
-                            <div class="metric-value accent" id="progress-pct">0%</div>
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="progress-bar" style="width: 0%"></div>
+        <!-- Dashboard Tab -->
+        <div class="tab-content active" id="dashboard">
+            <div class="panel-grid">
+                <div class="panel">
+                    <div class="panel-header">Training Metrics</div>
+                    <div class="panel-body">
+                        <div class="metric-grid wide">
+                            <div class="metric">
+                                <div class="metric-value" id="dash-epoch">0</div>
+                                <div class="metric-label">Current Epoch</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="dash-loss">--</div>
+                                <div class="metric-label">Loss</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="dash-samples">0</div>
+                                <div class="metric-label">Samples Processed</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="dash-experts">0</div>
+                                <div class="metric-label">Experts Active</div>
                             </div>
                         </div>
-                        <div class="metric">
-                            <div class="metric-label">Active Experts</div>
-                            <div class="metric-value" id="active-experts">8</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Topology Updates</div>
-                            <div class="metric-value" id="topology-updates">0</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Mode</div>
-                            <div class="metric-value" id="training-mode">Standard</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Iteration</div>
-                            <div class="metric-value" id="iteration-count">0</div>
+                        <div class="progress-container" style="margin-top: 1.5rem;">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="dash-progress" style="width: 0%"></div>
+                            </div>
+                            <div class="progress-text">
+                                <span id="dash-progress-text">Waiting to start...</span>
+                                <span id="dash-progress-pct">0%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Betti Metrics -->
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">🔄 Betti Topology</span>
-                        <button class="copy-btn" onclick="copyCard('betti-topology')" title="Copy">📋</button>
+                <div class="panel">
+                    <div class="panel-header">System Status</div>
+                    <div class="panel-body">
+                        <div class="metric-grid">
+                            <div class="metric">
+                                <div class="metric-value" id="dash-memory">0</div>
+                                <div class="metric-label">Memory (MB)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="dash-arena">0</div>
+                                <div class="metric-label">Arena (MB)</div>
+                            </div>
+                        </div>
+                        <div id="system-check-results" style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-secondary);"></div>
                     </div>
-                    <div class="metric-grid">
-                        <div class="metric">
-                            <div class="metric-label">β₁ (avg/max)</div>
-                            <div class="metric-value" id="betti-stats">0.0 / 0</div>
+                </div>
+            </div>
+            
+            <div class="panel" style="margin-top: 1rem;">
+                <div class="panel-header">System Logs</div>
+                <div class="panel-body" style="padding: 0;">
+                    <div class="log-container">
+                        <div class="log-output" id="dashboard-logs"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Training Tab -->
+        <div class="tab-content" id="training">
+            <div class="panel-grid split">
+                <div class="panel">
+                    <div class="panel-header">Training Configuration</div>
+                    <div class="panel-body" style="max-height: 600px; overflow-y: auto;">
+                        <!-- Basic Training Params -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Epochs</label>
+                                <input type="number" id="cfg-epochs" value="100" min="1" max="100000">
+                            </div>
+                            <div class="form-group">
+                                <label>Batch Size</label>
+                                <input type="number" id="cfg-batch-size" value="16384" min="1" max="1000000" step="1024">
+                            </div>
                         </div>
-                        <div class="metric">
-                            <div class="metric-label">Graph Density</div>
-                            <div class="metric-value" id="graph-density">0%</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Learning Rate</label>
+                                <input type="number" id="cfg-learning-rate" value="10" min="0.00001" max="1000" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>Checkpoint Interval</label>
+                                <input type="number" id="cfg-checkpoint-interval" value="10" min="1" max="1000">
+                            </div>
                         </div>
-                        <div class="metric">
-                            <div class="metric-label">Edges</div>
-                            <div class="metric-value" id="edge-count">0</div>
+                        
+                        <!-- Model Architecture -->
+                        <div class="config-section expanded">
+                            <div class="config-section-header">Model Architecture</div>
+                            <div class="config-section-body">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label style="color: var(--accent); font-weight: 600;">MoE Experts (Total)</label>
+                                        <input type="number" id="cfg-moe-experts" value="8192" min="1" max="100000">
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="color: var(--accent); font-weight: 600;">Top-K (Active Experts)</label>
+                                        <input type="number" id="cfg-moe-topk" value="128" min="1" max="256">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Context Window</label>
+                                        <input type="number" id="cfg-context-window" value="8192" min="256" max="65536" step="256">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Num Layers</label>
+                                        <input type="number" id="cfg-num-layers" value="64" min="1" max="256">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Entanglement Tokens</label>
+                                        <input type="number" id="cfg-entanglement-tokens" value="1024" min="1" max="8192">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Shadow Dim</label>
+                                        <input type="number" id="cfg-shadow-dim" value="4096" min="256" max="16384">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Neurons Per Layer</label>
+                                        <input type="number" id="cfg-neurons-per-layer" value="2048" min="256" max="8192">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Routing Qutrits</label>
+                                        <input type="number" id="cfg-routing-qutrits" value="12" min="1" max="32">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="metric">
-                            <div class="metric-label">Expert Splits</div>
-                            <div class="metric-value" id="split-count">0</div>
+                        
+                        <!-- Features -->
+                        <div class="config-section">
+                            <div class="config-section-header">Features</div>
+                            <div class="config-section-body">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-steane-correction" checked>
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Steane Correction</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-flash-cim">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Flash CIM</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-continuous-mode" checked>
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Continuous Mode</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-lazy-init" checked>
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Lazy Init</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-data-accumulation" checked>
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Data Accumulation</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Worker Threads</label>
+                                        <input type="number" id="cfg-worker-threads" value="32" min="1" max="128">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Data Acquisition & Training Pipeline -->
+                        <div class="config-section">
+                            <div class="config-section-header">Training Data Pipeline</div>
+                            <div class="config-section-body">
+                                <div id="training-data-status" style="font-size: 0.85rem; margin-bottom: 0.75rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                        <span id="data-pipeline-indicator" style="width: 8px; height: 8px; border-radius: 50%; background: var(--warning);"></span>
+                                        <span id="data-pipeline-text" style="color: var(--text-secondary);">Checking data status...</span>
+                                    </div>
+                                    <div id="training-data-sources" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem;"></div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem;">
+                                    <button class="btn btn-secondary" onclick="refreshTrainingDataSources()" style="padding: 0.4rem 0.6rem; font-size: 0.75rem;">
+                                        <span style="font-size: 0.9rem;">🔄</span> Refresh Status
+                                    </button>
+                                    <button class="btn btn-primary" onclick="startDataAcquisitionFromTraining()" style="padding: 0.4rem 0.6rem; font-size: 0.75rem;">
+                                        <span style="font-size: 0.9rem;">📥</span> Acquire Data
+                                    </button>
+                                </div>
+                                
+                                <div style="margin-top: 0.75rem; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; font-size: 0.75rem;">
+                                    <strong style="color: var(--accent);">Continuous Mode:</strong>
+                                    <span id="continuous-data-status" style="color: var(--text-secondary);"> Data acquisition will run automatically between training cycles</span>
+                                </div>
+                                
+                                <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                                    <button class="btn btn-secondary" onclick="document.querySelector('[data-tab=data]').click()" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; flex: 1;">Manage Data Sources →</button>
+                                    <button class="btn btn-secondary" onclick="viewAcquiredData()" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; flex: 1;">View Acquired Data</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- API Settings -->
+                        <div class="config-section">
+                            <div class="config-section-header">API Integrations</div>
+                            <div class="config-section-body">
+                                <div class="form-group">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="cfg-apis-enabled">
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-text">Enable APIs</span>
+                                    </label>
+                                </div>
+                                <div class="form-row three">
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-wolfram">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Wolfram</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-wikidata">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Wikidata</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-arxiv">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">arXiv</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-row three">
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-github">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">GitHub</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-nasa">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">NASA</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-pubchem">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">PubChem</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-row three">
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-pdb">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">PDB</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-oeis">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">OEIS</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="toggle">
+                                            <input type="checkbox" id="cfg-api-lean">
+                                            <span class="toggle-slider"></span>
+                                            <span class="toggle-text">Lean</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="btn-group" style="margin-top: 1rem;">
+                            <button class="btn btn-primary" id="btn-start-training" onclick="startTraining()">Start Training</button>
+                            <button class="btn btn-danger" id="btn-stop-training" onclick="stopTraining()" disabled>Stop</button>
+                            <button class="btn btn-secondary" id="btn-pause-training" onclick="pauseTraining()" disabled>Pause</button>
+                            <button class="btn btn-secondary" onclick="saveTrainingConfig()">Save Config</button>
+                            <button class="btn btn-secondary" onclick="resetTrainingDefaults()">Reset Defaults</button>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Checkpoint Management -->
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">💾 Checkpoints</span>
-                        <button class="copy-btn" onclick="copyCard('checkpoints')" title="Copy">📋</button>
-                    </div>
-                    <div class="control-group">
-                        <label>Checkpoint Interval</label>
-                        <input type="number" id="checkpoint-interval" value="1" min="1">
-                    </div>
-                    <div class="control-group">
-                        <label>Output Directory</label>
-                        <input type="text" id="output-dir" value="checkpoints/">
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <button class="secondary" onclick="browseCheckpoints()">Browse Checkpoints</button>
-                    </div>
-                    <div id="checkpoint-list" style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-secondary);">
-                        No checkpoints loaded
-                    </div>
-                </div>
-                
-                <!-- Training Config -->
-                <div class="card two-thirds">
-                    <div class="card-header">
-                        <span class="card-title">⚙️ Model Configuration</span>
-                        <button class="copy-btn" onclick="copyCard('model-config')" title="Copy">📋</button>
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
-                        <div class="control-group">
-                            <label>Total Experts</label>
-                            <input type="number" value="8192" readonly>
-                        </div>
-                        <div class="control-group">
-                            <label>Active Experts (Top-K)</label>
-                            <input type="number" value="128" readonly>
-                        </div>
-                        <div class="control-group">
-                            <label>Layers per Expert</label>
-                            <input type="number" value="64" readonly>
-                        </div>
-                        <div class="control-group">
-                            <label>Neurons per Layer</label>
-                            <input type="number" value="2048" readonly>
-                        </div>
-                        <div class="control-group">
-                            <label>Context Window</label>
-                            <input type="number" value="8192" readonly>
-                        </div>
-                        <div class="control-group">
-                            <label>Sparsity</label>
-                            <input type="text" value="5%" readonly>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Live Training Feed -->
-                <div class="card full-width">
-                    <div class="card-header">
-                        <span class="card-title">📡 Live Training Feed</span>
-                        <div class="card-header-actions">
-                            <button class="copy-btn" onclick="copyCard('training-feed')" title="Copy">📋</button>
-                            <button class="secondary" onclick="clearTrainingFeed()">Clear</button>
-                        </div>
-                    </div>
-                    <div class="log-container" id="training-feed" style="max-height: 300px;">
-                        <div class="log-entry">
-                            <span class="log-time">[--:--:--]</span>
-                            <span class="log-info">Training feed ready. Click "Start Training" to begin.</span>
+                <div class="panel">
+                    <div class="panel-header">Training Log</div>
+                    <div class="panel-body" style="padding: 0;">
+                        <div class="log-container">
+                            <div class="log-output" id="training-logs"></div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- INFERENCE PANEL -->
-        <div id="inference-panel" class="panel">
-            <div class="grid">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">🔮 Inference</span>
-                        <button class="copy-btn" onclick="copyCard('inference-input')" title="Copy">📋</button>
-                    </div>
-                    <div class="control-group">
-                        <label>Input Text</label>
-                        <textarea id="inference-input" rows="6" placeholder="Enter text for inference..."></textarea>
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <button onclick="runInference()">Run Inference</button>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">📤 Output</span>
-                        <button class="copy-btn" onclick="copyElement('inference-output')" title="Copy">📋</button>
-                    </div>
-                    <div id="inference-output" style="background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; min-height: 200px; font-family: monospace; font-size: 0.875rem;">
-                        Inference output will appear here...
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">🎯 Expert Activation</span>
-                        <button class="copy-btn" onclick="copyCard('expert-activation')" title="Copy">📋</button>
-                    </div>
-                    <div id="expert-activation" class="topology-viz">
-                        Expert activation visualization
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- TOPOLOGY PANEL -->
-        <div id="topology-panel" class="panel">
-            <div class="grid">
-                <div class="card two-thirds">
-                    <div class="card-header">
-                        <span class="card-title">🕸️ Self-Organizing Expert Topology</span>
-                        <button class="copy-btn" onclick="copyCard('topology-viz')" title="Copy">📋</button>
-                    </div>
-                    <div class="topology-viz" style="height: 500px;">
-                        <div>Live topology graph visualization<br>Expert nodes and connections based on Betti guidance</div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">📈 Topology Evolution</span>
-                        <button class="copy-btn" onclick="copyCard('topology-evolution')" title="Copy">📋</button>
-                    </div>
-                    <div class="metric-grid">
-                        <div class="metric">
-                            <div class="metric-label">Seed Experts</div>
-                            <div class="metric-value">8</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Current Experts</div>
-                            <div class="metric-value" id="current-experts">8</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Max Experts</div>
-                            <div class="metric-value">100K</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Split Threshold</div>
-                            <div class="metric-value">β₁ > 5</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- DATA SOURCES PANEL -->
-        <div id="data-panel" class="panel">
-            <div class="grid">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">🌐 DataSynthesizer V2 - API Sources</span>
-                        <button class="copy-btn" onclick="copyCard('api-sources')" title="Copy">📋</button>
-                    </div>
-                    <div class="api-grid">
-                        <div class="api-item active">OpenAlex</div>
-                        <div class="api-item active">Gutendex</div>
-                        <div class="api-item active">USGS Earthquake</div>
-                        <div class="api-item active">SpaceX</div>
-                        <div class="api-item active">Chronicling America</div>
-                        <div class="api-item active">GBIF</div>
-                        <div class="api-item active">arXiv</div>
-                        <div class="api-item active">Wikidata</div>
-                        <div class="api-item active">OEIS</div>
-                        <div class="api-item active">PubChem</div>
-                        <div class="api-item active">NASA</div>
-                        <div class="api-item active">PDB</div>
-                        <div class="api-item active">GitHub</div>
-                        <div class="api-item active">Lean</div>
-                    </div>
-                    <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
-                        <button onclick="toggleDataSynthesizer()">Start Data Acquisition</button>
-                        <button class="secondary" onclick="browseDataset()">Browse Dataset</button>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">📊 Data Stats</span>
-                        <button class="copy-btn" onclick="copyCard('data-stats')" title="Copy">📋</button>
-                    </div>
-                    <div class="metric-grid">
-                        <div class="metric">
-                            <div class="metric-label">Total Acquired</div>
-                            <div class="metric-value" id="data-acquired">0</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Perturbed Samples</div>
-                            <div class="metric-value" id="data-perturbed">0</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">API Failures</div>
-                            <div class="metric-value" id="api-failures">0</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-label">Active Sources</div>
-                            <div class="metric-value">14</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- LOGS PANEL -->
-        <div id="logs-panel" class="panel">
-            <div class="card full-width">
-                <div class="card-header">
-                    <span class="card-title">📋 Training Logs</span>
-                    <div class="card-header-actions">
-                        <button class="copy-btn" onclick="copyElement('log-container')" title="Copy">📋</button>
-                        <button class="secondary" onclick="clearLogs()">Clear</button>
-                    </div>
-                </div>
-                <div class="log-container" id="log-container">
-                    <div class="log-entry">
-                        <span class="log-time">[19:00:00]</span>
-                        <span class="log-info">Dashboard initialized. Ready for training.</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- CONFIG PANEL -->
-        <div id="config-panel" class="panel">
-            <div class="grid">
-                <div class="card full-width">
-                    <div class="card-header">
-                        <span class="card-title">⚙️ TOML Configuration Editor</span>
-                        <div class="card-header-actions">
-                            <button class="copy-btn" onclick="copyElement('cli-editor')" title="Copy">📋</button>
-                            <select id="config-file-select" onchange="loadConfigFile()">
-                                <option value="training">training_config.toml (Training)</option>
-                                <option value="system">system.toml (System)</option>
+        <!-- Inference Tab -->
+        <div class="tab-content" id="inference">
+            <div class="panel-grid split">
+                <div class="panel">
+                    <div class="panel-header">Inference Settings</div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label>Model</label>
+                            <select id="inf-model-select">
+                                <option value="">-- Select Model --</option>
                             </select>
-                            <button onclick="saveConfig()">Save</button>
-                            <button class="secondary" onclick="resetConfig()">Reset</button>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Num Qutrits</label>
+                                <input type="number" id="inf-qutrits" value="243" min="4" max="4096">
+                            </div>
+                            <div class="form-group">
+                                <label>Num Experts</label>
+                                <input type="number" id="inf-experts" value="243" min="1" max="8192">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Max Iterations</label>
+                                <input type="number" id="inf-max-iter" value="5000" min="10" max="100000">
+                            </div>
+                            <div class="form-group">
+                                <label>Convergence Tolerance</label>
+                                <input type="number" id="inf-tolerance" value="0.001" min="0.00001" max="1" step="0.001">
+                            </div>
+                        </div>
+                        <div class="btn-group" style="margin-top: 1rem;">
+                            <button class="btn btn-primary" onclick="loadModelForInference()">Load Model</button>
+                            <button class="btn btn-danger" onclick="unloadModel()">Unload</button>
                         </div>
                     </div>
-                    <div class="cli-editor-container">
-                        <div class="cli-help-bar">
-                            <kbd>Tab</kbd> = Complete <kbd>?</kbd> = Help <kbd>Ctrl+C</kbd> = Cancel <kbd>Ctrl+S</kbd> = Save
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-header">Chat Interface</div>
+                    <div class="panel-body" style="padding: 0;">
+                        <div class="chat-container">
+                            <div class="chat-history" id="chat-history">
+                                <div class="chat-message assistant">
+                                    <div class="chat-bubble">Load a model and start chatting. Configure inference parameters on the left.</div>
+                                </div>
+                            </div>
+                            <div class="chat-input">
+                                <textarea id="chat-prompt" placeholder="Enter your prompt..."></textarea>
+                                <button class="btn btn-primary" onclick="sendInferenceMessage()">Send</button>
+                            </div>
                         </div>
-                        <div id="cli-editor" class="cli-editor" contenteditable="true" spellcheck="false"></div>
-                        <div id="cli-suggestions" class="cli-suggestions"></div>
-                        <div id="cli-help" class="cli-help"></div>
                     </div>
                 </div>
             </div>
         </div>
-    </main>
-    
-    <script>
-        // Panel switching
-        function showPanel(panelName) {
-            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-            document.getElementById(panelName + '-panel').classList.add('active');
-            event.target.classList.add('active');
-        }
         
-        // Training controls - REAL backend only, NO SIMULATION
-        async function startTraining() {
-            log('Starting training...', 'info');
-            document.getElementById('training-status').className = 'status-indicator training';
-            startLiveFeed();
-            
-            // Get training parameters
-            const epochs = parseInt(document.getElementById('epochs')?.value) || 100;
-            const batchSize = parseInt(document.getElementById('batch-size')?.value) || 8192;
-            const continuous = document.getElementById('continuous-mode')?.checked || false;
-            const configPath = document.getElementById('config-select')?.value || 'config/training_config.toml';
-            
-            // Call backend to start training - NO FALLBACK, NO SIMULATION
-            try {
-                const result = await window.wsBridge.callTool('wui_start_training_sse', {
-                    epochs: epochs,
-                    batch_size: batchSize,
-                    config_path: configPath,
-                    continuous_mode: continuous
-                });
-                log('Training process started: ' + JSON.stringify(result), 'success');
-            } catch (err) {
-                log('Failed to start training: ' + err.message, 'error');
-                document.getElementById('training-status').className = 'status-indicator error';
-                stopLiveFeed();
-            }
-        }
-        
-        function pauseTraining() {
-            log('Pause not implemented', 'warn');
-        }
-        
-        async function stopTraining() {
-            log('Stopping training...', 'info');
-            document.getElementById('training-status').className = 'status-indicator idle';
-            stopLiveFeed();
-            
-            try {
-                const result = await window.wsBridge.callTool('wui_stop_training_sse', {});
-                log('Training stopped: ' + JSON.stringify(result), 'info');
-            } catch (err) {
-                log('Error stopping training: ' + err.message, 'error');
-            }
-        }
-        
-        function browseCheckpoints() {
-            log('Browsing checkpoints...', 'info');
-        }
-        
-        function runInference() {
-            const input = document.getElementById('inference-input').value;
-            document.getElementById('inference-output').textContent = 
-                'Processing: ' + input.substring(0, 50) + '...';
-            log('Inference request sent', 'info');
-        }
-        
-        function toggleDataSynthesizer() {
-            log('DataSynthesizer toggled', 'info');
-        }
-        
-        function browseDataset() {
-            log('Browsing dataset...', 'info');
-        }
-        
-        function clearLogs() {
-            document.getElementById('log-container').innerHTML = '';
-        }
-        
-        function clearTrainingFeed() {
-            document.getElementById('training-feed').innerHTML = '';
-        }
-        
-        // Copy to clipboard functions
-        function copyCard(cardName) {
-            // Build text from card metrics
-            let text = '';
-            
-            if (cardName === 'training-control') {
-                text = `Training Control\n`;
-                text += `Config: ${document.getElementById('config-select')?.value || 'default'}\n`;
-                text += `Epochs: ${document.getElementById('epochs')?.value || 100}\n`;
-                text += `Batch Size: ${document.getElementById('batch-size')?.value || 8192}\n`;
-                text += `Continuous Mode: ${document.getElementById('continuous-mode')?.checked || false}\n`;
-            }
-            else if (cardName === 'live-metrics') {
-                text = `Live Training Metrics\n`;
-                text += `Epoch: ${document.getElementById('current-epoch')?.textContent || '0/100'}\n`;
-                text += `Progress: ${document.getElementById('progress-pct')?.textContent || '0%'}\n`;
-                text += `Active Experts: ${document.getElementById('active-experts')?.textContent || '8'}\n`;
-                text += `Topology Updates: ${document.getElementById('topology-updates')?.textContent || '0'}\n`;
-                text += `Mode: ${document.getElementById('training-mode')?.textContent || 'Standard'}\n`;
-                text += `Iteration: ${document.getElementById('iteration-count')?.textContent || '0'}\n`;
-            }
-            else if (cardName === 'betti-topology') {
-                text = `Betti Topology\n`;
-                text += `β₁ (avg/max): ${document.getElementById('betti-stats')?.textContent || '0.0 / 0'}\n`;
-                text += `Graph Density: ${document.getElementById('graph-density')?.textContent || '0%'}\n`;
-                text += `Edges: ${document.getElementById('edge-count')?.textContent || '0'}\n`;
-                text += `Expert Splits: ${document.getElementById('split-count')?.textContent || '0'}\n`;
-            }
-            else if (cardName === 'checkpoints') {
-                text = `Checkpoints\n`;
-                text += `Interval: ${document.getElementById('checkpoint-interval')?.value || 1}\n`;
-                text += `Output Dir: ${document.getElementById('output-dir')?.value || 'checkpoints/'}\n`;
-            }
-            else if (cardName === 'model-config') {
-                text = `Model Configuration\n`;
-                text += `Total Experts: 8192\n`;
-                text += `Active Experts (Top-K): 128\n`;
-                text += `Layers per Expert: 64\n`;
-                text += `Neurons per Layer: 2048\n`;
-                text += `Context Window: 8192\n`;
-                text += `Sparsity: 5%\n`;
-            }
-            else if (cardName === 'training-feed') {
-                const feed = document.getElementById('training-feed');
-                text = feed ? feed.innerText : '';
-            }
-            else if (cardName === 'topology-evolution') {
-                text = `Topology Evolution\n`;
-                text += `Seed Experts: 8\n`;
-                text += `Current Experts: ${document.getElementById('current-experts')?.textContent || '8'}\n`;
-                text += `Max Experts: 100K\n`;
-                text += `Split Threshold: β₁ > 5\n`;
-            }
-            else if (cardName === 'data-stats') {
-                text = `Data Stats\n`;
-                text += `Total Acquired: ${document.getElementById('data-acquired')?.textContent || '0'}\n`;
-                text += `Perturbed Samples: ${document.getElementById('data-perturbed')?.textContent || '0'}\n`;
-                text += `API Failures: ${document.getElementById('api-failures')?.textContent || '0'}\n`;
-                text += `Active Sources: 14\n`;
-            }
-            
-            copyToClipboard(text, event.target);
-        }
-        
-        function copyElement(elementId) {
-            const el = document.getElementById(elementId);
-            const text = el ? el.innerText || el.value || '' : '';
-            copyToClipboard(text, event.target);
-        }
-        
-        function copyToClipboard(text, button) {
-            navigator.clipboard.writeText(text).then(() => {
-                // Show copied feedback
-                const originalText = button.textContent;
-                button.textContent = '✓';
-                button.classList.add('copied');
+        <!-- Models Tab -->
+        <div class="tab-content" id="models">
+            <div class="panel-grid split">
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>Available Models</span>
+                        <button class="btn btn-secondary" onclick="refreshModelsList()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Refresh</button>
+                    </div>
+                    <div class="panel-body">
+                        <div id="models-list-container" style="max-height: 500px; overflow-y: auto;">
+                            <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No models found</p>
+                        </div>
+                    </div>
+                </div>
                 
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.classList.remove('copied');
-                }, 2000);
-            }).catch(err => {
-                console.error('Copy failed:', err);
-                // Fallback
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-            });
+                <div class="panel">
+                    <div class="panel-header">Model Details</div>
+                    <div class="panel-body">
+                        <div id="model-details">
+                            <p style="color: var(--text-secondary);">Select a model to view details</p>
+                        </div>
+                        <div class="btn-group" style="margin-top: 1rem; display: none;" id="model-actions">
+                            <button class="btn btn-primary" onclick="loadSelectedModel()">Load for Inference</button>
+                            <button class="btn btn-danger" onclick="deleteSelectedModel()">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Config Tab -->
+        <div class="tab-content" id="config">
+            <div class="panel-grid split">
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>Training Config</span>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary" onclick="loadTrainingConfigFile()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Load</button>
+                            <button class="btn btn-primary" onclick="saveTrainingConfigFile()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Save</button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label>training_config.toml</label>
+                            <textarea id="config-training" rows="25" style="font-family: 'SF Mono', monospace; font-size: 0.8rem; line-height: 1.4;"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>System Config</span>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary" onclick="loadSystemConfig()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Load</button>
+                            <button class="btn btn-primary" onclick="saveSystemConfig()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Save</button>
+                            <button class="btn btn-secondary" onclick="validateSystemConfig()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Validate</button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div id="config-validation" class="validation-errors" style="display: none;"></div>
+                        <div class="form-group">
+                            <label>system.toml</label>
+                            <textarea id="config-system" rows="25" style="font-family: 'SF Mono', monospace; font-size: 0.8rem; line-height: 1.4;"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Data Tab -->
+        <div class="tab-content" id="data">
+            <div class="panel">
+                <div class="panel-header">
+                    <span>Data Sources</span>
+                    <button class="btn btn-primary" onclick="showAddDataSourceModal()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">+ Add Source</button>
+                </div>
+                <div class="panel-body" style="padding: 0;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="data-sources-table">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="panel" style="margin-top: 1rem;">
+                <div class="panel-header">
+                    <span>Data Acquisition</span>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="startDataAcquisition()">Start Acquisition</button>
+                        <button class="btn btn-danger" onclick="stopDataAcquisition()">Stop</button>
+                    </div>
+                </div>
+                <div class="panel-body" style="padding: 0;">
+                    <div class="log-container">
+                        <div class="log-output" id="data-acquisition-logs"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- API Keys Tab -->
+        <div class="tab-content" id="apikeys">
+            <div class="panel-grid">
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>API Keys</span>
+                        <button class="btn btn-primary" onclick="saveAPIKeys()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Save Keys</button>
+                    </div>
+                    <div class="panel-body">
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                            API keys are stored securely using Windows Credential Manager.
+                        </p>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-wolfram">
+                                <span class="toggle-slider"></span>
+                                <span>Enable WolframAlpha</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>WolframAlpha API Key</label>
+                            <input type="password" id="api-key-wolfram" placeholder="Enter API key">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-wikidata">
+                                <span class="toggle-slider"></span>
+                                <span>Enable Wikidata</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Wikidata API Key</label>
+                            <input type="password" id="api-key-wikidata" placeholder="Enter API key">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-arxiv">
+                                <span class="toggle-slider"></span>
+                                <span>Enable arXiv</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>arXiv API Key (optional)</label>
+                            <input type="password" id="api-key-arxiv" placeholder="Enter API key">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-github">
+                                <span class="toggle-slider"></span>
+                                <span>Enable GitHub</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>GitHub API Key</label>
+                            <input type="password" id="api-key-github" placeholder="Enter API key">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-header">Additional APIs</div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-nasa">
+                                <span class="toggle-slider"></span>
+                                <span>Enable NASA APIs</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-pubchem">
+                                <span class="toggle-slider"></span>
+                                <span>Enable PubChem</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-pdb">
+                                <span class="toggle-slider"></span>
+                                <span>Enable PDB (Protein Data Bank)</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-oeis">
+                                <span class="toggle-slider"></span>
+                                <span>Enable OEIS</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="toggle">
+                                <input type="checkbox" id="api-enabled-lean">
+                                <span class="toggle-slider"></span>
+                                <span>Enable Lean/mathlib</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Data Source Modal -->
+    <div class="modal-overlay" id="data-source-modal">
+        <div class="modal">
+            <div class="modal-header">Add Data Source</div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="modal-source-name" placeholder="e.g., Custom Dataset">
+                </div>
+                <div class="form-group">
+                    <label>Type</label>
+                    <select id="modal-source-type" onchange="onSourceTypeChange()">
+                        <option value="web_api">Web API</option>
+                        <option value="local_file">Local File</option>
+                        <option value="directory">Directory</option>
+                    </select>
+                </div>
+                <div class="form-group" id="modal-url-group">
+                    <label>URL</label>
+                    <input type="text" id="modal-source-url" placeholder="https://api.example.com/data">
+                </div>
+                <div class="form-group" id="modal-path-group" style="display: none;">
+                    <label>Path</label>
+                    <input type="text" id="modal-source-path" placeholder="C:/data/file.jsonl">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="modal-source-category">
+                        <option value="academic">Academic</option>
+                        <option value="code">Code</option>
+                        <option value="knowledge">Knowledge</option>
+                        <option value="scientific">Scientific</option>
+                        <option value="local">Local</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="modal-source-desc" placeholder="Brief description">
+                </div>
+                <label class="toggle" style="margin-top: 0.5rem;">
+                    <input type="checkbox" id="modal-source-enabled" checked>
+                    <span class="toggle-slider"></span>
+                    <span>Enabled</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDataSourceModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="addDataSource()">Add Source</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // Production WUI - WebSocket MCP Client
+        // ============================================
+        
+        // Global state
+        let ws = null;
+        let wsConnected = false;
+        let wsReconnectAttempts = 0;
+        const MAX_WS_RECONNECT = 10;
+        let wsReconnectTimer = null;
+        
+        let pendingRequests = new Map();
+        let requestId = 1;
+        
+        let appState = {
+            training: {
+                running: false,
+                epoch: 0,
+                totalEpochs: 0,
+                loss: null,
+                samples: 0
+            },
+            model: {
+                loaded: false,
+                filename: null,
+                sizeMB: 0
+            },
+            system: {
+                memoryMB: 0,
+                arenaMB: 0
+            },
+            selectedModel: null,
+            config: {
+                training: {},
+                system: {}
+            }
+        };
+        
+        // ============================================
+        // WebSocket Connection
+        // ============================================
+        
+        // ============================================
+        // HTTP MCP Connection (qminiwasm server on port 9090)
+        // ============================================
+        
+        const MCP_BASE_URL = 'http://localhost:9090';
+        
+        async function callMCP(method, params = {}) {
+            try {
+                const response = await fetch(`${MCP_BASE_URL}/mcp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: Date.now().toString(),
+                        method: method,
+                        params: params
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message || 'Unknown error');
+                }
+                
+                return data.result;
+            } catch (err) {
+                logError('MCP', err.message);
+                throw err;
+            }
         }
         
-        // Logging
-        function log(message, level = 'info') {
-            const time = new Date().toLocaleTimeString();
-            const entryHtml = `<span class="log-time">[${time}]</span> <span class="log-${level}">${message}</span>`;
+        function initConnection() {
+            updateConnectionStatus(true);
+            loadInitialData();
             
-            // Log to main logs panel
-            const container = document.getElementById('log-container');
+            // Poll for metrics every 2 seconds
+            setInterval(async () => {
+                try {
+                    const metrics = await callMCP('wui_get_training_metrics');
+                    if (metrics) {
+                        updateDashboardMetrics({
+                            epoch: metrics.epoch,
+                            loss: metrics.loss,
+                            samples: metrics.samples
+                        });
+                        
+                        // Update expert count display
+                        if (metrics.expert_stats) {
+                            const stats = metrics.expert_stats;
+                            const expertEl = document.getElementById('dash-experts');
+                            if (expertEl && stats.current) {
+                                if (metrics.lazy_init && stats.current < stats.target) {
+                                    expertEl.textContent = `${stats.current}/${stats.target} (growing)`;
+                                } else {
+                                    expertEl.textContent = stats.current;
+                                }
+                            }
+                            
+                            // Log expert growth if actually growing (not 0, not decreasing)
+                            if (stats.current > 0 && appState.training.lastExpertCount && stats.current > appState.training.lastExpertCount) {
+                                if (metrics.lazy_init) {
+                                    addLogEntry('training-logs', `[GROWTH] Expert pool expanded: ${appState.training.lastExpertCount} → ${stats.current} experts`, 'info');
+                                }
+                            }
+                            // Only update last count if current is valid (>0)
+                            if (stats.current > 0) {
+                                appState.training.lastExpertCount = stats.current;
+                            }
+                        }
+                        
+                        if (metrics.is_running !== appState.training.running) {
+                            appState.training.running = metrics.is_running;
+                            updateTrainingUI(metrics.is_running);
+                        }
+                    }
+                } catch (e) {
+                    // Silent fail on poll
+                }
+            }, 2000);
+        }
+        
+        function updateConnectionStatus(connected) {
+            const dot = document.getElementById('server-status');
+            const text = document.getElementById('server-text');
+            
+            if (connected) {
+                dot.classList.add('connected');
+                text.textContent = 'Connected';
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = 'Disconnected';
+            }
+        }
+        
+        function showConnBanner() {
+            document.getElementById('conn-banner').classList.add('visible');
+        }
+        
+        function hideConnBanner() {
+            document.getElementById('conn-banner').classList.remove('visible');
+        }
+        
+        // ============================================
+        // Initial Data Loading
+        // ============================================
+        
+        async function loadInitialData() {
+            try {
+                // Connect to server
+                const connected = await callMCP('wui_connect', {});
+                if (connected && connected.connected) {
+                    logSuccess('Init', 'Connected to qminiwasm server on port 9090');
+                }
+                
+                // Load both configs
+                await loadTrainingConfigFile();
+                await loadSystemConfig();
+                
+                // Load models
+                await refreshModelsList();
+                
+                // Load data sources
+                await refreshDataSources();
+                
+                // Load training data sources (for training tab display)
+                await refreshTrainingDataSources();
+                
+                // Load API keys
+                await loadAPIKeys();
+                
+                // Get initial metrics
+                const metrics = await callMCP('wui_get_training_metrics', {});
+                if (metrics) {
+                    updateDashboardMetrics({
+                        epoch: metrics.epoch,
+                        loss: metrics.loss,
+                        samples: metrics.samples
+                    });
+                }
+            } catch (err) {
+                logError('Init', err.message);
+            }
+        }
+        
+        // ============================================
+        // Tab Switching
+        // ============================================
+        
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+        
+        // ============================================
+        // Logging
+        // ============================================
+        
+        function addLogEntry(containerId, message, level = 'info') {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
             const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            entry.innerHTML = entryHtml;
+            entry.className = `log-entry ${level}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${escapeHtml(message)}`;
+            
             container.appendChild(entry);
             container.scrollTop = container.scrollHeight;
             
-            // Also log to training feed if training is active or starting
-            const trainingFeed = document.getElementById('training-feed');
-            if (trainingFeed) {
-                const trainingEntry = document.createElement('div');
-                trainingEntry.className = 'log-entry';
-                trainingEntry.innerHTML = entryHtml;
-                trainingFeed.appendChild(trainingEntry);
-                trainingFeed.scrollTop = trainingFeed.scrollHeight;
+            // Keep only last 500 entries
+            while (container.children.length > 500) {
+                container.removeChild(container.firstChild);
             }
         }
         
-        // Training-specific logging
-        function trainingLog(message, level = 'info') {
-            const time = new Date().toLocaleTimeString();
-            const trainingFeed = document.getElementById('training-feed');
-            if (trainingFeed) {
-                const entry = document.createElement('div');
-                entry.className = 'log-entry';
-                entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${level}">${message}</span>`;
-                trainingFeed.appendChild(entry);
-                trainingFeed.scrollTop = trainingFeed.scrollHeight;
-            }
+        function logError(source, message) {
+            addLogEntry('dashboard-logs', `[${source}] ${message}`, 'error');
         }
         
-        // Simulate backend connection
-        setTimeout(() => {
-            document.getElementById('backend-status').className = 'status-indicator active';
-            document.getElementById('backend-text').textContent = 'Backend: Connected';
-            log('Backend connected', 'info');
-        }, 1000);
-        
-        // ========== LIVE TRAINING FEED (SSE) ==========
-        let eventSource = null;
-        let liveMetrics = {
-            epoch: 0,
-            totalEpochs: 100,
-            progress: 0,
-            samplesProcessed: 0,
-            totalSamples: 0,
-            expertsActive: 8,
-            topologyUpdates: 0,
-            bettiAvg: 0,
-            bettiMax: 0,
-            graphDensity: 0,
-            edgeCount: 0,
-            splitCount: 0
-        };
-        
-        function connectLiveFeed() {
-            // Connect to SSE endpoint
-            eventSource = new EventSource('http://localhost:9090/training-stream');
-            
-            eventSource.onopen = () => {
-                log('Live feed connected', 'success');
-            };
-            
-            eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    handleLiveUpdate(data);
-                } catch (e) {
-                    // Non-JSON messages (plain text progress)
-                    if (event.data.includes('epoch') || event.data.includes('progress')) {
-                        log(event.data, 'info');
-                    }
-                }
-            };
-            
-            eventSource.onerror = () => {
-                log('Live feed disconnected - retrying...', 'warn');
-                setTimeout(connectLiveFeed, 3000);
-            };
+        function logWarn(source, message) {
+            addLogEntry('dashboard-logs', `[${source}] ${message}`, 'warn');
         }
         
-        function handleLiveUpdate(data) {
-            // Update live metrics based on message type
-            if (data.status === 'epoch') {
-                liveMetrics.epoch = data.epoch || liveMetrics.epoch;
-                liveMetrics.totalEpochs = data.total_epochs || liveMetrics.totalEpochs;
-                liveMetrics.progress = data.progress_pct || 0;
-                liveMetrics.expertsActive = data.experts_active || liveMetrics.expertsActive;
-                liveMetrics.topologyUpdates = data.topology_updates || liveMetrics.topologyUpdates;
-                updateDashboard();
-            }
-            else if (data.status === 'progress') {
-                liveMetrics.samplesProcessed = data.samples_processed || liveMetrics.samplesProcessed;
-                liveMetrics.totalSamples = data.total_samples || liveMetrics.totalSamples;
-                if (data.epoch_progress_pct) {
-                    liveMetrics.progress = data.epoch_progress_pct;
-                }
-                updateDashboard();
-            }
-            else if (data.status === 'topology') {
-                liveMetrics.expertsActive = data.experts || liveMetrics.expertsActive;
-                liveMetrics.edgeCount = data.edges || liveMetrics.edgeCount;
-                liveMetrics.graphDensity = data.density || liveMetrics.graphDensity;
-                liveMetrics.bettiMax = data.max_beta_1 || liveMetrics.bettiMax;
-                updateDashboard();
-            }
-            else if (data.status === 'sample_processed') {
-                liveMetrics.samplesProcessed = data.samples_processed || liveMetrics.samplesProcessed;
-                liveMetrics.expertsActive = data.experts_active || liveMetrics.expertsActive;
-                updateDashboard();
-            }
-            else if (data.status === 'checkpoint_saved') {
-                log(`Checkpoint saved: ${data.samples} samples`, 'success');
-            }
-            else if (data.status === 'continuous_data_fetched') {
-                document.getElementById('data-acquired').textContent = data.count || 0;
-            }
-            else if (data.status === 'continuous_cycle_complete') {
-                document.getElementById('iteration-count').textContent = data.iteration || 0;
-                log(`Continuous cycle ${data.iteration} complete`, 'success');
-            }
-            
-            // Log important events to both feeds
-            if (data.status === 'epoch_complete') {
-                const msg = `Epoch ${data.epoch} complete - ${data.experts} experts active`;
-                log(msg, 'success');
-                trainingLog(msg, 'success');
-            }
-            if (data.status === 'continuous_cycle_complete') {
-                trainingLog(`Cycle ${data.iteration} complete - continuing...`, 'success');
-            }
-            if (data.status === 'progress' && data.step) {
-                trainingLog(data.step, 'info');
-            }
+        function logInfo(source, message) {
+            addLogEntry('dashboard-logs', `[${source}] ${message}`, 'info');
         }
         
-        function updateDashboard() {
-            // Update Training panel
-            document.getElementById('current-epoch').textContent = 
-                `${liveMetrics.epoch}/${liveMetrics.totalEpochs}`;
-            document.getElementById('progress-pct').textContent = 
-                `${liveMetrics.progress}%`;
-            document.getElementById('progress-bar').style.width = 
-                `${liveMetrics.progress}%`;
-            document.getElementById('active-experts').textContent = 
-                liveMetrics.expertsActive;
-            document.getElementById('topology-updates').textContent = 
-                liveMetrics.topologyUpdates;
-            
-            // Update Mode and Iteration
-            const continuousCheckbox = document.getElementById('continuous-mode');
-            document.getElementById('training-mode').textContent = 
-                continuousCheckbox && continuousCheckbox.checked ? 'Continuous' : 'Standard';
-            
-            // Update Betti panel
-            document.getElementById('betti-stats').textContent = 
-                `${liveMetrics.bettiAvg.toFixed(1)} / ${liveMetrics.bettiMax}`;
-            document.getElementById('graph-density').textContent = 
-                `${(liveMetrics.graphDensity * 100).toFixed(1)}%`;
-            document.getElementById('edge-count').textContent = 
-                liveMetrics.edgeCount;
-            document.getElementById('split-count').textContent = 
-                liveMetrics.splitCount;
-            
-            // Update Topology panel
-            document.getElementById('current-experts').textContent = 
-                liveMetrics.expertsActive;
+        function logSuccess(source, message) {
+            addLogEntry('dashboard-logs', `[${source}] ${message}`, 'success');
         }
         
-        // Start live feed when training starts
-        function startLiveFeed() {
-            if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
-                connectLiveFeed();
-            }
-        }
-        
-        // Stop live feed when training stops
-        function stopLiveFeed() {
-            if (eventSource) {
-                eventSource.close();
-            }
-        }
-        
-        // Auto-connect on page load
-        setTimeout(connectLiveFeed, 1500);
-        
-        // ========== CLI CONFIG EDITOR ==========
-        const configSchema = {
-            system: {
-                'system.memory': {
-                    'arena_size_mb': { type: 'number', desc: 'Unified memory arena size in MB', values: [524288, 1048576], default: 524288 },
-                    'usm_enabled': { type: 'boolean', desc: 'Enable Unified Shared Memory', values: [true, false], default: true },
-                    'cache_line_size': { type: 'number', desc: 'Cache line size in bytes', values: [32, 64, 128], default: 64 },
-                    'page_locked': { type: 'boolean', desc: 'Enable page-locked memory for DMA', values: [true, false], default: true },
-                    'zero_initialize': { type: 'boolean', desc: 'Zero-initialize arena allocations', values: [true, false], default: false }
-                },
-                'system.moe': {
-                    'total_experts': { type: 'number', desc: 'Total number of expert networks', values: [8, 16, 32, 64, 128, 243, 8192], default: 243 },
-                    'active_experts': { type: 'number', desc: 'Number of experts to activate (Top-K)', values: [1, 2, 4, 8, 16, 32, 64, 128], default: 4 },
-                    'routing_qutrits': { type: 'number', desc: 'Number of qutrits for routing', values: [4, 8, 12, 16], default: 8 },
-                    'load_balancing': { type: 'boolean', desc: 'Enable expert load balancing', values: [true, false], default: true }
-                },
-                'system.wui': {
-                    'http_port': { type: 'number', desc: 'HTTP server port for WUI', values: [0, 7345, 8080, 9000], default: 7345 },
-                    'websocket_port': { type: 'number', desc: 'WebSocket server port', values: [8080, 8081, 9000], default: 8080 },
-                    'realtime_metrics': { type: 'boolean', desc: 'Enable real-time metrics streaming', values: [true, false], default: true },
-                    'theme': { type: 'string', desc: 'Default theme', values: ['light', 'dark', 'system'], default: 'system' }
-                },
-                'system.inference': {
-                    'num_qutrits': { type: 'number', desc: 'Number of qutrits for inference', values: [4, 8, 16, 32, 64, 128, 243, 512, 1024], default: 243 },
-                    'num_experts': { type: 'number', desc: 'MoE experts to activate', values: [1, 2, 4, 8, 16, 32, 64, 128, 243], default: 243 },
-                    'model_size_b': { type: 'number', desc: 'Total parameters in billions', values: [0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000], default: 100 },
-                    'max_iterations': { type: 'number', desc: 'Max message passing iterations', values: [10, 50, 100, 500, 1000, 5000], default: 5000 },
-                    'goodness_threshold': { type: 'number', desc: 'Forward-forward goodness threshold', values: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 100.0], default: 5.0 },
-                    'betti_analysis': { type: 'boolean', desc: 'Enable Betti topology analysis', values: [true, false], default: true }
-                }
-            },
-            training: {
-                'training': {
-                    'epochs': { type: 'number', desc: 'Training epochs', values: [1, 10, 50, 100, 500, 1000], default: 100 },
-                    'batch_size': { type: 'number', desc: 'Batch size', values: [128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768], default: 32768 },
-                    'checkpoint_interval': { type: 'number', desc: 'Checkpoint every N epochs', values: [1, 5, 10, 50], default: 10 },
-                    'learning_rate': { type: 'number', desc: 'Learning rate', values: [0.001, 0.01, 0.1, 1, 10], default: 10 }
-                },
-                'model': {
-                    'moe_experts': { type: 'number', desc: 'Total MoE experts', values: [64, 128, 256, 512, 1024, 2048, 4096, 8192], default: 8192 },
-                    'moe_top_k': { type: 'number', desc: 'Active experts per forward pass', values: [4, 8, 16, 32, 64, 128], default: 128 },
-                    'context_window': { type: 'number', desc: 'Context window size', values: [512, 1024, 2048, 4096, 8192], default: 8192 },
-                    'entanglement_tokens': { type: 'number', desc: 'Entanglement tokens', values: [256, 512, 1024, 2048], default: 1024 },
-                    'shadow_dim': { type: 'number', desc: 'Shadow dimension', values: [1024, 2048, 4096, 8192], default: 4096 },
-                    'num_layers': { type: 'number', desc: 'Layers per expert', values: [4, 8, 16, 32, 64], default: 64 },
-                    'neurons_per_layer': { type: 'number', desc: 'Neurons per layer', values: [512, 1024, 2048, 4096], default: 2048 },
-                    'routing_qutrits': { type: 'number', desc: 'Routing qutrits', values: [8, 10, 12, 14, 16], default: 12 },
-                    'learning_rate_shift': { type: 'number', desc: 'Learning rate bit shift', values: [1, 2, 3, 4], default: 2 }
-                },
-                'features': {
-                    'steane_correction': { type: 'boolean', desc: 'Enable Steane error correction', values: [true, false], default: true },
-                    'cim_mode': { type: 'boolean', desc: 'Enable Compute-in-Memory', values: [true, false], default: false },
-                    'worker_threads': { type: 'number', desc: 'Worker threads', values: [1, 2, 4, 8, 16, 32, 64], default: 32 },
-                    'continuous_mode': { type: 'boolean', desc: 'Continuous training (infinite)', values: [true, false], default: false }
-                },
-                'apis': {
-                    'enabled': { type: 'boolean', desc: 'Enable API data acquisition', values: [true, false], default: true },
-                    'wolfram': { type: 'boolean', desc: 'Wolfram Alpha', values: [true, false], default: false },
-                    'pubchem': { type: 'boolean', desc: 'PubChem', values: [true, false], default: true },
-                    'oeis': { type: 'boolean', desc: 'OEIS', values: [true, false], default: true },
-                    'wikidata': { type: 'boolean', desc: 'Wikidata', values: [true, false], default: false },
-                    'arxiv': { type: 'boolean', desc: 'arXiv', values: [true, false], default: false },
-                    'nasa': { type: 'boolean', desc: 'NASA', values: [true, false], default: true },
-                    'pdb': { type: 'boolean', desc: 'PDB', values: [true, false], default: true },
-                    'github': { type: 'boolean', desc: 'GitHub', values: [true, false], default: false },
-                    'lean': { type: 'boolean', desc: 'Lean', values: [true, false], default: false }
-                }
-            }
-        };
-        
-        let currentConfigFile = 'system';
-        let editorHistory = [];
-        let historyIndex = -1;
-        
-        // Initialize CLI editor
-        document.addEventListener('DOMContentLoaded', () => {
-            loadConfigFile();
-            setupCLIEditor();
-        });
-        
-        function setupCLIEditor() {
-            const editor = document.getElementById('cli-editor');
-            
-            editor.addEventListener('keydown', (e) => {
-                // Ctrl+S = Save
-                if (e.ctrlKey && e.key === 's') {
-                    e.preventDefault();
-                    saveConfig();
-                    return;
-                }
-                
-                // Ctrl+C = Cancel/Clear suggestions
-                if (e.ctrlKey && e.key === 'c') {
-                    e.preventDefault();
-                    hideSuggestions();
-                    hideHelp();
-                    return;
-                }
-                
-                // Tab = Complete
-                if (e.key === 'Tab') {
-                    e.preventDefault();
-                    handleTabCompletion();
-                    return;
-                }
-                
-                // ? = Help
-                if (e.key === '?') {
-                    setTimeout(() => showContextHelp(), 0);
-                    return;
-                }
-                
-                // Up/Down = History (when at start of line)
-                if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    navigateHistory(-1);
-                    return;
-                }
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    navigateHistory(1);
-                    return;
-                }
-                
-                // Escape = Cancel
-                if (e.key === 'Escape') {
-                    hideSuggestions();
-                    hideHelp();
-                }
-            });
-            
-            editor.addEventListener('input', () => {
-                highlightTOML();
-            });
-            
-            editor.addEventListener('click', () => {
-                hideSuggestions();
-                hideHelp();
-            });
-        }
-        
-        function loadConfigFile() {
-            const select = document.getElementById('config-file-select');
-            currentConfigFile = select.value;
-            
-            // Load sample content based on schema
-            let content = generateSampleConfig(currentConfigFile);
-            
-            const editor = document.getElementById('cli-editor');
-            editor.textContent = content;
-            highlightTOML();
-            
-            // Sync continuous mode checkbox from config
-            syncCheckboxFromConfig(content);
-            
-            log(`Loaded ${currentConfigFile}.toml`, 'info');
-        }
-        
-        function syncCheckboxFromConfig(content) {
-            // Parse continuous_mode from [features] section
-            const match = content.match(/continuous_mode\s*=\s*(true|false)/);
-            if (match) {
-                const isContinuous = match[1] === 'true';
-                document.getElementById('continuous-mode').checked = isContinuous;
-                updateDashboard();
-            }
-        }
-        
-        function updateConfigFromCheckbox() {
-            // Only update if training config is active
-            if (currentConfigFile !== 'training') return;
-            
-            const isContinuous = document.getElementById('continuous-mode').checked;
-            const editor = document.getElementById('cli-editor');
-            let content = editor.textContent;
-            
-            // Update continuous_mode in [features] section
-            if (content.match(/continuous_mode\s*=\s*(true|false)/)) {
-                content = content.replace(/continuous_mode\s*=\s*(true|false)/, `continuous_mode = ${isContinuous}`);
-            } else if (content.includes('[features]')) {
-                // Add continuous_mode if [features] exists but line doesn't
-                content = content.replace(/\[features\]/, `[features]\ncontinuous_mode = ${isContinuous}`);
-            }
-            
-            editor.textContent = content;
-            highlightTOML();
-            updateDashboard();
-        }
-        
-        function generateSampleConfig(type) {
-            if (type === 'system') {
-                return `# System Configuration
-# Press Tab to complete, ? for help, Ctrl+S to save
-
-[system.memory]
-arena_size_mb = 524288
-usm_enabled = true
-cache_line_size = 64
-page_locked = true
-
-[system.moe]
-total_experts = 8192
-active_experts = 128
-routing_qutrits = 12
-
-[system.wui]
-http_port = 7345
-websocket_port = 8080
-realtime_metrics = true
-theme = "dark"
-
-[system.inference]
-num_qutrits = 243
-num_experts = 243
-model_size_b = 100
-goodness_threshold = 5.0
-betti_analysis = true`;
-            } else {
-                return `# Training Configuration
-# Press Tab to complete, ? for help, Ctrl+S to save
-
-[training]
-epochs = 100
-batch_size = 32768
-checkpoint_interval = 10
-learning_rate = 10
-
-[model]
-moe_experts = 8192
-moe_top_k = 128
-context_window = 8192
-entanglement_tokens = 1024
-shadow_dim = 4096
-num_layers = 64
-neurons_per_layer = 2048
-routing_qutrits = 12
-learning_rate_shift = 2
-
-[features]
-steane_correction = true
-cim_mode = false
-worker_threads = 32
-continuous_mode = false
-
-[apis]
-enabled = true
-pubchem = true
-oeis = true
-nasa = true
-pdb = true`;
-            }
-        }
-        
-        function highlightTOML() {
-            const editor = document.getElementById('cli-editor');
-            const text = editor.textContent;
-            
-            // Simple syntax highlighting via HTML replacement
-            let html = text
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/(#.*$)/gm, '<span class="comment">$1</span>')
-                .replace(/(\[.+\])/g, '<span class="section">$1</span>')
-                .replace(/(^[a-z_]+)\s*=/gm, '<span class="key">$1</span> =')
-                .replace(/=\s*(true|false)/g, '= <span class="boolean">$1</span>')
-                .replace(/=\s*(\d+)/g, '= <span class="number">$1</span>')
-                .replace(/=\s*"([^"]*)"/g, '= <span class="string">"$1"</span>');
-            
-            // Only update if changed to avoid cursor jumping
-            if (editor.innerHTML !== html) {
-                const sel = window.getSelection();
-                const range = sel.getRangeAt(0);
-                const offset = range.startOffset;
-                
-                editor.innerHTML = html;
-                
-                // Restore cursor position
-                try {
-                    const newRange = document.createRange();
-                    newRange.setStart(editor.childNodes[0], offset);
-                    newRange.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(newRange);
-                } catch (e) {}
-            }
+                .replace(/"/g, '&quot;');
         }
+        // Legacy compatibility - callMCP is now the primary interface
         
-        function handleTabCompletion() {
-            const editor = document.getElementById('cli-editor');
-            const sel = window.getSelection();
-            const range = sel.getRangeAt(0);
-            const text = editor.textContent;
-            const cursorPos = range.startOffset;
-            
-            // Get current line
-            const lines = text.substring(0, cursorPos).split('\n');
-            const currentLine = lines[lines.length - 1];
-            
-            // Find completions based on context
-            const completions = getCompletions(currentLine, currentConfigFile);
-            
-            if (completions.length === 1) {
-                // Single completion - insert it
-                insertCompletion(completions[0], currentLine, cursorPos);
-            } else if (completions.length > 1) {
-                // Multiple completions - show suggestions
-                showSuggestions(completions);
-            }
-        }
+        // ============================================
+        // Configuration Management
+        // ============================================
         
-        function getCompletions(line, configType) {
-            const schema = configSchema[configType];
-            const completions = [];
+        function populateTrainingConfig(tomlContent) {
+            // Parse TOML and populate form fields
+            const lines = tomlContent.split('\n');
+            let currentSection = '';
             
-            // Check if we're in a section
-            const sectionMatch = line.match(/^\[([a-z.]+)\]/);
-            if (sectionMatch) {
-                const section = sectionMatch[1];
-                if (schema[section]) {
-                    Object.keys(schema[section]).forEach(key => {
-                        completions.push(`${key} = ${schema[section][key].default}`);
-                    });
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                    currentSection = trimmed.slice(1, -1);
+                    continue;
                 }
-            } else if (line.trim() === '' || line.startsWith('#')) {
-                // Suggest sections
-                Object.keys(schema).forEach(section => {
-                    completions.push(`[${section}]`);
-                });
-            } else {
-                // Check for partial key match
-                const partial = line.trim();
-                Object.keys(schema).forEach(section => {
-                    Object.keys(schema[section]).forEach(key => {
-                        if (key.startsWith(partial)) {
-                            completions.push(`${key} = ${schema[section][key].default}`);
-                        }
-                    });
-                });
-            }
-            
-            return completions;
-        }
-        
-        function insertCompletion(completion, currentLine, cursorPos) {
-            const editor = document.getElementById('cli-editor');
-            const text = editor.textContent;
-            
-            // Replace current line with completion
-            const before = text.substring(0, cursorPos - currentLine.length);
-            const after = text.substring(cursorPos);
-            
-            editor.textContent = before + completion + after;
-            highlightTOML();
-            hideSuggestions();
-        }
-        
-        function showSuggestions(completions) {
-            const suggestions = document.getElementById('cli-suggestions');
-            suggestions.innerHTML = completions.map((c, i) => 
-                `<div class="cli-suggestion-item ${i === 0 ? 'selected' : ''}" onclick="selectSuggestion('${c.replace(/'/g, "\\'")}')">${c}</div>`
-            ).join('');
-            suggestions.classList.add('active');
-        }
-        
-        function hideSuggestions() {
-            document.getElementById('cli-suggestions').classList.remove('active');
-        }
-        
-        function selectSuggestion(completion) {
-            const editor = document.getElementById('cli-editor');
-            const sel = window.getSelection();
-            const range = sel.getRangeAt(0);
-            const text = editor.textContent;
-            const cursorPos = range.startOffset;
-            
-            const lines = text.substring(0, cursorPos).split('\n');
-            const currentLine = lines[lines.length - 1];
-            
-            insertCompletion(completion, currentLine, cursorPos);
-        }
-        
-        function showContextHelp() {
-            const editor = document.getElementById('cli-editor');
-            const sel = window.getSelection();
-            const range = sel.getRangeAt(0);
-            const text = editor.textContent;
-            const cursorPos = range.startOffset;
-            
-            // Get current line
-            const lines = text.substring(0, cursorPos).split('\n');
-            const currentLine = lines[lines.length - 1];
-            
-            // Find help context
-            const help = getHelpForLine(currentLine, currentConfigFile);
-            
-            if (help) {
-                const helpPanel = document.getElementById('cli-help');
-                helpPanel.innerHTML = `
-                    <h4>${help.key}</h4>
-                    <p>${help.desc}</p>
-                    <div class="valid-values">
-                        Valid: ${help.values.map(v => `<code>${v}</code>`).join(', ')}
-                        <br>Default: <code>${help.default}</code>
-                    </div>
-                `;
-                helpPanel.classList.add('active');
-            }
-        }
-        
-        function getHelpForLine(line, configType) {
-            const schema = configSchema[configType];
-            
-            // Try to find key in line
-            const keyMatch = line.match(/([a-z_]+)\s*=/);
-            if (keyMatch) {
-                const key = keyMatch[1];
                 
-                // Find in schema
-                for (const section in schema) {
-                    if (schema[section][key]) {
-                        return {
-                            key: `${section}.${key}`,
-                            desc: schema[section][key].desc,
-                            values: schema[section][key].values,
-                            default: schema[section][key].default
-                        };
+                if (trimmed.includes('=')) {
+                    const [key, ...valueParts] = trimmed.split('=');
+                    const value = valueParts.join('=').trim();
+                    
+                    // Remove comments
+                    const cleanValue = value.split('#')[0].trim();
+                    
+                    // Map to form fields
+                    const fieldId = getFieldId(currentSection, key.trim());
+                    if (fieldId) {
+                        const el = document.getElementById(fieldId);
+                        if (el) {
+                            // Handle checkboxes for booleans
+                            if (el.type === 'checkbox') {
+                                el.checked = cleanValue === 'true';
+                            } else {
+                                el.value = cleanValue.replace(/"/g, '');
+                            }
+                        }
                     }
                 }
             }
+        }
+        
+        // Setup collapsible sections
+        document.querySelectorAll('.config-section-header').forEach(header => {
+            header.addEventListener('click', () => {
+                header.parentElement.classList.toggle('expanded');
+            });
+        });
+        
+        function getFieldId(section, key) {
+            const map = {
+                'training.epochs': 'cfg-epochs',
+                'training.batch_size': 'cfg-batch-size',
+                'training.learning_rate': 'cfg-learning-rate',
+                'training.checkpoint_interval': 'cfg-checkpoint-interval',
+                'model.moe_experts': 'cfg-moe-experts',
+                'model.moe_top_k': 'cfg-moe-topk',
+                'model.context_window': 'cfg-context-window',
+                'model.num_layers': 'cfg-num-layers',
+                'model.entanglement_tokens': 'cfg-entanglement-tokens',
+                'model.shadow_dim': 'cfg-shadow-dim',
+                'model.neurons_per_layer': 'cfg-neurons-per-layer',
+                'model.routing_qutrits': 'cfg-routing-qutrits',
+                'features.steane_correction': 'cfg-steane-correction',
+                'features.flash_cim': 'cfg-flash-cim',
+                'features.worker_threads': 'cfg-worker-threads',
+                'features.continuous_mode': 'cfg-continuous-mode',
+                'features.lazy_init': 'cfg-lazy-init',
+                'features.data_accumulation': 'cfg-data-accumulation',
+                'apis.enabled': 'cfg-apis-enabled',
+                'apis.wolfram': 'cfg-api-wolfram',
+                'apis.wikidata': 'cfg-api-wikidata',
+                'apis.arxiv': 'cfg-api-arxiv',
+                'apis.github': 'cfg-api-github',
+                'apis.nasa': 'cfg-api-nasa',
+                'apis.pubchem': 'cfg-api-pubchem',
+                'apis.pdb': 'cfg-api-pdb',
+                'apis.oeis': 'cfg-api-oeis',
+                'apis.lean': 'cfg-api-lean'
+            };
+            return map[`${section}.${key}`];
+        }
+        
+        function buildTrainingConfig() {
+            const getVal = (id) => document.getElementById(id)?.value || 0;
+            const getBool = (id) => document.getElementById(id)?.checked || false;
             
-            return null;
+            return `[training]
+epochs = ${getVal('cfg-epochs')}
+batch_size = ${getVal('cfg-batch-size')}
+checkpoint_interval = ${getVal('cfg-checkpoint-interval')}
+learning_rate = ${getVal('cfg-learning-rate')}
+
+[model]
+moe_experts = ${getVal('cfg-moe-experts')}
+moe_top_k = ${getVal('cfg-moe-topk')}
+context_window = ${getVal('cfg-context-window')}
+entanglement_tokens = ${getVal('cfg-entanglement-tokens')}
+shadow_dim = ${getVal('cfg-shadow-dim')}
+num_layers = ${getVal('cfg-num-layers')}
+neurons_per_layer = ${getVal('cfg-neurons-per-layer')}
+routing_qutrits = ${getVal('cfg-routing-qutrits')}
+
+[features]
+steane_correction = ${getBool('cfg-steane-correction')}
+flash_cim = ${getBool('cfg-flash-cim')}
+worker_threads = ${getVal('cfg-worker-threads')}
+continuous_mode = ${getBool('cfg-continuous-mode')}
+lazy_init = ${getBool('cfg-lazy-init')}
+data_accumulation = ${getBool('cfg-data-accumulation')}
+
+[apis]
+enabled = ${getBool('cfg-apis-enabled')}
+wolfram = ${getBool('cfg-api-wolfram')}
+wikidata = ${getBool('cfg-api-wikidata')}
+arxiv = ${getBool('cfg-api-arxiv')}
+github = ${getBool('cfg-api-github')}
+nasa = ${getBool('cfg-api-nasa')}
+pubchem = ${getBool('cfg-api-pubchem')}
+pdb = ${getBool('cfg-api-pdb')}
+oeis = ${getBool('cfg-api-oeis')}
+lean = ${getBool('cfg-api-lean')}`;
         }
         
-        function hideHelp() {
-            document.getElementById('cli-help').classList.remove('active');
-        }
-        
-        function navigateHistory(direction) {
-            // TODO: Implement line history
-        }
-        
-        function saveConfig() {
-            const editor = document.getElementById('cli-editor');
-            const content = editor.textContent;
+        function resetTrainingDefaults() {
+            // Training defaults
+            document.getElementById('cfg-epochs').value = 100;
+            document.getElementById('cfg-batch-size').value = 16384;
+            document.getElementById('cfg-learning-rate').value = 10;
+            document.getElementById('cfg-checkpoint-interval').value = 10;
             
-            // In real implementation, send to backend via MCP
-            log(`Saved ${currentConfigFile}.toml (${content.length} bytes)`, 'success');
+            // Model defaults
+            document.getElementById('cfg-moe-experts').value = 8192;
+            document.getElementById('cfg-moe-topk').value = 128;
+            document.getElementById('cfg-context-window').value = 8192;
+            document.getElementById('cfg-entanglement-tokens').value = 1024;
+            document.getElementById('cfg-shadow-dim').value = 4096;
+            document.getElementById('cfg-num-layers').value = 64;
+            document.getElementById('cfg-neurons-per-layer').value = 2048;
+            document.getElementById('cfg-routing-qutrits').value = 12;
             
-            // Flash success indicator
-            editor.style.borderColor = 'var(--success)';
-            setTimeout(() => {
-                editor.style.borderColor = '';
-            }, 500);
+            // Features defaults
+            document.getElementById('cfg-steane-correction').checked = true;
+            document.getElementById('cfg-flash-cim').checked = false;
+            document.getElementById('cfg-continuous-mode').checked = true;
+            document.getElementById('cfg-lazy-init').checked = true;
+            document.getElementById('cfg-data-accumulation').checked = true;
+            document.getElementById('cfg-worker-threads').value = 32;
+            
+            // APIs defaults (all off)
+            document.getElementById('cfg-apis-enabled').checked = false;
+            document.getElementById('cfg-api-wolfram').checked = false;
+            document.getElementById('cfg-api-wikidata').checked = false;
+            document.getElementById('cfg-api-arxiv').checked = false;
+            document.getElementById('cfg-api-github').checked = false;
+            document.getElementById('cfg-api-nasa').checked = false;
+            document.getElementById('cfg-api-pubchem').checked = false;
+            document.getElementById('cfg-api-pdb').checked = false;
+            document.getElementById('cfg-api-oeis').checked = false;
+            document.getElementById('cfg-api-lean').checked = false;
+            
+            logSuccess('Config', 'Reset to defaults');
         }
         
-        function resetConfig() {
-            if (confirm('Reset to defaults?')) {
-                loadConfigFile();
-                log('Config reset to defaults', 'warn');
+        async function saveTrainingConfig() {
+            try {
+                const config = buildTrainingConfig();
+                await callMCP('wui_save_config', { content: config });
+                document.getElementById('config-training').value = config;
+                logSuccess('Config', 'Training configuration saved');
+            } catch (err) {
+                logError('Config', err.message);
             }
         }
+        
+        async function loadTrainingConfigFile() {
+            try {
+                const result = await callMCP('wui_load_config', {});
+                if (result && result.content) {
+                    document.getElementById('config-training').value = result.content;
+                    populateTrainingConfig(result.content);
+                    logSuccess('Config', 'Training config loaded');
+                }
+            } catch (err) {
+                logError('Config', err.message);
+            }
+        }
+        
+        async function saveTrainingConfigFile() {
+            try {
+                const content = document.getElementById('config-training').value;
+                await callMCP('wui_save_config', { content: content });
+                logSuccess('Config', 'Training config saved');
+            } catch (err) {
+                logError('Config', err.message);
+            }
+        }
+        
+        async function loadSystemConfig() {
+            try {
+                const result = await callMCP('wui_get_system_toml', {});
+                if (result && result.toml) {
+                    document.getElementById('config-system').value = result.toml;
+                    logSuccess('Config', 'System config loaded');
+                }
+            } catch (err) {
+                logError('Config', err.message);
+            }
+        }
+        
+        async function saveSystemConfig() {
+            try {
+                const content = document.getElementById('config-system').value;
+                await callMCP('wui_set_system_toml', { toml: content });
+                logSuccess('Config', 'System config saved');
+            } catch (err) {
+                logError('Config', err.message);
+            }
+        }
+        
+        async function validateSystemConfig() {
+            try {
+                const content = document.getElementById('config-system').value;
+                const result = await callMCP('wui_validate_system_toml', { toml: content });
+                
+                const errorDiv = document.getElementById('config-validation');
+                if (result && result.valid) {
+                    errorDiv.innerHTML = '<strong>Valid</strong> - No errors found';
+                    errorDiv.style.display = 'block';
+                    setTimeout(() => errorDiv.style.display = 'none', 3000);
+                } else {
+                    let html = '<strong>Validation Errors:</strong><ul>';
+                    if (result.errors) {
+                        result.errors.forEach(e => html += `<li>${escapeHtml(e)}</li>`);
+                    }
+                    html += '</ul>';
+                    errorDiv.innerHTML = html;
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                logError('Config', err.message);
+            }
+        }
+        
+        // Legacy compatibility functions
+        async function loadFullConfig() {
+            await loadTrainingConfigFile();
+            await loadSystemConfig();
+        }
+        
+        async function saveFullConfig() {
+            await saveTrainingConfigFile();
+            await saveSystemConfig();
+        }
+        
+        async function validateConfig() {
+            await validateSystemConfig();
+        }
+        
+        // ============================================
+        // Training Operations
+        // ============================================
+        
+        async function startTraining() {
+            try {
+                document.getElementById('btn-start-training').disabled = true;
+                document.getElementById('btn-stop-training').disabled = false;
+                document.getElementById('btn-pause-training').disabled = false;
+                
+                const epochs = parseInt(document.getElementById('cfg-epochs').value);
+                const batchSize = parseInt(document.getElementById('cfg-batch-size').value);
+                const numExperts = parseInt(document.getElementById('cfg-moe-experts').value);
+                const lazyInit = document.getElementById('cfg-lazy-init').checked;
+                const continuousMode = document.getElementById('cfg-continuous-mode').checked;
+                const dataAccumulation = document.getElementById('cfg-data-accumulation').checked;
+                
+                // Check data acquisition status first
+                const acqStatus = await callMCP('wui_get_acquisition_status', {});
+                const hasData = acqStatus && (acqStatus.items_fetched > 0 || acqStatus.sources_done > 0);
+                
+                if (!hasData) {
+                    addLogEntry('training-logs', `[DATA] No training data available - run data acquisition first`, 'warn');
+                    logWarn('Training', 'No data available. Click "Acquire Data" button in Training Data Pipeline section.');
+                    document.getElementById('btn-start-training').disabled = false;
+                    document.getElementById('btn-stop-training').disabled = true;
+                    document.getElementById('btn-pause-training').disabled = true;
+                    return;
+                }
+                
+                addLogEntry('training-logs', `[DATA] Training with ${acqStatus.items_fetched} items from ${acqStatus.sources_done} sources`, 'info');
+                
+                // If continuous mode and data accumulation enabled, set up auto-refresh
+                if (continuousMode && dataAccumulation) {
+                    addLogEntry('training-logs', `[DATA] Continuous mode: data will auto-refresh between cycles`, 'info');
+                }
+                
+                // First init pipeline
+                const initResult = await callMCP('wui_init_training_pipeline', {
+                    epochs: epochs,
+                    batch_size: batchSize,
+                    num_experts: numExperts
+                });
+                
+                if (initResult && initResult.message) {
+                    logInfo('Training', initResult.message);
+                    addLogEntry('training-logs', `[INIT] ${initResult.message}`, 'info');
+                }
+                
+                // Then start training
+                const startResult = await callMCP('wui_start_ff_training', { epochs: epochs });
+                
+                if (startResult && startResult.message) {
+                    logSuccess('Training', startResult.message);
+                    addLogEntry('training-logs', `[START] ${startResult.message}`, 'success');
+                    
+                    // Show lazy init info if applicable
+                    if (startResult.lazy_init) {
+                        addLogEntry('training-logs', `[LAZY] Starting with ${startResult.initial_experts} experts, will grow to ${startResult.target_experts}`, 'info');
+                    }
+                }
+                
+                appState.training.running = true;
+                appState.training.lazyInit = lazyInit;
+                appState.training.continuousMode = continuousMode;
+                appState.training.dataAccumulation = dataAccumulation;
+                appState.training.initialExperts = startResult?.initial_experts || numExperts;
+                appState.training.targetExperts = startResult?.target_experts || numExperts;
+                updateTrainingUI(true);
+            } catch (err) {
+                logError('Training', err.message);
+                document.getElementById('btn-start-training').disabled = false;
+                document.getElementById('btn-stop-training').disabled = true;
+                document.getElementById('btn-pause-training').disabled = true;
+            }
+        }
+        
+        async function stopTraining() {
+            try {
+                await callMCP('wui_stop_ff_training', {});
+                appState.training.running = false;
+                updateTrainingUI(false);
+                logInfo('Training', 'Training stopped');
+            } catch (err) {
+                logError('Training', err.message);
+            }
+        }
+        
+        async function pauseTraining() {
+            try {
+                await callMCP('wui_pause_training', {});
+                logSuccess('Training', 'Training paused');
+            } catch (err) {
+                logError('Training', err.message);
+            }
+        }
+        
+        function updateTrainingUI(running) {
+            const dot = document.getElementById('training-status');
+            const text = document.getElementById('training-text');
+            
+            if (running) {
+                dot.classList.add('training');
+                text.textContent = 'Training';
+            } else {
+                dot.classList.remove('training');
+                text.textContent = 'Idle';
+            }
+        }
+        
+        // ============================================
+        // Model Management
+        // ============================================
+        
+        async function refreshModelsList() {
+            try {
+                const result = await callMCP('wui_list_models', {});
+                const container = document.getElementById('models-list-container');
+                const select = document.getElementById('inf-model-select');
+                
+                container.innerHTML = '';
+                select.innerHTML = '<option value="">-- Select Model --</option>';
+                
+                if (result && result.checkpoints && result.checkpoints.length > 0) {
+                    result.checkpoints.forEach(filename => {
+                        const card = document.createElement('div');
+                        card.className = 'model-card';
+                        card.dataset.filename = filename;
+                        card.innerHTML = `
+                            <div class="info">
+                                <div class="name">${escapeHtml(filename)}</div>
+                            </div>
+                        `;
+                        card.onclick = () => selectModel({ filename: filename });
+                        container.appendChild(card);
+                        
+                        const option = document.createElement('option');
+                        option.value = filename;
+                        option.textContent = filename;
+                        select.appendChild(option);
+                    });
+                } else {
+                    container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No models found</p>';
+                }
+            } catch (err) {
+                logError('Models', err.message);
+            }
+        }
+        
+        function selectModel(model) {
+            appState.selectedModel = model;
+            
+            // Update UI
+            document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+            const card = document.querySelector(`.model-card[data-filename="${CSS.escape(model.filename)}"]`);
+            if (card) card.classList.add('selected');
+            
+            // Show details
+            document.getElementById('model-details').innerHTML = `
+                <div class="form-group">
+                    <label>Filename</label>
+                    <input type="text" value="${escapeHtml(model.filename)}" disabled>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Size</label>
+                        <input type="text" value="${model.size_mb} MB" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>Modified</label>
+                        <input type="text" value="${model.modified || 'Unknown'}" disabled>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('model-actions').style.display = 'flex';
+        }
+        
+        async function loadSelectedModel() {
+            if (!appState.selectedModel) {
+                logWarn('Models', 'No model selected');
+                return;
+            }
+            try {
+                await callMCP('wui_load_model', { model: appState.selectedModel.filename });
+                appState.model.loaded = true;
+                appState.model.filename = appState.selectedModel.filename;
+                document.getElementById('model-status').classList.add('connected');
+                document.getElementById('model-text').textContent = appState.selectedModel.filename.substring(0, 15);
+                logSuccess('Models', `Loaded ${appState.selectedModel.filename}`);
+            } catch (err) {
+                logError('Models', err.message);
+            }
+        }
+        
+        async function loadModelForInference() {
+            const filename = document.getElementById('inf-model-select').value;
+            if (!filename) {
+                logWarn('Inference', 'Please select a model');
+                return;
+            }
+            try {
+                await callMCP('wui_load_model', { model: filename });
+                appState.model.loaded = true;
+                appState.model.filename = filename;
+                document.getElementById('model-status').classList.add('connected');
+                document.getElementById('model-text').textContent = filename.substring(0, 15);
+                logSuccess('Inference', `Model ${filename} ready`);
+            } catch (err) {
+                logError('Inference', err.message);
+            }
+        }
+        
+        async function unloadModel() {
+            appState.model.loaded = false;
+            appState.model.filename = null;
+            document.getElementById('model-status').classList.remove('connected');
+            document.getElementById('model-text').textContent = 'No Model';
+            logInfo('Inference', 'Model unloaded');
+        }
+        
+        async function deleteSelectedModel() {
+            if (!appState.selectedModel) return;
+            
+            // Note: Actual delete not implemented in backend
+            logWarn('Models', 'Delete not implemented - remove files manually from C:\\q_mini_data\\checkpoints');
+        }
+        
+        // ============================================
+        // Inference / Chat
+        // ============================================
+        
+        async function sendInferenceMessage() {
+            const prompt = document.getElementById('chat-prompt').value.trim();
+            if (!prompt) return;
+            
+            // Add user message
+            const history = document.getElementById('chat-history');
+            const userMsg = document.createElement('div');
+            userMsg.className = 'chat-message user';
+            userMsg.innerHTML = `<div class="chat-bubble">${escapeHtml(prompt)}</div>`;
+            history.appendChild(userMsg);
+            document.getElementById('chat-prompt').value = '';
+            history.scrollTop = history.scrollHeight;
+            
+            // Inference not implemented in wui-server
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'chat-message assistant';
+            errorMsg.innerHTML = `<div class="chat-bubble" style="color: var(--warning)">` +
+                `Inference not implemented in wui-server.<br>` +
+                `This server only supports training operations.` +
+                `</div>`;
+            history.appendChild(errorMsg);
+            history.scrollTop = history.scrollHeight;
+            
+            logWarn('Inference', 'Inference not implemented in wui-server');
+        }
+        
+        // ============================================
+        // Data Sources Management
+        // ============================================
+        
+        async function refreshDataSources() {
+            try {
+                const result = await callMCP('wui_list_data_sources', {});
+                const tbody = document.getElementById('data-sources-table');
+                tbody.innerHTML = '';
+                
+                if (result && result.sources && result.sources.length > 0) {
+                    result.sources.forEach(source => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${escapeHtml(source.name || source.id)}</td>
+                            <td>${source.type || 'unknown'}</td>
+                            <td>${source.status || 'unknown'}</td>
+                            <td><span class="status ${source.enabled || source.status === 'available' ? 'enabled' : 'disabled'}">${source.enabled || source.status === 'available' ? 'Enabled' : 'Disabled'}</span></td>
+                            <td>-</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No data sources</td></tr>';
+                }
+            } catch (err) {
+                logError('Data', err.message);
+            }
+        }
+        
+        async function toggleDataSource(name, enabled) {
+            try {
+                await callMCP('wui_update_data_source', { name: name, enabled: enabled });
+                logSuccess('Data', `Source "${name}" ${enabled ? 'enabled' : 'disabled'}`);
+                await refreshDataSources();
+            } catch (err) {
+                logError('Data', err.message);
+            }
+        }
+        
+        function showAddDataSourceModal() {
+            document.getElementById('data-source-modal').classList.add('visible');
+            document.getElementById('modal-source-name').value = '';
+            document.getElementById('modal-source-url').value = '';
+            document.getElementById('modal-source-desc').value = '';
+            document.getElementById('modal-source-enabled').checked = true;
+        }
+        
+        function closeDataSourceModal() {
+            document.getElementById('data-source-modal').classList.remove('visible');
+        }
+        
+        function onSourceTypeChange() {
+            const type = document.getElementById('modal-source-type').value;
+            const urlInput = document.getElementById('modal-source-url');
+            if (type === 'web_api') {
+                urlInput.placeholder = 'https://api.example.com/data';
+            } else if (type === 'local_file') {
+                urlInput.placeholder = 'C:\\q_mini_data\\datasets\\file.jsonl';
+            } else if (type === 'directory') {
+                urlInput.placeholder = 'C:\\q_mini_data\\datasets\\';
+            }
+        }
+        
+        async function addDataSource() {
+            const name = document.getElementById('modal-source-name').value.trim();
+            const type = document.getElementById('modal-source-type').value;
+            const url = document.getElementById('modal-source-url').value.trim();
+            const category = document.getElementById('modal-source-category').value;
+            const desc = document.getElementById('modal-source-desc').value.trim();
+            const enabled = document.getElementById('modal-source-enabled').checked;
+            
+            if (!name) {
+                logError('Data', 'Source name is required');
+                return;
+            }
+            
+            try {
+                await callMCP('wui_add_data_source', {
+                    name: name,
+                    type: type,
+                    url: type === 'web_api' ? url : undefined,
+                    path: type !== 'web_api' ? url : undefined,
+                    category: category,
+                    description: desc,
+                    enabled: enabled
+                });
+                logSuccess('Data', `Source "${name}" added`);
+                closeDataSourceModal();
+                await refreshDataSources();
+            } catch (err) {
+                logError('Data', err.message);
+            }
+        }
+        
+        async function startDataAcquisition() {
+            try {
+                await callMCP('wui_start_data_acquisition', {});
+                logSuccess('Data', 'Data acquisition started');
+            } catch (err) {
+                logError('Data', err.message);
+            }
+        }
+        
+        async function stopDataAcquisition() {
+            try {
+                await callMCP('wui_stop_data_acquisition', {});
+                logSuccess('Data', 'Data acquisition stopped');
+            } catch (err) {
+                logError('Data', err.message);
+            }
+        }
+        
+        // Data sources display for Training tab - with pipeline status
+        async function refreshTrainingDataSources() {
+            const container = document.getElementById('training-data-sources');
+            const indicator = document.getElementById('data-pipeline-indicator');
+            const statusText = document.getElementById('data-pipeline-text');
+            const continuousStatus = document.getElementById('continuous-data-status');
+            
+            try {
+                // Check acquisition status
+                const acqResult = await callMCP('wui_get_acquisition_status', {});
+                const hasRunAcquisition = acqResult && (acqResult.items_fetched > 0 || acqResult.sources_done > 0);
+                const isRunning = acqResult && acqResult.running;
+                
+                // Get data sources
+                const result = await callMCP('wui_list_data_sources', {});
+                const hasSources = result && result.sources && result.sources.length > 0;
+                
+                if (hasSources) {
+                    const activeSources = result.sources.filter(s => s.enabled || s.status === 'available');
+                    const inactiveSources = result.sources.filter(s => !s.enabled && s.status !== 'available');
+                    
+                    // Update status indicator
+                    if (isRunning) {
+                        indicator.style.background = 'var(--accent)';
+                        indicator.classList.add('pulse');
+                        statusText.textContent = `Acquiring data... ${acqResult.progress || 0}% (${acqResult.items_fetched || 0} items)`;
+                        statusText.style.color = 'var(--accent)';
+                    } else if (hasRunAcquisition) {
+                        indicator.style.background = 'var(--success)';
+                        indicator.classList.remove('pulse');
+                        statusText.textContent = `Data ready: ${acqResult.items_fetched || 0} items from ${acqResult.sources_done || 0} sources`;
+                        statusText.style.color = 'var(--success)';
+                    } else {
+                        indicator.style.background = 'var(--warning)';
+                        indicator.classList.remove('pulse');
+                        statusText.textContent = `${activeSources.length} sources configured - run acquisition before training`;
+                        statusText.style.color = 'var(--warning)';
+                    }
+                    
+                    // Build source badges
+                    let html = '';
+                    activeSources.forEach(src => {
+                        const hasData = hasRunAcquisition ? '✓' : '⏳';
+                        const bg = hasRunAcquisition ? 'var(--success)' : 'var(--warning)';
+                        html += `<span style="background: ${bg}; color: var(--bg-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">${escapeHtml(src.name || src.id)} ${hasData}</span>`;
+                    });
+                    
+                    inactiveSources.forEach(src => {
+                        html += `<span style="background: var(--border-color); color: var(--text-secondary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem;">${escapeHtml(src.name || src.id)} ✗</span>`;
+                    });
+                    
+                    container.innerHTML = html;
+                    
+                    // Update continuous mode text
+                    const continuousMode = document.getElementById('cfg-continuous-mode')?.checked;
+                    if (continuousMode) {
+                        continuousStatus.textContent = hasRunAcquisition 
+                            ? ' Data acquisition will auto-run between training cycles' 
+                            : ' ⚠ Run acquisition first - then it will auto-refresh between cycles';
+                    } else {
+                        continuousStatus.textContent = ' Continuous mode disabled - manual acquisition only';
+                    }
+                } else {
+                    indicator.style.background = 'var(--error)';
+                    statusText.textContent = 'No data sources configured!';
+                    statusText.style.color = 'var(--error)';
+                    container.innerHTML = '<span style="color: var(--warning);">⚠ Configure data sources in Data tab</span>';
+                }
+            } catch (err) {
+                container.innerHTML = `<span style="color: var(--error);">Error: ${escapeHtml(err.message)}</span>`;
+            }
+        }
+        
+        async function startDataAcquisitionFromTraining() {
+            try {
+                logInfo('Data', 'Starting data acquisition from training pipeline...');
+                const result = await callMCP('wui_start_data_acquisition', {});
+                if (result && result.started) {
+                    logSuccess('Data', `Acquisition started: ${result.sources} sources`);
+                    addLogEntry('training-logs', `[DATA] Acquisition started: ${result.message}`, 'info');
+                    
+                    // Poll for completion
+                    const pollInterval = setInterval(async () => {
+                        const status = await callMCP('wui_get_acquisition_status', {});
+                        if (!status.running) {
+                            clearInterval(pollInterval);
+                            logSuccess('Data', `Acquisition complete: ${status.items_fetched} items fetched`);
+                            addLogEntry('training-logs', `[DATA] Acquisition complete: ${status.items_fetched} items from ${status.sources_done} sources`, 'success');
+                            refreshTrainingDataSources();
+                        } else {
+                            // Update UI with progress
+                            const indicator = document.getElementById('data-pipeline-indicator');
+                            const statusText = document.getElementById('data-pipeline-text');
+                            if (indicator) indicator.style.background = 'var(--accent)';
+                            if (statusText) statusText.textContent = `Acquiring: ${status.progress}% (${status.current_source || '...'})`;
+                        }
+                    }, 1000);
+                }
+            } catch (err) {
+                logError('Data', err.message);
+            }
+        }
+        
+        async function viewAcquiredData() {
+            try {
+                const result = await callMCP('wui_list_data_sources', {});
+                const acqResult = await callMCP('wui_get_acquisition_status', {});
+                
+                let message = `Acquisition Status:\n`;
+                message += `- Running: ${acqResult.running ? 'Yes' : 'No'}\n`;
+                message += `- Progress: ${acqResult.progress || 0}%\n`;
+                message += `- Items Fetched: ${acqResult.items_fetched || 0}\n`;
+                message += `- Sources Processed: ${acqResult.sources_done || 0}/${acqResult.sources_total || 0}\n`;
+                message += `- Current Source: ${acqResult.current_source || 'None'}\n\n`;
+                message += `Data Sources:\n`;
+                
+                if (result && result.sources) {
+                    result.sources.forEach(src => {
+                        const status = src.enabled || src.status === 'available' ? '✓' : '✗';
+                        message += `- ${src.name} [${status}]\n`;
+                    });
+                }
+                
+                alert(message);
+            } catch (err) {
+                logError('Data', err.message);
+            }
+        }
+        
+        // ============================================
+        // API Keys Management
+        // ============================================
+        
+        async function loadAPIKeys() {
+            try {
+                const result = await callMCP('wui_get_api_keys', {});
+                if (result && result.keys) {
+                    // Set toggles based on configured status
+                    document.getElementById('api-enabled-wolfram').checked = result.keys.wolfram?.configured || false;
+                    document.getElementById('api-enabled-wikidata').checked = result.keys.wikidata?.configured || false;
+                    document.getElementById('api-enabled-arxiv').checked = result.keys.arxiv?.configured || false;
+                    document.getElementById('api-enabled-github').checked = result.keys.github?.configured || false;
+                }
+            } catch (err) {
+                // API keys may not be available
+            }
+        }
+        
+        async function saveAPIKeys() {
+            try {
+                const keys = {
+                    wolfram: { configured: document.getElementById('api-enabled-wolfram').checked },
+                    wikidata: { configured: document.getElementById('api-enabled-wikidata').checked },
+                    arxiv: { configured: document.getElementById('api-enabled-arxiv').checked },
+                    github: { configured: document.getElementById('api-enabled-github').checked }
+                };
+                await callMCP('wui_save_api_keys', keys);
+                logSuccess('API Keys', 'Settings saved');
+            } catch (err) {
+                logError('API Keys', err.message);
+            }
+        }
+        
+        // ============================================
+        // Dashboard Updates
+        // ============================================
+        
+        function updateDashboardMetrics(data) {
+            if (data.epoch !== undefined) {
+                document.getElementById('dash-epoch').textContent = data.epoch;
+                appState.training.epoch = data.epoch;
+            }
+            if (data.loss !== undefined) {
+                document.getElementById('dash-loss').textContent = data.loss.toFixed(4);
+                appState.training.loss = data.loss;
+            }
+            if (data.samples !== undefined) {
+                document.getElementById('dash-samples').textContent = data.samples;
+                appState.training.samples = data.samples;
+            }
+            if (data.experts !== undefined) {
+                document.getElementById('dash-experts').textContent = data.experts;
+            }
+            
+            // Update progress bar
+            if (appState.training.totalEpochs > 0) {
+                const pct = Math.round((appState.training.epoch / appState.training.totalEpochs) * 100);
+                document.getElementById('dash-progress').style.width = `${pct}%`;
+                document.getElementById('dash-progress-pct').textContent = `${pct}%`;
+                document.getElementById('dash-progress-text').textContent = `Epoch ${appState.training.epoch} / ${appState.training.totalEpochs}`;
+            }
+        }
+        
+        function updateSystemStatus(data) {
+            if (data.self_check) {
+                const sc = data.self_check;
+                document.getElementById('dash-memory').textContent = sc.memory_mb || 0;
+                
+                const resultsDiv = document.getElementById('system-check-results');
+                let statusHtml = '';
+                if (sc.system_toml_exists) statusHtml += '✓ System TOML<br>';
+                if (sc.engine_artifact_available) statusHtml += '✓ Engine Available<br>';
+                if (sc.ready_for_operator_pipeline) statusHtml += '✓ Ready for Pipeline';
+                resultsDiv.innerHTML = statusHtml;
+            }
+            
+            if (data.training) {
+                appState.training.running = data.training.is_running;
+                appState.training.epoch = data.training.current_epoch || 0;
+                appState.training.totalEpochs = data.training.total_epochs || 100;
+                updateTrainingUI(appState.training.running);
+                updateDashboardMetrics({
+                    epoch: appState.training.epoch,
+                    loss: data.training.loss,
+                    samples: data.training.samples
+                });
+            }
+        }
+        
+        // ============================================
+        // Keyboard Shortcuts
+        // ============================================
+        
+        document.getElementById('chat-prompt').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendInferenceMessage();
+            }
+        });
+        
+        // ============================================
+        // Initialize
+        // ============================================
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initConnection();
+        });
     </script>
+    
+    <!-- Add Data Source Modal -->
+    <div class="modal-overlay" id="data-source-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Add Data Source</h3>
+                <button class="btn btn-secondary" onclick="closeDataSourceModal()" style="padding: 0.3rem 0.6rem;">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Source Name</label>
+                    <input type="text" id="modal-source-name" placeholder="e.g., My Dataset">
+                </div>
+                <div class="form-group">
+                    <label>Source Type</label>
+                    <select id="modal-source-type" onchange="onSourceTypeChange()">
+                        <option value="web_api">Web API</option>
+                        <option value="local_file">Local File</option>
+                        <option value="directory">Directory</option>
+                    </select>
+                </div>
+                <div class="form-group" id="modal-url-group">
+                    <label>URL / Path</label>
+                    <input type="text" id="modal-source-url" placeholder="https://api.example.com/data">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="modal-source-category">
+                        <option value="academic">Academic</option>
+                        <option value="code">Code</option>
+                        <option value="knowledge">Knowledge</option>
+                        <option value="space">Space</option>
+                        <option value="chemistry">Chemistry</option>
+                        <option value="biology">Biology</option>
+                        <option value="biodiversity">Biodiversity</option>
+                        <option value="local">Local</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="modal-source-desc" rows="2" placeholder="Brief description..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="toggle">
+                        <input type="checkbox" id="modal-source-enabled" checked>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-text">Enabled</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDataSourceModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="addDataSource()">Add Source</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

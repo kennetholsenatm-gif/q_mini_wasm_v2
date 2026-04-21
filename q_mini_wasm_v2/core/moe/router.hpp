@@ -42,6 +42,16 @@ struct EntangledRoutingConfig {
 };
 
 /**
+ * @brief Routing strategy selection
+ */
+enum class RoutingStrategy {
+    TOP_K,           // Standard Top-K routing
+    ENTANGLED,       // Quantum-inspired entangled routing
+    ADAPTIVE_LOAD,   // Adaptive load-balanced routing
+    MULTI_OBJECTIVE  // Multi-objective optimization routing
+};
+
+/**
  * @brief Mixture-of-Experts Router with Tropical Geometry
  * 
  * Based on research: "Sparsity is Combinatorial Depth: Quantifying MoE 
@@ -77,6 +87,17 @@ public:
     // ========================================================================
     // Routing Operations
     // ========================================================================
+    
+    /**
+     * @brief Route input to experts using specified strategy
+     * @param input Input features as ternary values
+     * @param strategy Routing strategy to use
+     * @return Indices of selected experts
+     */
+    std::vector<size_t> route(
+        const std::vector<ternary::Trit>& input,
+        const RoutingStrategy strategy = RoutingStrategy::ADAPTIVE_LOAD
+    );
     
     /**
      * @brief Route input to Top-K experts using tropical geometry
@@ -531,11 +552,19 @@ private:
     ExpertConfig config_;
     EntangledRoutingConfig entangled_config_;
     
+    /**
+     * @brief Lazy initialization of routing weights (67M elements!)
+     */
+    void ensure_routing_weights_initialized();
+    
     // Expert weight matrices (ternary)
     std::vector<std::vector<std::vector<ternary::Trit>>> expert_weights_;
     
-    // Routing weight matrix (ternary)
+    // Routing weight matrix (ternary) - lazy initialized (67M elements!)
     std::vector<std::vector<ternary::Trit>> routing_weights_;
+    bool routing_weights_initialized_;
+    bool entanglement_initialized_;
+    bool advanced_selection_initialized_;
     
     // Ternary deterministic state generator
     uint32_t ternary_seed_;

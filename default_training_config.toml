@@ -1,0 +1,81 @@
+# Q-Mini-WASM-v2 Training Configuration
+# This is the comprehensive default configuration
+# ALL settings must be defined here - no hardcoded defaults in code
+
+[training]
+epochs = 100
+batch_size = 32768
+checkpoint_interval = 10
+learning_rate = 10.0
+resume = false
+
+[model]
+moe_experts = 8192
+moe_top_k = 128
+context_window = 8192
+entanglement_tokens = 1024
+shadow_dim = 4096
+num_layers = 64
+neurons_per_layer = 8192
+routing_qutrits = 12
+learning_rate_shift = 2
+
+[features]
+steane_correction = true
+cim_mode = false
+worker_threads = 32
+continuous_mode = true
+lazy_init = true
+data_accumulation = true
+lazy_provisioning = true
+infinite_data = true
+
+[network]
+websocket_port = 8080
+realtime_metrics = true
+theme = "dark"
+
+[paths]
+output_dir = "C:/q_mini_data/checkpoints/"
+checkpoint_dir = "C:/q_mini_data/checkpoints/"
+dataset_dir = "C:/q_mini_data/datasets/"
+base_model = "C:/q_mini_data/checkpoints/final_model.json"
+
+[streaming]
+port = 9090
+sse_port = 9091
+
+[apis]
+enabled = true
+pubchem = true
+oeis = true
+nasa = true
+pdb = true
+openalex = true
+
+[memory]
+arena_mb = 4096
+max_memory_gb = 48
+
+[som]
+initial_experts = 2
+split_beta1_threshold = 5
+target_graph_density = 0.15
+max_experts_hard_cap = 100000
+min_graph_density = 0.05
+max_graph_density = 0.40
+merge_min_activation_rate = 0.001
+
+[system.inference]
+num_qutrits = 243
+num_experts = 243
+model_size_b = 100
+goodness_threshold = 5.0
+betti_analysis = true
+
+[training.data_filter]
+min_text_length = 50
+max_text_length = 100000
+
+[model.expert]
+sparsity = 5

@@ -1,0 +1,148 @@
+# Data Sources Configuration
+# Define web APIs and local data sources for training data acquisition
+# Changes are hot-reloaded by the WUI
+
+[settings]
+health_check_timeout = 5
+max_concurrent = 10
+cache_ttl = 300
+
+[[source]]
+name = "OpenAlex"
+type = "web_api"
+url = "https://api.openalex.org/works?per_page=1"
+enabled = true
+category = "academic"
+description = "Open academic graph - papers, authors, institutions"
+
+[[source]]
+name = "arXiv"
+type = "web_api"
+url = "http://export.arxiv.org/api/query?search_query=all:electron&start=0&max_results=1"
+enabled = true
+category = "academic"
+description = "Preprint server for scientific papers"
+
+[[source]]
+name = "GitHub"
+type = "web_api"
+url = "https://api.github.com/repos/microsoft/TypeScript"
+enabled = true
+category = "code"
+description = "Code repositories and metadata"
+
+[[source]]
+name = "NASA APOD"
+type = "web_api"
+url = "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY"
+enabled = true
+category = "space"
+description = "Astronomy Picture of the Day"
+
+[[source]]
+name = "Wikidata"
+type = "web_api"
+url = "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&format=json"
+enabled = true
+category = "knowledge"
+description = "Structured knowledge base"
+
+[[source]]
+name = "SpaceX"
+type = "web_api"
+url = "https://api.spacexdata.com/v4/launches/latest"
+enabled = true
+category = "space"
+description = "SpaceX launch data"
+
+[[source]]
+name = "PubChem"
+type = "web_api"
+url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/water/cids/JSON"
+enabled = true
+category = "chemistry"
+description = "Chemical information database"
+
+[[source]]
+name = "PDB"
+type = "web_api"
+url = "https://data.rcsb.org/rest/v1/holdings/status/entry_count"
+enabled = true
+category = "biology"
+description = "Protein Data Bank"
+
+[[source]]
+name = "GBIF"
+type = "web_api"
+url = "https://api.gbif.org/v1/occurrence/search?limit=1"
+enabled = true
+category = "biodiversity"
+description = "Global Biodiversity Information Facility"
+
+[[source]]
+name = "USGS Earthquake"
+type = "web_api"
+url = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=1"
+enabled = true
+category = "scientific"
+description = "Earthquake data feed"
+
+[[source]]
+name = "Chronicling America"
+type = "web_api"
+url = "https://chroniclingamerica.loc.gov/search/titles/results/?format=json&per_page=1"
+enabled = true
+category = "historical"
+description = "Historic newspaper archives"
+
+[[source]]
+name = "Gutendex"
+type = "web_api"
+url = "https://gutendex.com/books/?page=1"
+enabled = true
+category = "literature"
+description = "Project Gutenberg catalog"
+
+[[source]]
+name = "OEIS"
+type = "web_api"
+url = "https://oeis.org/search?q=1,2,3,4&fmt=json"
+enabled = true
+category = "mathematics"
+description = "Online Encyclopedia of Integer Sequences"
+
+[[source]]
+name = "Lean"
+type = "web_api"
+url = "https://leanprover-community.github.io/api/"
+enabled = false
+category = "mathematics"
+description = "Lean theorem prover community API"
+
+[[source]]
+name = "Backup Dataset"
+type = "local_file"
+path = "data/backup.jsonl"
+enabled = false
+category = "local"
+description = "Backup training data"
+format = "jsonl"
+
+[[source]]
+name = "Custom Data Directory"
+type = "directory"
+path = "data/custom/"
+enabled = false
+category = "local"
+description = "Directory of custom training files"
+pattern = "*.jsonl"
+
+[[source]]
+name = "C:\\q_mini_data\\datasets"
+type = "directory"
+path = "C:\\q_mini_data\\datasets"
+enabled = true
+category = "custom"
+description = "Added via WUI on 4/15/2026, 7:03:50 PM"
+pattern = "*.jsonl"
+

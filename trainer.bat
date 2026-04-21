@@ -1,0 +1,1 @@
+@echo off`necho {"status": "init", "message": "Batch trainer running"} > C:\q_mini_data\trainer_sse_output.txt`necho [BATCH] Started >> C:\q_mini_data\trainer_test.log`n:loop`ntimeout /t 1 /nobreak >nul`necho {"status": "progress", "epoch": 1} >> C:\q_mini_data\trainer_sse_output.txt`ngoto loop

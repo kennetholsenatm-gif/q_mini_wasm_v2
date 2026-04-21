@@ -8,17 +8,26 @@ namespace q_mini_wasm_v2::core {
 TernaryNeuralNetwork::TernaryNeuralNetwork(const NetworkConfig& config)
     : config_(config)
 {
+    std::cerr << "[Network] Starting initialization..." << std::endl;
+    
     // Initialize Data Ingestion Pipeline
+    std::cerr << "[Network] Creating DataIngestionPipeline..." << std::endl;
     pipeline_ = std::make_unique<ingestion::DataIngestionPipeline>(config.input_dim, config.hash_dim);
+    std::cerr << "[Network] DataIngestionPipeline created" << std::endl;
+    
+    std::cerr << "[Network] Creating CliffordShadow..." << std::endl;
     shadow_ = std::make_unique<ingestion::CliffordShadow>(config.input_dim, 3); // 3 layers of cooling
+    std::cerr << "[Network] CliffordShadow created" << std::endl;
 
     // Initialize MoE Router
+    std::cerr << "[Network] Creating MoERouter..." << std::endl;
     moe::ExpertConfig router_config{
         config.total_experts,
         config.active_experts,
         config.routing_qutrits
     };
     router_ = std::make_unique<moe::MoERouter>(router_config);
+    std::cerr << "[Network] MoERouter created" << std::endl;
 
     // Store expert config for lazy initialization (MoE: only create experts when actually used)
     expert_config_.num_layers = config.num_layers;
@@ -32,9 +41,12 @@ TernaryNeuralNetwork::TernaryNeuralNetwork(const NetworkConfig& config)
               << config.active_experts << " active per forward pass. (Lazy initialization enabled)" << std::endl;
 
     // Initialize Steane Code
+    std::cerr << "[Network] Creating QutritSteaneCode..." << std::endl;
     steane_ = std::make_unique<steane::QutritSteaneCode>();
+    std::cerr << "[Network] QutritSteaneCode created" << std::endl;
 
     // Initialize Runtime Orchestrator
+    std::cerr << "[Network] Creating RuntimeOrchestrator..." << std::endl;
     runtime::RuntimeConfig runtime_config{
         config.worker_threads,
         1024,   // max queue size
@@ -42,6 +54,7 @@ TernaryNeuralNetwork::TernaryNeuralNetwork(const NetworkConfig& config)
         config.enable_flash_cim   // enable flash cim
     };
     orchestrator_ = std::make_unique<runtime::RuntimeOrchestrator>(runtime_config);
+    std::cerr << "[Network] RuntimeOrchestrator created - Network init complete!" << std::endl;
 }
 
 TernaryNeuralNetwork::~TernaryNeuralNetwork() = default;
@@ -86,7 +99,7 @@ void TernaryNeuralNetwork::train(const std::vector<std::vector<double>>& positiv
                 for (size_t expert_idx : expert_indices) {
                     auto* expert = ensure_expert(expert_idx);
                     if (!expert) continue;
-                    
+
                     // Generate negative samples via NPID (Non-Parametric Instance Discrimination)
                     std::vector<std::vector<ternary::Trit>> single_sample_positive = {sample};
                     auto discrete_negative = expert->generate_negative_samples(single_sample_positive);
@@ -144,6 +157,7 @@ std::vector<ternary::Trit> TernaryNeuralNetwork::infer(const std::vector<double>
     for (size_t expert_idx : expert_indices) {
         auto* expert = ensure_expert(expert_idx);
         if (!expert) continue;
+
         auto expert_out = expert->forward(discrete_input);
         for (size_t i = 0; i < output.size(); ++i) {
             // Tropical accumulation
@@ -188,12 +202,12 @@ learning::ForwardForwardLearner* TernaryNeuralNetwork::get_expert(size_t expert_
     return ensure_expert(expert_id);
 }
 
-void TernaryNeuralNetwork::train_on_experts(const std::vector<double>& sample, 
-                                             const std::vector<size_t>& expert_indices, 
+void TernaryNeuralNetwork::train_on_experts(const std::vector<double>& sample,
+                                             const std::vector<size_t>& expert_indices,
                                              size_t epochs) {
     // Preprocess the single sample
     auto discrete_sample = preprocess(sample);
-    
+
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         // Layer by layer training
         for (size_t layer = 0; layer < config_.num_layers; ++layer) {
@@ -201,11 +215,11 @@ void TernaryNeuralNetwork::train_on_experts(const std::vector<double>& sample,
             for (size_t expert_idx : expert_indices) {
                 auto* expert = ensure_expert(expert_idx);
                 if (!expert) continue;
-                
+
                 // Generate negative samples for this expert
                 std::vector<std::vector<ternary::Trit>> single_sample_positive = {discrete_sample};
                 auto discrete_negative = expert->generate_negative_samples(single_sample_positive);
-                
+
                 // Submit training task to orchestrator
                 auto future_goodness = orchestrator_->submit_ff_training(
                     *expert,
@@ -213,17 +227,17 @@ void TernaryNeuralNetwork::train_on_experts(const std::vector<double>& sample,
                     single_sample_positive,
                     discrete_negative
                 );
-                
+
                 // Wait for training to complete
                 auto goodness = future_goodness.get();
-                
+
                 // Output domain-specialist training info
                 std::cout << "data: {\"status\": \"specialist_train\", \"epoch\": " << epoch + 1
                           << ", \"layer\": " << layer
                           << ", \"expert\": " << expert_idx
-                          << ", \"loss\": " << goodness.delta 
-                          << ", \"reward\": " << goodness.positive_goodness 
-                          << ", \"entropy\": " << goodness.negative_goodness 
+                          << ", \"loss\": " << goodness.delta
+                          << ", \"reward\": " << goodness.positive_goodness
+                          << ", \"entropy\": " << goodness.negative_goodness
                           << "}\n\n" << std::flush;
             }
         }

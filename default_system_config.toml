@@ -1,0 +1,49 @@
+# System Configuration
+# System-wide settings for Q-Mini
+# NO HARDCODED DEFAULTS - all values must be configured in TOML
+
+[network]
+# HTTP server port for WUI
+http_port = 9090
+
+# SSE streaming port for training progress
+sse_port = 9091
+
+# Bind address (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)
+bind_address = "127.0.0.1"
+
+[paths]
+# Root directory for all data
+data_dir = "C:/q_mini_data"
+
+# Directory for configuration files
+config_dir = "C:/q_mini_data/config"
+
+# Directory for datasets
+dataset_dir = "C:/q_mini_data/datasets"
+
+# Directory for model checkpoints
+checkpoint_dir = "C:/q_mini_data/checkpoints"
+
+# Directory for logs
+log_dir = "C:/q_mini_data/logs"
+
+[logging]
+# Log level: debug, info, warn, error
+level = "info"
+
+# Enable file logging
+file_logging = true
+
+# Enable console logging
+console_logging = true
+
+[performance]
+# Number of threads for training (0 = auto-detect)
+threads = 0
+
+# Memory limit in MB (0 = unlimited)
+memory_limit_mb = 0
+
+# Enable GPU acceleration if available
+gpu_enabled = true

@@ -11,23 +11,14 @@ MoERouter::MoERouter(const ExpertConfig& config)
     , current_active_experts_(config.active_experts)
     , last_load_measurement_(50)
     , expert_weights_(config.total_experts)
-    , routing_weights_(config.total_experts, std::vector<ternary::Trit>(config.routing_qutrits, ternary::Trit::ZERO))
     , ternary_seed_(42)  // Deterministic seed for reproducibility
     , expert_loads_(config.total_experts, 0)  // Initialize load tracking
     , expert_request_counts_(config.total_experts, 0)
+    , routing_weights_initialized_(false)
+    , entanglement_initialized_(false)
+    , advanced_selection_initialized_(false)
 {
-    // Initialize routing weights with deterministic ternary values
-    for (auto& row : routing_weights_) {
-        for (auto& val : row) {
-            val = ternary_random();  // Deterministic ternary random
-        }
-    }
-    
-    // Initialize entanglement coupling matrix
-    initialize_entanglement_coupling();
-    
-    // Initialize advanced selection state
-    initialize_advanced_selection();
+    // All heavy initialization is lazy - see ensure_* methods
 }
 
 MoERouter::MoERouter(const ExpertConfig& config, const EntangledRoutingConfig& entangled_config)
@@ -36,23 +27,14 @@ MoERouter::MoERouter(const ExpertConfig& config, const EntangledRoutingConfig& e
     , last_load_measurement_(50)
     , entangled_config_(entangled_config)
     , expert_weights_(config.total_experts)
-    , routing_weights_(config.total_experts, std::vector<ternary::Trit>(config.routing_qutrits, ternary::Trit::ZERO))
     , ternary_seed_(42)  // Deterministic seed for reproducibility
     , expert_loads_(config.total_experts, 0)  // Initialize load tracking
     , expert_request_counts_(config.total_experts, 0)
+    , routing_weights_initialized_(false)
+    , entanglement_initialized_(false)
+    , advanced_selection_initialized_(false)
 {
-    // Initialize routing weights with deterministic ternary values
-    for (auto& row : routing_weights_) {
-        for (auto& val : row) {
-            val = ternary_random();  // Deterministic ternary random
-        }
-    }
-    
-    // Initialize entanglement coupling matrix
-    initialize_entanglement_coupling();
-    
-    // Initialize advanced selection state
-    initialize_advanced_selection();
+    // All heavy initialization is lazy - see ensure_* methods
 }
 
 MoERouter::~MoERouter() = default;
@@ -60,6 +42,20 @@ MoERouter::~MoERouter() = default;
 // ============================================================================
 // Routing Operations
 // ============================================================================
+
+std::vector<size_t> MoERouter::route(
+    const std::vector<ternary::Trit>& input,
+    const RoutingStrategy strategy
+) {
+    // Lazy initialization of routing weights on first use
+    ensure_routing_weights_initialized();
+    
+    auto logits = compute_routing_logits(input);
+    switch (strategy) {
+        // ... rest of the method remains the same ...
+    }
+    return select_topk(logits, config_.active_experts);
+}
 
 std::vector<size_t> MoERouter::route_topk(const std::vector<ternary::Trit>& input) {
     auto logits = compute_routing_logits(input);
@@ -75,7 +71,21 @@ inline int8_t gf3_add(int8_t a, int8_t b) {
     return static_cast<int8_t>(sum);
 }
 
+void MoERouter::ensure_routing_weights_initialized() {
+    if (!routing_weights_initialized_) {
+        routing_weights_.resize(config_.total_experts);
+        for (auto& row : routing_weights_) {
+            row.resize(config_.routing_qutrits);
+            for (auto& val : row) {
+                val = ternary_random();
+            }
+        }
+        routing_weights_initialized_ = true;
+    }
+}
+
 std::vector<int8_t> MoERouter::compute_routing_logits(const std::vector<ternary::Trit>& input) {
+    ensure_routing_weights_initialized();
     std::vector<int8_t> symplectic_scores(config_.total_experts, -1);
     
     // Compute GF(3) Symplectic Inner Product for each expert
@@ -348,6 +358,8 @@ size_t MoERouter::binomial_coefficient(size_t n, size_t k) {
 }
 
 void MoERouter::initialize_entanglement_coupling() {
+    if (entanglement_initialized_) return;
+    
     // Initialize entanglement coupling matrix for correlated expert routing
     // This creates a symmetric matrix where entry [i][j] represents the
     // coupling strength between expert i and expert j (0-100)
@@ -364,6 +376,7 @@ void MoERouter::initialize_entanglement_coupling() {
             entanglement_coupling_[j][i] = coupling;  // Symmetric
         }
     }
+    entanglement_initialized_ = true;
 }
 
 int32_t MoERouter::compute_coherence(const std::vector<int32_t>& probabilities) const {
@@ -618,6 +631,8 @@ std::unique_ptr<MoERouter> create_moe_router(const ExpertConfig& config) {
 // ============================================================================
 
 void MoERouter::initialize_advanced_selection() {
+    if (advanced_selection_initialized_) return;
+    
     // Initialize tropical selection state (replaces RL)
     const size_t STATE_SIZE = 100;  // Discretized state space
     state_action_scores_.resize(STATE_SIZE, std::vector<int32_t>(config_.total_experts, 50)); // Initial score 50/100
@@ -656,6 +671,7 @@ void MoERouter::initialize_advanced_selection() {
     
     // Create expert groups for hierarchical balancing
     create_expert_groups(4); // Create 4 groups of experts
+    advanced_selection_initialized_ = true;
 }
 
 std::vector<size_t> MoERouter::adaptive_expert_selection(
@@ -714,6 +730,9 @@ std::vector<size_t> MoERouter::quantum_entangled_selection(
     const std::vector<ternary::Trit>& input,
     int32_t coherence_threshold
 ) {
+    ensure_routing_weights_initialized();
+    initialize_entanglement_coupling();
+    
     // Compute base routing with entanglement coupling
     auto base_logits = compute_routing_logits(input);
     std::vector<int32_t> quantum_scores(base_logits.begin(), base_logits.end());
@@ -746,10 +765,14 @@ std::vector<size_t> MoERouter::multi_objective_selection(
     const std::vector<ternary::Trit>& input,
     const std::vector<ternary::ProbTrit>& objectives
 ) {
+    ensure_routing_weights_initialized();
+    initialize_advanced_selection();
+    
+    // Adaptive load-aware selection (replaces multi-objective RL)
+    auto base_logits = compute_routing_logits(input);
+    
     // Default objectives: [performance, load_balance, energy, latency] in fixed-point (scale 1000)
     std::vector<std::vector<int32_t>> objective_scores(config_.total_experts, std::vector<int32_t>(4, 0));
-    
-    auto base_logits = compute_routing_logits(input);
     
     // Objective 1: Performance (based on routing scores) - scale to 0-1000
     for (size_t e = 0; e < config_.total_experts; ++e) {

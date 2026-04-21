@@ -92,11 +92,12 @@ TernaryLSH::TernaryLSH(size_t input_dim, size_t output_dim, double sparsity, uns
     : input_dim_(input_dim)
     , output_dim_(output_dim)
     , sparsity_(sparsity)
+    , seed_(seed)
     , positive_margin_(0.0)
     , negative_margin_(0.0)
+    , initialized_(false)
 {
-    initialize_projection_matrix(seed);
-    compute_margins();
+    // Lazy initialization - matrix will be created on first hash() call
 }
 
 TernaryLSH::~TernaryLSH() = default;
@@ -105,6 +106,8 @@ std::vector<ternary::Trit> TernaryLSH::hash(const std::vector<double>& input) co
     if (input.size() != input_dim_) {
         throw std::invalid_argument("Input dimension mismatch");
     }
+    
+    ensure_initialized();
     
     // Project onto ternary matrix
     std::vector<double> projections(output_dim_, 0.0);
@@ -169,31 +172,42 @@ double TernaryLSH::similarity(
     return 1.0 - hamming_distance(hash1, hash2);
 }
 
-void TernaryLSH::initialize_projection_matrix(unsigned seed) {
-    std::mt19937 rng(seed);
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
-    
-    projection_matrix_.resize(output_dim_, std::vector<ternary::Trit>(input_dim_));
-    
-    for (size_t i = 0; i < output_dim_; ++i) {
-        for (size_t j = 0; j < input_dim_; ++j) {
-            double r = dist(rng);
-            
-            if (r < sparsity_) {
-                // Zero entry
-                projection_matrix_[i][j] = ternary::Trit::ZERO;
-            } else if (r < sparsity_ + (1.0 - sparsity_) / 2.0) {
-                // Positive entry
-                projection_matrix_[i][j] = ternary::Trit::POSITIVE;
-            } else {
-                // Negative entry
-                projection_matrix_[i][j] = ternary::Trit::NEGATIVE;
-            }
-        }
+void TernaryLSH::ensure_initialized() const {
+    if (!initialized_) {
+        initialize_projection_matrix(seed_);
+        initialized_ = true;
     }
 }
 
-void TernaryLSH::compute_margins() {
+void TernaryLSH::initialize_projection_matrix(unsigned seed) const {
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    
+    projection_matrix_.clear();
+    projection_matrix_.reserve(output_dim_);
+    
+    // For each output dimension (hash dimension)
+    for (size_t i = 0; i < output_dim_; ++i) {
+        std::vector<ternary::Trit> row;
+        row.reserve(input_dim_);
+        
+        // Generate random ternary entries
+        for (size_t j = 0; j < input_dim_; ++j) {
+            double r = dist(rng);
+            if (r < sparsity_) {
+                row.push_back(ternary::Trit::ZERO);  // Sparsity: zero with probability sparsity_
+            } else if (r < (1.0 + sparsity_) / 2.0) {
+                row.push_back(ternary::Trit::NEGATIVE);  // -1
+            } else {
+                row.push_back(ternary::Trit::POSITIVE);   // +1
+            }
+        }
+        
+        projection_matrix_.push_back(std::move(row));
+    }
+}
+
+void TernaryLSH::compute_margins() const {
     // Compute adaptive margins from projection matrix statistics
     // Margins set to 1 standard deviation of expected projection values
     

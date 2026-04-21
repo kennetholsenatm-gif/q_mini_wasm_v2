@@ -169,6 +169,7 @@ public:
      * @brief Get projection matrix (for inspection/debugging)
      */
     const std::vector<std::vector<ternary::Trit>>& get_projection_matrix() const {
+        ensure_initialized();
         return projection_matrix_;
     }
 
@@ -176,23 +177,30 @@ private:
     size_t input_dim_;
     size_t output_dim_;
     double sparsity_;
+    unsigned int seed_;
     
-    // Rademacher projection matrix (ternary entries)
-    std::vector<std::vector<ternary::Trit>> projection_matrix_;
+    // Rademacher projection matrix (ternary entries) - lazy initialized
+    mutable std::vector<std::vector<ternary::Trit>> projection_matrix_;
+    mutable bool initialized_ = false;
     
-    // Adaptive margin thresholds
-    double positive_margin_;
-    double negative_margin_;
+    // Adaptive margin thresholds - mutable for lazy init from const methods
+    mutable double positive_margin_;
+    mutable double negative_margin_;
     
     /**
-     * @brief Initialize projection matrix with random ternary entries
+     * @brief Initialize projection matrix with random ternary entries (lazy)
      */
-    void initialize_projection_matrix(unsigned seed);
+    void initialize_projection_matrix(unsigned seed) const;
+    
+    /**
+     * @brief Ensure matrix is initialized (thread-safe lazy init)
+     */
+    void ensure_initialized() const;
     
     /**
      * @brief Compute adaptive margins from projection statistics
      */
-    void compute_margins();
+    void compute_margins() const;
 };
 
 /**

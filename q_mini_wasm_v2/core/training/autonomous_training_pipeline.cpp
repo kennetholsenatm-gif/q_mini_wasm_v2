@@ -1,9 +1,19 @@
 #include "autonomous_training_pipeline.hpp"
 #include "../moe/gf3_layers.hpp"
+#include "../moe/unified_config.hpp"
+#include "../moe/runtime_orchestrator.hpp"
+#include "../ternary/trit.hpp"
 #include <fstream>
 #include <iostream>
 #include <algorithm>
 #include <numeric>
+#include <variant>
+#include <unordered_map>
+#include <chrono>
+#include <optional>
+#include <future>
+#include <random>
+#include <cmath>
 
 namespace q_mini_wasm_v2::core::training {
 
@@ -39,15 +49,15 @@ bool AutonomousTrainingPipeline::initialize_components() {
     // Initialize Forward-Forward Learner
     learning::FFConfig ff_config;
     ff_config.num_layers = config_.ff_num_layers;
-    ff_config.layer_width = config_.ff_layer_width;
-    ff_config.learning_rate = config_.ff_learning_rate;
+    ff_config.neurons_per_layer = config_.ff_layer_width;
+    ff_config.learning_rate = static_cast<int>(config_.ff_learning_rate);
     ff_learner_ = std::make_unique<learning::ForwardForwardLearner>(ff_config);
     
     // Initialize MoE Router
-    moe::MoEConfig router_config;
+    moe::ExpertConfig router_config;
     router_config.total_experts = config_.moe_num_experts;
-    router_config.top_k = config_.moe_top_k;
-    router_config.input_dim = config_.moe_input_dim;
+    router_config.active_experts = config_.moe_top_k;
+    router_config.routing_qutrits = 16;  // Default routing qutrits
     router_ = std::make_unique<moe::MoERouter>(router_config);
     
     // Create experts
@@ -58,11 +68,6 @@ bool AutonomousTrainingPipeline::initialize_components() {
     expert_config.num_layers = 2;
     
     experts_ = create_experts(config_.moe_num_experts, expert_config);
-    
-    // Register experts with router
-    for (size_t i = 0; i < experts_.size(); ++i) {
-        router_->RegisterExpert(i, experts_[i].get());
-    }
     
     // Initialize BettiExtractor
     betti_extractor_ = std::make_unique<qgnn::BettiExtractor>(config_.betti_max_qutrits);
@@ -267,17 +272,12 @@ bool AutonomousTrainingPipeline::process_batch() {
             }
             
             // Train this expert
-            int32_t delta = experts_[expert_idx]->TrainForwardForward(
-                positive_sample, 
-                negative_sample
-            );
+            experts_[expert_idx]->TrainForwardForward(positive_sample, negative_sample);
             
             // Compute goodness for metrics
-            auto pos_output = experts_[expert_idx]->Forward(positive_sample);
-            auto neg_output = experts_[expert_idx]->Forward(negative_sample);
-            
-            uint32_t pos_goodness = experts_[expert_idx]->ComputeGoodness(pos_output);
-            uint32_t neg_goodness = experts_[expert_idx]->ComputeGoodness(neg_output);
+            uint32_t pos_goodness = experts_[expert_idx]->ComputeGoodness(positive_sample);
+            uint32_t neg_goodness = experts_[expert_idx]->ComputeGoodness(negative_sample);
+            int32_t delta = static_cast<int32_t>(pos_goodness) - static_cast<int32_t>(neg_goodness);
             
             // Accumulate metrics
             batch_pos_goodness += static_cast<float>(pos_goodness);
@@ -327,6 +327,7 @@ std::vector<ternary::Trit> AutonomousTrainingPipeline::extract_ternary_vector(
         else if constexpr (std::is_same_v<T, std::vector<float>>) {
             // Convert float vector to ternary via quantization
             result.reserve(arg.size());
+            size_t count = 0;
             for (float val : arg) {
                 // Quantize to {-1, 0, 1} based on thresholds
                 if (val > 0.33f) {
@@ -336,30 +337,8 @@ std::vector<ternary::Trit> AutonomousTrainingPipeline::extract_ternary_vector(
                 } else {
                     result.push_back(ternary::Trit::ZERO);
                 }
-            }
-        }
-        else if constexpr (std::is_same_v<T, std::vector<std::vector<float>>>) {
-            // Flatten matrix and convert
-            size_t total_elements = 0;
-            for (const auto& row : arg) {
-                total_elements += row.size();
-            }
-            result.reserve(std::min(total_elements, config_.moe_input_dim));
-            
-            size_t count = 0;
-            for (const auto& row : arg) {
-                for (float val : row) {
-                    if (count >= config_.moe_input_dim) break;
-                    if (val > 0.33f) {
-                        result.push_back(ternary::Trit::POSITIVE);
-                    } else if (val < -0.33f) {
-                        result.push_back(ternary::Trit::NEGATIVE);
-                    } else {
-                        result.push_back(ternary::Trit::ZERO);
-                    }
-                    count++;
-                }
-                if (count >= config_.moe_input_dim) break;
+                count++;
+                if (count >= static_cast<size_t>(config_.moe_input_dim)) break;
             }
         }
         else if constexpr (std::is_same_v<T, std::string_view>) {
@@ -455,19 +434,43 @@ qgnn::BettiExtractor::SimplicialComplex AutonomousTrainingPipeline::build_simpli
     auto edges = graph_tableau_->get_edges();
     
     // Add extracted edges to simplicial complex
+    // Encode vertex pairs (i, j) into TritPack5 format
+    // TritPack5 stores 5 trits in 8 bits - we use first 3 trits for i, last 2 for j (mod 3)
+    // This is a simplified encoding for Betti number computation
     for (const auto& [i, j] : edges) {
-        if (i < nodes && j < nodes) {
-            complex.add_edge(static_cast<uint32_t>(i), static_cast<uint32_t>(j));
+        if (i < nodes && j < nodes && i < 27 && j < 9) {  // Limits: 3^3=27, 3^2=9
+            ternary::TritPack5 pack{};
+            // Encode i in first 3 trits (base-3, values 0-26)
+            uint32_t ii = static_cast<uint32_t>(i);
+            pack.set(0, static_cast<ternary::Trit>(ii % 3 - 1)); ii /= 3;
+            pack.set(1, static_cast<ternary::Trit>(ii % 3 - 1)); ii /= 3;
+            pack.set(2, static_cast<ternary::Trit>(ii % 3 - 1));
+            // Encode j in next 2 trits (base-3, values 0-8)
+            uint32_t jj = static_cast<uint32_t>(j);
+            pack.set(3, static_cast<ternary::Trit>(jj % 3 - 1)); jj /= 3;
+            pack.set(4, static_cast<ternary::Trit>(jj % 3 - 1));
+            complex.edges.push_back(pack);
         }
     }
-    
+
     // If no edges found, create initial edges based on config
     if (complex.edges.empty()) {
         size_t num_edges = std::min(config_.graph_initial_edges, nodes * (nodes - 1) / 2);
         for (size_t e = 0, i = 0; e < num_edges && i < nodes; ++i) {
             for (size_t j = i + 1; j < nodes && e < num_edges; ++j, ++e) {
-                complex.add_edge(static_cast<uint32_t>(i), static_cast<uint32_t>(j));
-                // Actually add to graph_tableau as well
+                // Encode edge (i, j) into TritPack5
+                if (i < 27 && j < 9) {
+                    ternary::TritPack5 pack{};
+                    uint32_t ii = static_cast<uint32_t>(i);
+                    pack.set(0, static_cast<ternary::Trit>(ii % 3 - 1)); ii /= 3;
+                    pack.set(1, static_cast<ternary::Trit>(ii % 3 - 1)); ii /= 3;
+                    pack.set(2, static_cast<ternary::Trit>(ii % 3 - 1));
+                    uint32_t jj = static_cast<uint32_t>(j);
+                    pack.set(3, static_cast<ternary::Trit>(jj % 3 - 1)); jj /= 3;
+                    pack.set(4, static_cast<ternary::Trit>(jj % 3 - 1));
+                    complex.edges.push_back(pack);
+                }
+                // Also add to graph_tableau
                 graph_tableau_->add_edge(i, j);
             }
         }

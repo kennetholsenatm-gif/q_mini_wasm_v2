@@ -9,6 +9,7 @@
 #include <mutex>
 #include "../ternary/trit.hpp"
 #include "../learning/forward_forward.hpp"
+#include "../qgnn/fast_betti_estimator.hpp"
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -36,7 +37,14 @@ struct DynamicExpert {
     // Forward-Forward learner
     std::unique_ptr<learning::ForwardForwardLearner> learner;
     
+    // Config storage for lazy initialization
+    learning::FFConfig learner_config_;
+    bool learner_initialized_;
+    
     DynamicExpert(size_t id_, const learning::FFConfig& config);
+    
+    // Lazy initialization - creates learner only when first used
+    void ensure_learner_initialized();
     
     double average_goodness() const {
         return activation_count > 0 ? accumulated_goodness / activation_count : 0.0;
@@ -225,6 +233,12 @@ public:
     };
     TopologyStats get_stats() const;
     
+    /**
+     * @brief Export topology as JSON for visualization
+     * Returns nodes (experts) and edges (connections) for D3.js/Canvas rendering
+     */
+    std::string export_topology_json() const;
+    
 private:
     Config config_;
     learning::FFConfig learner_config_;
@@ -246,6 +260,10 @@ private:
     
     // Centroid index for fast nearest-neighbor lookup (simplified: linear scan)
     std::vector<std::pair<size_t, std::vector<double>>> centroids_cache_;
+    
+    // Fast Betti estimation for 64+ experts (Chebyshev polynomial + Monte Carlo)
+    // Falls back to exact extraction for smaller graphs
+    q::qgnn::HybridBettiExtractor hybrid_betti_extractor_;
     
     // Helpers
     double centroid_distance(const std::vector<double>& a, const std::vector<double>& b);
