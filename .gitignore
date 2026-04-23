@@ -426,7 +426,7 @@ q_mini_wasm_v2/build_final/
 q_mini_wasm_v2/build_clean/
 
 cmd/qminiwasm/qminiwasm.exe
-cmd/qminiwasm/*.dll
+cmd/*.dll
 cmd/qminiwasm/*.log
 cmd/qminiwasm/*.exe~
 cmd/libq_training.a
