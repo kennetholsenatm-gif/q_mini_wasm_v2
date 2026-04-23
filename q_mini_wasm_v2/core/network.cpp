@@ -33,7 +33,7 @@ TernaryNeuralNetwork::TernaryNeuralNetwork(const NetworkConfig& config)
     expert_config_.num_layers = config.num_layers;
     expert_config_.neurons_per_layer = config.neurons_per_layer;
     expert_config_.learning_rate_shift = static_cast<int>(config.learning_rate_shift);
-    expert_config_.sparsity = 0.05f;  // 5% tropical sparse edges
+    expert_config_.sparsity_bps = 500;  // 5% = 500 basis points tropical sparse edges
     expert_config_.lazy_init = true;  // create weights only on first use
     // Resize to total_experts slots, but all empty (lazy init)
     experts_.resize(config.total_experts);

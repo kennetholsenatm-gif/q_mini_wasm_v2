@@ -627,6 +627,36 @@
 <body>
     <div class="conn-banner" id="conn-banner">Disconnected from server - retrying...</div>
     
+    <!-- Debug Panel - Visible MCP Error Log -->
+    <div style="position:fixed; bottom:0; right:0; width:400px; z-index:10000;">
+        <div style="background:#333; padding:5px; font-weight:bold; color:#fff; display:flex; justify-content:space-between; align-items:center; border:1px solid #555; border-bottom:none;">
+            <span>Debug Log (MCP)</span>
+            <button onclick="downloadDebugLog()" style="font-size:10px; padding:2px 8px; cursor:pointer;">Save Log</button>
+        </div>
+        <div id="debug-panel" style="height:180px; background:#1a1a1a; border:1px solid #333; overflow:auto; font-family:monospace; font-size:11px; color:#0f0;">
+        </div>
+    </div>
+    <script>
+        window.debugLogEntries = [];
+        function addDebugLogEntry(msg, color='#0f0') {
+            const debugDiv = document.getElementById('debug-panel');
+            const entry = {time: new Date().toLocaleTimeString(), msg: msg, color: color};
+            window.debugLogEntries.push(entry);
+            if (debugDiv) {
+                debugDiv.innerHTML += `<div style="color:${color}">[${entry.time}] ${msg}</div>`;
+                debugDiv.scrollTop = debugDiv.scrollHeight;
+            }
+        }
+        function downloadDebugLog() {
+            const text = window.debugLogEntries.map(e => `[${e.time}] ${e.msg}`).join('\n');
+            const blob = new Blob([text], {type: 'text/plain'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `debug_log_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`;
+            a.click();
+        }
+    </script>
+    
     <div class="header">
         <h1>Q-Mini-WASM-v2 Production Control Plane</h1>
         <div class="status-bar">
@@ -1365,29 +1395,41 @@
         const MCP_BASE_URL = 'http://localhost:9090';
         
         async function callMCP(method, params = {}) {
+            const requestId = Date.now().toString();
+            console.log(`[MCP] Request ${requestId}: ${method}`, params);
             try {
                 const response = await fetch(`${MCP_BASE_URL}/mcp`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        id: Date.now().toString(),
+                        id: requestId,
                         method: method,
                         params: params
                     })
                 });
                 
                 if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`[MCP] Response ${requestId}: HTTP ${response.status} - ${errorText}`);
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const data = await response.json();
+                console.log(`[MCP] Response ${requestId}:`, data);
+                
+                // Log to visible debug panel
+                const color = data.error ? 'red' : (data.result ? '#0f0' : '#ff0');
+                addDebugLogEntry(`${method}: ${data.error ? 'ERROR' : 'OK'}`, color);
                 
                 if (data.error) {
+                    console.error(`[MCP] Error ${requestId}:`, data.error);
                     throw new Error(data.error.message || 'Unknown error');
                 }
                 
                 return data.result;
             } catch (err) {
+                console.error(`[MCP] Exception ${requestId}:`, err);
+                addDebugLogEntry(`${method}: ${err.message}`, 'red');
                 logError('MCP', err.message);
                 throw err;
             }
@@ -1830,6 +1872,8 @@ lean = ${getBool('cfg-api-lean')}`;
         // ============================================
         
         async function startTraining() {
+            console.log('[Training] startTraining() called');
+            addDebugLogEntry('Button clicked!', '#0ff');
             try {
                 document.getElementById('btn-start-training').disabled = true;
                 document.getElementById('btn-stop-training').disabled = false;
@@ -1842,20 +1886,20 @@ lean = ${getBool('cfg-api-lean')}`;
                 const continuousMode = document.getElementById('cfg-continuous-mode').checked;
                 const dataAccumulation = document.getElementById('cfg-data-accumulation').checked;
                 
-                // Check data acquisition status first
+                // Check for real training data (files on disk)
                 const acqStatus = await callMCP('wui_get_acquisition_status', {});
-                const hasData = acqStatus && (acqStatus.items_fetched > 0 || acqStatus.sources_done > 0);
+                const hasDataFiles = acqStatus && acqStatus.data_files > 0;
+                const hasAcquiredData = acqStatus && (acqStatus.items_fetched > 0 || acqStatus.sources_done > 0);
                 
-                if (!hasData) {
-                    addLogEntry('training-logs', `[DATA] No training data available - run data acquisition first`, 'warn');
-                    logWarn('Training', 'No data available. Click "Acquire Data" button in Training Data Pipeline section.');
-                    document.getElementById('btn-start-training').disabled = false;
-                    document.getElementById('btn-stop-training').disabled = true;
-                    document.getElementById('btn-pause-training').disabled = true;
-                    return;
+                if (hasDataFiles) {
+                    addLogEntry('training-logs', `[DATA] Training with ${acqStatus.data_files} data files from ${acqStatus.data_path}`, 'info');
+                } else if (hasAcquiredData) {
+                    addLogEntry('training-logs', `[DATA] Training with ${acqStatus.items_fetched} acquired items`, 'info');
+                } else {
+                    addLogEntry('training-logs', `[DATA] ERROR: No training data found. Add .txt files to: ${acqStatus?.data_path || 'C:\\q_mini_data\\datasets\\acquired\\'}`, 'error');
+                    logError('Training', 'Cannot start: No training data available');
+                    return;  // Stop - training requires real data
                 }
-                
-                addLogEntry('training-logs', `[DATA] Training with ${acqStatus.items_fetched} items from ${acqStatus.sources_done} sources`, 'info');
                 
                 // If continuous mode and data accumulation enabled, set up auto-refresh
                 if (continuousMode && dataAccumulation) {
@@ -1863,11 +1907,15 @@ lean = ${getBool('cfg-api-lean')}`;
                 }
                 
                 // First init pipeline
+                console.log('[Training] Calling wui_init_training_pipeline...');
+                addDebugLogEntry('Init pipeline starting...', '#ff0');
+                
                 const initResult = await callMCP('wui_init_training_pipeline', {
                     epochs: epochs,
                     batch_size: batchSize,
                     num_experts: numExperts
                 });
+                console.log('[Training] Init result:', initResult);
                 
                 if (initResult && initResult.message) {
                     logInfo('Training', initResult.message);

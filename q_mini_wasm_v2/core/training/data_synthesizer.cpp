@@ -1,4 +1,5 @@
 #include "data_synthesizer.hpp"
+#include "data_acquisition.hpp"
 #include <algorithm>
 #include <random>
 #include <chrono>
@@ -8,6 +9,8 @@
 #include <cstring>
 #include <iostream>
 #include <unordered_set>
+#include <cstdlib>  // getenv
+#include <filesystem>
 
 // HTTP client support - requires libcurl or similar
 // For production: link with -lcurl
@@ -60,6 +63,12 @@ void ThreadPool::wait_for_completion() {
 // ============================================================================
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -279,10 +288,13 @@ private:
 };
 
 /**
- * @brief Parse simple JSON array of numbers
+ * @brief Parse simple JSON array of numbers to fixed-point int32_t
+ * TROPICAL_SCALE = 1000 for fixed-point representation
  */
-std::vector<float> parse_json_array(const std::string& json) {
-    std::vector<float> result;
+static constexpr int32_t TROPICAL_SCALE = 1000;
+
+std::vector<int32_t> parse_json_array_fixed(const std::string& json) {
+    std::vector<int32_t> result;
     
     // Simple parser for [1.0, 2.0, 3.0] format
     size_t start = json.find('[');
@@ -303,7 +315,10 @@ std::vector<float> parse_json_array(const std::string& json) {
         
         if (!token.empty()) {
             try {
-                result.push_back(std::stof(token));
+                float val = std::stof(token);
+                // Convert to fixed-point with TROPICAL_SCALE
+                int32_t fixed_val = static_cast<int32_t>(val * TROPICAL_SCALE);
+                result.push_back(fixed_val);
             } catch (...) {
                 // Skip invalid tokens
             }
@@ -316,6 +331,14 @@ std::vector<float> parse_json_array(const std::string& json) {
 // ============================================================================
 // API Client Implementations
 // ============================================================================
+
+WolframClient::WolframClient() {
+    // Load API key from environment if available
+    const char* env_key = std::getenv("WOLFRAM_API_KEY");
+    if (env_key) {
+        api_key_ = env_key;
+    }
+}
 
 std::optional<ApiPayload> WolframClient::query(std::string_view endpoint, 
                                                 std::string_view params) {
@@ -353,11 +376,11 @@ std::optional<ApiPayload> WolframClient::query(std::string_view endpoint,
         return std::nullopt;
     }
     
-    // Parse response - extract numerical values
-    auto result = parse_json_array(response.body);
+    // Parse response - extract numerical values to fixed-point
+    auto result = parse_json_array_fixed(response.body);
     if (result.empty()) {
         // If no JSON array found, extract numbers from text
-        std::vector<float> numbers;
+        std::vector<int32_t> numbers;
         std::stringstream ss(response.body);
         std::string token;
         while (ss >> token) {
@@ -365,7 +388,8 @@ std::optional<ApiPayload> WolframClient::query(std::string_view endpoint,
                 size_t pos;
                 float val = std::stof(token, &pos);
                 if (pos == token.length()) {
-                    numbers.push_back(val);
+                    // Convert to fixed-point
+                    numbers.push_back(static_cast<int32_t>(val * TROPICAL_SCALE));
                 }
             } catch (...) {}
         }
@@ -374,7 +398,7 @@ std::optional<ApiPayload> WolframClient::query(std::string_view endpoint,
     
     // Ensure we have some data
     if (result.empty()) {
-        result.push_back(0.0f);
+        result.push_back(0);
     }
     
     last_query_time_ = std::chrono::steady_clock::now();
@@ -414,11 +438,11 @@ std::optional<ApiPayload> PubChemClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 8000);
     
-    std::vector<float> molecular_data;
+    std::vector<int32_t> molecular_data;
     
     if (response.success && !response.body.empty()) {
         // Try to parse molecular properties from JSON
-        auto parsed = parse_json_array(response.body);
+        auto parsed = parse_json_array_fixed(response.body);
         if (!parsed.empty()) {
             molecular_data = parsed;
         }
@@ -468,11 +492,11 @@ std::optional<ApiPayload> OeisClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 5000);
     
-    std::vector<float> sequence;
+    std::vector<int32_t> sequence;
     
     if (response.success && !response.body.empty()) {
         // Try to parse sequence from JSON
-        auto parsed = parse_json_array(response.body);
+        auto parsed = parse_json_array_fixed(response.body);
         if (!parsed.empty()) {
             sequence = parsed;
         }
@@ -504,12 +528,12 @@ ApiPayload OeisClient::perturb_sequence(const ApiPayload& positive) {
     auto result = positive;
     thread_local std::mt19937 rng(std::random_device{}());
     
-    if (std::holds_alternative<std::vector<float>>(result)) {
-        auto& seq = std::get<std::vector<float>>(result);
+    if (std::holds_alternative<std::vector<int32_t>>(result)) {
+        auto& seq = std::get<std::vector<int32_t>>(result);
         if (!seq.empty()) {
             std::uniform_int_distribution<size_t> dist(0, seq.size() - 1);
             size_t pos = dist(rng);
-            seq[pos] = static_cast<float>(dist(rng) * 2);  // Random perturbation
+            seq[pos] = static_cast<int32_t>(dist(rng) % 2000) - 1000;  // Random perturbation (fixed-point)
         }
     }
     
@@ -535,13 +559,15 @@ std::optional<ApiPayload> WikidataClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 10000);
     
-    std::vector<float> triple_data;
+    std::vector<int32_t> triple_data;
     
     if (response.success && !response.body.empty()) {
-        // Parse RDF triple structure - extract entity IDs as floats
-        // This is a simplified representation
+        // Parse RDF triple structure - extract entity IDs as fixed-point
+        // This is a simplified representation (scale: TROPICAL_SCALE)
         for (size_t i = 0; i < response.body.size() && triple_data.size() < 64; ++i) {
-            triple_data.push_back(static_cast<float>(response.body[i] % 256) / 128.0f - 1.0f);
+            // Convert byte to fixed-point range [-1000, 1000]
+            int32_t val = static_cast<int32_t>((response.body[i] % 256) - 128) * 8;
+            triple_data.push_back(val);
         }
     }
     
@@ -567,8 +593,8 @@ ApiPayload WikidataClient::perturb_triples(const ApiPayload& positive) {
     auto result = positive;
     thread_local std::mt19937 rng(std::random_device{}());
     
-    if (std::holds_alternative<std::vector<float>>(result)) {
-        auto& triples = std::get<std::vector<float>>(result);
+    if (std::holds_alternative<std::vector<int32_t>>(result)) {
+        auto& triples = std::get<std::vector<int32_t>>(result);
         if (!triples.empty()) {
             // Swap random entity values to create false but plausible triples
             std::uniform_int_distribution<size_t> dist(0, triples.size() - 1);
@@ -614,14 +640,16 @@ std::optional<ApiPayload> ArxivClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 8000);
     
-    std::vector<float> embedding;
+    std::vector<int32_t> embedding;
     
     if (response.success && !response.body.empty()) {
-        // Convert abstract text to numerical embedding
-        // Simple bag-of-words style encoding
+        // Convert abstract text to numerical embedding (fixed-point)
+        // Simple bag-of-words style encoding (scale: TROPICAL_SCALE)
         for (size_t i = 0; i < response.body.size() && embedding.size() < 256; ++i) {
             if (std::isalpha(response.body[i])) {
-                embedding.push_back(static_cast<float>(response.body[i]) / 128.0f - 1.0f);
+                // Convert to fixed-point: (char_val / 128.0 - 1.0) * 1000
+                int32_t val = static_cast<int32_t>((response.body[i] - 128) * 8);
+                embedding.push_back(val);
             }
         }
     }
@@ -648,8 +676,8 @@ ApiPayload ArxivClient::perturb_scientific(const ApiPayload& positive) {
     auto result = positive;
     thread_local std::mt19937 rng(std::random_device{}());
     
-    if (std::holds_alternative<std::vector<float>>(result)) {
-        auto& embedding = std::get<std::vector<float>>(result);
+    if (std::holds_alternative<std::vector<int32_t>>(result)) {
+        auto& embedding = std::get<std::vector<int32_t>>(result);
         if (!embedding.empty()) {
             // Invert values to simulate semantic negation
             for (auto& val : embedding) {
@@ -694,11 +722,11 @@ std::optional<ApiPayload> NasaExoplanetClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 10000);
     
-    std::vector<float> light_curve;
+    std::vector<int32_t> light_curve;
     
     if (response.success && !response.body.empty()) {
         // Parse photometric data points
-        auto parsed = parse_json_array(response.body);
+        auto parsed = parse_json_array_fixed(response.body);
         if (!parsed.empty()) {
             light_curve = parsed;
         }
@@ -726,17 +754,17 @@ ApiPayload NasaExoplanetClient::perturb_transit(const ApiPayload& positive) {
     auto result = positive;
     thread_local std::mt19937 rng(std::random_device{}());
     
-    if (std::holds_alternative<std::vector<float>>(result)) {
-        auto& light_curve = std::get<std::vector<float>>(result);
+    if (std::holds_alternative<std::vector<int32_t>>(result)) {
+        auto& light_curve = std::get<std::vector<int32_t>>(result);
         if (!light_curve.empty()) {
             std::uniform_int_distribution<size_t> pos_dist(0, light_curve.size() - 1);
-            std::uniform_real_distribution<float> noise_dist(-0.5f, 0.5f);
+            std::uniform_int_distribution<int32_t> noise_dist(-500, 500);  // Fixed-point noise
             
             // Inject irregular dips that don't correspond to Keplerian orbits
             size_t num_anomalies = light_curve.size() / 10;  // 10% anomalies
             for (size_t i = 0; i < num_anomalies; ++i) {
                 size_t pos = pos_dist(rng);
-                light_curve[pos] += noise_dist(rng);  // Add non-physical noise
+                light_curve[pos] += noise_dist(rng);  // Add non-physical noise (fixed-point)
             }
         }
     }
@@ -765,11 +793,11 @@ std::optional<ApiPayload> PdbClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 8000);
     
-    std::vector<float> coordinates;
+    std::vector<int32_t> coordinates;
     
     if (response.success && !response.body.empty()) {
         // Parse 3D coordinate data
-        auto parsed = parse_json_array(response.body);
+        auto parsed = parse_json_array_fixed(response.body);
         if (!parsed.empty()) {
             coordinates = parsed;
         }
@@ -797,15 +825,15 @@ ApiPayload PdbClient::perturb_coordinates(const ApiPayload& positive) {
     auto result = positive;
     thread_local std::mt19937 rng(std::random_device{}());
     
-    if (std::holds_alternative<std::vector<float>>(result)) {
-        auto& coords = std::get<std::vector<float>>(result);
+    if (std::holds_alternative<std::vector<int32_t>>(result)) {
+        auto& coords = std::get<std::vector<int32_t>>(result);
         // Process as 3D coordinates (x,y,z triplets)
         if (coords.size() >= 3) {
-            std::uniform_real_distribution<float> noise_dist(-2.0f, 2.0f);
+            std::uniform_int_distribution<int32_t> noise_dist(-2000, 2000);  // Fixed-point noise
             
             // Apply random drift to each coordinate
             for (auto& coord : coords) {
-                coord += noise_dist(rng);  // Add significant drift
+                coord += noise_dist(rng);  // Add significant drift (fixed-point)
             }
         }
     }
@@ -816,6 +844,14 @@ ApiPayload PdbClient::perturb_coordinates(const ApiPayload& positive) {
 // ============================================================================
 // GitHub API Client
 // ============================================================================
+
+GitHubClient::GitHubClient() {
+    // Load optional API key from environment for higher rate limits
+    const char* env_key = std::getenv("GITHUB_API_KEY");
+    if (env_key) {
+        api_key_ = env_key;
+    }
+}
 
 std::optional<ApiPayload> GitHubClient::query(std::string_view endpoint,
                                               std::string_view params) {
@@ -836,15 +872,15 @@ std::optional<ApiPayload> GitHubClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 10000);
     
-    std::vector<float> code_embedding;
+    std::vector<int32_t> code_embedding;
     
     if (response.success && !response.body.empty()) {
-        // Parse code content - convert to embedding
-        // Extract code characters as normalized values
+        // Parse code content - convert to fixed-point embedding
+        // Extract code characters as normalized fixed-point values
         for (size_t i = 0; i < response.body.size() && code_embedding.size() < 512; ++i) {
             char c = response.body[i];
-            // Normalize ASCII to [-1, 1] range
-            float normalized = (static_cast<float>(c) - 128.0f) / 128.0f;
+            // Normalize ASCII to fixed-point [-1000, 1000] range
+            int32_t normalized = static_cast<int32_t>((static_cast<int>(c) - 128) * 8);
             code_embedding.push_back(normalized);
         }
     }
@@ -872,8 +908,8 @@ ApiPayload GitHubClient::perturb_code(const ApiPayload& positive) {
     auto result = positive;
     thread_local std::mt19937 rng(std::random_device{}());
     
-    if (std::holds_alternative<std::vector<float>>(result)) {
-        auto& code_emb = std::get<std::vector<float>>(result);
+    if (std::holds_alternative<std::vector<int32_t>>(result)) {
+        auto& code_emb = std::get<std::vector<int32_t>>(result);
         if (!code_emb.empty()) {
             // Simulate code corruption by reordering/swapping segments
             std::uniform_int_distribution<size_t> dist(0, code_emb.size() - 1);
@@ -881,7 +917,8 @@ ApiPayload GitHubClient::perturb_code(const ApiPayload& positive) {
             size_t pos2 = dist(rng);
             
             // Swap code segments (simulates moving operations out of order)
-            if (pos2 > pos1 + 10) {
+            // MSVC debug STL asserts when iterator goes past end.
+            if (pos2 > pos1 + 10 && pos1 + 5 <= code_emb.size() && pos2 + 5 <= code_emb.size()) {
                 std::swap_ranges(code_emb.begin() + pos1, code_emb.begin() + pos1 + 5,
                                code_emb.begin() + pos2);
             }
@@ -914,11 +951,11 @@ std::optional<ApiPayload> LeanClient::query(std::string_view endpoint,
     // Make HTTP request
     auto response = SimpleHttpClient::get(url, 15000);
     
-    std::vector<float> proof_state;
+    std::vector<int32_t> proof_state;
     
     if (response.success && !response.body.empty()) {
         // Parse tactic states and proof steps
-        auto parsed = parse_json_array(response.body);
+        auto parsed = parse_json_array_fixed(response.body);
         if (!parsed.empty()) {
             proof_state = parsed;
         }
@@ -947,15 +984,15 @@ ApiPayload LeanClient::perturb_proof(const ApiPayload& positive) {
     auto result = positive;
     thread_local std::mt19937 rng(std::random_device{}());
     
-    if (std::holds_alternative<std::vector<float>>(result)) {
-        auto& proof = std::get<std::vector<float>>(result);
+    if (std::holds_alternative<std::vector<int32_t>>(result)) {
+        auto& proof = std::get<std::vector<int32_t>>(result);
         if (!proof.empty()) {
             // Perturb proof by corrupting intermediate steps
             std::uniform_int_distribution<size_t> dist(0, proof.size() - 1);
             size_t pos = dist(rng);
             
-            // Introduce logical error while maintaining structure
-            proof[pos] = static_cast<float>(dist(rng) % 100) / 50.0f - 1.0f;
+            // Introduce logical error while maintaining structure (fixed-point)
+            proof[pos] = static_cast<int32_t>((dist(rng) % 200) - 100) * 10;
         }
     }
     
@@ -992,16 +1029,330 @@ void DataSynthesizer::initialize_apis() {
     clients_.push_back(std::make_unique<GbifClient>());            // 2B+ biodiversity records
 }
 
+bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
+    local_samples_.clear();
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir_path, ec)) {
+        std::cerr << "[DataSynthesizer] Not a directory: " << dir_path << std::endl;
+        return false;
+    }
+    constexpr size_t kMaxLines = 100000;
+    constexpr size_t kMaxLineFeatures = 512;
+    size_t loaded = 0;
+
+    for (const auto& entry : std::filesystem::directory_iterator(dir_path, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+        const std::string ext = entry.path().extension().string();
+        if (ext != ".txt") {
+            continue;
+        }
+        std::ifstream file(entry.path());
+        if (!file.is_open()) {
+            continue;
+        }
+        std::string line;
+        while (std::getline(file, line) && loaded < kMaxLines) {
+            if (line.empty() || line[0] == '#') {
+                continue;
+            }
+            std::vector<int32_t> values;
+            values.reserve(std::min(line.size(), kMaxLineFeatures));
+            for (unsigned char ch : line) {
+                if (values.size() >= kMaxLineFeatures) {
+                    break;
+                }
+                values.push_back(static_cast<int32_t>(ch));
+            }
+            if (values.empty()) {
+                continue;
+            }
+            local_samples_.push_back(TrainingSample{
+                std::move(values), static_cast<Trit>(1), "local_dir", "local_text"});
+            ++loaded;
+        }
+    }
+
+    if (loaded == 0) {
+        std::cerr << "[DataSynthesizer] No .txt lines loaded from directory: " << dir_path << std::endl;
+        return false;
+    }
+
+    data_path_ = dir_path;
+    has_local_data_ = true;
+    std::cout << "[DataSynthesizer] Loaded " << loaded << " text lines from directory: " << dir_path << std::endl;
+
+    std::mt19937 rng(42);
+    const size_t original_count = local_samples_.size();
+    for (size_t i = 0; i < original_count; ++i) {
+        auto neg_sample = local_samples_[i];
+        neg_sample.label = static_cast<Trit>(-1);
+        if (std::holds_alternative<std::vector<int32_t>>(neg_sample.data)) {
+            auto& vec = std::get<std::vector<int32_t>>(neg_sample.data);
+            if (!vec.empty()) {
+                std::uniform_int_distribution<size_t> pos_dist(0, vec.size() - 1);
+                std::uniform_int_distribution<int> val_dist(-1000, 1000);
+                for (int j = 0; j < 3 && j < static_cast<int>(vec.size()); ++j) {
+                    vec[pos_dist(rng)] = val_dist(rng);
+                }
+            }
+        }
+        local_samples_.push_back(std::move(neg_sample));
+    }
+    std::cout << "[DataSynthesizer] With negatives, total samples: " << local_samples_.size() << std::endl;
+    return true;
+}
+
+bool DataSynthesizer::use_config(const std::string& config_path) {
+    std::cout << "[DataSynthesizer] Loading data sources from config: " << config_path << std::endl;
+    
+    acquisition_mgr_ = std::make_unique<DataAcquisitionManager>();
+    
+    if (!acquisition_mgr_->load_sources(config_path)) {
+        std::cerr << "[DataSynthesizer] Failed to load config from: " << config_path << std::endl;
+        acquisition_mgr_.reset();
+        return false;
+    }
+    
+    use_config_sources_ = true;
+    std::cout << "[DataSynthesizer] Config loaded successfully - using configured data sources" << std::endl;
+    std::cout << "[DataSynthesizer] Skipping hardcoded API clients" << std::endl;
+    return true;
+}
+
+bool DataSynthesizer::load_local_data(const std::string& data_path) {
+    std::lock_guard<std::mutex> lock(local_data_mutex_);
+    
+    if (data_path.empty()) {
+        std::cerr << "[DataSynthesizer] Error: Empty data path" << std::endl;
+        return false;
+    }
+    
+    // Check if path is a directory
+    if (std::filesystem::is_directory(data_path)) {
+        std::cout << "[DataSynthesizer] Path is directory, loading from: " << data_path << std::endl;
+        std::cout << "[DataSynthesizer] Starting directory iteration..." << std::endl;
+        return load_from_directory(data_path);
+    }
+    
+    // Clear existing local samples
+    local_samples_.clear();
+    std::ifstream file(data_path);
+    std::cout << "[DataSynthesizer] Loading local data from: " << data_path << std::endl;
+
+    // Try to open the file
+    if (!file.is_open()) {
+        std::cerr << "[DataSynthesizer] Failed to open: " << data_path << std::endl;
+        return false;
+    }
+
+    // Parse JSONL format (one JSON object per line)
+    std::string line;
+    size_t line_num = 0;
+    size_t loaded = 0;
+
+    while (std::getline(file, line)) {
+        line_num++;
+        if (line.empty() || line[0] == '#') continue;  // Skip empty lines and comments
+        
+        // Simple parsing: look for "input" and "label" fields
+        // Format: {"input": [1, 0, -1, ...], "label": 1}
+        size_t input_pos = line.find("\"input\"");
+        if (input_pos == std::string::npos) continue;
+        
+        // Extract numeric array between brackets
+        size_t arr_start = line.find('[', input_pos);
+        size_t arr_end = line.find(']', arr_start);
+        if (arr_start == std::string::npos || arr_end == std::string::npos) continue;
+        
+        std::string arr_str = line.substr(arr_start + 1, arr_end - arr_start - 1);
+        std::vector<int32_t> values;
+        std::stringstream ss(arr_str);
+        std::string val;
+        
+        while (std::getline(ss, val, ',')) {
+            // Trim whitespace
+            val.erase(0, val.find_first_not_of(" \t"));
+            val.erase(val.find_last_not_of(" \t") + 1);
+            if (!val.empty()) {
+                try {
+                    values.push_back(std::stoi(val));
+                } catch (...) {
+                    // Skip invalid values
+                }
+            }
+        }
+        
+        if (!values.empty()) {
+            // Create training sample with positive label by default
+            Trit label = 1;
+            // Try to extract label if present
+            size_t label_pos = line.find("\"label\"");
+            if (label_pos != std::string::npos) {
+                size_t colon = line.find(':', label_pos);
+                if (colon != std::string::npos) {
+                    std::string label_str = line.substr(colon + 1);
+                    // Find next comma or brace
+                    size_t end = label_str.find_first_of(",}");
+                    if (end != std::string::npos) {
+                        label_str = label_str.substr(0, end);
+                        // Trim
+                        label_str.erase(0, label_str.find_first_not_of(" \t"));
+                        label_str.erase(label_str.find_last_not_of(" \t") + 1);
+                        try {
+                            label = static_cast<Trit>(std::stoi(label_str));
+                        } catch (...) {}
+                    }
+                }
+            }
+            
+            local_samples_.push_back(TrainingSample{values, label, "local_file", "local_data"});
+            loaded++;
+        }
+        
+        if (loaded >= 10000) break;  // Limit to 10k samples for memory
+    }
+    
+    file.close();
+    
+    if (loaded > 0) {
+        data_path_ = data_path;
+        has_local_data_ = true;
+        std::cout << "[DataSynthesizer] Loaded " << loaded << " samples from local file" << std::endl;
+        
+        // Generate negative samples by perturbing positive ones
+        std::mt19937 rng(42);
+        size_t original_count = local_samples_.size();
+        for (size_t i = 0; i < original_count; ++i) {
+            if (local_samples_[i].label == 1) {
+                // Create negative sample by corrupting values
+                auto neg_sample = local_samples_[i];
+                neg_sample.label = -1;
+                
+                if (std::holds_alternative<std::vector<int32_t>>(neg_sample.data)) {
+                    auto& vec = std::get<std::vector<int32_t>>(neg_sample.data);
+                    if (!vec.empty()) {
+                        // Flip random values
+                        std::uniform_int_distribution<size_t> pos_dist(0, vec.size() - 1);
+                        std::uniform_int_distribution<int> val_dist(-1000, 1000);
+                        for (int j = 0; j < 3 && j < (int)vec.size(); ++j) {
+                            vec[pos_dist(rng)] = val_dist(rng);
+                        }
+                    }
+                }
+                
+                local_samples_.push_back(neg_sample);
+            }
+        }
+        
+        std::cout << "[DataSynthesizer] Generated " << (local_samples_.size() - original_count) 
+                  << " negative samples, total: " << local_samples_.size() << std::endl;
+        return true;
+    }
+    
+    std::cerr << "[DataSynthesizer] No valid samples found in: " << data_path << std::endl;
+    return false;
+}
+
 void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_threads) {
     if (running_) return;
     running_ = true;
     
+    // If local data is loaded, skip API initialization
+    if (has_local_data_) {
+        std::cout << "[DataSynthesizer] Using local data from: " << data_path_ << std::endl;
+        std::cout << "[DataSynthesizer] Samples available: " << local_samples_.size() << std::endl;
+        return;  // Local data is already loaded, no threads needed
+    }
+    
+    // If config-based sources are loaded, use DataAcquisitionManager
+    if (use_config_sources_ && acquisition_mgr_) {
+        std::cout << "[DataSynthesizer] Using configured data sources from data_sources.toml" << std::endl;
+        
+        // Start the acquisition manager
+        if (!acquisition_mgr_->start()) {
+            std::cerr << "[DataSynthesizer] Failed to start DataAcquisitionManager" << std::endl;
+            running_ = false;
+            return;
+        }
+        
+        std::cout << "[DataSynthesizer] DataAcquisitionManager started" << std::endl;
+        
+        // Start a thread to fetch from acquisition manager and feed to train_queue_
+        acquisition_pool_ = std::make_unique<ThreadPool>(1);
+        acquisition_pool_->enqueue([this] {
+            config_acquisition_worker();
+        });
+        
+        // Start perturbation workers
+        perturbation_pool_ = std::make_unique<ThreadPool>(perturbation_threads);
+        for (size_t i = 0; i < perturbation_threads; ++i) {
+            perturbation_pool_->enqueue([this] {
+                perturbation_worker();
+            });
+        }
+        return;
+    }
+    
+    // Fall back to legacy hardcoded API clients
     initialize_apis();
+    
+    // Log all clients and their configuration status
+    std::cout << "[DataSynthesizer] Initializing API clients..." << std::endl;
+    size_t configured_count = 0;
+    for (auto& client : clients_) {
+        bool configured = client->is_configured();
+        if (configured) configured_count++;
+        
+        // Identify client type for logging
+        const char* name = "unknown";
+        if (dynamic_cast<WolframClient*>(client.get())) name = "WolframAlpha";
+        else if (dynamic_cast<PubChemClient*>(client.get())) name = "PubChem";
+        else if (dynamic_cast<OeisClient*>(client.get())) name = "OEIS";
+        else if (dynamic_cast<WikidataClient*>(client.get())) name = "Wikidata";
+        else if (dynamic_cast<ArxivClient*>(client.get())) name = "arXiv";
+        else if (dynamic_cast<NasaExoplanetClient*>(client.get())) name = "NASA_Exoplanet";
+        else if (dynamic_cast<PdbClient*>(client.get())) name = "PDB";
+        else if (dynamic_cast<GitHubClient*>(client.get())) name = "GitHub";
+        else if (dynamic_cast<LeanClient*>(client.get())) name = "Lean";
+        else if (dynamic_cast<OpenAlexClient*>(client.get())) name = "OpenAlex";
+        else if (dynamic_cast<GutendexClient*>(client.get())) name = "Gutendex";
+        else if (dynamic_cast<UsgsEarthquakeClient*>(client.get())) name = "USGS_Earthquake";
+        else if (dynamic_cast<SpaceXClient*>(client.get())) name = "SpaceX";
+        else if (dynamic_cast<ChroniclingAmericaClient*>(client.get())) name = "ChroniclingAmerica";
+        else if (dynamic_cast<GbifClient*>(client.get())) name = "GBIF";
+        
+        std::cout << "[DataSynthesizer]   " << name << ": " 
+                  << (configured ? "CONFIGURED" : "NOT_CONFIGURED") << std::endl;
+    }
+    
+    // Filter to only configured clients - skip APIs without keys/credentials
+    size_t total_clients = clients_.size();
+    clients_.erase(
+        std::remove_if(clients_.begin(), clients_.end(),
+            [](const std::unique_ptr<ApiClient>& c) { return !c->is_configured(); }),
+        clients_.end()
+    );
+    
+    std::cout << "[DataSynthesizer] API clients enabled: " << clients_.size() << "/" << total_clients << std::endl;
+    
+    if (clients_.empty()) {
+        std::cerr << "[DataSynthesizer] ERROR: No API clients configured!" << std::endl;
+        std::cerr << "[DataSynthesizer] Set WOLFRAM_API_KEY env var for WolframAlpha API" << std::endl;
+        std::cerr << "[DataSynthesizer] Other APIs (PubChem, OEIS, Wikidata, etc.) don't require keys" << std::endl;
+        std::cerr << "[DataSynthesizer] Check network connectivity if keyless APIs are not configured" << std::endl;
+        running_ = false;
+        return;
+    }
     
     acquisition_pool_ = std::make_unique<ThreadPool>(acquisition_threads);
     perturbation_pool_ = std::make_unique<ThreadPool>(perturbation_threads);
     
-    // Start acquisition workers
+    // Start acquisition workers ONLY for configured clients
     for (auto& client : clients_) {
         acquisition_pool_->enqueue([this, &client] {
             acquisition_worker(client.get());
@@ -1019,6 +1370,12 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
 void DataSynthesizer::stop() {
     running_ = false;
     queue_cv_.notify_all();
+    
+    // Stop config-based acquisition manager if running
+    if (acquisition_mgr_) {
+        acquisition_mgr_->stop();
+    }
+    
     acquisition_pool_.reset();
     perturbation_pool_.reset();
 }
@@ -1046,6 +1403,43 @@ DataSynthesizer::Stats DataSynthesizer::get_stats() const {
     Stats s = stats_;
     s.queue_depth = train_queue_.size();
     return s;
+}
+
+void DataSynthesizer::config_acquisition_worker() {
+    // Fetch data from configured sources via DataAcquisitionManager
+    // and feed into raw_queue_ for perturbation_worker
+    
+    while (running_) {
+        if (!acquisition_mgr_) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+        
+        // Fetch a batch from configured sources
+        auto samples = acquisition_mgr_->fetch_batch(10, 50, 100000);
+        
+        if (!samples.empty()) {
+            // Convert TrainingSample to ApiPayload and add to raw_queue_
+            for (auto& sample : samples) {
+                std::visit([this, &sample](auto&& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, std::vector<int32_t>>) {
+                        // Already in correct format
+                        std::lock_guard<std::mutex> lock(queue_mutex_);
+                        raw_queue_.push(arg);
+                        {
+                            std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                            stats_.total_acquired++;
+                        }
+                    }
+                }, sample.data);
+            }
+            queue_cv_.notify_one();
+        } else {
+            // No data available, wait a bit
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    }
 }
 
 void DataSynthesizer::acquisition_worker(ApiClient* client) {
@@ -1318,8 +1712,11 @@ void DataSynthesizer::acquisition_worker(ApiClient* client) {
             ++stats_.api_failures;
             
             // Remove failed topic from frontier to avoid requery
-            if (topic_frontier.size() > 4) {  // Keep minimum seed topics
+            // Check bounds: must have >4 topics AND current_topic_idx must be valid
+            if (topic_frontier.size() > 4 && current_topic_idx < topic_frontier.size()) {
                 topic_frontier.erase(topic_frontier.begin() + current_topic_idx);
+                // Decrement index since we removed current element
+                if (current_topic_idx > 0) --current_topic_idx;
             }
         }
         

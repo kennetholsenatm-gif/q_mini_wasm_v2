@@ -1,4 +1,5 @@
 #include "autonomous_training_pipeline.hpp"
+#include "../gf3/gf3_types.hpp"
 #include "../moe/gf3_layers.hpp"
 #include "../moe/unified_config.hpp"
 #include "../moe/runtime_orchestrator.hpp"
@@ -33,7 +34,7 @@ bool AutonomousTrainingPipeline::initialize(const PipelineConfig& config) {
     config_ = config;
     
     if (!initialize_components()) {
-        set_state(PipelineState::ERROR);
+        set_state(PipelineState::FAILED);
         return false;
     }
     
@@ -44,20 +45,45 @@ bool AutonomousTrainingPipeline::initialize(const PipelineConfig& config) {
 bool AutonomousTrainingPipeline::initialize_components() {
     // Initialize DataSynthesizer
     synthesizer_ = std::make_unique<DataSynthesizer>();
-    synthesizer_->initialize_apis();
+    
+    // Use config-based data sources (data_sources.toml) ONLY
+    // NO fallback to hardcoded APIs - must use configured sources
+    bool config_loaded = false;
+    if (!config_.data_path.empty()) {
+        // If a specific data path is provided, use local data
+        config_loaded = synthesizer_->load_local_data(config_.data_path);
+        if (config_loaded) {
+            std::cout << "[TrainingPipeline] Using local data from: " << config_.data_path << std::endl;
+        } else {
+            std::cerr << "[TrainingPipeline] ERROR: Failed to load local data from: " << config_.data_path << std::endl;
+            return false;
+        }
+    } else {
+        const std::string& ds_path = config_.data_sources_toml_path.empty()
+            ? std::string("config/data_sources.toml")
+            : config_.data_sources_toml_path;
+        config_loaded = synthesizer_->use_config(ds_path);
+        if (config_loaded) {
+            std::cout << "[TrainingPipeline] Using configured data sources from data_sources.toml" << std::endl;
+        } else {
+            std::cerr << "[TrainingPipeline] ERROR: Failed to load data_sources.toml" << std::endl;
+            std::cerr << "[TrainingPipeline] Please configure data sources in config/data_sources.toml" << std::endl;
+            return false;  // NO FALLBACK - training cannot proceed without configured sources
+        }
+    }
     
     // Initialize Forward-Forward Learner
     learning::FFConfig ff_config;
     ff_config.num_layers = config_.ff_num_layers;
     ff_config.neurons_per_layer = config_.ff_layer_width;
-    ff_config.learning_rate = static_cast<int>(config_.ff_learning_rate);
+    ff_config.learning_rate = static_cast<int>(config_.ff_learning_rate_step);
     ff_learner_ = std::make_unique<learning::ForwardForwardLearner>(ff_config);
     
     // Initialize MoE Router
     moe::ExpertConfig router_config;
     router_config.total_experts = config_.moe_num_experts;
     router_config.active_experts = config_.moe_top_k;
-    router_config.routing_qutrits = 16;  // Default routing qutrits
+    router_config.routing_qutrits = std::max<size_t>(1u, config_.routing_qutrits);
     router_ = std::make_unique<moe::MoERouter>(router_config);
     
     // Create experts
@@ -65,7 +91,7 @@ bool AutonomousTrainingPipeline::initialize_components() {
     expert_config.input_dim = config_.moe_input_dim;
     expert_config.output_dim = config_.moe_output_dim;
     expert_config.hidden_dim = config_.moe_hidden_dim;
-    expert_config.num_layers = 2;
+    expert_config.num_layers = std::max<size_t>(1u, config_.moe_expert_internal_layers);
     
     experts_ = create_experts(config_.moe_num_experts, expert_config);
     
@@ -174,14 +200,25 @@ void AutonomousTrainingPipeline::training_loop() {
             set_state(PipelineState::TRAINING);
         }
         
-        // Process batch
-        if (!process_batch()) {
-            // Error in batch processing
-            set_state(PipelineState::ERROR);
-            break;
+        // Process batch - returns number of samples actually trained
+        size_t samples_trained = process_batch();
+        
+        if (samples_trained == 0) {
+            // No samples available - DataSynthesizer not producing data
+            // Log periodically but don't fail - APIs might recover
+            ++consecutive_empty_batches_;
+            if (consecutive_empty_batches_ % 100u == 1u) {
+                std::cerr << "[TrainingPipeline] Waiting for DataSynthesizer to produce samples... "
+                          << "(empty batches: " << consecutive_empty_batches_ << ")" << std::endl;
+            }
+            // Brief yield before retry
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;  // Retry without incrementing counters
         }
         
-        // Update batch counter
+        consecutive_empty_batches_ = 0;
+        
+        // Update batch counter only when training actually occurred
         ++current_batch_;
         
         // Topology evaluation
@@ -190,26 +227,38 @@ void AutonomousTrainingPipeline::training_loop() {
             evaluate_topology();
         }
         
-        // Checkpoint
-        if (config_.enable_checkpoints && 
-            current_batch_ % config_.checkpoint_interval == 0) {
-            checkpoint_if_needed();
-        }
-        
         // Update and emit metrics
         update_metrics();
         if (config_.enable_wui_streaming) {
             emit_metrics();
         }
         
-        // Check for epoch completion
-        if (current_batch_ >= config_.num_epochs * (config_.batch_size > 0 ? 100 : 1)) {
+        // Check for epoch completion based on samples processed
+        samples_processed_ += samples_trained;
+        if (samples_processed_ >= config_.samples_per_epoch) {
             ++current_epoch_;
+            samples_processed_ = 0;
             current_batch_ = 0;
             
+            if (config_.enable_checkpoints && config_.checkpoint_interval > 0 &&
+                (current_epoch_ % config_.checkpoint_interval) == 0) {
+                checkpoint_if_needed();
+            }
+            
             if (current_epoch_ >= config_.num_epochs) {
-                set_state(PipelineState::COMPLETE);
-                break;
+                if (config_.enable_continuous_mode) {
+                    // Continuous mode: auto-restart from epoch 1
+                    ++loop_count_;
+                    current_epoch_ = 0;
+                    current_batch_ = 0;
+                    // Log the restart
+                    printf("[CONTINUOUS] Loop %u completed. Auto-restarting training...\n", loop_count_.load());
+                    // Continue training without breaking
+                } else {
+                    // Normal mode: complete training
+                    set_state(PipelineState::COMPLETE);
+                    break;
+                }
             }
         }
         
@@ -218,35 +267,56 @@ void AutonomousTrainingPipeline::training_loop() {
     }
     
     if (state_.load() != PipelineState::COMPLETE && 
-        state_.load() != PipelineState::ERROR) {
+        state_.load() != PipelineState::FAILED) {
         set_state(PipelineState::STOPPING);
     }
 }
 
-bool AutonomousTrainingPipeline::process_batch() {
+size_t AutonomousTrainingPipeline::process_batch() {
     // Get samples from DataSynthesizer
     std::vector<TrainingSample> batch_samples;
     batch_samples.reserve(config_.batch_size);
     
+    // Timeout mechanism: max 30 seconds to acquire a full batch
+    const auto max_wait_time = std::chrono::seconds(30);
+    const auto start_time = std::chrono::steady_clock::now();
+    size_t consecutive_empty_checks = 0;
+    
     for (size_t i = 0; i < config_.batch_size; ++i) {
+        // Check for timeout
+        auto elapsed = std::chrono::steady_clock::now() - start_time;
+        if (elapsed > max_wait_time) {
+            std::cerr << "[TrainingPipeline] TIMEOUT: Failed to acquire sample " << (i + 1) 
+                      << "/" << config_.batch_size << " within 30 seconds. "
+                      << "DataSynthesizer may not be producing samples." << std::endl;
+            return 0;  // Return 0 samples trained - no progress possible
+        }
+        
         if (synthesizer_->has_sample()) {
             batch_samples.push_back(synthesizer_->get_sample());
+            consecutive_empty_checks = 0;  // Reset counter on success
         } else {
-            // Wait for samples
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            --i;  // Retry
+            // Wait for samples with exponential backoff
+            consecutive_empty_checks++;
+            auto wait_ms = std::min(10 * (1 << std::min(consecutive_empty_checks, size_t(10))), 1000);
+            std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+            --i;  // Retry this sample
         }
     }
     
     if (batch_samples.empty()) {
-        return true;  // No data yet, not an error
+        std::cerr << "[TrainingPipeline] No training samples available - DataSynthesizer queue empty" << std::endl;
+        return 0;  // Return 0 samples trained - no progress was made
     }
     
-    // Batch-level metrics accumulation
-    float batch_pos_goodness = 0.0f;
-    float batch_neg_goodness = 0.0f;
-    float batch_delta = 0.0f;
-    size_t total_routes = 0;
+    // Forward-Forward metrics (GF(3) TropicalInt - max-plus algebra)
+    using namespace q_mini_wasm_v2::core::gf3;
+    TropicalInt batch_pos_goodness = tropical::ZERO;
+    TropicalInt batch_neg_goodness = tropical::ZERO;
+    TropicalInt batch_delta = tropical::ZERO;
+    
+    // MoE metrics
+    uint32_t total_routes = 0;
     std::vector<uint32_t> expert_counts(config_.moe_num_experts, 0);
     std::vector<int32_t> expert_deltas(config_.moe_num_experts, 0);
     
@@ -279,33 +349,34 @@ bool AutonomousTrainingPipeline::process_batch() {
             uint32_t neg_goodness = experts_[expert_idx]->ComputeGoodness(negative_sample);
             int32_t delta = static_cast<int32_t>(pos_goodness) - static_cast<int32_t>(neg_goodness);
             
-            // Accumulate metrics
-            batch_pos_goodness += static_cast<float>(pos_goodness);
-            batch_neg_goodness += static_cast<float>(neg_goodness);
-            batch_delta += static_cast<float>(delta);
+            // Accumulate metrics using tropical addition (max)
+            batch_pos_goodness = tropical::add(batch_pos_goodness, static_cast<TropicalInt>(pos_goodness));
+            batch_neg_goodness = tropical::add(batch_neg_goodness, static_cast<TropicalInt>(neg_goodness));
+            batch_delta = tropical::add(batch_delta, static_cast<TropicalInt>(delta));
             expert_counts[expert_idx]++;
             expert_deltas[expert_idx] += delta;
             total_routes++;
         }
     }
     
-    // Update cached metrics
+    // Update cached metrics using tropical division
     if (total_routes > 0) {
         std::lock_guard<std::mutex> lock(metrics_mutex_);
-        cached_metrics_.ff_positive_goodness = static_cast<uint32_t>(batch_pos_goodness / total_routes);
-        cached_metrics_.ff_negative_goodness = static_cast<uint32_t>(batch_neg_goodness / total_routes);
-        cached_metrics_.ff_goodness_delta = static_cast<int32_t>(batch_delta / total_routes);
+        cached_metrics_.ff_positive_goodness = static_cast<uint32_t>(tropical::divide(batch_pos_goodness, static_cast<TropicalInt>(total_routes)));
+        cached_metrics_.ff_negative_goodness = static_cast<uint32_t>(tropical::divide(batch_neg_goodness, static_cast<TropicalInt>(total_routes)));
+        cached_metrics_.ff_goodness_delta = static_cast<int32_t>(tropical::divide(batch_delta, static_cast<TropicalInt>(total_routes)));
         cached_metrics_.ff_total_train_calls += total_routes;
         cached_metrics_.expert_utilization.resize(config_.moe_num_experts);
         cached_metrics_.expert_deltas = expert_deltas;
         
-        // Compute utilization percentages
+        // Compute utilization using tropical division (not percentage - raw count)
         for (size_t i = 0; i < config_.moe_num_experts; ++i) {
-            cached_metrics_.expert_utilization[i] = static_cast<float>(expert_counts[i]) / total_routes;
+            cached_metrics_.expert_utilization[i] = static_cast<uint32_t>(tropical::divide(static_cast<TropicalInt>(expert_counts[i]), static_cast<TropicalInt>(total_routes)));
         }
     }
     
-    return true;
+    // Return number of samples actually trained (successful routes through experts)
+    return total_routes;
 }
 
 /**
@@ -563,14 +634,14 @@ PipelineMetrics AutonomousTrainingPipeline::get_metrics() const {
     metrics.current_epoch = current_epoch_.load();
     metrics.current_batch = current_batch_.load();
     
-    // Calculate progress
+    // Calculate progress as integer percentage (0-10000 for 0.00% - 100.00% precision)
     if (config_.num_epochs > 0) {
-        float epoch_progress = static_cast<float>(current_epoch_) / config_.num_epochs * 100.0f;
-        metrics.training_progress = epoch_progress;
+        uint32_t epoch_progress = (static_cast<uint32_t>(current_epoch_) * 10000) / config_.num_epochs;
+        metrics.training_progress = epoch_progress;  // Now in basis points (0-10000)
     }
     
-    // Add status message
-    metrics.status_message = state_to_string(state_.load());
+    // Add status message with detailed DataSynthesizer health
+    std::string status = state_to_string(state_.load());
     
     // Get DataSynthesizer stats
     if (synthesizer_) {
@@ -579,7 +650,22 @@ PipelineMetrics AutonomousTrainingPipeline::get_metrics() const {
         metrics.ds_total_perturbed = ds_stats.total_perturbed;
         metrics.ds_api_failures = ds_stats.api_failures;
         metrics.ds_queue_depth = ds_stats.queue_depth;
+        
+        // Add diagnostic info to status message
+        if (ds_stats.queue_depth == 0 && state_.load() == PipelineState::TRAINING) {
+            status += " | WAITING: DataSynthesizer queue empty";
+            if (ds_stats.api_failures > 0) {
+                status += " (API failures: " + std::to_string(ds_stats.api_failures) + ")";
+            }
+        } else if (ds_stats.total_acquired == 0 && state_.load() == PipelineState::TRAINING) {
+            status += " | WAITING: No data acquired from APIs yet";
+        } else {
+            status += " | queue_depth=" + std::to_string(ds_stats.queue_depth) +
+                      " acquired=" + std::to_string(ds_stats.total_acquired);
+        }
     }
+    
+    metrics.status_message = status;
     
     return metrics;
 }
@@ -588,11 +674,20 @@ void AutonomousTrainingPipeline::update_metrics() {
     // Update internal metrics cache
     std::lock_guard<std::mutex> lock(metrics_mutex_);
     
+    // Pipeline state
+    cached_metrics_.current_epoch = current_epoch_.load();
+    cached_metrics_.current_batch = current_batch_.load();
+    cached_metrics_.samples_processed = samples_processed_.load();
+    cached_metrics_.is_running = (state_ == PipelineState::TRAINING);
+    
     // Graph state
     if (graph_tableau_) {
         cached_metrics_.graph_nodes = graph_tableau_->num_qutrits();
         cached_metrics_.graph_topology = "graph_tableau";
     }
+    
+    // Continuous mode tracking
+    cached_metrics_.loop_count = loop_count_.load();
 }
 
 void AutonomousTrainingPipeline::emit_metrics() {
@@ -728,19 +823,13 @@ std::string AutonomousTrainingPipeline::state_to_string(PipelineState state) {
         case PipelineState::PAUSED: return "paused";
         case PipelineState::STOPPING: return "stopping";
         case PipelineState::COMPLETE: return "complete";
-        case PipelineState::ERROR: return "error";
+        case PipelineState::FAILED: return "error";
         default: return "unknown";
     }
 }
 
-std::unique_ptr<AutonomousTrainingPipeline> create_training_pipeline(
-    const PipelineConfig& config
-) {
-    auto pipeline = std::make_unique<AutonomousTrainingPipeline>();
-    if (!pipeline->initialize(config)) {
-        return nullptr;
-    }
-    return pipeline;
+std::unique_ptr<AutonomousTrainingPipeline> create_training_pipeline() {
+    return std::make_unique<AutonomousTrainingPipeline>();
 }
 
 } // namespace q_mini_wasm_v2::core::training

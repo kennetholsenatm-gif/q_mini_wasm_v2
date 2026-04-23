@@ -107,7 +107,7 @@ public:
         const std::vector<int32_t>& b
     );
     
-    static int32_t TropicalAdd(int32_t a, int32_t b) { return std::max(a, b); }
+    static int32_t TropicalAdd(int32_t a, int32_t b) { return (a > b) ? a : b; }
     static int32_t TropicalMultiply(int32_t a, int32_t b) { return a + b; }
 
     // ========================================================================

@@ -10,8 +10,12 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <fstream>
 
 namespace q_mini_wasm_v2::core::training {
+
+// Forward declaration
+class DataAcquisitionManager;
 
 /**
  * @brief Data Synthesizer Agent for Autonomous Forward-Forward Training
@@ -69,6 +73,9 @@ public:
     
     // Exponential backoff after failure
     virtual void backoff() = 0;
+    
+    // Check if API client has valid configuration (keys, endpoints, etc.)
+    virtual bool is_configured() const = 0;
 };
 
 /**
@@ -79,10 +86,12 @@ public:
  */
 class WolframClient : public ApiClient {
 public:
+    WolframClient();
     std::optional<ApiPayload> query(std::string_view endpoint, 
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return !api_key_.empty(); }
     
     // Generate negative sample by corrupting mathematical AST
     static ApiPayload perturb_symbolic(const ApiPayload& positive);
@@ -90,7 +99,7 @@ public:
 private:
     size_t rate_limit_ = 10000;  // 100x increase - external APIs enforce via HTTP 429
     size_t backoff_ms_ = 100;
-    std::string api_key_ = "";  // Set via environment or config
+    std::string api_key_;  // Set via environment or config
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -106,6 +115,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required
     
     // Generate valid SMILES variation (positive) vs corrupted with valency violations (negative)
     static ApiPayload perturb_smiles(const ApiPayload& positive);
@@ -128,6 +138,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required
     
     // Mutate sequence by splicing or altering growth factor
     static ApiPayload perturb_sequence(const ApiPayload& positive);
@@ -150,6 +161,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required
     
     // Disrupt ontological triples by swapping objects with plausible alternatives
     static ApiPayload perturb_triples(const ApiPayload& positive);
@@ -172,6 +184,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required
     
     // Generate negative samples by inverting scientific claims
     static ApiPayload perturb_scientific(const ApiPayload& positive);
@@ -194,6 +207,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required
     
     // Inject synthetic astrophysical anomalies into light curves
     static ApiPayload perturb_transit(const ApiPayload& positive);
@@ -216,6 +230,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required
     
     // Apply rotational/translational noise to generate non-physical structures
     static ApiPayload perturb_coordinates(const ApiPayload& positive);
@@ -234,10 +249,12 @@ private:
  */
 class GitHubClient : public ApiClient {
 public:
+    GitHubClient();
     std::optional<ApiPayload> query(std::string_view endpoint,
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required for basic queries
     
     // Apply destructive logical mutations to code AST
     static ApiPayload perturb_code(const ApiPayload& positive);
@@ -245,7 +262,7 @@ public:
 private:
     size_t rate_limit_ = 6000;  // 100x increase - use API key for production
     size_t backoff_ms_ = 200;
-    std::string api_key_ = "";
+    std::string api_key_;  // Optional - higher rate limits with key
     std::chrono::steady_clock::time_point last_query_time_;
 };
 
@@ -261,6 +278,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // No key required
     
     // Inject contextually plausible but mathematically invalid tactics
     static ApiPayload perturb_proof(const ApiPayload& positive);
@@ -284,6 +302,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // NO KEY REQUIRED
     
     // Fabricate citations, alter authorship, misattribute concepts
     static ApiPayload perturb_scholarly(const ApiPayload& positive);
@@ -307,6 +326,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // NO KEY REQUIRED
     
     // Reorder paragraphs, swap character names, alter endings
     static ApiPayload perturb_literature(const ApiPayload& positive);
@@ -330,6 +350,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // NO KEY REQUIRED
     
     // Alter magnitude, shift epicenter, fabricate aftershocks
     static ApiPayload perturb_seismic(const ApiPayload& positive);
@@ -353,6 +374,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // NO KEY REQUIRED
     
     // Swap payload capacities, alter launch dates, mix up stages
     static ApiPayload perturb_telemetry(const ApiPayload& positive);
@@ -376,6 +398,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // NO KEY REQUIRED
     
     // Alter dates, swap headlines, fabricate quotes
     static ApiPayload perturb_historical(const ApiPayload& positive);
@@ -399,6 +422,7 @@ public:
                                     std::string_view params) override;
     size_t rate_limit_remaining() const override { return rate_limit_; }
     void backoff() override;
+    bool is_configured() const override { return true; }  // NO KEY REQUIRED
     
     // Shift coordinates, swap species names, alter dates
     static ApiPayload perturb_biodiversity(const ApiPayload& positive);
@@ -453,9 +477,21 @@ public:
     // Initialize API clients with keys/endpoints
     void initialize_apis();
     
-    // Start synthesis pipeline
+    // Load data sources from config file (data_sources.toml)
+    // This replaces hardcoded APIs with configured sources
+    bool use_config(const std::string& config_path = "config/data_sources.toml");
+    
+    // Load local training data from file/directory (JSONL, CSV, etc.)
+    bool load_local_data(const std::string& data_path);
+    /** Load plain-text lines from .txt files under a directory (for local training corpora). */
+    bool load_from_directory(const std::string& dir_path);
+    
+    // Start synthesis pipeline - if local data loaded, use it; else use APIs
     void start(size_t acquisition_threads = 4, 
                size_t perturbation_threads = 2);
+    
+    // Check if local data is being used
+    bool using_local_data() const { return has_local_data_; }
     
     // Stop all threads
     void stop();
@@ -476,8 +512,9 @@ public:
     Stats get_stats() const;
 
 private:
-    // Acquisition thread function
+    // Acquisition thread functions
     void acquisition_worker(ApiClient* client);
+    void config_acquisition_worker();  // For config-based DataAcquisitionManager
     
     // Perturbation thread function
     void perturbation_worker();
@@ -486,8 +523,12 @@ private:
     std::vector<std::string> extract_topics_from_response(const ApiPayload& response, 
                                                            const std::string& current_topic);
     
-    // API clients
+    // API clients (legacy hardcoded - replaced by config-based sources)
     std::vector<std::unique_ptr<ApiClient>> clients_;
+    
+    // Config-based data acquisition (preferred)
+    std::unique_ptr<DataAcquisitionManager> acquisition_mgr_;
+    bool use_config_sources_ = false;
     
     // Thread pools
     std::unique_ptr<ThreadPool> acquisition_pool_;
@@ -503,6 +544,13 @@ private:
     bool running_ = false;
     Stats stats_;
     mutable std::mutex stats_mutex_;
+    
+    // Local data storage (when using file-based training instead of APIs)
+    bool has_local_data_ = false;
+    std::vector<TrainingSample> local_samples_;
+    size_t local_sample_index_ = 0;
+    mutable std::mutex local_data_mutex_;
+    std::string data_path_;
 };
 
 } // namespace q_mini_wasm_v2::core::training

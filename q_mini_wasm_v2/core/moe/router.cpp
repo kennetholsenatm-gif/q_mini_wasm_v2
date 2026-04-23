@@ -318,19 +318,37 @@ void MoERouter::update_expert_weights(size_t expert_idx, const std::vector<std::
 // ============================================================================
 
 std::vector<size_t> MoERouter::select_topk(const std::vector<int8_t>& scores, size_t k) const {
+    if (scores.empty()) {
+        return {};
+    }
+    // Clamp k to available scores size to prevent iterator overflow
+    k = std::min(k, scores.size());
+
     std::vector<size_t> indices(scores.size());
     std::iota(indices.begin(), indices.end(), 0);
-    
-    // Partial sort to get Top-K GF(3) symplectic scores
-    std::partial_sort(
-        indices.begin(),
-        indices.begin() + k,
-        indices.end(),
-        [&scores](size_t a, size_t b) {
-            return scores[a] > scores[b];
-        }
-    );
-    
+
+    // MSVC debug STL asserts when middle == last in partial_sort.
+    // Use full sort when k >= scores.size() to avoid the assertion.
+    if (k >= scores.size()) {
+        std::sort(
+            indices.begin(),
+            indices.end(),
+            [&scores](size_t a, size_t b) {
+                return scores[a] > scores[b];
+            }
+        );
+    } else {
+        // Partial sort to get Top-K GF(3) symplectic scores
+        std::partial_sort(
+            indices.begin(),
+            indices.begin() + k,
+            indices.end(),
+            [&scores](size_t a, size_t b) {
+                return scores[a] > scores[b];
+            }
+        );
+    }
+
     indices.resize(k);
     return indices;
 }
@@ -423,10 +441,16 @@ std::vector<std::vector<size_t>> MoERouter::expert_choice_route(
         }
         
         // Remove assigned tokens from remaining pool
-        remaining_tokens.erase(
-            remaining_tokens.begin(),
-            remaining_tokens.begin() + assign_count
-        );
+        // MSVC debug STL asserts when first == last in erase (empty range).
+        if (assign_count > 0 && assign_count < remaining_tokens.size()) {
+            remaining_tokens.erase(
+                remaining_tokens.begin(),
+                remaining_tokens.begin() + assign_count
+            );
+        } else if (assign_count >= remaining_tokens.size()) {
+            // Clear all remaining tokens
+            remaining_tokens.clear();
+        }
         
         if (remaining_tokens.empty()) break;
     }

@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstdint>
 #include <random>
+#include <algorithm>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -143,7 +144,7 @@ public:
      * @brief Tropical addition (max operation)
      */
     static int32_t tropical_add(int32_t a, int32_t b) {
-        return std::max(a, b);
+        return (a > b) ? a : b;
     }
     
     /**

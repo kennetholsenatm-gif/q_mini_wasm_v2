@@ -17,6 +17,13 @@ extern "C" {
 #endif
 
 // ============================================================================
+// Shared Global State (defined in training_api.cpp)
+// ============================================================================
+extern void* g_sessions_mutex;
+extern void* g_sessions;
+extern uint64_t g_next_session_id;
+
+// ============================================================================
 // Training Session Management
 // ============================================================================
 
@@ -30,6 +37,22 @@ extern "C" {
  * @param batch_size - Training batch size
  * @param lazy_init - Enable lazy initialization of experts
  * @param continuous_mode - Enable continuous training mode
+ * @param epochs - Total epochs for training
+ * @param learning_rate - Learning rate for optimizer
+ * @param checkpoint_interval - Epochs between checkpoints
+ * @param context_window - Model context window size
+ * @param entanglement_tokens - Number of entanglement tokens
+ * @param shadow_dim - Shadow dimension for stabilizer
+ * @param neurons_per_layer - Neurons per layer
+ * @param routing_qutrits - Number of routing qutrits
+ * @param steane_correction - Enable Steane error correction
+ * @param flash_cim - Enable Flash CIM optimization
+ * @param worker_threads - Number of worker threads (maps to acquisition/perturbation thread counts)
+ * @param data_sources_toml_path - Absolute path to data_sources.toml (UTF-8)
+ * @param moe_input_dim - Expert input width
+ * @param moe_output_dim - Expert output width
+ * @param moe_hidden_dim - Expert hidden width
+ * @param moe_expert_internal_layers - Layer count inside each expert FF stack
  * @return 0 on success, negative error code on failure
  */
 TRAINING_API int Training_InitSession(
@@ -39,7 +62,23 @@ TRAINING_API int Training_InitSession(
     uint32_t num_layers,
     uint32_t batch_size,
     bool lazy_init,
-    bool continuous_mode
+    bool continuous_mode,
+    uint32_t epochs,
+    double learning_rate,
+    uint32_t checkpoint_interval,
+    uint32_t context_window,
+    uint32_t entanglement_tokens,
+    uint32_t shadow_dim,
+    uint32_t neurons_per_layer,
+    uint32_t routing_qutrits,
+    bool steane_correction,
+    bool flash_cim,
+    uint32_t worker_threads,
+    const char* data_sources_toml_path,
+    uint32_t moe_input_dim,
+    uint32_t moe_output_dim,
+    uint32_t moe_hidden_dim,
+    uint32_t moe_expert_internal_layers
 );
 
 /**
@@ -67,6 +106,7 @@ TRAINING_API int Training_StartTraining(
  * @param current_loss_out - Output: current loss value
  * @param samples_processed_out - Output: number of samples processed
  * @param is_running_out - Output: whether training is still running
+ * @param loop_count_out - Output: continuous mode loop count (0 if not in continuous mode)
  * @return 0 on success, negative error code on failure
  */
 TRAINING_API int Training_GetProgress(
@@ -75,7 +115,8 @@ TRAINING_API int Training_GetProgress(
     uint32_t* total_epochs_out,
     double* current_loss_out,
     uint64_t* samples_processed_out,
-    bool* is_running_out
+    bool* is_running_out,
+    uint32_t* loop_count_out
 );
 
 /**

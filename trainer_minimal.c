@@ -1,1 +1,0 @@
-/* Minimal C trainer */`n#include <stdio.h>`nint main(int argc, char** argv) {`n    FILE* f = fopen("C:/q_mini_data/trainer_c_test.txt", "w");`n    if (f) {`n        fprintf(f, "C trainer works\n");`n        fclose(f);`n    }`n    return 0;`n}

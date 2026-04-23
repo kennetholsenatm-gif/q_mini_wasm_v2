@@ -321,14 +321,13 @@ void ForwardForwardLearner::update_weights_hebbian(
 void ForwardForwardLearner::reset_weights() {
     initialize_tropical_weights();
 }
-
-// ============================================================================
 // Internal Helpers
 // ============================================================================
 
 void ForwardForwardLearner::initialize_tropical_weights() {
     thread_local std::mt19937 rng(std::random_device{}());
-    std::uniform_real_distribution<float> sparsity_dist(0.0f, 1.0f);
+    // Integer-based sparsity check: 0-9999, compare against sparsity_bps (500 = 5%)
+    std::uniform_int_distribution<uint32_t> sparsity_dist(0, 9999);
     std::discrete_distribution<int> weight_dist({40, 20, 40}); // -1: 40%, 0: 20%, +1: 40%
     std::discrete_distribution<int> bias_dist({40, 20, 40});
     
@@ -342,7 +341,8 @@ void ForwardForwardLearner::initialize_tropical_weights() {
         // Create sparse connections: only sparsity % of possible edges
         for (size_t source = 0; source < neurons; ++source) {
             for (size_t target = 0; target < neurons; ++target) {
-                if (sparsity_dist(rng) < config_.sparsity) {
+                // Integer comparison: if random(0-9999) < sparsity_bps, create edge
+                if (sparsity_dist(rng) < config_.sparsity_bps) {
                     // Only add edge if below sparsity threshold
                     ternary::Trit weight = static_cast<ternary::Trit>(weight_dist(rng));
                     if (weight != ternary::Trit::ZERO) {
@@ -408,7 +408,7 @@ std::vector<uint8_t> ForwardForwardLearner::serialize_weights() const {
     
     // Header: num_layers (1 byte), sparsity (1 byte as percent)
     data.push_back(static_cast<uint8_t>(config_.num_layers));
-    data.push_back(static_cast<uint8_t>(config_.sparsity * 100));
+    data.push_back(static_cast<uint8_t>(config_.sparsity_bps / 100));
     
     // For each layer: [num_edges][edges...][biases...]
     for (size_t layer = 0; layer < config_.num_layers; ++layer) {

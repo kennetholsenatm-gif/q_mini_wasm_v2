@@ -8,8 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Executables
 # ============================================================================
 
+# STANDALONE TRAINER - No core library linkage to avoid static init crashes
 add_executable(q_mini_wasm_v2_trainer core/training/trainer_main.cpp)
-target_link_libraries(q_mini_wasm_v2_trainer PRIVATE q_mini_wasm_v2_core)
+# DO NOT link against q_mini_wasm_v2_core - it has problematic global constructors
+# target_link_libraries(q_mini_wasm_v2_trainer PRIVATE q_mini_wasm_v2_core)
 
 add_executable(q_mini_wasm_v2_infer core/inference/infer_main.cpp)
 target_link_libraries(q_mini_wasm_v2_infer PRIVATE q_mini_wasm_v2_core)
@@ -64,23 +66,49 @@ set(CORE_SOURCES
     core/ingestion/clifford_shadow.cpp
     core/ingestion/trit_binary_loader.hpp
     core/ingestion/trit_binary_loader.cpp
+    core/ingestion/async_staging_buffer.hpp
+    core/ingestion/async_staging_buffer.cpp
+    core/ingestion/async_transformer.hpp
+    core/ingestion/async_transformer.cpp
+    core/ingestion/gf3_polynomial_hash.hpp
+    core/ingestion/gf3_polynomial_hash.cpp
     core/learning/entropy_goodness.hpp
     core/learning/entropy_goodness.cpp
     core/moe/router.hpp
     core/moe/router.cpp
+    core/moe/gf3_layers.hpp
+    core/moe/gf3_layers.cpp
+    core/moe/expert_network.hpp
+    core/moe/expert_network.cpp
+    core/moe/unified_router.hpp
+    core/moe/unified_router.cpp
+    core/moe/moe_trainer.hpp
+    core/moe/moe_trainer.cpp
     core/moe/self_organizing_expert.hpp
     core/moe/self_organizing_expert.cpp
+    core/moe/runtime_orchestrator.hpp
+    core/moe/runtime_orchestrator.cpp
     core/learning/forward_forward.hpp
     core/learning/forward_forward.cpp
     core/network.hpp
     core/network.cpp
     core/training/data_synthesizer.hpp
     core/training/data_synthesizer.cpp
+    core/training/data_acquisition.hpp
+    core/training/data_acquisition.cpp
     core/training/dataset_storage.hpp
     core/training/dataset_storage.cpp
     core/qgnn/graph_native.cpp
     core/qgnn/betti_extractor.hpp
     core/qgnn/betti_extractor.cpp
+    core/qgnn/fast_betti_estimator.hpp
+    core/qgnn/fast_betti_estimator.cpp
+    core/qgnn/graph_tableau.hpp
+    core/qgnn/graph_tableau.cpp
+    core/persistence/tlwl_checkpoint.hpp
+    core/persistence/tlwl_checkpoint.cpp
+    core/training/autonomous_training_pipeline.hpp
+    core/training/autonomous_training_pipeline.cpp
     # core/inference/geometric_context.hpp  # TODO: Fix std::min and extract_context_vector
     # core/inference/geometric_context.cpp
     # core/inference/householder_synthesizer.hpp  # TODO: Fix compute_reflection_error
@@ -121,6 +149,38 @@ endif()
 target_include_directories(q_mini_wasm_v2_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# ============================================================================
+# DLL Target for CGO Bindings
+# ============================================================================
+
+if(BUILD_DLL)
+    add_library(q_mini_wasm_v2_dll SHARED
+        dll/impl/q_mini_wasm_v2_api.cpp
+        core/training/autonomous_training_pipeline.cpp
+        core/training/data_synthesizer.cpp
+        core/training/dataset_storage.cpp
+    )
+
+    target_link_libraries(q_mini_wasm_v2_dll PRIVATE
+        q_mini_wasm_v2_core
+    )
+
+    target_include_directories(q_mini_wasm_v2_dll PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    set_target_properties(q_mini_wasm_v2_dll PROPERTIES
+        OUTPUT_NAME "q_mini_wasm_v2"
+        PREFIX ""
+    )
+
+    if(MSVC)
+        target_compile_options(q_mini_wasm_v2_dll PRIVATE /FS)
+        set_property(TARGET q_mini_wasm_v2_dll PROPERTY MSVC_DEBUG_INFORMATION_FORMAT "")
+        target_compile_options(q_mini_wasm_v2_dll PRIVATE /Zi-)
+    endif()
+endif()
 
 # ============================================================================
 # Data Synthesizer Agent - HTTP Client Dependencies
@@ -277,6 +337,31 @@ if(BUILD_DLL)
     )
 
     # ------------------------------------------------------------------------
+    # 5. Training DLL (Real MoE + Forward-Forward Training)
+    # ------------------------------------------------------------------------
+    add_library(q_training SHARED
+        dll/training/training_api.hpp
+        dll/training/training_api.cpp
+    )
+    
+    target_link_libraries(q_training PRIVATE
+        q_mini_wasm_v2_core
+    )
+    
+    target_include_directories(q_training PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/dll
+    )
+    
+    target_compile_definitions(q_training PRIVATE
+        TRAINING_API_EXPORTS
+    )
+    
+    set_target_properties(q_training PROPERTIES
+        OUTPUT_NAME "q_training"
+        PREFIX ""
+    )
+
+    # ------------------------------------------------------------------------
     # Install all DLL targets
     # ------------------------------------------------------------------------
     install(TARGETS 
@@ -284,6 +369,7 @@ if(BUILD_DLL)
         q_gf3_serialize
         q_gf3_wasm
         q_gf3_maxplus
+        q_training
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin
@@ -294,6 +380,7 @@ if(BUILD_DLL)
         dll/serialize/serialize_api.hpp
         dll/wasm_bridge/wasm_api.hpp
         dll/maxplus/maxplus_api.hpp
+        dll/training/training_api.hpp
         DESTINATION include/q_mini_wasm_v2/dll
     )
 endif()

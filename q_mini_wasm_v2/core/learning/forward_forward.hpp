@@ -27,7 +27,7 @@ struct FFConfig {
     size_t neurons_per_layer = 128;
     int learning_rate = 1;
     int learning_rate_shift = 3;
-    float sparsity = 0.05f;  // Reduced: 5% for experts (ultra-sparse tropical)
+    uint32_t sparsity_bps = 500;  // 5% = 500 basis points (0-10000, ultra-sparse tropical)
     bool lazy_init = true;  // Don't init weights until first use (MoE optimization)
 };
 

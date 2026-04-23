@@ -37,9 +37,10 @@ enabled = true
 port = 9090
 
 [paths]
-base_model = "flash_cim_243expert/checkpoints/final_model.json"
-output_dir = "flash_cim_243expert/checkpoints/"
-dataset_dir = "flash_cim_243expert/"
+base_model = "C:/q_mini_data/checkpoints/final_model.json"
+output_dir = "C:/q_mini_data/checkpoints/"
+checkpoint_dir = "C:/q_mini_data/checkpoints/"
+dataset_dir = "C:/q_mini_data/datasets/"
 
 [data_sources]
 urls = [

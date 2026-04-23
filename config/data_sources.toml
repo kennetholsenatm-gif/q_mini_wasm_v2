@@ -144,5 +144,14 @@ path = "C:\\q_mini_data\\datasets"
 enabled = true
 category = "custom"
 description = "Added via WUI on 4/15/2026, 7:03:50 PM"
+pattern = "*.txt"
+
+[[source]]
+name = "C:\\q_mini_data\\datasets_jsonl"
+type = "directory"
+path = "C:\\q_mini_data\\datasets"
+enabled = true
+category = "custom"
+description = "JSONL files in datasets directory"
 pattern = "*.jsonl"
 

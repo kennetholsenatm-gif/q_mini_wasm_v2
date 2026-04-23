@@ -24,9 +24,9 @@ namespace q_mini_wasm_v2::core::moe {
 struct DynamicExpert {
     size_t id;
     size_t generation;  // How many times this expert lineage has split
-    double activation_count;
-    double accumulated_goodness;
-    std::vector<double> centroid;  // Geometric center in embedding space
+    int32_t activation_count_fixed;      // Fixed-point: scale 1000 = 1.0
+    int32_t accumulated_goodness_fixed;  // Fixed-point: scale 1000 = 1.0
+    std::vector<int32_t> centroid_fixed; // Fixed-point: scale 1000 = 1.0
     std::set<size_t> connected_experts;  // Graph edges
     std::chrono::steady_clock::time_point last_activation;
     
@@ -46,20 +46,20 @@ struct DynamicExpert {
     // Lazy initialization - creates learner only when first used
     void ensure_learner_initialized();
     
-    double average_goodness() const {
-        return activation_count > 0 ? accumulated_goodness / activation_count : 0.0;
+    int32_t average_goodness_fixed() const {
+        return activation_count_fixed > 0 ? (accumulated_goodness_fixed * 1000) / activation_count_fixed : 0;
     }
     
     // Check if expert should split based on topological complexity
-    bool should_split(double beta1_threshold = 5.0) const {
+    bool should_split(int32_t beta1_threshold = 5000) const {  // 5.0 in fixed-point
         return local_beta_1 > beta1_threshold && generation < 10;  // Max 10 generations
     }
     
     // Check if expert is underutilized and should merge
-    bool should_merge(double min_activation_rate = 0.001) const {
+    bool should_merge(int32_t min_activation_rate_fixed = 1) const {  // 0.001 in fixed-point
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::minutes>(now - last_activation).count();
-        return elapsed > 60 && activation_count < min_activation_rate * elapsed;  // Idle for 1hr+
+        return elapsed > 60 && activation_count_fixed < (min_activation_rate_fixed * elapsed) / 1000;  // Idle for 1hr+
     }
 };
 
@@ -68,14 +68,14 @@ struct DynamicExpert {
  */
 struct TopologicalSample {
     std::vector<ternary::Trit> data;
-    std::vector<double> embedding;  // Continuous embedding for topology
+    std::vector<int32_t> embedding_fixed;  // Fixed-point embedding: scale 1000
     std::chrono::steady_clock::time_point timestamp;
     std::set<size_t> assigned_experts;  // Which experts processed this
     
     // Persistent homology barcode
     struct PersistencePair {
-        float birth;
-        float death;
+        int32_t birth_fixed;   // Fixed-point: scale 1000
+        int32_t death_fixed;   // Fixed-point: scale 1000
         uint32_t dimension;  // 0=component, 1=cycle, 2=void
     };
     std::vector<PersistencePair> homology_barcode;
@@ -96,18 +96,18 @@ class SelfOrganizingExpertManager {
 public:
     struct Config {
         // Splitting thresholds
-        double split_beta1_threshold = 5.0;      // Split when β₁ > 5 cycles
-        double split_goodness_threshold = 0.8;   // Only split well-performing experts
+        int32_t split_beta1_threshold = 5000;      // 5.0 in fixed-point: Split when β₁ > 5 cycles
+        int32_t split_goodness_threshold = 800;    // 0.8 in fixed-point: Only split well-performing experts
         size_t max_generation_depth = 10;        // Prevent infinite splitting
         
         // Merging thresholds
-        double merge_idle_threshold_min = 60.0;  // Merge after 60 min idle
-        double merge_min_activation_rate = 0.001; // Merge if < 0.1% activation rate
+        int32_t merge_idle_threshold_min = 60;    // Merge after 60 min idle (integer minutes)
+        int32_t merge_min_activation_rate = 1;    // 0.001 in fixed-point: Merge if < 0.1% activation rate
         
         // Graph density targets
-        double target_graph_density = 0.15;      // 15% connectivity (sparse but connected)
-        double min_graph_density = 0.05;         // Below 5% = too sparse, add edges
-        double max_graph_density = 0.40;         // Above 40% = too dense, remove edges
+        int32_t target_graph_density = 150;      // 0.15 in fixed-point (basis points): 15% connectivity
+        int32_t min_graph_density = 50;          // 0.05 in fixed-point: Below 5% = too sparse
+        int32_t max_graph_density = 400;         // 0.40 in fixed-point: Above 40% = too dense
         
         // Initial experts
         size_t initial_experts = 8;              // Start with 8 root experts
@@ -141,7 +141,7 @@ public:
      * 3. Trains those experts
      * 4. Triggers topology update (split/merge/graph adjustment)
      */
-    size_t process_sample(const std::vector<double>& raw_data, const std::vector<ternary::Trit>& discrete_data);
+    size_t process_sample(const std::vector<int32_t>& raw_data_fixed, const std::vector<ternary::Trit>& discrete_data);
     
     // ====================================================================
     // Self-Organization Operations
@@ -203,10 +203,10 @@ public:
         uint32_t beta_0;  // Connected components
         uint32_t beta_1;  // 1-cycles (loops/holes) - high = complex structure
         uint32_t beta_2;  // 2-voids (cavities)
-        float graph_density;
+        int32_t graph_density_fixed;  // Fixed-point: scale 1000
     };
     
-    BettiNumbers compute_betti_numbers(const std::vector<TopologicalSample>& samples, float max_edge_length);
+    BettiNumbers compute_betti_numbers(const std::vector<TopologicalSample>& samples, int32_t max_edge_length_fixed);
     
     // ====================================================================
     // Queries
@@ -214,7 +214,7 @@ public:
     
     size_t get_expert_count() const { return experts_.size(); }
     size_t get_edge_count() const;
-    double get_graph_density() const;
+    int32_t get_graph_density_fixed() const;
     std::vector<size_t> get_active_expert_ids() const;
     std::vector<size_t> get_recently_created_experts(size_t n = 10) const;
     
@@ -224,8 +224,8 @@ public:
     struct TopologyStats {
         size_t num_experts;
         size_t num_edges;
-        double graph_density;
-        double avg_beta_1;
+        int32_t graph_density_fixed;  // Fixed-point: scale 1000
+        int32_t avg_beta_1_fixed;     // Fixed-point: scale 1000
         uint32_t max_beta_1;
         size_t split_count_total;
         size_t merge_count_total;
@@ -259,15 +259,15 @@ private:
     size_t merge_count_ = 0;
     
     // Centroid index for fast nearest-neighbor lookup (simplified: linear scan)
-    std::vector<std::pair<size_t, std::vector<double>>> centroids_cache_;
+    std::vector<std::pair<size_t, std::vector<int32_t>>> centroids_cache_fixed_;
     
     // Fast Betti estimation for 64+ experts (Chebyshev polynomial + Monte Carlo)
     // Falls back to exact extraction for smaller graphs
     q::qgnn::HybridBettiExtractor hybrid_betti_extractor_;
     
     // Helpers
-    double centroid_distance(const std::vector<double>& a, const std::vector<double>& b);
-    std::vector<double> compute_sample_embedding(const std::vector<double>& raw_data);
+    int32_t centroid_distance_fixed(const std::vector<int32_t>& a, const std::vector<int32_t>& b);
+    std::vector<int32_t> compute_sample_embedding_fixed(const std::vector<int32_t>& raw_data_fixed);
     void flush_old_samples();
     void rebuild_centroid_cache();
 };

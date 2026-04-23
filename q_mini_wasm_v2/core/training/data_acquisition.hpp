@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -22,6 +23,7 @@ struct DataSourceConfig {
     std::string type;           // "web_api", "local_file", "local_directory"
     std::string url;            // For web_api
     std::string path;           // For local_file/directory
+    std::string pattern;        // For directory: *.txt, *.jsonl
     std::vector<std::string> extensions;  // For directory: [.txt, .md, .json]
     std::map<std::string, std::string> headers;  // For web_api
     bool enabled = true;
@@ -122,11 +124,16 @@ private:
     
     LogCallback log_callback_;
     
+    // String pool for sample lifetime management
+    std::vector<std::string> string_pool_;
+    mutable std::mutex string_pool_mutex_;
+    
     // HTTP client for web APIs
     struct HttpResponse {
         int status_code = 0;
         std::string body;
         bool success = false;
+        std::string error_message;
     };
     HttpResponse http_get(const std::string& url, 
                           const std::map<std::string, std::string>& headers,

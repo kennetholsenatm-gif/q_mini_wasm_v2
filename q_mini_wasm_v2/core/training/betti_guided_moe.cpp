@@ -18,7 +18,7 @@ public:
     struct TopologySuggestion {
         uint32_t suggested_nodes;
         uint32_t suggested_edges;
-        float entanglement_density;  // edges / (nodes * (nodes-1)/2)
+        uint32_t entanglement_density_bps;  // GF(3): density in basis points (0-10000)
         std::string topology_type;   // "sparse", "dense", "scale_free", "small_world"
     };
     
@@ -28,12 +28,12 @@ public:
      * Maps expert utilization patterns to a simplicial complex and computes
      * Betti numbers to understand the topological structure of expert interactions.
      * 
-     * @param expert_utilization Vector of expert utilization rates (0.0 to 1.0)
+     * @param expert_utilization Vector of expert utilization counts (integer, not rate)
      * @param expert_connections Adjacency matrix of expert interactions
      * @return TopologySuggestion with recommended graph structure
      */
     static TopologySuggestion analyze_expert_topology(
-        const std::vector<float>& expert_utilization,
+        const std::vector<uint32_t>& expert_utilization,
         const std::vector<std::vector<bool>>& expert_connections
     ) {
         size_t num_experts = expert_utilization.size();
@@ -73,9 +73,9 @@ public:
         uint32_t beta_0 = 1;  // Assume connected
         uint32_t beta_1 = static_cast<uint32_t>(num_edges - num_vertices + 1);
         
-        // Calculate entanglement density
+        // Calculate entanglement density (GF(3): basis points 0-10000)
         uint32_t max_edges = num_vertices * (num_vertices - 1) / 2;
-        float density = max_edges > 0 ? static_cast<float>(num_edges) / max_edges : 0.0f;
+        uint32_t density_bps = max_edges > 0 ? (num_edges * 10000) / max_edges : 0;
         
         // Generate suggestion based on Betti analysis
         TopologySuggestion suggestion;
@@ -85,19 +85,19 @@ public:
             suggestion.topology_type = "sparse";
             suggestion.suggested_nodes = num_vertices;
             suggestion.suggested_edges = num_vertices + (num_vertices / 4);  // Tree-like + some cycles
-            suggestion.entanglement_density = 0.15f;
+            suggestion.entanglement_density_bps = 1500;  // 15% = 1500 bps
         } else if (beta_1 < num_vertices / 10) {
             // Low cyclomatic number - too tree-like, suggest more edges
             suggestion.topology_type = "small_world";
             suggestion.suggested_nodes = num_vertices;
             suggestion.suggested_edges = num_vertices + (num_vertices / 2);  // More cycles
-            suggestion.entanglement_density = 0.25f;
+            suggestion.entanglement_density_bps = 2500;  // 25% = 2500 bps
         } else {
             // Balanced topology
             suggestion.topology_type = "scale_free";
             suggestion.suggested_nodes = num_vertices;
             suggestion.suggested_edges = num_edges;
-            suggestion.entanglement_density = density;
+            suggestion.entanglement_density_bps = density_bps;
         }
         
         return suggestion;
@@ -151,27 +151,36 @@ public:
      * Low β₀ (connected) suggests efficient communication.
      * 
      * @param betti BettiNumbers from topology analysis
-     * @return Routing quality score (0.0 to 1.0)
+     * @return Routing quality score (0-1000, per-mille)
      */
-    static float compute_routing_quality(const qgnn::BettiExtractor::BettiNumbers& betti) {
+    static uint32_t compute_routing_quality(const qgnn::BettiExtractor::BettiNumbers& betti) {
         // Ideal routing topology:
         // - β₀ = 1 (fully connected, single component)
         // - β₁ ≈ 0.15 * V (moderate cycles for path diversity)
         
-        float beta_0_score = (betti.beta_0 == 1) ? 1.0f : (1.0f / betti.beta_0);
+        // GF(3): Fixed-point score calculation (scale 1000)
+        // beta_0_score: 1000 if beta_0 == 1, otherwise 1000/beta_0
+        uint32_t beta_0_score = (betti.beta_0 == 1) ? 1000 : (1000 / betti.beta_0);
         
-        // Score based on beta_1 relative to ideal
-        // β₁ = E - V + 1 for connected graph
-        // Ideal ratio: E ≈ 1.15V, so β₁ ≈ 0.15V
-        // Score peaks at ideal, decreases if too sparse or too dense
-        float beta_1_ideal_ratio = 0.15f;
-        float beta_1_ratio = betti.beta_1 > 0 ? 
-            static_cast<float>(betti.beta_1) / (betti.beta_0 + betti.beta_1) : 0.0f;
-        float beta_1_score = 1.0f - std::abs(beta_1_ratio - beta_1_ideal_ratio) / beta_1_ideal_ratio;
-        beta_1_score = std::max(0.0f, std::min(1.0f, beta_1_score));
+        // Score based on beta_1 relative to ideal (ideal is 15% of total)
+        // Ideal ratio: β₁ ≈ 0.15 * (β₀ + β₁), so β₁/(β₀+β₁) ≈ 0.15
+        uint32_t beta_1_ratio_bps = 0;
+        uint32_t total = betti.beta_0 + betti.beta_1;
+        if (total > 0) {
+            beta_1_ratio_bps = (betti.beta_1 * 10000) / total;  // In basis points
+        }
         
-        // Weighted combination
-        return 0.4f * beta_0_score + 0.6f * beta_1_score;
+        // Ideal is 1500 bps (15%), compute distance from ideal
+        // Score = 1000 - |ratio - ideal| / ideal * 1000
+        int32_t deviation = static_cast<int32_t>(beta_1_ratio_bps) - 1500;  // 1500 = 15% ideal
+        if (deviation < 0) deviation = -deviation;
+        
+        // Clamp deviation: if > 1500, score is 0
+        uint32_t beta_1_score = (deviation >= 1500) ? 0 : (1000 - (deviation * 1000 / 1500));
+        
+        // Weighted combination: 0.4 * beta_0 + 0.6 * beta_1
+        // In fixed-point: (400 * beta_0_score + 600 * beta_1_score) / 1000
+        return (400 * beta_0_score + 600 * beta_1_score) / 1000;
     }
     
     /**
@@ -181,23 +190,25 @@ public:
      * if the expert graph topology should be reconfigured.
      * 
      * @param betti Current Betti numbers
-     * @param training_delta Average goodness delta from recent training
-     * @param convergence_rate Rate of convergence (0.0 = stalled, 1.0 = converging)
+     * @param training_delta Average goodness delta from recent training (fixed-point, scale 1000)
+     * @param convergence_rate Rate of convergence (0-1000 per-mille, where 1000 = converging)
      * @return true if reconfiguration recommended
      */
     static bool needs_reconfiguration(
         const qgnn::BettiExtractor::BettiNumbers& betti,
-        float training_delta,
-        float convergence_rate
+        int32_t training_delta,
+        uint32_t convergence_rate_permille
     ) {
-        // Poor routing quality
-        float routing_quality = compute_routing_quality(betti);
-        if (routing_quality < 0.5f) {
+        // Poor routing quality (GF(3): routing quality is 0-1000, compare with 500 threshold)
+        uint32_t routing_quality = compute_routing_quality(betti);
+        if (routing_quality < 500) {  // 500 = 50% threshold
             return true;
         }
         
         // Training stalled and convergence is slow
-        if (training_delta < 5.0f && convergence_rate < 0.1f) {
+        // GF(3): delta < 5.0f becomes delta < 5000 (fixed-point)
+        // convergence_rate < 0.1f becomes rate < 100 (100 per-mille = 10%)
+        if (training_delta < 5000 && convergence_rate_permille < 100) {
             return true;
         }
         
@@ -217,13 +228,14 @@ public:
      * 
      * @param num_experts Number of experts
      * @param betti Betti numbers
-     * @return Heatmap matrix (num_experts x num_experts) with suggested connection strengths
+     * @return Heatmap matrix (num_experts x num_experts) with connection strength (0-1000)
      */
-    static std::vector<std::vector<float>> generate_routing_heatmap(
+    static std::vector<std::vector<uint32_t>> generate_routing_heatmap(
         uint32_t num_experts,
         const qgnn::BettiExtractor::BettiNumbers& betti
     ) {
-        std::vector<std::vector<float>> heatmap(num_experts, std::vector<float>(num_experts, 0.0f));
+        // GF(3): Integer heatmap (0-1000 scale, 1000 = full heat)
+        std::vector<std::vector<uint32_t>> heatmap(num_experts, std::vector<uint32_t>(num_experts, 0));
         
         // Higher heat between experts that would reduce β₀ (connect components)
         // and increase β₁ moderately (add path diversity)
@@ -241,7 +253,7 @@ public:
                 bool is_shortcut = (i + j) % 7 == 0 || (i * j) % 11 == 0;
                 
                 if (ring_distance <= 2 || is_shortcut) {
-                    heatmap[i][j] = heatmap[j][i] = 1.0f;
+                    heatmap[i][j] = heatmap[j][i] = 1000;  // GF(3): 1000 = full connection
                 }
             }
         }
@@ -360,8 +372,8 @@ inline bool train_with_betti_guidance(
     const std::vector<TrainingSample>& batch_samples,
     uint32_t betti_threshold
 ) {
-    // Extract expert utilization from recent batch
-    std::vector<float> expert_utilization(experts.size(), 0.0f);
+    // Extract expert utilization from recent batch (GF(3): use integer counts, not float rates)
+    std::vector<uint32_t> expert_utilization_counts(experts.size(), 0);
     std::vector<std::vector<bool>> expert_connections(
         experts.size(), 
         std::vector<bool>(experts.size(), false)
@@ -377,13 +389,14 @@ inline bool train_with_betti_guidance(
             // Convert sample to ternary vector for routing
             std::vector<ternary::Trit> input_vector;
             
-            // Handle different payload types
+            // Handle different payload types (float input for external API compatibility)
             std::visit([&input_vector](auto&& arg) {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, std::vector<ternary::Trit>>) {
                     input_vector = arg;
                 }
                 else if constexpr (std::is_same_v<T, std::vector<float>>) {
+                    // Convert float to trits (one-way conversion for API input)
                     input_vector.reserve(arg.size());
                     for (float val : arg) {
                         if (val > 0.33f) input_vector.push_back(ternary::Trit::POSITIVE);
@@ -405,44 +418,33 @@ inline bool train_with_betti_guidance(
             }
         }
         
-        // Convert counts to utilization rates
-        if (total_selections > 0) {
-            for (size_t i = 0; i < experts.size(); ++i) {
-                expert_utilization[i] = static_cast<float>(expert_selection_counts[i]) / total_selections;
-            }
-        }
+        // Store raw counts (GF(3): no float conversion)
+        expert_utilization_counts = expert_selection_counts;
         
         // Build expert connection graph based on co-activation patterns
         // Two experts are "connected" if they are frequently selected together
+        // GF(3): Use tropical comparison instead of float multiplication
         for (size_t i = 0; i < experts.size(); ++i) {
             for (size_t j = i + 1; j < experts.size(); ++j) {
-                // Connection strength based on utilization correlation
-                float combined_utilization = expert_utilization[i] * expert_utilization[j];
-                expert_connections[i][j] = (combined_utilization > 0.001f);
-                expert_connections[j][i] = expert_connections[i][j];
+                // Connection if both experts have non-zero selection counts
+                bool both_active = (expert_utilization_counts[i] > 0) && (expert_utilization_counts[j] > 0);
+                expert_connections[i][j] = both_active;
+                expert_connections[j][i] = both_active;
             }
         }
     }
     
-    // Get topology suggestion based on actual utilization
-    auto suggestion = BettiGuidedMoE::analyze_expert_topology(
-        expert_utilization, 
-        expert_connections
-    );
+    // Compute Betti numbers for the expert connection graph
+    auto betti = betti_extractor.extract(expert_connections);
     
-    // Build simplicial complex from graph state
-    qgnn::BettiExtractor::SimplicialComplex complex;
+    // Check if topology needs reconfiguration (GF(3): use fixed-point deltas)
+    int32_t avg_delta = 0;  // Would come from training metrics (fixed-point, scale 1000)
+    uint32_t convergence = 500;  // Would come from training metrics (per-mille, 500 = 50%)
     
-    // Extract vertices (graph nodes)
-    size_t num_nodes = graph_tableau.num_qutrits();
-    complex.vertices.reserve(num_nodes);
-    for (size_t i = 0; i < num_nodes; ++i) {
-        complex.vertices.push_back(static_cast<uint32_t>(i));
-    }
-    
-    // Extract edges from graph tableau
-    // Use stabilizer weight to infer edge presence
-    size_t max_edges = num_nodes * (num_nodes - 1) / 2;
+    if (BettiGuidedMoE::needs_reconfiguration(betti, avg_delta, convergence)) {
+        // Trigger reconfiguration
+        auto suggestion = BettiGuidedMoE::analyze_expert_topology(
+            expert_utilization_counts, expert_connections);
     complex.edges.reserve(std::min(max_edges, size_t(256)));
     
     for (size_t i = 0; i < num_nodes; ++i) {

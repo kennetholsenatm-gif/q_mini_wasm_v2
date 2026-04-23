@@ -1,8 +1,11 @@
 # WUI Architecture - Single Entry Point Design
 
+> **Document Status:** Current as of April 2026 post-massive-refactor  
+> **Entry Point:** `qminiwasm.exe` (built from `cmd/qminiwasm/`)
+
 ## The Golden Rule
 
-**`C:\GitHub\q_mini_wasm_v2\qminiwasm.exe` is the ONLY executable the user ever needs to run.**
+**`qminiwasm.exe` is the ONLY executable the user ever needs to run.**
 
 Everything else is a subprocess, library, or asset that qminiwasm.exe manages internally.
 
@@ -14,15 +17,15 @@ The **WUI (Web User Interface)** is a desktop application with a web-based front
 
 - **Container**: Native desktop executable (`qminiwasm.exe`)
 - **UI Layer**: HTML/CSS/JavaScript files in `wui/` directory
-- **Bridge Layer**: Go-based MCP (Model Context Protocol) server (`wui-cli-bridge`)
+- **Bridge Layer**: Go-based MCP server (`cmd/qminiwasm/main.go`)
 - **Backend**: C++ inference and training engines
 
-The WUI provides a browser-based interface that runs inside a native desktop shell, enabling:
-- Quantum circuit visualization
-- Training control and monitoring
-- Model management
-- Configuration editing
-- Real-time SSE streaming of training progress
+The WUI provides a browser-based interface enabling:
+- ✅ Training control and monitoring (UI functional, backend stubbed)
+- ✅ Model management (UI functional, operations stubbed)
+- ✅ Configuration editing (fully functional)
+- ✅ Real-time SSE streaming (connection works, training not executing)
+- ⚠️ Quantum circuit visualization (structure exists, gates not implemented)
 
 ---
 
@@ -95,25 +98,24 @@ The WUI provides a browser-based interface that runs inside a native desktop she
 - Extracts embedded assets on first run
 - Opens the default web browser automatically
 
-**Build**: Produced by building `agents/cmd/wui-cli-bridge` with asset embedding
+**Build**: `go build -o qminiwasm.exe ./cmd/qminiwasm`
 
 ### 2. WUI Frontend
 
 **Location**: `wui/` directory
 
 **Files**:
-- `index.html` - Main dashboard
-- `training.html` - Training control and monitoring
-- `inference.html` - Inference interface
-- `config.html` - Configuration editor
-- `js/mcp-host-bridge.js` - Bridge to backend
-- `js/training-sse-client.js` - SSE streaming client
+- `index.html` - Main entry point (serves React app or standalone)
+- `react-wui/` - React SPA source (modern UI)
+- `DASHBOARD_*.md` - Wiring documentation
+
+**OLD (DELETED):** `training.html`, `inference.html`, `config.html`, `js/*` - Replaced with React
 
 **Protocol**: Communicates via HTTP JSON-RPC to `/mcp` endpoint
 
 ### 3. MCP (Model Context Protocol) Server
 
-**Location**: `agents/cmd/wui-cli-bridge/main.go`
+**Location**: `cmd/qminiwasm/main.go`
 
 **Purpose**: Handles tool calls from the WUI frontend:
 - `wui_connect` - Connection handshake

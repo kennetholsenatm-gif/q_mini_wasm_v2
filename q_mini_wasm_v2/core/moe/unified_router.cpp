@@ -183,7 +183,15 @@ UnifiedMoERouter::RoutingResult UnifiedMoERouter::HierarchicalRoute(
     std::vector<std::pair<int32_t, size_t>> expert_scores;
     
     for (size_t cluster_idx : selected_clusters) {
+        // Bounds check: ensure cluster_idx is valid
+        if (cluster_idx >= clusters_.size()) continue;
+        
         for (size_t expert_id : clusters_[cluster_idx].expert_ids) {
+            // Bounds check: ensure expert_id is valid for vector access
+            if (expert_id >= specializations_.size() || expert_id >= expert_request_counts_.size()) {
+                continue;
+            }
+            
             // Compute routing score for this expert (fixed-point)
             int32_t score = 0;
             size_t min_dim = std::min(input.size(), specializations_[expert_id].size());
@@ -446,7 +454,10 @@ std::vector<int32_t> UnifiedMoERouter::ApplyLoadBalancingFixed(
 ) {
     std::vector<int32_t> balanced = logits;
     
-    for (size_t i = 0; i < balanced.size(); ++i) {
+    // Ensure we don't access utilization_rates_fixed out of bounds
+    size_t num_experts = std::min(balanced.size(), stats.utilization_rates_fixed.size());
+    
+    for (size_t i = 0; i < num_experts; ++i) {
         // Penalize over-utilized experts
         // Fixed-point: expected_rate = 1000 / total_experts
         int32_t expected_rate_fixed = 1000 / static_cast<int32_t>(config_.total_experts);
@@ -515,7 +526,10 @@ std::vector<size_t> UnifiedMoERouter::SelectTopK(const std::vector<int32_t>& log
 
 void UnifiedMoERouter::UpdateLoadStats(const std::vector<size_t>& selected_experts) {
     for (size_t expert : selected_experts) {
-        expert_request_counts_[expert]++;
+        // Bounds check: ensure expert index is valid
+        if (expert < expert_request_counts_.size()) {
+            expert_request_counts_[expert]++;
+        }
     }
     
     load_stats_.total_requests++;
@@ -608,6 +622,11 @@ std::vector<size_t> UnifiedMoERouter::HierarchicalSelect(
     std::vector<std::pair<int32_t, size_t>> expert_scores;
     
     for (size_t expert_id : cluster.expert_ids) {
+        // Bounds check: ensure expert_id is valid for vector access
+        if (expert_id >= specializations_.size() || expert_id >= expert_request_counts_.size()) {
+            continue;
+        }
+        
         // Base score from tropical logits
         int32_t base_score = 0;
         size_t min_dim = std::min(input.size(), specializations_[expert_id].size());
@@ -653,7 +672,10 @@ void UnifiedMoERouter::RecomputeClusterCentroids() {
         
         // Sum all member specializations
         for (size_t expert_id : cluster.expert_ids) {
-            for (size_t j = 0; j < config_.specialization_dim; ++j) {
+            // Bounds check: ensure expert_id is valid
+            if (expert_id >= specializations_.size()) continue;
+            
+            for (size_t j = 0; j < config_.specialization_dim && j < specializations_[expert_id].size(); ++j) {
                 cluster.centroid[j] = static_cast<ternary::Trit>(
                     static_cast<int8_t>(cluster.centroid[j]) +
                     static_cast<int8_t>(specializations_[expert_id][j])

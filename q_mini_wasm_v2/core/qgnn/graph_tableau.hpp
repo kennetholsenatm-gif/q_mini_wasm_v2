@@ -109,6 +109,9 @@ public:
     // Get node index in ternary-tree order (for optimized access)
     size_t get_tree_order(size_t node_idx) const;
 
+    // Gaussian elimination for stabilizer tableau (used by optimizers)
+    void gaussian_elimination();
+
 private:
     size_t num_qutrits_;
     size_t num_generators_;  // 2 * num_qutrits
@@ -128,8 +131,7 @@ private:
     // Internal operations
     void row_add(size_t target, size_t source);  // Add row to another (mod 3)
     void swap_rows(size_t a, size_t b);
-    void gaussian_elimination();
-    
+
     // GF(3) arithmetic
     static Trit gf3_add(Trit a, Trit b) { return (a + b) % 3; }
     static Trit gf3_mul(Trit a, Trit b);

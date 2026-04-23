@@ -48,8 +48,8 @@ bool DataAcquisitionManager::load_sources(const std::string& config_path) {
         
         if (line.empty() || line[0] == '#') continue;
         
-        // Check for [[sources]] section start
-        if (line == "[[sources]]") {
+        // Check for [[source]] section start
+        if (line == "[[source]]") {
             if (in_source && !current_source.name.empty()) {
                 sources_.push_back(current_source);
             }
@@ -91,6 +91,7 @@ bool DataAcquisitionManager::load_sources(const std::string& config_path) {
         else if (key == "type") current_source.type = value;
         else if (key == "url") current_source.url = value;
         else if (key == "path") current_source.path = value;
+        else if (key == "pattern") current_source.pattern = value;
         else if (key == "enabled") current_source.enabled = (value == "true");
         else if (key == "rate_limit") current_source.rate_limit = std::stof(value);
         else if (key == "priority") current_source.priority = std::stoi(value);
@@ -283,25 +284,44 @@ void DataAcquisitionManager::fetch_from_web_api(const DataSourceConfig& source) 
     
     if (!response.success) {
         std::lock_guard<std::mutex> lock(progress_mutex_);
-        progress_.errors.push_back("HTTP error from " + source.name);
+        progress_.errors.push_back("HTTP error from " + source.name + ": " + response.error_message);
+        log("HTTP error from " + source.name + ": " + response.error_message);
         return;
     }
     
-    // Try to parse as JSON and extract items
-    // For now, create a single sample with the response
-    TrainingSample sample;
-    // Store string (need to manage lifetime properly in production)
-    sample.data = std::string_view(""); // Placeholder
-    sample.label = 1; // Positive
-    sample.source_api = source.name;
-    sample.domain = "web";
+    // Store the response data
+    // Split response into chunks for multiple samples
+    const size_t chunk_size = 4096;
+    size_t total_chunks = (response.body.size() + chunk_size - 1) / chunk_size;
+    int items = 0;
     
-    std::lock_guard<std::mutex> lock(queue_mutex_);
-    // sample_queue_.push(sample); // Disabled until proper string storage
+    for (size_t i = 0; i < response.body.size(); i += chunk_size) {
+        std::string chunk = response.body.substr(i, (std::min)(chunk_size, response.body.size() - i));
+        std::string processed = preprocess_text(chunk);
+        
+        if (!processed.empty()) {
+            TrainingSample sample;
+            // Store in string pool to ensure lifetime
+            string_pool_.push_back(processed);
+            sample.data = std::string_view(string_pool_.back());
+            sample.label = 1; // Positive
+            sample.source_api = source.name;
+            sample.domain = "web";
+            
+            std::lock_guard<std::mutex> lock(queue_mutex_);
+            sample_queue_.push(sample);
+            items++;
+        }
+        
+        if (items % 100 == 0) {
+            log_progress("progress", source.name, "Processing chunks", items);
+        }
+    }
     
     std::lock_guard<std::mutex> plock(progress_mutex_);
-    progress_.processed_items++;
-    progress_.total_items++;
+    progress_.processed_items += items;
+    progress_.total_items += items;
+    log("Fetched " + std::to_string(items) + " samples from " + source.name);
     
     // Rate limiting
     std::this_thread::sleep_for(
@@ -333,10 +353,15 @@ void DataAcquisitionManager::fetch_from_local_file(const DataSourceConfig& sourc
         std::string processed = preprocess_text(chunk);
         
         if (!processed.empty()) {
-            // Add to queue
+            TrainingSample sample;
+            string_pool_.push_back(processed);
+            sample.data = std::string_view(string_pool_.back());
+            sample.label = 1;
+            sample.source_api = source.name;
+            sample.domain = "local_file";
+            
             std::lock_guard<std::mutex> lock(queue_mutex_);
-            // Create sample with proper string storage
-            // For now, just count
+            sample_queue_.push(sample);
             items++;
         }
         
@@ -348,6 +373,7 @@ void DataAcquisitionManager::fetch_from_local_file(const DataSourceConfig& sourc
     std::lock_guard<std::mutex> lock(progress_mutex_);
     progress_.processed_items += items;
     progress_.total_items += items;
+    log("Loaded " + std::to_string(items) + " samples from " + source.path);
 }
 
 void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source) {
@@ -356,9 +382,31 @@ void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source
         return;
     }
     
-    std::vector<std::string> extensions = source.extensions.empty() 
-        ? std::vector<std::string>{".txt", ".md", ".json"}
-        : source.extensions;
+    std::vector<std::string> extensions;
+    
+    // If extensions specified, use them
+    if (!source.extensions.empty()) {
+        extensions = source.extensions;
+    }
+    // If pattern specified (e.g., "*.txt"), convert to extension
+    else if (!source.pattern.empty()) {
+        if (source.pattern == "*.txt") extensions = {".txt"};
+        else if (source.pattern == "*.jsonl") extensions = {".jsonl"};
+        else if (source.pattern == "*.json") extensions = {".json"};
+        else if (source.pattern == "*.md") extensions = {".md"};
+        else if (source.pattern == "*") extensions = {".txt", ".md", ".json", ".jsonl"};
+        else {
+            // Extract extension from pattern like "*.ext"
+            size_t dot = source.pattern.find('.');
+            if (dot != std::string::npos) {
+                extensions = {source.pattern.substr(dot)};
+            }
+        }
+    }
+    // Default extensions
+    if (extensions.empty()) {
+        extensions = {".txt", ".md", ".json"};
+    }
     
     int items = 0;
     
@@ -398,6 +446,15 @@ void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source
             std::string processed = preprocess_text(chunk);
             
             if (!processed.empty()) {
+                TrainingSample sample;
+                string_pool_.push_back(processed);
+                sample.data = std::string_view(string_pool_.back());
+                sample.label = 1;
+                sample.source_api = source.name;
+                sample.domain = "local_directory";
+                
+                std::lock_guard<std::mutex> lock(queue_mutex_);
+                sample_queue_.push(sample);
                 items++;
             }
         }
@@ -415,6 +472,7 @@ void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source
     std::lock_guard<std::mutex> lock(progress_mutex_);
     progress_.processed_items += items;
     progress_.total_items += items;
+    log("Loaded " + std::to_string(items) + " samples from directory " + source.path);
 }
 
 std::string DataAcquisitionManager::preprocess_text(const std::string& text,

@@ -29,10 +29,10 @@ struct PipelineMetrics {
     int32_t ff_goodness_delta = 0;
     uint64_t ff_total_train_calls = 0;
     
-    // MoE metrics
-    float moe_load_balance_score = 0.0f;
-    float avg_routing_latency_ms = 0.0f;
-    std::vector<float> expert_utilization;
+    // MoE metrics (GF(3) - tropical integers)
+    uint32_t moe_load_balance_score = 0;        // Tropical goodness score
+    uint32_t avg_routing_latency_ms = 0;        // Integer milliseconds
+    std::vector<uint32_t> expert_utilization;   // Tropical utilization counts
     std::vector<int32_t> expert_deltas;
     
     // Betti numbers (topology analysis)
@@ -55,9 +55,13 @@ struct PipelineMetrics {
     // Pipeline state
     uint64_t current_epoch = 0;
     uint64_t current_batch = 0;
-    float training_progress = 0.0f;  // 0.0 to 100.0
+    uint64_t samples_processed = 0;  // Total samples processed in current epoch
+    uint32_t training_progress = 0;  // Basis points (0-10000 = 0.00%-100.00%)
     bool is_running = false;
     std::string status_message;
+    
+    // Continuous mode tracking
+    uint32_t loop_count = 0;  // Number of completed loops in continuous mode
 };
 
 /**
@@ -71,7 +75,8 @@ struct PipelineConfig {
     // Forward-Forward settings
     size_t ff_num_layers = 3;
     size_t ff_layer_width = 128;
-    float ff_learning_rate = 0.001f;
+    uint32_t ff_learning_rate_step = 1;  // GF(3) learning step size (no float)
+    float learning_rate = 0.001f;  // Standard learning rate
     
     // MoE settings
     size_t moe_num_experts = 243;
@@ -79,24 +84,41 @@ struct PipelineConfig {
     size_t moe_input_dim = 64;
     size_t moe_output_dim = 64;
     size_t moe_hidden_dim = 128;
+    /** Layers inside each expert network (Forward–Forward stack depth). */
+    size_t moe_expert_internal_layers = 2;
+    /** MoE router qutrit width; must match TOML model.routing_qutrits. */
+    size_t routing_qutrits = 16;
     
     // Betti/Graph settings
     size_t graph_initial_nodes = 64;
     size_t graph_initial_edges = 112;
     size_t betti_max_qutrits = 243;
     uint32_t betti_guidance_threshold = 15;  // β₁ threshold for optimization
+    uint32_t shadow_dim = 64;  // Shadow dimension for stabilizer
     
     // Training loop settings
     size_t batch_size = 32;
-    size_t num_epochs = 1000;
+    size_t num_epochs = 100;
+    size_t samples_per_epoch = 1000;  // samples to process per epoch
     size_t topology_evaluation_interval = 10;  // batches between Betti analysis
-    size_t checkpoint_interval = 100;  // epochs between checkpoints
+    /** Checkpoints taken when current_epoch % checkpoint_interval == 0 (after epoch completes). */
+    size_t checkpoint_interval = 10;
     
     // Control flags
     bool enable_betti_guidance = true;
     bool enable_knowledge_engine = true;
     bool enable_checkpoints = true;
     bool enable_wui_streaming = true;
+    bool enable_continuous_mode = false;  // Auto-restart when epoch limit reached
+    bool enable_steane_correction = false;  // Steane error correction
+    bool enable_error_correction = false;   // Alias for steane correction
+    bool enable_flash_cim = false;         // Flash CIM optimization
+    
+    // Data source - if set, load local data instead of external APIs
+    std::string data_path;  // Path to local training data files
+    bool prefer_local_data = true;  // Use local data if available, fall back to APIs
+    /** Absolute or CWD-relative path to data_sources.toml (host should pass absolute). */
+    std::string data_sources_toml_path;
 };
 
 /**
@@ -114,7 +136,7 @@ enum class PipelineState {
     PAUSED,               // Training paused
     STOPPING,             // Graceful shutdown
     COMPLETE,              // Training finished
-    ERROR                  // Error state
+    FAILED                 // Error state (renamed to avoid Windows ERROR macro)
 };
 
 /**
@@ -260,6 +282,9 @@ private:
     // Training state
     std::atomic<uint64_t> current_epoch_{0};
     std::atomic<uint64_t> current_batch_{0};
+    std::atomic<uint64_t> samples_processed_{0};  // Samples processed in current epoch
+    std::atomic<uint32_t> loop_count_{0};  // Continuous mode loop counter
+    size_t consecutive_empty_batches_{0};
     
     // Threading
     std::thread training_thread_;
@@ -279,7 +304,7 @@ private:
     void training_loop();
     bool initialize_components();
     void shutdown_components();
-    bool process_batch();
+    size_t process_batch();
     bool evaluate_topology();
     bool optimize_graph_topology();
     void update_metrics();
@@ -303,10 +328,8 @@ private:
 };
 
 /**
- * @brief Factory function for creating pipeline
+ * @brief Factory: new pipeline only; caller must initialize(config) then start_training().
  */
-std::unique_ptr<AutonomousTrainingPipeline> create_training_pipeline(
-    const PipelineConfig& config
-);
+std::unique_ptr<AutonomousTrainingPipeline> create_training_pipeline();
 
 } // namespace q_mini_wasm_v2::core::training

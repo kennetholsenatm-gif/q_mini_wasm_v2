@@ -13,12 +13,19 @@ shadow_dim = 4096
 num_layers = 64
 neurons_per_layer = 2048
 routing_qutrits = 12
+moe_input_dim = 2048
+moe_output_dim = 2048
+moe_hidden_dim = 4096
+expert_internal_layers = 2
 learning_rate_shift = 2
 
 [features]
 steane_correction = true
 flash_cim = false
 worker_threads = 32
+continuous_mode = true
+lazy_init = true
+data_accumulation = true
 
 [apis]
 enabled = false
@@ -37,9 +44,29 @@ enabled = true
 port = 9090
 
 [paths]
+# =============================================================================
+# DATA PATHS - Configure for your environment
+# =============================================================================
+# For git-appropriate repositories, use external data storage:
+#   Windows: C:\q_mini_data\ or D:\ML_Data\q_mini\
+#   Linux:   /var/lib/q_mini/data/ or ~/q_mini_data/
+#   macOS:   ~/Library/Application Support/q_mini/data/
+#
+# Run: .\scripts\setup_external_data.ps1 to migrate data outside git
+# =============================================================================
+
 base_model = "checkpoints/final_model.json"
 output_dir = "checkpoints/"
+
+# Dataset directory - can be external (outside git repo)
+# Default: relative "datasets/" for local testing
+# Production: "C:\\q_mini_data\\datasets" or "/var/lib/q_mini/datasets"
 dataset_dir = "datasets/"
+
+# External data paths (uncomment and set for production)
+# external_data_root = "C:\\q_mini_data"
+# weights_dir = "C:\\q_mini_data\\weights"
+# logs_dir = "C:\\q_mini_data\\logs"
 
 # =============================================================================
 # Previously Hardcoded Values - Now Configurable
