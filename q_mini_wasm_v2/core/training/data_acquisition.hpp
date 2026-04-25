@@ -7,6 +7,7 @@
 #include <atomic>
 #include <mutex>
 #include <queue>
+#include <algorithm>
 #include <functional>
 #include <chrono>
 #include <optional>
@@ -52,6 +53,14 @@ struct AcquisitionProgress {
     }
 };
 
+struct AcquisitionQueueStats {
+    size_t queue_depth = 0;
+    size_t max_queue_depth = 0;
+    uint64_t blocked_pushes = 0;
+    uint64_t blocked_wait_ms = 0;
+    uint64_t dropped_too_short = 0;
+};
+
 /**
  * @brief Data Acquisition Manager
  * 
@@ -90,6 +99,8 @@ public:
     
     // Get count of samples in queue
     size_t queue_size() const;
+    AcquisitionQueueStats get_queue_stats() const;
+    void set_max_queue_depth(size_t depth) { max_sample_queue_depth_ = std::max<size_t>(size_t{64}, depth); }
     
     // Set SSE logging callback
     using LogCallback = std::function<void(const std::string&)>;
@@ -113,6 +124,11 @@ private:
     std::vector<DataSourceConfig> sources_;
     std::queue<TrainingSample> sample_queue_;
     mutable std::mutex queue_mutex_;
+    std::condition_variable queue_not_full_cv_;
+    size_t max_sample_queue_depth_ = 32768;
+    std::atomic<uint64_t> blocked_pushes_{0};
+    std::atomic<uint64_t> blocked_wait_ms_{0};
+    std::atomic<uint64_t> dropped_too_short_{0};
     
     std::thread acquisition_thread_;
     std::atomic<bool> running_{false};
@@ -123,10 +139,6 @@ private:
     mutable std::mutex progress_mutex_;
     
     LogCallback log_callback_;
-    
-    // String pool for sample lifetime management
-    std::vector<std::string> string_pool_;
-    mutable std::mutex string_pool_mutex_;
     
     // HTTP client for web APIs
     struct HttpResponse {

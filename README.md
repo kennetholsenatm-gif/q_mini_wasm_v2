@@ -18,18 +18,19 @@ git clone https://github.com/kennetholsenatm-gif/q_mini_wasm_v2.git
 cd q_mini_wasm_v2
 ```
 
-Build the training DLL (MSVC / CMake), then the Go host (CGO links `q_training.dll`):
+Build the training DLL (MSVC / CMake), then the Go host (CGO links `q_training.dll`). **Always build and run a single `qminiwasm.exe` at the repository root** (for example `C:\GitHub\q_mini_wasm_v2\qminiwasm.exe`):
 
 ```powershell
+cd C:\GitHub\q_mini_wasm_v2
 cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_final
 cmake --build q_mini_wasm_v2/build_final --config Release --target q_training
-go build -o cmd/qminiwasm/qminiwasm.exe ./cmd/qminiwasm
+go build -o qminiwasm.exe ./cmd/qminiwasm
 ```
 
-Copy `q_mini_wasm_v2/build_final/q_training.dll` next to `cmd/qminiwasm/qminiwasm.exe` (or on `PATH`), create external data at `C:\q_mini_data` per [CONTRIBUTING.md](CONTRIBUTING.md), then:
+A Release build of **`q_training`** copies **`q_training.dll`** to the repo root next to **`qminiwasm.exe`**. Set up external data at `C:\q_mini_data` per [CONTRIBUTING.md](CONTRIBUTING.md), then:
 
 ```powershell
-.\cmd\qminiwasm\qminiwasm.exe
+.\qminiwasm.exe
 ```
 
 Open **http://localhost:9090** (see `Port` in `cmd/qminiwasm/main.go` if you change it).

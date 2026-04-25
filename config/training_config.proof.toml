@@ -1,0 +1,57 @@
+# Minimal training profile for automated proof (scripts/prove_training_works.ps1).
+# Use with QMINI_TRAINING_CONFIG and a local-only QMINI_DATA_SOURCES_TOML.
+
+[training]
+epochs = 3
+batch_size = 16
+checkpoint_interval = 1
+learning_rate = 1
+buffer_profile = "conservative"
+prefill_target_samples = 24
+prefill_timeout_ms = 25000
+prefill_poll_ms = 20
+
+[model]
+moe_experts = 64
+moe_top_k = 2
+context_window = 128
+entanglement_tokens = 16
+shadow_dim = 32
+num_layers = 2
+neurons_per_layer = 32
+routing_qutrits = 4
+moe_input_dim = 64
+moe_output_dim = 64
+moe_hidden_dim = 96
+expert_internal_layers = 1
+moe_ff_active_internal_layers = 1
+learning_rate_shift = 0
+
+[features]
+steane_correction = false
+flash_cim = false
+worker_threads = 4
+continuous_mode = false
+lazy_init = true
+data_accumulation = false
+
+[apis]
+enabled = false
+wolfram = false
+pubchem = false
+oeis = false
+wikidata = false
+arxiv = false
+nasa = false
+pdb = false
+github = false
+lean = false
+
+[streaming]
+enabled = true
+port = 9090
+
+[paths]
+base_model = "checkpoints/final_model.json"
+output_dir = "checkpoints/"
+dataset_dir = "datasets/proof_corpus"

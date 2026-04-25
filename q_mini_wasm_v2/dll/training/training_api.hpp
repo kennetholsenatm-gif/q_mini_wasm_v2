@@ -53,6 +53,7 @@ extern uint64_t g_next_session_id;
  * @param moe_output_dim - Expert output width
  * @param moe_hidden_dim - Expert hidden width
  * @param moe_expert_internal_layers - Layer count inside each expert FF stack
+ * @param moe_ff_active_internal_layers - Cap internal FF layers per expert (0 = use full moe_expert_internal_layers)
  * @return 0 on success, negative error code on failure
  */
 TRAINING_API int Training_InitSession(
@@ -78,7 +79,14 @@ TRAINING_API int Training_InitSession(
     uint32_t moe_input_dim,
     uint32_t moe_output_dim,
     uint32_t moe_hidden_dim,
-    uint32_t moe_expert_internal_layers
+    uint32_t moe_expert_internal_layers,
+    uint32_t moe_ff_active_internal_layers,
+    uint32_t prefill_target_samples,
+    uint32_t prefill_timeout_ms,
+    uint32_t prefill_poll_ms,
+    uint32_t max_acquisition_queue_depth,
+    uint32_t max_raw_queue_depth,
+    uint32_t max_train_queue_depth
 );
 
 /**
@@ -136,12 +144,80 @@ TRAINING_API int Training_StopTraining(uint64_t session_id);
 TRAINING_API int Training_CleanupSession(uint64_t session_id);
 
 /**
+ * Export MoE GF(3) expert weights and pipeline config to a QMINI_V3 file.
+ * Training must be stopped (same constraints as checkpointing).
+ * @return 0 success, -1 session not found, -2 still running, -3 I/O or encode error, -4 bad path
+ */
+TRAINING_API int Training_ExportCheckpoint(uint64_t session_id, const char* path_utf8);
+
+/**
+ * Replace the in-memory pipeline from a QMINI_V3 file (training stopped).
+ * @return 0 success, -1 session not found, -2 still running, -3 read or layout error, -4 bad path
+ */
+TRAINING_API int Training_ImportCheckpoint(uint64_t session_id, const char* path_utf8);
+
+/**
  * Get DLL version string
  * 
  * @param version_out - Output buffer for version string
  * @param max_len - Maximum length of output buffer
  */
 TRAINING_API void Training_GetVersion(char* version_out, size_t max_len);
+
+/**
+ * Extended pipeline / DataSynthesizer metrics (includes queue depths and cumulative samples_total).
+ * @return 0 on success, negative error code on failure
+ */
+TRAINING_API int Training_GetMetrics(
+    uint64_t session_id,
+    uint32_t* experts_active_out,
+    uint32_t* data_acquired_out,
+    uint32_t* data_perturbed_out,
+    uint32_t* api_failures_out,
+    uint32_t* betti_0_out,
+    uint32_t* betti_1_out,
+    uint32_t* betti_2_out,
+    uint32_t* topic_frontier_size_out,
+    uint32_t* topic_frontier_max_out,
+    uint32_t* topic_frontier_evictions_out,
+    uint32_t* ds_queue_depth_out,
+    uint32_t* ds_raw_queue_depth_out,
+    uint32_t* ds_raw_queue_max_out,
+    uint32_t* ds_train_queue_max_out,
+    uint32_t* ds_acq_queue_depth_out,
+    uint32_t* ds_acq_queue_max_out,
+    uint64_t* ds_blocked_raw_pushes_out,
+    uint64_t* ds_blocked_train_pushes_out,
+    uint64_t* ds_blocked_wait_ms_out,
+    uint64_t* ds_dropped_payloads_out,
+    uint64_t* ds_acq_blocked_pushes_out,
+    uint64_t* ds_acq_blocked_wait_ms_out,
+    uint64_t* samples_total_out,
+    uint64_t* ds_acq_dropped_too_short_out,
+    uint64_t* gf3_hebbian_weight_cell_updates_out
+);
+
+/**
+ * Get ingestion/backpressure diagnostics from the current session metrics.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+TRAINING_API int Training_GetIngestionStats(
+    uint64_t session_id,
+    uint64_t* samples_total_out,
+    uint32_t* ds_queue_depth_out,
+    uint32_t* ds_raw_queue_depth_out,
+    uint32_t* ds_raw_queue_max_out,
+    uint32_t* ds_train_queue_max_out,
+    uint32_t* ds_acq_queue_depth_out,
+    uint32_t* ds_acq_queue_max_out,
+    uint64_t* ds_blocked_raw_pushes_out,
+    uint64_t* ds_blocked_train_pushes_out,
+    uint64_t* ds_blocked_wait_ms_out,
+    uint64_t* ds_dropped_payloads_out,
+    uint64_t* ds_acq_blocked_pushes_out,
+    uint64_t* ds_acq_blocked_wait_ms_out
+);
 
 #ifdef __cplusplus
 } // extern "C"

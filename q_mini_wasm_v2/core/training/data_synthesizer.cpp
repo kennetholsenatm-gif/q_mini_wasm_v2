@@ -7,10 +7,13 @@
 #include <sstream>
 #include <iomanip>
 #include <cstring>
+#include <cstdint>
 #include <iostream>
 #include <unordered_set>
 #include <cstdlib>  // getenv
 #include <filesystem>
+#include <optional>
+#include <deque>
 
 // HTTP client support - requires libcurl or similar
 // For production: link with -lcurl
@@ -1031,6 +1034,7 @@ void DataSynthesizer::initialize_apis() {
 
 bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
     local_samples_.clear();
+    local_sample_index_ = 0;
     std::error_code ec;
     if (!std::filesystem::is_directory(dir_path, ec)) {
         std::cerr << "[DataSynthesizer] Not a directory: " << dir_path << std::endl;
@@ -1039,6 +1043,9 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
     constexpr size_t kMaxLines = 100000;
     constexpr size_t kMaxLineFeatures = 512;
     size_t loaded = 0;
+    size_t discovered_files = 0;
+    size_t accepted_files = 0;
+    size_t skipped_extension_files = 0;
 
     for (const auto& entry : std::filesystem::directory_iterator(dir_path, ec)) {
         if (ec) {
@@ -1047,10 +1054,13 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
         if (!entry.is_regular_file()) {
             continue;
         }
+        ++discovered_files;
         const std::string ext = entry.path().extension().string();
-        if (ext != ".txt") {
+        if (ext != ".txt" && ext != ".jsonl") {
+            ++skipped_extension_files;
             continue;
         }
+        ++accepted_files;
         std::ifstream file(entry.path());
         if (!file.is_open()) {
             continue;
@@ -1078,13 +1088,21 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
     }
 
     if (loaded == 0) {
-        std::cerr << "[DataSynthesizer] No .txt lines loaded from directory: " << dir_path << std::endl;
+        std::cerr << "[DataSynthesizer] No .txt/.jsonl lines loaded from directory: " << dir_path
+                  << " (discovered_files=" << discovered_files
+                  << ", accepted_files=" << accepted_files
+                  << ", skipped_extension_files=" << skipped_extension_files << ")"
+                  << std::endl;
         return false;
     }
 
     data_path_ = dir_path;
     has_local_data_ = true;
-    std::cout << "[DataSynthesizer] Loaded " << loaded << " text lines from directory: " << dir_path << std::endl;
+    std::cout << "[DataSynthesizer] Loaded " << loaded << " text lines from directory: " << dir_path
+              << " (discovered_files=" << discovered_files
+              << ", accepted_files=" << accepted_files
+              << ", skipped_extension_files=" << skipped_extension_files << ")"
+              << std::endl;
 
     std::mt19937 rng(42);
     const size_t original_count = local_samples_.size();
@@ -1111,6 +1129,7 @@ bool DataSynthesizer::use_config(const std::string& config_path) {
     std::cout << "[DataSynthesizer] Loading data sources from config: " << config_path << std::endl;
     
     acquisition_mgr_ = std::make_unique<DataAcquisitionManager>();
+    acquisition_mgr_->set_max_queue_depth(max_acquisition_queue_depth_);
     
     if (!acquisition_mgr_->load_sources(config_path)) {
         std::cerr << "[DataSynthesizer] Failed to load config from: " << config_path << std::endl;
@@ -1141,6 +1160,7 @@ bool DataSynthesizer::load_local_data(const std::string& data_path) {
     
     // Clear existing local samples
     local_samples_.clear();
+    local_sample_index_ = 0;
     std::ifstream file(data_path);
     std::cout << "[DataSynthesizer] Loading local data from: " << data_path << std::endl;
 
@@ -1261,14 +1281,39 @@ bool DataSynthesizer::load_local_data(const std::string& data_path) {
 void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_threads) {
     if (running_) return;
     running_ = true;
-    
-    // If local data is loaded, skip API initialization
+
+    const bool hybrid = has_local_data_ && use_config_sources_ && acquisition_mgr_;
+
+    if (hybrid) {
+        std::cout << "[DataSynthesizer] Hybrid: " << local_samples_.size()
+                  << " local samples + config/web acquisition (interleaved draws)" << std::endl;
+        if (!acquisition_mgr_->start()) {
+            std::cerr << "[DataSynthesizer] Failed to start DataAcquisitionManager (hybrid)" << std::endl;
+            use_config_sources_ = false;
+            acquisition_mgr_.reset();
+            std::cout << "[DataSynthesizer] Continuing local-only (web/config start failed)" << std::endl;
+            return;
+        }
+        acquisition_pool_ = std::make_unique<ThreadPool>(1);
+        acquisition_pool_->enqueue([this] {
+            config_acquisition_worker();
+        });
+        perturbation_pool_ = std::make_unique<ThreadPool>(perturbation_threads);
+        for (size_t i = 0; i < perturbation_threads; ++i) {
+            perturbation_pool_->enqueue([this] {
+                perturbation_worker();
+            });
+        }
+        return;
+    }
+
+    // Local-only: corpus already in memory; no acquisition threads
     if (has_local_data_) {
         std::cout << "[DataSynthesizer] Using local data from: " << data_path_ << std::endl;
         std::cout << "[DataSynthesizer] Samples available: " << local_samples_.size() << std::endl;
-        return;  // Local data is already loaded, no threads needed
+        return;
     }
-    
+
     // If config-based sources are loaded, use DataAcquisitionManager
     if (use_config_sources_ && acquisition_mgr_) {
         std::cout << "[DataSynthesizer] Using configured data sources from data_sources.toml" << std::endl;
@@ -1370,6 +1415,7 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
 void DataSynthesizer::stop() {
     running_ = false;
     queue_cv_.notify_all();
+    queue_not_full_cv_.notify_all();
     
     // Stop config-based acquisition manager if running
     if (acquisition_mgr_) {
@@ -1381,62 +1427,251 @@ void DataSynthesizer::stop() {
 }
 
 TrainingSample DataSynthesizer::get_sample() {
-    std::unique_lock<std::mutex> lock(queue_mutex_);
-    queue_cv_.wait(lock, [this] { return !train_queue_.empty() || !running_; });
-    
-    if (!train_queue_.empty()) {
-        TrainingSample sample = std::move(train_queue_.front());
-        train_queue_.pop();
-        return sample;
+    auto try_pop_local = [this]() -> std::optional<TrainingSample> {
+        std::lock_guard<std::mutex> lk(local_data_mutex_);
+        if (has_local_data_ && !local_samples_.empty()) {
+            const size_t idx = local_sample_index_++ % local_samples_.size();
+            return local_samples_[idx];
+        }
+        return std::nullopt;
+    };
+    auto try_pop_queue = [this]() -> std::optional<TrainingSample> {
+        std::lock_guard<std::mutex> lk(queue_mutex_);
+        if (!train_queue_.empty()) {
+            TrainingSample s = std::move(train_queue_.front());
+            train_queue_.pop();
+            queue_not_full_cv_.notify_all();
+            return s;
+        }
+        return std::nullopt;
+    };
+
+    // When a local corpus exists, get_sample() used to prefer local forever. Acquisition threads
+    // still fill raw/train queues; if the trainer never pops train_queue_, producers deadlock on
+    // full buffers while metrics show "prefill" and samples_processed stays 0. Drain train first
+    // whenever the queue is near its cap (same idea for hybrid: 50/50 interleave can still starve).
+    {
+        std::lock_guard<std::mutex> lk(queue_mutex_);
+        const size_t cap = max_train_queue_depth_;
+        if (!train_queue_.empty() && cap >= 4 && train_queue_.size() >= (cap * 3) / 4) {
+            TrainingSample s = std::move(train_queue_.front());
+            train_queue_.pop();
+            queue_not_full_cv_.notify_all();
+            return s;
+        }
     }
-    
-    return TrainingSample{};  // Empty sample if stopped
+
+    const bool hybrid = has_local_data_ && use_config_sources_;
+
+    if (!hybrid) {
+        if (auto loc = try_pop_local()) {
+            return *loc;
+        }
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        queue_cv_.wait(lock, [this] { return !train_queue_.empty() || !running_; });
+        if (!train_queue_.empty()) {
+            TrainingSample sample = std::move(train_queue_.front());
+            train_queue_.pop();
+            queue_not_full_cv_.notify_all();
+            return sample;
+        }
+        return TrainingSample{};
+    }
+
+    // Hybrid: alternate preferred side (local vs queue); take the other if empty.
+    for (;;) {
+        const bool prefer_local = ((interleave_counter_.fetch_add(1, std::memory_order_relaxed) & 1u) == 0u);
+        if (prefer_local) {
+            if (auto loc = try_pop_local()) {
+                return *loc;
+            }
+            if (auto q = try_pop_queue()) {
+                return *q;
+            }
+        } else {
+            if (auto q = try_pop_queue()) {
+                return *q;
+            }
+            if (auto loc = try_pop_local()) {
+                return *loc;
+            }
+        }
+
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        queue_cv_.wait_for(lock, std::chrono::milliseconds(250), [this] {
+            return !train_queue_.empty() || !running_;
+        });
+        if (!train_queue_.empty()) {
+            TrainingSample s = std::move(train_queue_.front());
+            train_queue_.pop();
+            queue_not_full_cv_.notify_all();
+            return s;
+        }
+        if (!running_) {
+            lock.unlock();
+            if (auto loc = try_pop_local()) {
+                return *loc;
+            }
+            return TrainingSample{};
+        }
+        lock.unlock();
+        if (auto loc = try_pop_local()) {
+            return *loc;
+        }
+    }
 }
 
 bool DataSynthesizer::has_sample() const {
+    {
+        std::lock_guard<std::mutex> local_lock(local_data_mutex_);
+        if (has_local_data_ && !local_samples_.empty()) {
+            return true;
+        }
+    }
     std::lock_guard<std::mutex> lock(queue_mutex_);
     return !train_queue_.empty();
 }
 
 DataSynthesizer::Stats DataSynthesizer::get_stats() const {
-    std::lock_guard<std::mutex> lock(stats_mutex_);
-    Stats s = stats_;
-    s.queue_depth = train_queue_.size();
+    Stats s;
+    {
+        std::lock_guard<std::mutex> qlock(queue_mutex_);
+        s.queue_depth = train_queue_.size();
+        s.raw_queue_depth = raw_queue_.size();
+    }
+    {
+        std::lock_guard<std::mutex> lock(stats_mutex_);
+        s = stats_;
+    }
+    {
+        std::lock_guard<std::mutex> qlock(queue_mutex_);
+        s.queue_depth = train_queue_.size();
+        s.raw_queue_depth = raw_queue_.size();
+    }
+    if (acquisition_mgr_) {
+        auto aq = acquisition_mgr_->get_queue_stats();
+        s.acquisition_queue_depth = aq.queue_depth;
+        s.acquisition_queue_max = aq.max_queue_depth;
+        s.acquisition_blocked_pushes = aq.blocked_pushes;
+        s.acquisition_blocked_wait_ms = aq.blocked_wait_ms;
+        s.acquisition_dropped_too_short = aq.dropped_too_short;
+    }
+    s.raw_queue_max = max_raw_queue_depth_;
+    s.train_queue_max = max_train_queue_depth_;
     return s;
 }
 
 void DataSynthesizer::config_acquisition_worker() {
     // Fetch data from configured sources via DataAcquisitionManager
     // and feed into raw_queue_ for perturbation_worker
-    
+    uint32_t empty_batch_streak = 0;
+    bool logged_relaxed_min_text = false;
+    constexpr uint32_t kRelaxMinTextAfterEmptyBatches = 40; // ~4s at 100ms idle sleep
+    constexpr size_t kDefaultMinTextLen = 50;
+
     while (running_) {
         if (!acquisition_mgr_) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
-        
-        // Fetch a batch from configured sources
-        auto samples = acquisition_mgr_->fetch_batch(10, 50, 100000);
-        
+
+        size_t min_text = kDefaultMinTextLen;
+        if (empty_batch_streak >= kRelaxMinTextAfterEmptyBatches) {
+            min_text = 1;
+            if (!logged_relaxed_min_text) {
+                logged_relaxed_min_text = true;
+                std::cerr << "[DataSynthesizer] config_acquisition_worker: min_text relaxed to 1 after "
+                          << empty_batch_streak << " empty acquisition batches (tiny-corpus / prefill guardrail)\n";
+            }
+        }
+
+        auto samples = acquisition_mgr_->fetch_batch(10, min_text, 100000);
+
         if (!samples.empty()) {
-            // Convert TrainingSample to ApiPayload and add to raw_queue_
+            empty_batch_streak = 0;
+            logged_relaxed_min_text = false;
+            // Convert TrainingSample payloads to a trainable fixed-point vector payload.
             for (auto& sample : samples) {
-                std::visit([this, &sample](auto&& arg) {
+                std::vector<int32_t> converted;
+                bool accepted = false;
+                std::visit([&converted, &accepted](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, std::vector<int32_t>>) {
-                        // Already in correct format
-                        std::lock_guard<std::mutex> lock(queue_mutex_);
-                        raw_queue_.push(arg);
-                        {
-                            std::lock_guard<std::mutex> stats_lock(stats_mutex_);
-                            stats_.total_acquired++;
+                        converted = arg;
+                        accepted = true;
+                    } else if constexpr (std::is_same_v<T, std::string_view>) {
+                        converted.reserve(arg.size());
+                        for (unsigned char ch : arg) {
+                            converted.push_back(static_cast<int32_t>(ch));
                         }
+                        accepted = !converted.empty();
+                    } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+                        converted.reserve(arg.size());
+                        for (float v : arg) {
+                            converted.push_back(static_cast<int32_t>(v * 1000.0f));
+                        }
+                        accepted = !converted.empty();
+                    } else if constexpr (std::is_same_v<T, std::vector<Trit>>) {
+                        converted.reserve(arg.size());
+                        for (auto t : arg) {
+                            converted.push_back(static_cast<int32_t>(t));
+                        }
+                        accepted = !converted.empty();
+                    } else if constexpr (std::is_same_v<T, std::vector<std::vector<int32_t>>>) {
+                        size_t cap = 0;
+                        for (const auto& row : arg) cap += row.size();
+                        converted.reserve(cap);
+                        for (const auto& row : arg) {
+                            converted.insert(converted.end(), row.begin(), row.end());
+                        }
+                        accepted = !converted.empty();
+                    } else if constexpr (std::is_same_v<T, std::vector<std::vector<float>>>) {
+                        for (const auto& row : arg) {
+                            for (float v : row) {
+                                converted.push_back(static_cast<int32_t>(v * 1000.0f));
+                            }
+                        }
+                        accepted = !converted.empty();
                     }
                 }, sample.data);
+
+                if (!accepted) {
+                    std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                    stats_.dropped_payloads++;
+                    if (std::holds_alternative<std::string_view>(sample.data)) {
+                        stats_.dropped_payload_string_view++;
+                    } else {
+                        stats_.dropped_payload_other++;
+                    }
+                    continue;
+                }
+
+                std::unique_lock<std::mutex> lock(queue_mutex_);
+                while (running_ && raw_queue_.size() >= max_raw_queue_depth_) {
+                    auto ws = std::chrono::steady_clock::now();
+                    {
+                        std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                        stats_.blocked_raw_pushes++;
+                    }
+                    queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(200));
+                    const auto waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - ws).count());
+                    std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                    stats_.blocked_wait_ms += waited;
+                }
+                if (!running_) {
+                    break;
+                }
+                raw_queue_.push(std::move(converted));
+                lock.unlock();
+                {
+                    std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                    stats_.total_acquired++;
+                }
+                queue_cv_.notify_one();
             }
-            queue_cv_.notify_one();
         } else {
-            // No data available, wait a bit
+            ++empty_batch_streak;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
@@ -1592,18 +1827,46 @@ void DataSynthesizer::acquisition_worker(ApiClient* client) {
         return;
     }
     
-    size_t current_topic_idx = 0;
+    // Ring-buffer frontier: bounded memory + dedup set.
+    constexpr size_t kTopicFrontierMax = 4096;
+    std::deque<std::string> topic_frontier_ring;
+    std::unordered_set<std::string> topic_frontier_seen;
+    topic_frontier_ring.clear();
+    topic_frontier_seen.clear();
+    auto frontier_push = [&](const std::string& topic) {
+        if (topic.empty()) return;
+        if (topic_frontier_seen.find(topic) != topic_frontier_seen.end()) return;
+        if (topic_frontier_ring.size() >= kTopicFrontierMax) {
+            topic_frontier_seen.erase(topic_frontier_ring.front());
+            topic_frontier_ring.pop_front();
+            {
+                std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                stats_.topic_frontier_evictions++;
+            }
+        }
+        topic_frontier_ring.push_back(topic);
+        topic_frontier_seen.insert(topic);
+    };
+    for (const auto& t : topic_frontier) {
+        frontier_push(t);
+    }
+
     std::mt19937 rng(std::random_device{}());
     
     while (running_) {
-        if (topic_frontier.empty()) {
+        {
+            std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+            stats_.topic_frontier_size = topic_frontier_ring.size();
+            stats_.topic_frontier_max = kTopicFrontierMax;
+        }
+        if (topic_frontier_ring.empty()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
         
-        // Pick a topic from frontier (round-robin with randomness for exploration)
-        current_topic_idx = (current_topic_idx + rng() % 3) % topic_frontier.size();
-        const std::string& topic = topic_frontier[current_topic_idx];
+        // Pick a topic from bounded frontier (randomized exploration).
+        const size_t current_topic_idx = static_cast<size_t>(rng() % topic_frontier_ring.size());
+        const std::string topic = topic_frontier_ring[current_topic_idx];
         
         // Each client builds its own query dynamically based on topic
         std::string endpoint;
@@ -1686,16 +1949,28 @@ void DataSynthesizer::acquisition_worker(ApiClient* client) {
             std::vector<std::string> discovered = extract_topics_from_response(*payload, topic);
             
             // AGGRESSIVE TOPIC DISCOVERY: Add all discovered topics
-            // For 100B parameter model, we need MASSIVE diversity - no artificial limits
+            // Use bounded ring buffer to keep memory stable in long runs.
             for (const auto& new_topic : discovered) {
-                if (topic_frontier.size() < 10000 &&  // Allow up to 10k topics per API
-                    std::find(topic_frontier.begin(), topic_frontier.end(), new_topic) == topic_frontier.end()) {
-                    topic_frontier.push_back(new_topic);
-                }
+                frontier_push(new_topic);
             }
             
             {
-                std::lock_guard<std::mutex> lock(queue_mutex_);
+                std::unique_lock<std::mutex> lock(queue_mutex_);
+                while (running_ && raw_queue_.size() >= max_raw_queue_depth_) {
+                    auto ws = std::chrono::steady_clock::now();
+                    {
+                        std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                        stats_.blocked_raw_pushes++;
+                    }
+                    queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(200));
+                    const auto waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - ws).count());
+                    std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                    stats_.blocked_wait_ms += waited;
+                }
+                if (!running_) {
+                    break;
+                }
                 raw_queue_.push(*payload);
                 {
                     std::lock_guard<std::mutex> stats_lock(stats_mutex_);
@@ -1706,21 +1981,22 @@ void DataSynthesizer::acquisition_worker(ApiClient* client) {
             
             std::cout << "[DataSynthesizer] " << client_name 
                       << " explored: " << topic 
-                      << " (frontier: " << topic_frontier.size() << ")" << std::endl;
+                      << " (frontier: " << topic_frontier_ring.size() << "/" << kTopicFrontierMax << ")" << std::endl;
         } else {
             std::lock_guard<std::mutex> stats_lock(stats_mutex_);
             ++stats_.api_failures;
             
             // Remove failed topic from frontier to avoid requery
-            // Check bounds: must have >4 topics AND current_topic_idx must be valid
-            if (topic_frontier.size() > 4 && current_topic_idx < topic_frontier.size()) {
-                topic_frontier.erase(topic_frontier.begin() + current_topic_idx);
-                // Decrement index since we removed current element
-                if (current_topic_idx > 0) --current_topic_idx;
+            // Keep a minimum frontier width to avoid dead-ending.
+            if (topic_frontier_ring.size() > 4) {
+                auto it = std::find(topic_frontier_ring.begin(), topic_frontier_ring.end(), topic);
+                if (it != topic_frontier_ring.end()) {
+                    topic_frontier_seen.erase(*it);
+                    topic_frontier_ring.erase(it);
+                }
             }
         }
-        
-        ++current_topic_idx;
+
         
         // MINIMAL rate limiting - we need MASSIVE data for 100B model
         // APIs with limits will return 429, we handle via backoff
@@ -1812,6 +2088,7 @@ void DataSynthesizer::perturbation_worker() {
             
             positive = std::move(raw_queue_.front());
             raw_queue_.pop();
+            queue_not_full_cv_.notify_all();
             client_type = (stats_.total_acquired % 15);  // Cycle through 15 client types (9 old + 6 new)
         }
         
@@ -1875,7 +2152,22 @@ void DataSynthesizer::perturbation_worker() {
         TrainingSample neg_sample{negative, -1, "synthesizer", domain};
         
         {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            while (running_ && train_queue_.size() + 2 > max_train_queue_depth_) {
+                auto ws = std::chrono::steady_clock::now();
+                {
+                    std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                    stats_.blocked_train_pushes++;
+                }
+                queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(200));
+                const auto waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - ws).count());
+                std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                stats_.blocked_wait_ms += waited;
+            }
+            if (!running_) {
+                break;
+            }
             train_queue_.push(pos_sample);
             train_queue_.push(neg_sample);
             {
@@ -1912,7 +2204,12 @@ std::optional<ApiPayload> OpenAlexClient::query(std::string_view endpoint,
         return std::nullopt;
     }
     
-    return ApiPayload{std::string_view(response.body)};
+    std::vector<int32_t> encoded;
+    encoded.reserve(response.body.size());
+    for (unsigned char ch : response.body) {
+        encoded.push_back(static_cast<int32_t>(ch));
+    }
+    return ApiPayload{std::move(encoded)};
 }
 
 void OpenAlexClient::backoff() {
@@ -1952,7 +2249,12 @@ std::optional<ApiPayload> GutendexClient::query(std::string_view endpoint,
         return std::nullopt;
     }
     
-    return ApiPayload{std::string_view(response.body)};
+    std::vector<int32_t> encoded;
+    encoded.reserve(response.body.size());
+    for (unsigned char ch : response.body) {
+        encoded.push_back(static_cast<int32_t>(ch));
+    }
+    return ApiPayload{std::move(encoded)};
 }
 
 void GutendexClient::backoff() {
@@ -1992,7 +2294,12 @@ std::optional<ApiPayload> UsgsEarthquakeClient::query(std::string_view endpoint,
         return std::nullopt;
     }
     
-    return ApiPayload{std::string_view(response.body)};
+    std::vector<int32_t> encoded;
+    encoded.reserve(response.body.size());
+    for (unsigned char ch : response.body) {
+        encoded.push_back(static_cast<int32_t>(ch));
+    }
+    return ApiPayload{std::move(encoded)};
 }
 
 void UsgsEarthquakeClient::backoff() {
@@ -2032,7 +2339,12 @@ std::optional<ApiPayload> SpaceXClient::query(std::string_view endpoint,
         return std::nullopt;
     }
     
-    return ApiPayload{std::string_view(response.body)};
+    std::vector<int32_t> encoded;
+    encoded.reserve(response.body.size());
+    for (unsigned char ch : response.body) {
+        encoded.push_back(static_cast<int32_t>(ch));
+    }
+    return ApiPayload{std::move(encoded)};
 }
 
 void SpaceXClient::backoff() {
@@ -2072,7 +2384,12 @@ std::optional<ApiPayload> ChroniclingAmericaClient::query(std::string_view endpo
         return std::nullopt;
     }
     
-    return ApiPayload{std::string_view(response.body)};
+    std::vector<int32_t> encoded;
+    encoded.reserve(response.body.size());
+    for (unsigned char ch : response.body) {
+        encoded.push_back(static_cast<int32_t>(ch));
+    }
+    return ApiPayload{std::move(encoded)};
 }
 
 void ChroniclingAmericaClient::backoff() {
@@ -2112,7 +2429,12 @@ std::optional<ApiPayload> GbifClient::query(std::string_view endpoint,
         return std::nullopt;
     }
     
-    return ApiPayload{std::string_view(response.body)};
+    std::vector<int32_t> encoded;
+    encoded.reserve(response.body.size());
+    for (unsigned char ch : response.body) {
+        encoded.push_back(static_cast<int32_t>(ch));
+    }
+    return ApiPayload{std::move(encoded)};
 }
 
 void GbifClient::backoff() {

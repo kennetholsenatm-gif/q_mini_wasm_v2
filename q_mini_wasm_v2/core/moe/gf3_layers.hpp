@@ -5,8 +5,12 @@
 #include <memory>
 #include <cstddef>
 #include <cstdint>
+#include <iosfwd>
 
 namespace q_mini_wasm_v2::core::moe {
+
+/** Cumulative GF(3) Hebbian weight-cell update steps (process lifetime). */
+uint64_t gf3_hebbian_weight_cell_updates_total() noexcept;
 
 /**
  * @brief GF(3) Linear Transformation Layer
@@ -138,6 +142,10 @@ public:
      */
     uint32_t GetSparsity() const;
 
+    /** Binary weight blob for QMINI_V3 checkpoints (little-endian layout). */
+    void SerializeWeights(std::ostream& os) const;
+    bool DeserializeWeights(std::istream& is);
+
 private:
     LayerConfig config_;
     
@@ -207,6 +215,9 @@ public:
     static std::vector<ternary::Trit> TernaryActivation(
         const std::vector<int32_t>& pre_activations
     );
+
+    void SerializeWeights(std::ostream& os) const;
+    bool DeserializeWeights(std::istream& is);
 
 private:
     std::vector<std::unique_ptr<GF3LinearLayer>> layers_;

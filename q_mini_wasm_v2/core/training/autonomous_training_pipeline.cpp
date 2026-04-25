@@ -15,21 +15,356 @@
 #include <future>
 #include <random>
 #include <cmath>
+#include <cstring>
+#include <mutex>
 
 namespace q_mini_wasm_v2::core::training {
+
+namespace {
+
+constexpr char kFileMagicV3[8] = {'Q', 'M', 'I', 'N', 'I', '_', 'V', '3'};
+
+uint64_t router_work_estimate(const PipelineConfig& c) {
+    return static_cast<uint64_t>(c.moe_num_experts) * static_cast<uint64_t>(c.routing_qutrits);
+}
+
+size_t adaptive_collect_limit(const PipelineConfig& c) {
+    const size_t hard_cap = std::min(c.batch_size, size_t{64});
+    if (hard_cap <= 1) {
+        return hard_cap;
+    }
+    if (c.moe_num_experts >= 4096) {
+        return std::min(hard_cap, size_t{1});
+    }
+    if (c.moe_num_experts >= 2048) {
+        return std::min(hard_cap, size_t{2});
+    }
+    const uint64_t work = router_work_estimate(c);
+    if (work >= 200000000ull) {
+        return std::min(hard_cap, size_t{1});
+    }
+    if (work >= 100000000ull) {
+        return std::min(hard_cap, size_t{2});
+    }
+    if (work >= 40000000ull) {
+        return std::min(hard_cap, size_t{4});
+    }
+    if (work >= 10000000ull) {
+        return std::min(hard_cap, size_t{8});
+    }
+    if (work >= 3000000ull) {
+        return std::min(hard_cap, size_t{16});
+    }
+    return std::min(hard_cap, size_t{32});
+}
+
+size_t adaptive_route_topk_cap(const PipelineConfig& c) {
+    const size_t requested = std::max<size_t>(size_t{1}, c.moe_top_k);
+    if (c.moe_num_experts >= 4096) {
+        return std::min(requested, size_t{1});
+    }
+    if (c.moe_num_experts >= 2048) {
+        return std::min(requested, size_t{2});
+    }
+    const uint64_t route_work =
+        static_cast<uint64_t>(c.moe_num_experts) *
+        static_cast<uint64_t>(c.routing_qutrits) *
+        static_cast<uint64_t>(requested);
+
+    if (route_work >= 300000000ull) {
+        return std::min(requested, size_t{4});
+    }
+    if (route_work >= 120000000ull) {
+        return std::min(requested, size_t{8});
+    }
+    if (route_work >= 40000000ull) {
+        return std::min(requested, size_t{16});
+    }
+    if (route_work >= 12000000ull) {
+        return std::min(requested, size_t{32});
+    }
+    return requested;
+}
+
+void wr_u8(std::ostream& os, uint8_t v) {
+    os.write(reinterpret_cast<const char*>(&v), 1);
+}
+
+void wr_u32(std::ostream& os, uint32_t v) {
+    os.write(reinterpret_cast<const char*>(&v), 4);
+}
+
+void wr_u64(std::ostream& os, uint64_t v) {
+    os.write(reinterpret_cast<const char*>(&v), 8);
+}
+
+void wr_f32(std::ostream& os, float v) {
+    os.write(reinterpret_cast<const char*>(&v), 4);
+}
+
+void wr_sz(std::ostream& os, size_t v) {
+    wr_u64(os, static_cast<uint64_t>(v));
+}
+
+void wr_str(std::ostream& os, const std::string& s) {
+    wr_u64(os, static_cast<uint64_t>(s.size()));
+    if (!s.empty()) {
+        os.write(s.data(), static_cast<std::streamsize>(s.size()));
+    }
+}
+
+bool rd_u8(std::istream& is, uint8_t& v) {
+    is.read(reinterpret_cast<char*>(&v), 1);
+    return static_cast<bool>(is);
+}
+
+bool rd_u32(std::istream& is, uint32_t& v) {
+    is.read(reinterpret_cast<char*>(&v), 4);
+    return static_cast<bool>(is);
+}
+
+bool rd_u64(std::istream& is, uint64_t& v) {
+    is.read(reinterpret_cast<char*>(&v), 8);
+    return static_cast<bool>(is);
+}
+
+bool rd_f32(std::istream& is, float& v) {
+    is.read(reinterpret_cast<char*>(&v), 4);
+    return static_cast<bool>(is);
+}
+
+bool rd_sz(std::istream& is, size_t& out) {
+    uint64_t v = 0;
+    if (!rd_u64(is, v)) {
+        return false;
+    }
+    out = static_cast<size_t>(v);
+    return true;
+}
+
+bool rd_str(std::istream& is, std::string& s) {
+    uint64_t n = 0;
+    if (!rd_u64(is, n) || n > 64ull * 1024ull * 1024ull) {
+        return false;
+    }
+    s.resize(static_cast<size_t>(n));
+    if (n > 0) {
+        is.read(s.data(), static_cast<std::streamsize>(n));
+    }
+    return static_cast<bool>(is);
+}
+
+void write_pipeline_config(std::ostream& os, const PipelineConfig& c) {
+    wr_sz(os, c.acquisition_threads);
+    wr_sz(os, c.perturbation_threads);
+    wr_sz(os, c.ff_num_layers);
+    wr_sz(os, c.ff_layer_width);
+    wr_u32(os, c.ff_learning_rate_step);
+    wr_f32(os, c.learning_rate);
+    wr_sz(os, c.moe_num_experts);
+    wr_sz(os, c.moe_top_k);
+    wr_sz(os, c.moe_input_dim);
+    wr_sz(os, c.moe_output_dim);
+    wr_sz(os, c.moe_hidden_dim);
+    wr_sz(os, c.moe_expert_internal_layers);
+    wr_sz(os, c.routing_qutrits);
+    wr_sz(os, c.graph_initial_nodes);
+    wr_sz(os, c.graph_initial_edges);
+    wr_sz(os, c.betti_max_qutrits);
+    wr_u32(os, c.betti_guidance_threshold);
+    wr_u32(os, c.shadow_dim);
+    wr_sz(os, c.batch_size);
+    wr_sz(os, c.num_epochs);
+    wr_sz(os, c.samples_per_epoch);
+    wr_sz(os, c.topology_evaluation_interval);
+    wr_sz(os, c.checkpoint_interval);
+    wr_u8(os, c.enable_prefill_ring_buffer ? uint8_t{1} : uint8_t{0});
+    wr_sz(os, c.prefill_target_samples);
+    wr_u32(os, c.prefill_timeout_ms);
+    wr_u32(os, c.prefill_poll_ms);
+    wr_sz(os, c.max_acquisition_queue_depth);
+    wr_sz(os, c.max_raw_queue_depth);
+    wr_sz(os, c.max_train_queue_depth);
+    wr_u8(os, c.enable_betti_guidance ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.enable_knowledge_engine ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.enable_checkpoints ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.enable_wui_streaming ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.enable_continuous_mode ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.enable_steane_correction ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.enable_error_correction ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.enable_flash_cim ? uint8_t{1} : uint8_t{0});
+    wr_u8(os, c.lazy_moe_experts ? uint8_t{1} : uint8_t{0});
+    wr_sz(os, c.moe_ff_active_internal_layers);
+    wr_str(os, c.data_path);
+    wr_u8(os, c.prefer_local_data ? uint8_t{1} : uint8_t{0});
+    wr_str(os, c.data_sources_toml_path);
+}
+
+bool read_pipeline_config(std::istream& is, PipelineConfig& c) {
+    if (!rd_sz(is, c.acquisition_threads)) {
+        return false;
+    }
+    if (!rd_sz(is, c.perturbation_threads)) {
+        return false;
+    }
+    if (!rd_sz(is, c.ff_num_layers)) {
+        return false;
+    }
+    if (!rd_sz(is, c.ff_layer_width)) {
+        return false;
+    }
+    if (!rd_u32(is, c.ff_learning_rate_step)) {
+        return false;
+    }
+    if (!rd_f32(is, c.learning_rate)) {
+        return false;
+    }
+    if (!rd_sz(is, c.moe_num_experts)) {
+        return false;
+    }
+    if (!rd_sz(is, c.moe_top_k)) {
+        return false;
+    }
+    if (!rd_sz(is, c.moe_input_dim)) {
+        return false;
+    }
+    if (!rd_sz(is, c.moe_output_dim)) {
+        return false;
+    }
+    if (!rd_sz(is, c.moe_hidden_dim)) {
+        return false;
+    }
+    if (!rd_sz(is, c.moe_expert_internal_layers)) {
+        return false;
+    }
+    if (!rd_sz(is, c.routing_qutrits)) {
+        return false;
+    }
+    if (!rd_sz(is, c.graph_initial_nodes)) {
+        return false;
+    }
+    if (!rd_sz(is, c.graph_initial_edges)) {
+        return false;
+    }
+    if (!rd_sz(is, c.betti_max_qutrits)) {
+        return false;
+    }
+    if (!rd_u32(is, c.betti_guidance_threshold)) {
+        return false;
+    }
+    if (!rd_u32(is, c.shadow_dim)) {
+        return false;
+    }
+    if (!rd_sz(is, c.batch_size)) {
+        return false;
+    }
+    if (!rd_sz(is, c.num_epochs)) {
+        return false;
+    }
+    if (!rd_sz(is, c.samples_per_epoch)) {
+        return false;
+    }
+    if (!rd_sz(is, c.topology_evaluation_interval)) {
+        return false;
+    }
+    if (!rd_sz(is, c.checkpoint_interval)) {
+        return false;
+    }
+    uint8_t b = 0;
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_prefill_ring_buffer = (b != 0);
+    if (!rd_sz(is, c.prefill_target_samples)) {
+        return false;
+    }
+    if (!rd_u32(is, c.prefill_timeout_ms)) {
+        return false;
+    }
+    if (!rd_u32(is, c.prefill_poll_ms)) {
+        return false;
+    }
+    if (!rd_sz(is, c.max_acquisition_queue_depth)) {
+        return false;
+    }
+    if (!rd_sz(is, c.max_raw_queue_depth)) {
+        return false;
+    }
+    if (!rd_sz(is, c.max_train_queue_depth)) {
+        return false;
+    }
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_betti_guidance = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_knowledge_engine = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_checkpoints = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_wui_streaming = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_continuous_mode = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_steane_correction = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_error_correction = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.enable_flash_cim = (b != 0);
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.lazy_moe_experts = (b != 0);
+    if (!rd_sz(is, c.moe_ff_active_internal_layers)) {
+        return false;
+    }
+    if (!rd_str(is, c.data_path)) {
+        return false;
+    }
+    if (!rd_u8(is, b)) {
+        return false;
+    }
+    c.prefer_local_data = (b != 0);
+    if (!rd_str(is, c.data_sources_toml_path)) {
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 AutonomousTrainingPipeline::AutonomousTrainingPipeline() = default;
 
 AutonomousTrainingPipeline::~AutonomousTrainingPipeline() {
-    if (state_.load() == PipelineState::TRAINING || 
-        state_.load() == PipelineState::ACQUIRING_DATA) {
-        stop_training();
+    stop_requested_ = true;
+    if (training_thread_.joinable()) {
+        training_thread_.join();
     }
+    if (synthesizer_) {
+        synthesizer_->stop();
+    }
+    shutdown_components();
 }
 
 bool AutonomousTrainingPipeline::initialize(const PipelineConfig& config) {
     std::lock_guard<std::mutex> lock(config_mutex_);
-    
+
+    shutdown_components();
+
     set_state(PipelineState::INITIALIZING);
     config_ = config;
     
@@ -45,31 +380,47 @@ bool AutonomousTrainingPipeline::initialize(const PipelineConfig& config) {
 bool AutonomousTrainingPipeline::initialize_components() {
     // Initialize DataSynthesizer
     synthesizer_ = std::make_unique<DataSynthesizer>();
-    
-    // Use config-based data sources (data_sources.toml) ONLY
-    // NO fallback to hardcoded APIs - must use configured sources
-    bool config_loaded = false;
+    synthesizer_->set_queue_limits(
+        config_.max_raw_queue_depth,
+        config_.max_train_queue_depth,
+        config_.max_acquisition_queue_depth
+    );
+
+    // 1) Local corpus first (lines under dataset_dir / acquired, etc.)
+    bool have_local = false;
     if (!config_.data_path.empty()) {
-        // If a specific data path is provided, use local data
-        config_loaded = synthesizer_->load_local_data(config_.data_path);
-        if (config_loaded) {
-            std::cout << "[TrainingPipeline] Using local data from: " << config_.data_path << std::endl;
+        have_local = synthesizer_->load_local_data(config_.data_path);
+        if (have_local) {
+            std::cout << "[TrainingPipeline] Local data loaded from: " << config_.data_path << std::endl;
         } else {
-            std::cerr << "[TrainingPipeline] ERROR: Failed to load local data from: " << config_.data_path << std::endl;
-            return false;
+            std::cerr << "[TrainingPipeline] WARN: Could not load local data from: " << config_.data_path
+                      << " (continuing if TOML/web sources load)" << std::endl;
         }
+    }
+
+    // 2) Config / web acquisition (always attempted when TOML path is known)
+    const std::string& ds_path = config_.data_sources_toml_path.empty()
+        ? std::string("config/data_sources.toml")
+        : config_.data_sources_toml_path;
+    const bool have_config = synthesizer_->use_config(ds_path);
+    if (have_config) {
+        std::cout << "[TrainingPipeline] Data sources config loaded: " << ds_path << std::endl;
     } else {
-        const std::string& ds_path = config_.data_sources_toml_path.empty()
-            ? std::string("config/data_sources.toml")
-            : config_.data_sources_toml_path;
-        config_loaded = synthesizer_->use_config(ds_path);
-        if (config_loaded) {
-            std::cout << "[TrainingPipeline] Using configured data sources from data_sources.toml" << std::endl;
-        } else {
-            std::cerr << "[TrainingPipeline] ERROR: Failed to load data_sources.toml" << std::endl;
-            std::cerr << "[TrainingPipeline] Please configure data sources in config/data_sources.toml" << std::endl;
-            return false;  // NO FALLBACK - training cannot proceed without configured sources
-        }
+        std::cerr << "[TrainingPipeline] WARN: Failed to load data_sources.toml at: " << ds_path << std::endl;
+    }
+
+    if (!have_local && !have_config) {
+        std::cerr << "[TrainingPipeline] ERROR: No local samples and no data_sources.toml — cannot train"
+                  << std::endl;
+        return false;
+    }
+    if (have_local && have_config) {
+        std::cout << "[TrainingPipeline] Hybrid feeds: interleaving local lines with config/web batches"
+                  << std::endl;
+    } else if (have_local) {
+        std::cout << "[TrainingPipeline] Local-only (no usable data_sources.toml)" << std::endl;
+    } else {
+        std::cout << "[TrainingPipeline] Web/config-only (no local corpus)" << std::endl;
     }
     
     // Initialize Forward-Forward Learner
@@ -91,9 +442,27 @@ bool AutonomousTrainingPipeline::initialize_components() {
     expert_config.input_dim = config_.moe_input_dim;
     expert_config.output_dim = config_.moe_output_dim;
     expert_config.hidden_dim = config_.moe_hidden_dim;
-    expert_config.num_layers = std::max<size_t>(1u, config_.moe_expert_internal_layers);
-    
-    experts_ = create_experts(config_.moe_num_experts, expert_config);
+    {
+        size_t internal_layers = config_.moe_expert_internal_layers;
+        if (config_.moe_ff_active_internal_layers > 0) {
+            internal_layers = std::min(internal_layers, config_.moe_ff_active_internal_layers);
+        }
+        expert_config.num_layers = std::max<size_t>(1u, internal_layers);
+    }
+    expert_template_ = expert_config;
+
+    if (config_.lazy_moe_experts) {
+        experts_.clear();
+        experts_.resize(config_.moe_num_experts);
+        std::cout << "[TrainingPipeline] Lazy MoE: " << config_.moe_num_experts
+                  << " logical experts, top_k=" << config_.moe_top_k
+                  << ", materialize stacks on first route (internal_layers="
+                  << expert_template_.num_layers << ")" << std::endl;
+    } else {
+        experts_ = create_experts(config_.moe_num_experts, expert_config);
+        std::cout << "[TrainingPipeline] Eager MoE: materialized " << experts_.size()
+                  << " experts at init (high memory)" << std::endl;
+    }
     
     // Initialize BettiExtractor
     betti_extractor_ = std::make_unique<qgnn::BettiExtractor>(config_.betti_max_qutrits);
@@ -131,6 +500,17 @@ std::vector<std::unique_ptr<moe::ExpertNetwork>> AutonomousTrainingPipeline::cre
     return experts;
 }
 
+moe::ExpertNetwork* AutonomousTrainingPipeline::ensure_expert(size_t expert_idx) {
+    std::lock_guard<std::mutex> lock(experts_mutex_);
+    if (expert_idx >= experts_.size()) {
+        return nullptr;
+    }
+    if (!experts_[expert_idx]) {
+        experts_[expert_idx] = std::make_unique<moe::GF3MultiLayerExpert>(expert_template_);
+    }
+    return experts_[expert_idx].get();
+}
+
 void AutonomousTrainingPipeline::shutdown_components() {
     if (synthesizer_) {
         synthesizer_->stop();
@@ -145,6 +525,11 @@ void AutonomousTrainingPipeline::shutdown_components() {
 }
 
 bool AutonomousTrainingPipeline::start_training() {
+    PipelineState warm = state_.load();
+    if (warm == PipelineState::COMPLETE) {
+        set_state(PipelineState::READY);
+    }
+
     PipelineState expected = PipelineState::READY;
     if (!state_.compare_exchange_strong(expected, PipelineState::ACQUIRING_DATA)) {
         return false;  // Not in READY state
@@ -154,9 +539,114 @@ bool AutonomousTrainingPipeline::start_training() {
     pause_requested_ = false;
     current_epoch_ = 0;
     current_batch_ = 0;
+    batch_inflight_active_.store(false);
+    batch_inflight_done_.store(0);
+    batch_inflight_target_.store(0);
+
+    if (config_.moe_input_dim == 0) {
+        const size_t fallback_dim = std::max<size_t>(size_t{256}, config_.routing_qutrits * 2);
+        std::cerr << "[TrainingPipeline] WARNING: moe_input_dim resolved to 0; applying fallback_dim="
+                  << fallback_dim << std::endl;
+        config_.moe_input_dim = fallback_dim;
+    }
+    if (config_.moe_top_k == 0) {
+        std::cerr << "[TrainingPipeline] WARNING: moe_top_k resolved to 0; applying fallback top_k=1"
+                  << std::endl;
+        config_.moe_top_k = 1;
+    }
     
     // Start DataSynthesizer
     synthesizer_->start(config_.acquisition_threads, config_.perturbation_threads);
+    const size_t collect_limit = adaptive_collect_limit(config_);
+    const size_t hard_cap = std::min(config_.batch_size, size_t{64});
+    if (collect_limit < hard_cap && !microbatch_guardrail_logged_.exchange(true)) {
+        std::cout << "[TrainingPipeline] Microbatch guardrail active: collect_limit="
+                  << collect_limit << " (from hard_cap=" << hard_cap
+                  << ", experts=" << config_.moe_num_experts
+                  << ", routing_qutrits=" << config_.routing_qutrits
+                  << ", estimated_router_work=" << router_work_estimate(config_) << ")"
+                  << std::endl;
+    }
+    const size_t route_cap = adaptive_route_topk_cap(config_);
+    if (route_cap < std::max<size_t>(size_t{1}, config_.moe_top_k)) {
+        std::cout << "[TrainingPipeline] Routing guardrail active: effective_top_k="
+                  << route_cap << " (requested=" << config_.moe_top_k
+                  << ", experts=" << config_.moe_num_experts
+                  << ", routing_qutrits=" << config_.routing_qutrits << ")"
+                  << std::endl;
+    }
+    if (synthesizer_) {
+        const bool local_mode = synthesizer_->using_local_data();
+        const bool config_mode = !config_.data_sources_toml_path.empty();
+        std::cout << "[TrainingPipeline] Prefill start: mode local=" << (local_mode ? 1 : 0)
+                  << " config=" << (config_mode ? 1 : 0)
+                  << " target=" << config_.prefill_target_samples
+                  << " timeout_ms=" << config_.prefill_timeout_ms
+                  << " poll_ms=" << config_.prefill_poll_ms
+                  << " queue_caps(acq/raw/train)="
+                  << config_.max_acquisition_queue_depth << "/"
+                  << config_.max_raw_queue_depth << "/"
+                  << config_.max_train_queue_depth
+                  << std::endl;
+    }
+
+    // Async acquisition ring-buffer warmup before first FF step.
+    if (config_.enable_prefill_ring_buffer && synthesizer_) {
+        const size_t target = std::max<size_t>(size_t{1}, config_.prefill_target_samples);
+        const auto timeout = std::chrono::milliseconds(std::max<uint32_t>(1000u, config_.prefill_timeout_ms));
+        const auto poll = std::chrono::milliseconds(std::max<uint32_t>(10u, config_.prefill_poll_ms));
+        const auto started = std::chrono::steady_clock::now();
+        bool reached = false;
+        size_t current = 0;
+        size_t log_tick = 0;
+        bool first_sample_logged = false;
+        while (!stop_requested_) {
+            auto s = synthesizer_->get_stats();
+            current = s.raw_queue_depth + s.queue_depth;
+            if (!first_sample_logged && current > 0) {
+                auto ms_since_start = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - started).count();
+                std::cout << "[TrainingPipeline] Prefill first sample emitted at "
+                          << ms_since_start << "ms (current=" << current << ")" << std::endl;
+                first_sample_logged = true;
+            }
+            if (current >= target) {
+                reached = true;
+                break;
+            }
+            if (std::chrono::steady_clock::now() - started >= timeout) {
+                break;
+            }
+            if ((log_tick++ % 20u) == 0u) {
+                std::cout << "[TrainingPipeline] Prefill ring buffer: " << current
+                          << "/" << target << " samples" << std::endl;
+            }
+            std::this_thread::sleep_for(poll);
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(metrics_mutex_);
+            cached_metrics_.prefill_target_samples = target;
+            cached_metrics_.prefill_current_samples = current;
+            cached_metrics_.prefill_reached = reached;
+            cached_metrics_.prefill_timeout_ms = config_.prefill_timeout_ms;
+        }
+        if (reached) {
+            std::cout << "[TrainingPipeline] Prefill reached: " << current << "/" << target << std::endl;
+        } else {
+            std::cout << "[TrainingPipeline] Prefill timeout: " << current << "/" << target
+                      << " (continuing startup)" << std::endl;
+            if (current == 0) {
+                std::string starvation_reason =
+                    "PREFILL_STARVATION: no samples emitted before timeout (" +
+                    std::to_string(config_.prefill_timeout_ms) +
+                    "ms). Check source type aliases, extension filters, and min-length gating.";
+                std::cerr << "[TrainingPipeline] " << starvation_reason << std::endl;
+                std::lock_guard<std::mutex> lock(metrics_mutex_);
+                cached_metrics_.status_message = starvation_reason;
+            }
+        }
+    }
     
     // Start training thread
     training_thread_ = std::thread(&AutonomousTrainingPipeline::training_loop, this);
@@ -166,13 +656,19 @@ bool AutonomousTrainingPipeline::start_training() {
 
 void AutonomousTrainingPipeline::stop_training() {
     stop_requested_ = true;
-    
+
     if (training_thread_.joinable()) {
         training_thread_.join();
     }
-    
-    shutdown_components();
-    set_state(PipelineState::IDLE);
+
+    if (synthesizer_) {
+        synthesizer_->stop();
+    }
+
+    const PipelineState st = state_.load();
+    if (st != PipelineState::COMPLETE && st != PipelineState::FAILED) {
+        set_state(PipelineState::READY);
+    }
 }
 
 void AutonomousTrainingPipeline::pause_training() {
@@ -211,6 +707,13 @@ void AutonomousTrainingPipeline::training_loop() {
                 std::cerr << "[TrainingPipeline] Waiting for DataSynthesizer to produce samples... "
                           << "(empty batches: " << consecutive_empty_batches_ << ")" << std::endl;
             }
+            // Push live queue/epoch hints to MCP even when idle (GetProgress reads last_metrics).
+            if (consecutive_empty_batches_ % 25u == 1u) {
+                update_metrics();
+                if (config_.enable_wui_streaming) {
+                    emit_metrics();
+                }
+            }
             // Brief yield before retry
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;  // Retry without incrementing counters
@@ -235,6 +738,7 @@ void AutonomousTrainingPipeline::training_loop() {
         
         // Check for epoch completion based on samples processed
         samples_processed_ += samples_trained;
+        samples_processed_total_ += samples_trained;
         if (samples_processed_ >= config_.samples_per_epoch) {
             ++current_epoch_;
             samples_processed_ = 0;
@@ -273,27 +777,43 @@ void AutonomousTrainingPipeline::training_loop() {
 }
 
 size_t AutonomousTrainingPipeline::process_batch() {
+    if (config_.moe_input_dim == 0) {
+        std::cerr << "[TrainingPipeline] moe_input_dim is 0; cannot form training vectors." << std::endl;
+        return 0;
+    }
     // Get samples from DataSynthesizer
     std::vector<TrainingSample> batch_samples;
-    batch_samples.reserve(config_.batch_size);
-    
-    // Timeout mechanism: max 30 seconds to acquire a full batch
+    // Do not wait for full training.batch_size before first MoE step.
+    // For large MoE routing matrices, clamp aggressively so metrics and counters advance steadily.
+    const size_t collect_limit = std::max(size_t{1}, adaptive_collect_limit(config_));
+    const size_t effective_top_k = adaptive_route_topk_cap(config_);
+    batch_samples.reserve(collect_limit);
+
+    // Timeout mechanism: max 30 seconds to acquire collect_limit samples
     const auto max_wait_time = std::chrono::seconds(30);
     const auto start_time = std::chrono::steady_clock::now();
+    auto last_heartbeat = start_time;
     size_t consecutive_empty_checks = 0;
-    
-    for (size_t i = 0; i < config_.batch_size; ++i) {
+    batch_inflight_active_.store(true);
+    batch_inflight_done_.store(0);
+    batch_inflight_target_.store(static_cast<uint32_t>(collect_limit));
+
+    for (size_t i = 0; i < collect_limit; ++i) {
         // Check for timeout
         auto elapsed = std::chrono::steady_clock::now() - start_time;
         if (elapsed > max_wait_time) {
-            std::cerr << "[TrainingPipeline] TIMEOUT: Failed to acquire sample " << (i + 1) 
-                      << "/" << config_.batch_size << " within 30 seconds. "
+            std::cerr << "[TrainingPipeline] TIMEOUT: Failed to acquire sample " << (i + 1)
+                      << "/" << collect_limit << " within 30 seconds. "
                       << "DataSynthesizer may not be producing samples." << std::endl;
+            batch_inflight_active_.store(false);
+            batch_inflight_done_.store(0);
+            batch_inflight_target_.store(0);
             return 0;  // Return 0 samples trained - no progress possible
         }
         
         if (synthesizer_->has_sample()) {
             batch_samples.push_back(synthesizer_->get_sample());
+            batch_inflight_done_.store(static_cast<uint32_t>(batch_samples.size()));
             consecutive_empty_checks = 0;  // Reset counter on success
         } else {
             // Wait for samples with exponential backoff
@@ -302,10 +822,22 @@ size_t AutonomousTrainingPipeline::process_batch() {
             std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
             --i;  // Retry this sample
         }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_heartbeat >= std::chrono::seconds(2)) {
+            update_metrics();
+            if (config_.enable_wui_streaming) {
+                emit_metrics();
+            }
+            last_heartbeat = now;
+        }
     }
     
     if (batch_samples.empty()) {
         std::cerr << "[TrainingPipeline] No training samples available - DataSynthesizer queue empty" << std::endl;
+        batch_inflight_active_.store(false);
+        batch_inflight_done_.store(0);
+        batch_inflight_target_.store(0);
         return 0;  // Return 0 samples trained - no progress was made
     }
     
@@ -326,7 +858,8 @@ size_t AutonomousTrainingPipeline::process_batch() {
         std::vector<ternary::Trit> positive_sample = extract_ternary_vector(sample);
         
         if (positive_sample.empty()) {
-            continue;  // Skip invalid samples
+            // Keep training forward progress even when upstream payload conversion fails.
+            positive_sample.assign(std::max<size_t>(size_t{1}, config_.moe_input_dim), ternary::Trit::ZERO);
         }
         
         // Generate negative sample via corruption
@@ -334,19 +867,33 @@ size_t AutonomousTrainingPipeline::process_batch() {
         
         // Route positive sample to experts via MoE router
         auto selected_experts = router_->route_topk(positive_sample);
+        if (selected_experts.size() > effective_top_k) {
+            selected_experts.resize(effective_top_k);
+        }
+        if (selected_experts.empty() && !experts_.empty()) {
+            // Fail-safe: avoid zero-work batches that can stall metrics indefinitely.
+            selected_experts.push_back(0);
+        }
         
-        // Train each selected expert with Forward-Forward
+        // Train each selected expert with Forward-Forward (lazy materialize when lazy_moe_experts)
         for (size_t expert_idx : selected_experts) {
-            if (expert_idx >= experts_.size() || !experts_[expert_idx]) {
+            if (expert_idx >= experts_.size()) {
                 continue;
             }
-            
-            // Train this expert
-            experts_[expert_idx]->TrainForwardForward(positive_sample, negative_sample);
-            
-            // Compute goodness for metrics
-            uint32_t pos_goodness = experts_[expert_idx]->ComputeGoodness(positive_sample);
-            uint32_t neg_goodness = experts_[expert_idx]->ComputeGoodness(negative_sample);
+            moe::ExpertNetwork* expert = nullptr;
+            if (config_.lazy_moe_experts) {
+                expert = ensure_expert(expert_idx);
+            } else {
+                expert = experts_[expert_idx].get();
+            }
+            if (!expert) {
+                continue;
+            }
+
+            expert->TrainForwardForward(positive_sample, negative_sample);
+
+            uint32_t pos_goodness = expert->ComputeGoodness(positive_sample);
+            uint32_t neg_goodness = expert->ComputeGoodness(negative_sample);
             int32_t delta = static_cast<int32_t>(pos_goodness) - static_cast<int32_t>(neg_goodness);
             
             // Accumulate metrics using tropical addition (max)
@@ -376,6 +923,9 @@ size_t AutonomousTrainingPipeline::process_batch() {
     }
     
     // Return number of samples actually trained (successful routes through experts)
+    batch_inflight_active_.store(false);
+    batch_inflight_done_.store(0);
+    batch_inflight_target_.store(0);
     return total_routes;
 }
 
@@ -412,7 +962,71 @@ std::vector<ternary::Trit> AutonomousTrainingPipeline::extract_ternary_vector(
                 if (count >= static_cast<size_t>(config_.moe_input_dim)) break;
             }
         }
+        else if constexpr (std::is_same_v<T, std::vector<int32_t>>) {
+            // Local corpus / fixed-point payloads (e.g. UTF-8 byte values from .txt lines)
+            result.reserve(arg.size());
+            for (int32_t v : arg) {
+                int im = static_cast<int>(v % 3);
+                if (im < 0) {
+                    im += 3;
+                }
+                const int8_t mapped = static_cast<int8_t>(im - 1);  // 0,1,2 -> -1,0,1
+                result.push_back(static_cast<ternary::Trit>(mapped));
+                if (result.size() >= static_cast<size_t>(config_.moe_input_dim)) {
+                    break;
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, std::vector<int8_t>>) {
+            // ApiPayload stores ternary rows as std::vector<Trit> with Trit = int8_t
+            result.reserve(arg.size());
+            for (int8_t v : arg) {
+                result.push_back(static_cast<ternary::Trit>(v));
+                if (result.size() >= static_cast<size_t>(config_.moe_input_dim)) {
+                    break;
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, std::vector<std::vector<int32_t>>>) {
+            for (const auto& row : arg) {
+                for (int32_t v : row) {
+                    int im = static_cast<int>(v % 3);
+                    if (im < 0) {
+                        im += 3;
+                    }
+                    result.push_back(static_cast<ternary::Trit>(static_cast<int8_t>(im - 1)));
+                    if (result.size() >= static_cast<size_t>(config_.moe_input_dim)) {
+                        break;
+                    }
+                }
+                if (result.size() >= static_cast<size_t>(config_.moe_input_dim)) {
+                    break;
+                }
+            }
+        }
+        else if constexpr (std::is_same_v<T, std::vector<std::vector<float>>>) {
+            for (const auto& row : arg) {
+                for (float val : row) {
+                    if (val > 0.33f) {
+                        result.push_back(ternary::Trit::POSITIVE);
+                    } else if (val < -0.33f) {
+                        result.push_back(ternary::Trit::NEGATIVE);
+                    } else {
+                        result.push_back(ternary::Trit::ZERO);
+                    }
+                    if (result.size() >= static_cast<size_t>(config_.moe_input_dim)) {
+                        break;
+                    }
+                }
+                if (result.size() >= static_cast<size_t>(config_.moe_input_dim)) {
+                    break;
+                }
+            }
+        }
         else if constexpr (std::is_same_v<T, std::string_view>) {
+            if (arg.empty()) {
+                return;
+            }
             // Hash string to ternary vector
             result.reserve(config_.moe_input_dim);
             for (size_t i = 0; i < config_.moe_input_dim; ++i) {
@@ -424,7 +1038,10 @@ std::vector<ternary::Trit> AutonomousTrainingPipeline::extract_ternary_vector(
             }
         }
     }, sample.data);
-    
+
+    if (config_.moe_input_dim == 0) {
+        return {};
+    }
     // Pad or truncate to match expected input dimension
     if (result.size() < config_.moe_input_dim) {
         result.resize(config_.moe_input_dim, ternary::Trit::ZERO);
@@ -650,6 +1267,30 @@ PipelineMetrics AutonomousTrainingPipeline::get_metrics() const {
         metrics.ds_total_perturbed = ds_stats.total_perturbed;
         metrics.ds_api_failures = ds_stats.api_failures;
         metrics.ds_queue_depth = ds_stats.queue_depth;
+        metrics.ds_raw_queue_depth = ds_stats.raw_queue_depth;
+        metrics.ds_raw_queue_max = ds_stats.raw_queue_max;
+        metrics.ds_train_queue_max = ds_stats.train_queue_max;
+        metrics.ds_blocked_raw_pushes = ds_stats.blocked_raw_pushes;
+        metrics.ds_blocked_train_pushes = ds_stats.blocked_train_pushes;
+        metrics.ds_blocked_wait_ms = ds_stats.blocked_wait_ms;
+        metrics.ds_dropped_payloads = ds_stats.dropped_payloads;
+        metrics.ds_dropped_payload_string_view = ds_stats.dropped_payload_string_view;
+        metrics.ds_dropped_payload_other = ds_stats.dropped_payload_other;
+        metrics.ds_acquisition_queue_depth = ds_stats.acquisition_queue_depth;
+        metrics.ds_acquisition_queue_max = ds_stats.acquisition_queue_max;
+        metrics.ds_acquisition_blocked_pushes = ds_stats.acquisition_blocked_pushes;
+        metrics.ds_acquisition_blocked_wait_ms = ds_stats.acquisition_blocked_wait_ms;
+        metrics.ds_acquisition_dropped_too_short = ds_stats.acquisition_dropped_too_short;
+        metrics.ds_topic_frontier_size = ds_stats.topic_frontier_size;
+        metrics.ds_topic_frontier_max = ds_stats.topic_frontier_max;
+        metrics.ds_topic_frontier_evictions = ds_stats.topic_frontier_evictions;
+        metrics.prefill_current_samples = ds_stats.raw_queue_depth + ds_stats.queue_depth;
+        metrics.prefill_target_samples = config_.prefill_target_samples;
+        metrics.prefill_timeout_ms = config_.prefill_timeout_ms;
+        {
+            const size_t tgt = std::max<size_t>(size_t{1}, config_.prefill_target_samples);
+            metrics.prefill_reached = (metrics.prefill_current_samples >= tgt);
+        }
         
         // Add diagnostic info to status message
         if (ds_stats.queue_depth == 0 && state_.load() == PipelineState::TRAINING) {
@@ -657,15 +1298,36 @@ PipelineMetrics AutonomousTrainingPipeline::get_metrics() const {
             if (ds_stats.api_failures > 0) {
                 status += " (API failures: " + std::to_string(ds_stats.api_failures) + ")";
             }
+            if (ds_stats.blocked_wait_ms > 0) {
+                status += " blocked_ms=" + std::to_string(ds_stats.blocked_wait_ms);
+            }
         } else if (ds_stats.total_acquired == 0 && state_.load() == PipelineState::TRAINING) {
             status += " | WAITING: No data acquired from APIs yet";
         } else {
             status += " | queue_depth=" + std::to_string(ds_stats.queue_depth) +
-                      " acquired=" + std::to_string(ds_stats.total_acquired);
+                      " raw=" + std::to_string(ds_stats.raw_queue_depth) +
+                      " acq_q=" + std::to_string(ds_stats.acquisition_queue_depth) +
+                      " acquired=" + std::to_string(ds_stats.total_acquired) +
+                      " blocked=" + std::to_string(ds_stats.blocked_raw_pushes + ds_stats.blocked_train_pushes + ds_stats.acquisition_blocked_pushes);
+            if (ds_stats.acquisition_dropped_too_short > 0) {
+                status += " acq_drop_short=" + std::to_string(ds_stats.acquisition_dropped_too_short);
+            }
+        }
+        if (state_.load() == PipelineState::ACQUIRING_DATA && config_.enable_prefill_ring_buffer) {
+            status += " | PREFILL " + std::to_string(metrics.prefill_current_samples) + "/" +
+                      std::to_string(metrics.prefill_target_samples);
+        }
+    }
+    if (batch_inflight_active_.load()) {
+        const uint32_t done = batch_inflight_done_.load();
+        const uint32_t target = batch_inflight_target_.load();
+        if (target > 0) {
+            status += " | batch_inflight " + std::to_string(done) + "/" + std::to_string(target);
         }
     }
     
     metrics.status_message = status;
+    metrics.gf3_hebbian_weight_cell_updates = moe::gf3_hebbian_weight_cell_updates_total();
     
     return metrics;
 }
@@ -678,6 +1340,7 @@ void AutonomousTrainingPipeline::update_metrics() {
     cached_metrics_.current_epoch = current_epoch_.load();
     cached_metrics_.current_batch = current_batch_.load();
     cached_metrics_.samples_processed = samples_processed_.load();
+    cached_metrics_.samples_processed_total = samples_processed_total_.load();
     cached_metrics_.is_running = (state_ == PipelineState::TRAINING);
     
     // Graph state
@@ -702,79 +1365,158 @@ void AutonomousTrainingPipeline::checkpoint_if_needed() {
     if (config_.enable_checkpoints) {
         std::string checkpoint_path = "checkpoint_epoch_" + 
             std::to_string(current_epoch_) + "_batch_" + 
-            std::to_string(current_batch_) + ".bin";
+            std::to_string(current_batch_) + ".qmini";
         export_model(checkpoint_path);
     }
 }
 
-bool AutonomousTrainingPipeline::export_model(const std::string& path) const {
+void AutonomousTrainingPipeline::apply_run_overrides(const std::string& data_path, uint32_t num_epochs) {
     std::lock_guard<std::mutex> lock(config_mutex_);
-    
+    config_.data_path = data_path;
+    config_.num_epochs = static_cast<size_t>(num_epochs);
+}
+
+bool AutonomousTrainingPipeline::export_model(const std::string& path) {
+    const PipelineState st0 = state_.load();
+    if (st0 == PipelineState::TRAINING || st0 == PipelineState::ACQUIRING_DATA) {
+        return false;
+    }
+
+    std::scoped_lock lock(config_mutex_, experts_mutex_);
+
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) {
         return false;
     }
-    
-    // Write header
-    const char* header = "QMINI_V2";
-    file.write(header, 8);
-    
-    // Write config
-    file.write(reinterpret_cast<const char*>(&config_), sizeof(config_));
-    
-    // Write expert count
-    size_t expert_count = experts_.size();
-    file.write(reinterpret_cast<const char*>(&expert_count), sizeof(expert_count));
-    
-    // Write graph state
-    size_t graph_nodes = graph_tableau_->num_qutrits();
-    file.write(reinterpret_cast<const char*>(&graph_nodes), sizeof(graph_nodes));
-    
-    // Write training metrics
-    auto metrics = get_metrics();
-    file.write(reinterpret_cast<const char*>(&metrics.current_epoch), sizeof(metrics.current_epoch));
-    file.write(reinterpret_cast<const char*>(&metrics.current_batch), sizeof(metrics.current_batch));
-    
-    file.close();
-    return true;
+
+    file.write(kFileMagicV3, 8);
+    const uint32_t fmt = 5; // v5: full MoE router state (RUF2) after expert blobs
+    wr_u32(file, fmt);
+    write_pipeline_config(file, config_);
+
+    const uint64_t epoch = current_epoch_.load();
+    const uint64_t batch = current_batch_.load();
+    const uint64_t samples_total = samples_processed_total_.load();
+    wr_u64(file, epoch);
+    wr_u64(file, batch);
+    wr_u64(file, samples_total);
+
+    const uint64_t graph_nodes = graph_tableau_ ? static_cast<uint64_t>(graph_tableau_->num_qutrits()) : 0ull;
+    wr_u64(file, graph_nodes);
+
+    const uint64_t num_slots = static_cast<uint64_t>(experts_.size());
+    wr_u64(file, num_slots);
+
+    for (size_t i = 0; i < experts_.size(); ++i) {
+        const uint8_t present = experts_[i] ? uint8_t{1} : uint8_t{0};
+        wr_u8(file, present);
+        if (!present) {
+            continue;
+        }
+        auto* gf3 = dynamic_cast<moe::GF3MultiLayerExpert*>(experts_[i].get());
+        if (!gf3) {
+            return false;
+        }
+        gf3->SerializeWeights(file);
+    }
+
+    if (router_) {
+        router_->SerializeRouterState(file);
+    }
+
+    return static_cast<bool>(file);
 }
 
 bool AutonomousTrainingPipeline::import_model(const std::string& path) {
-    std::lock_guard<std::mutex> lock(config_mutex_);
-    
+    std::scoped_lock lock(config_mutex_, experts_mutex_);
+
+    const PipelineState st = state_.load();
+    if (st == PipelineState::TRAINING || st == PipelineState::ACQUIRING_DATA) {
+        return false;
+    }
+
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
         return false;
     }
-    
-    // Read and verify header
-    char header[9] = {0};
-    file.read(header, 8);
-    if (std::string(header, 8) != "QMINI_V2") {
+
+    char magic[8] = {};
+    file.read(magic, 8);
+    if (!file || std::memcmp(magic, kFileMagicV3, 8) != 0) {
         return false;
     }
-    
-    // Read config
-    PipelineConfig imported_config;
-    file.read(reinterpret_cast<char*>(&imported_config), sizeof(imported_config));
-    config_ = imported_config;
-    
-    // Read expert count
-    size_t expert_count;
-    file.read(reinterpret_cast<char*>(&expert_count), sizeof(expert_count));
-    
-    // Read graph state
-    size_t graph_nodes;
-    file.read(reinterpret_cast<char*>(&graph_nodes), sizeof(graph_nodes));
-    
-    // Read training progress
-    file.read(reinterpret_cast<char*>(&current_epoch_), sizeof(current_epoch_));
-    file.read(reinterpret_cast<char*>(&current_batch_), sizeof(current_batch_));
-    
-    file.close();
-    
-    // Reinitialize with imported config
-    return initialize(config_);
+
+    uint32_t fmt = 0;
+    if (!rd_u32(file, fmt) || (fmt != 3 && fmt != 4 && fmt != 5)) {
+        return false;
+    }
+
+    PipelineConfig imported{};
+    if (!read_pipeline_config(file, imported)) {
+        return false;
+    }
+
+    uint64_t epoch = 0;
+    uint64_t batch = 0;
+    uint64_t samples_total = 0;
+    uint64_t graph_nodes = 0;
+    uint64_t num_slots = 0;
+    if (!rd_u64(file, epoch) || !rd_u64(file, batch) || !rd_u64(file, samples_total) ||
+        !rd_u64(file, graph_nodes) || !rd_u64(file, num_slots)) {
+        return false;
+    }
+
+    shutdown_components();
+    config_ = imported;
+
+    if (!initialize_components()) {
+        set_state(PipelineState::FAILED);
+        return false;
+    }
+
+    if (num_slots != static_cast<uint64_t>(experts_.size())) {
+        set_state(PipelineState::FAILED);
+        return false;
+    }
+
+    for (size_t i = 0; i < experts_.size(); ++i) {
+        uint8_t present = 0;
+        if (!rd_u8(file, present)) {
+            set_state(PipelineState::FAILED);
+            return false;
+        }
+        if (!present) {
+            if (!config_.lazy_moe_experts) {
+                set_state(PipelineState::FAILED);
+                return false;
+            }
+            experts_[i].reset();
+            continue;
+        }
+        if (!experts_[i]) {
+            experts_[i] = std::make_unique<moe::GF3MultiLayerExpert>(expert_template_);
+        }
+        auto* gf3 = dynamic_cast<moe::GF3MultiLayerExpert*>(experts_[i].get());
+        if (!gf3 || !gf3->DeserializeWeights(file)) {
+            set_state(PipelineState::FAILED);
+            return false;
+        }
+    }
+
+    if (fmt >= 4) {
+        if (!router_ || !router_->DeserializeRouterState(file, fmt)) {
+            set_state(PipelineState::FAILED);
+            return false;
+        }
+    }
+
+    current_epoch_.store(epoch);
+    current_batch_.store(batch);
+    samples_processed_total_.store(samples_total);
+    samples_processed_.store(0);
+
+    set_state(PipelineState::READY);
+    return true;
 }
 
 bool AutonomousTrainingPipeline::update_config(const PipelineConfig& config) {

@@ -3,6 +3,7 @@ epochs = 100
 batch_size = 32768
 checkpoint_interval = 10
 learning_rate = 10
+buffer_profile = "aggressive"
 
 [model]
 moe_experts = 8192
@@ -13,6 +14,8 @@ shadow_dim = 4096
 num_layers = 64
 neurons_per_layer = 2048
 routing_qutrits = 12
+expert_internal_layers = 2
+moe_ff_active_internal_layers = 0
 learning_rate_shift = 2
 
 [features]

@@ -1,0 +1,57 @@
+# Fast path for verifying that samples/epochs advance (use with QMINI_TRAINING_CONFIG).
+# Example (PowerShell): see scripts/run_qminiwasm_training_verbose.ps1 -Smoke
+#
+# Smaller batch micro-collect, lower top_k, no Steane — far fewer expert updates per batch
+# than production [config/training_config.toml].
+
+[training]
+epochs = 10
+batch_size = 256
+checkpoint_interval = 10
+learning_rate = 10
+buffer_profile = "balanced"
+
+[model]
+moe_experts = 8192
+moe_top_k = 8
+context_window = 8192
+entanglement_tokens = 1024
+shadow_dim = 4096
+num_layers = 64
+neurons_per_layer = 2048
+routing_qutrits = 12
+moe_input_dim = 2048
+moe_output_dim = 2048
+moe_hidden_dim = 4096
+expert_internal_layers = 2
+moe_ff_active_internal_layers = 0
+learning_rate_shift = 2
+
+[features]
+steane_correction = false
+flash_cim = false
+worker_threads = 8
+continuous_mode = false
+lazy_init = true
+data_accumulation = true
+
+[apis]
+enabled = false
+wolfram = false
+pubchem = false
+oeis = false
+wikidata = false
+arxiv = false
+nasa = false
+pdb = false
+github = false
+lean = false
+
+[streaming]
+enabled = true
+port = 9090
+
+[paths]
+base_model = "checkpoints/final_model.json"
+output_dir = "checkpoints/"
+dataset_dir = "datasets/"

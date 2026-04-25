@@ -3,6 +3,7 @@ epochs = 100
 batch_size = 16384
 checkpoint_interval = 10
 learning_rate = 10
+buffer_profile = "aggressive"
 
 [model]
 moe_experts = 8192
@@ -17,6 +18,8 @@ moe_input_dim = 2048
 moe_output_dim = 2048
 moe_hidden_dim = 4096
 expert_internal_layers = 2
+# Cap FF stack depth inside each materialized expert (0 = no cap; use min with expert_internal_layers when > 0).
+moe_ff_active_internal_layers = 0
 learning_rate_shift = 2
 
 [features]

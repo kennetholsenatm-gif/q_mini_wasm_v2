@@ -495,7 +495,7 @@
     },
     {
       "name": "wui_export_model",
-      "description": "Export trained expert model weights and topology to file",
+      "description": "Export QMINI_V3 training checkpoint (alias of wui_export_training_checkpoint; MoE expert weights)",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -514,7 +514,7 @@
     },
     {
       "name": "wui_import_model",
-      "description": "Import trained expert model from file",
+      "description": "Import QMINI_V3 checkpoint (alias of wui_import_training_checkpoint)",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -541,6 +541,11 @@
             "type": "integer",
             "default": 100,
             "description": "Training epochs"
+          },
+          "force_new_native_session": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, destroy the existing native session before start (default: reuse session after stop to keep weights)"
           }
         }
       }
@@ -548,6 +553,41 @@
     {
       "name": "wui_stop_ff_training",
       "description": "Stop Forward-Forward training process",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "wui_export_training_checkpoint",
+      "description": "Export QMINI_V3 MoE checkpoint (.qmini) while training is stopped (same session as stop)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Optional absolute path; default DataDir/checkpoints/training_<unix>.qmini"
+          }
+        }
+      }
+    },
+    {
+      "name": "wui_import_training_checkpoint",
+      "description": "Load QMINI_V3 checkpoint into the current native session (training stopped)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to .qmini file"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "wui_close_training_session",
+      "description": "Destroy native q_training session after stop (frees RAM; export first if you need weights)",
       "input_schema": {
         "type": "object",
         "properties": {}

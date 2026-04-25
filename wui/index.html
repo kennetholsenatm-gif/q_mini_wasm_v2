@@ -168,6 +168,11 @@
             gap: 1rem;
         }
         .metric-grid.wide { grid-template-columns: repeat(4, 1fr); }
+        .metric-grid.ingestion-row {
+            grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+            gap: 0.65rem;
+        }
+        .metric-value.ingest-warn { color: var(--warning); }
         .metric {
             text-align: center;
             padding: 1rem;
@@ -703,11 +708,52 @@
                             </div>
                             <div class="metric">
                                 <div class="metric-value" id="dash-samples">0</div>
-                                <div class="metric-label">Samples Processed</div>
+                                <div class="metric-label">Samples (epoch)</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="dash-samples-total">0</div>
+                                <div class="metric-label">Samples (total)</div>
                             </div>
                             <div class="metric">
                                 <div class="metric-value" id="dash-experts">0</div>
                                 <div class="metric-label">Experts Active</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" id="dash-training-phase" style="font-size:0.85rem;line-height:1.2;">—</div>
+                                <div class="metric-label">Process phase</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">Ingestion &amp; queues</div>
+                            <div class="metric-grid ingestion-row">
+                                <div class="metric">
+                                    <div class="metric-value" id="dash-ing-train" style="font-size:0.95rem;">—</div>
+                                    <div class="metric-label">Train Q</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="dash-ing-raw" style="font-size:0.95rem;">—</div>
+                                    <div class="metric-label">Raw Q</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="dash-ing-acq" style="font-size:0.95rem;">—</div>
+                                    <div class="metric-label">Acq Q (cur/max)</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="dash-ing-prefill" style="font-size:0.95rem;">—</div>
+                                    <div class="metric-label">Prefill</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="dash-ing-drop-short" style="font-size:0.95rem;">0</div>
+                                    <div class="metric-label">Acq drop (short)</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric-value" id="dash-ing-drop-payload" style="font-size:0.95rem;">0</div>
+                                    <div class="metric-label">Drop payload</div>
+                                </div>
+                                <div class="metric" title="Cumulative count since the native session started: increments when a producer had to wait because raw, train, or acquisition queue was full. It is not how many items are blocked right now. Sum of blocked_raw_pushes + blocked_train_pushes + acq_blocked_pushes from the DLL.">
+                                    <div class="metric-value" id="dash-ing-blocked" style="font-size:0.95rem;">0</div>
+                                    <div class="metric-label">Queue full waits (total)</div>
+                                </div>
                             </div>
                         </div>
                         <div class="progress-container" style="margin-top: 1.5rem;">
@@ -752,6 +798,17 @@
         
         <!-- Training Tab -->
         <div class="tab-content" id="training">
+            <div class="panel" style="position: sticky; top: 0; z-index: 30; margin-bottom: 0.8rem;">
+                <div class="panel-body" style="padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap;">
+                    <div style="font-weight: 600; color: var(--text-primary);">Training Controls</div>
+                    <div class="btn-group" style="margin: 0;">
+                        <button class="btn btn-primary" id="btn-start-training" onclick="startTraining()">Start Training</button>
+                        <button class="btn btn-danger" id="btn-stop-training" onclick="stopTraining()" disabled>Stop</button>
+                        <button class="btn btn-secondary" id="btn-pause-training" onclick="pauseTraining()" disabled>Pause</button>
+                        <button type="button" class="btn btn-secondary" id="btn-quit-server" onclick="quitServerGracefully()" title="Stops native training, closes HTTP, exits process">Quit server</button>
+                    </div>
+                </div>
+            </div>
             <div class="panel-grid split">
                 <div class="panel">
                     <div class="panel-header">Training Configuration</div>
@@ -994,9 +1051,6 @@
                         </div>
                         
                         <div class="btn-group" style="margin-top: 1rem;">
-                            <button class="btn btn-primary" id="btn-start-training" onclick="startTraining()">Start Training</button>
-                            <button class="btn btn-danger" id="btn-stop-training" onclick="stopTraining()" disabled>Stop</button>
-                            <button class="btn btn-secondary" id="btn-pause-training" onclick="pauseTraining()" disabled>Pause</button>
                             <button class="btn btn-secondary" onclick="saveTrainingConfig()">Save Config</button>
                             <button class="btn btn-secondary" onclick="resetTrainingDefaults()">Reset Defaults</button>
                         </div>
@@ -1383,6 +1437,102 @@
                 system: {}
             }
         };
+
+        // MCP debug panel: avoid spamming identical metrics lines; still heartbeat when idle.
+        let lastTrainingMetricsDebugSig = '';
+        let lastTrainingMetricsDebugAt = 0;
+
+        function shouldEmitTrainingMetricsDebug(m) {
+            if (!m || typeof m !== 'object') return true;
+            const ig = m.ingestion && typeof m.ingestion === 'object'
+                ? `|${m.ingestion.train_queue_depth}|${m.ingestion.raw_queue_depth}|${m.ingestion.acq_queue_depth}|${m.ingestion.acq_dropped_too_short}|${m.ingestion.dropped_payloads}`
+                : '';
+            const sig = `${m.phase || ''}|${m.native_launch_in_progress}|${m.is_running}|${m.epoch}|${m.loss}|${m.samples}|${m.samples_total ?? ''}|${m.init_message || ''}${ig}`;
+            const now = Date.now();
+            if (sig !== lastTrainingMetricsDebugSig) {
+                lastTrainingMetricsDebugSig = sig;
+                lastTrainingMetricsDebugAt = now;
+                return true;
+            }
+            if (now - lastTrainingMetricsDebugAt > 12000) {
+                lastTrainingMetricsDebugAt = now;
+                return true;
+            }
+            return false;
+        }
+
+        function formatMcpResultSummary(method, result) {
+            if (result == null) return '';
+            try {
+                if (method === 'wui_get_training_metrics') {
+                    const ep = result.epoch ?? '?';
+                    const te = result.total_epochs ?? '?';
+                    const loss = result.loss != null && !Number.isNaN(Number(result.loss))
+                        ? Number(result.loss).toFixed(4)
+                        : (result.loss ?? 'n/a');
+                    const run = result.is_running ? 'RUNNING' : 'idle';
+                    const samp = result.samples ?? 0;
+                    const sampTot = result.samples_total ?? 0;
+                    const ph = result.phase ? String(result.phase) : '?';
+                    const bp = result.buffer_profile ? String(result.buffer_profile) : '?';
+                    const pe = result.phase_elapsed_seconds != null
+                        ? `${Number(result.phase_elapsed_seconds).toFixed(0)}s` : '';
+                    const nlp = result.native_launch_in_progress ? ' native_launch' : '';
+                    let extra = '';
+                    if (result.init_message) {
+                        extra = ' init=' + String(result.init_message).slice(0, 48);
+                    }
+                    const iq = result.ingestion && typeof result.ingestion === 'object'
+                        ? ` q=${result.ingestion.train_queue_depth ?? '?'} raw=${result.ingestion.raw_queue_depth ?? '?'}`
+                        : '';
+                    const tf = (result.ingestion && typeof result.ingestion === 'object')
+                        ? ` frontier=${result.ingestion.topic_frontier_size ?? '?'}\/${result.ingestion.topic_frontier_max ?? '?'} evict=${result.ingestion.topic_frontier_evictions ?? 0}`
+                        : '';
+                    const pf = (result.ingestion && typeof result.ingestion === 'object'
+                        && result.ingestion.prefill_target_samples > 0
+                        && result.ingestion.prefill_reached !== true)
+                        ? ` ring ${result.ingestion.prefill_current_samples ?? '?'}\/${result.ingestion.prefill_target_samples}`
+                        : '';
+                    const dq = (result.ingestion && typeof result.ingestion === 'object')
+                        ? ` acq=${result.ingestion.acq_queue_depth ?? '?'}/${result.ingestion.acq_queue_max ?? '?'}`
+                            + ` drop_s=${result.ingestion.acq_dropped_too_short ?? 0}`
+                            + ` drop_pl=${result.ingestion.dropped_payloads ?? 0}`
+                        : '';
+                    return ` | phase=${ph}${pe ? '(' + pe + ')' : ''}${nlp} profile=${bp} ep ${ep}/${te} loss=${loss} ${run} samples=${samp} total=${sampTot}${iq}${tf}${pf}${dq}${extra}`;
+                }
+                if (method === 'wui_get_acquisition_status') {
+                    const p = result.data_path ? String(result.data_path) : '';
+                    const tail = p.length > 40 ? '…' + p.slice(-36) : p;
+                    return ` | files=${result.data_files ?? 0} items=${result.items_fetched ?? 0} path=${tail || 'n/a'}`;
+                }
+                if (method === 'wui_init_training_pipeline' || method === 'wui_start_ff_training' || method === 'wui_stop_ff_training' || method === 'wui_shutdown_server') {
+                    const m = result.message || '';
+                    return m ? ` | ${m.slice(0, 140)}` : '';
+                }
+                if (method === 'wui_connect') {
+                    return result.connected ? ' | connected' : ' | not connected';
+                }
+                if (method === 'wui_list_models') {
+                    const n = Array.isArray(result.models) ? result.models.length : (result.count ?? '?');
+                    return ` | models=${n}`;
+                }
+                if (method === 'wui_list_data_sources') {
+                    const n = Array.isArray(result.sources) ? result.sources.length : '?';
+                    return ` | sources=${n}`;
+                }
+                if (method === 'wui_get_api_keys') {
+                    return ' | (redacted)';
+                }
+                if (typeof result === 'object') {
+                    const keys = Object.keys(result);
+                    if (keys.length > 0 && keys.length <= 5) {
+                        const s = JSON.stringify(result);
+                        return s.length > 120 ? ` | ${s.slice(0, 120)}…` : ` | ${s}`;
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            return '';
+        }
         
         // ============================================
         // WebSocket Connection
@@ -1417,9 +1567,18 @@
                 const data = await response.json();
                 console.log(`[MCP] Response ${requestId}:`, data);
                 
-                // Log to visible debug panel
-                const color = data.error ? 'red' : (data.result ? '#0f0' : '#ff0');
-                addDebugLogEntry(`${method}: ${data.error ? 'ERROR' : 'OK'}`, color);
+                // Log to visible debug panel (include payload summary — not just "OK")
+                const color = data.error ? 'red' : (data.result !== undefined && data.result !== null ? '#0f0' : '#ff0');
+                if (data.error) {
+                    const em = data.error.message || JSON.stringify(data.error);
+                    addDebugLogEntry(`${method}: ERROR — ${em}`, 'red');
+                } else if (method === 'wui_get_training_metrics' && data.result) {
+                    if (shouldEmitTrainingMetricsDebug(data.result)) {
+                        addDebugLogEntry(`${method}: OK${formatMcpResultSummary(method, data.result)}`, color);
+                    }
+                } else {
+                    addDebugLogEntry(`${method}: OK${formatMcpResultSummary(method, data.result)}`, color);
+                }
                 
                 if (data.error) {
                     console.error(`[MCP] Error ${requestId}:`, data.error);
@@ -1439,50 +1598,115 @@
             updateConnectionStatus(true);
             loadInitialData();
             
-            // Poll for metrics every 2 seconds
-            setInterval(async () => {
-                try {
-                    const metrics = await callMCP('wui_get_training_metrics');
-                    if (metrics) {
-                        updateDashboardMetrics({
-                            epoch: metrics.epoch,
-                            loss: metrics.loss,
-                            samples: metrics.samples
-                        });
-                        
-                        // Update expert count display
-                        if (metrics.expert_stats) {
-                            const stats = metrics.expert_stats;
-                            const expertEl = document.getElementById('dash-experts');
-                            if (expertEl && stats.current) {
-                                if (metrics.lazy_init && stats.current < stats.target) {
-                                    expertEl.textContent = `${stats.current}/${stats.target} (growing)`;
-                                } else {
-                                    expertEl.textContent = stats.current;
+            // Poll metrics: faster while training or native DLL is launching; slower when idle.
+            function scheduleTrainingMetricsPoll() {
+                const delay = (typeof appState.training._nextMetricsDelayMs === 'number')
+                    ? appState.training._nextMetricsDelayMs
+                    : 2000;
+                setTimeout(async () => {
+                    let nextMs = 10000;
+                    try {
+                        const metrics = await callMCP('wui_get_training_metrics');
+                        if (metrics) {
+                            if (typeof metrics.recommended_poll_interval_sec === 'number') {
+                                nextMs = Math.max(1500, Math.min(30000, metrics.recommended_poll_interval_sec * 1000));
+                            } else {
+                                const busy = metrics.is_running === true || metrics.native_launch_in_progress === true
+                                    || (metrics.phase && String(metrics.phase).startsWith('native_'))
+                                    || metrics.phase === 'stopping' || metrics.phase === 'training';
+                                nextMs = busy ? 2000 : 10000;
+                            }
+                            updateDashboardMetrics({
+                                epoch: metrics.epoch,
+                                loss: metrics.loss,
+                                samples: metrics.samples,
+                                samples_total: metrics.samples_total
+                            });
+                            updateDashboardIngestion(metrics);
+
+                            const phEl = document.getElementById('dash-training-phase');
+                            if (phEl && metrics.phase) {
+                                const pe = metrics.phase_elapsed_seconds != null
+                                    ? ` ${Number(metrics.phase_elapsed_seconds).toFixed(0)}s` : '';
+                                const ingest = metrics.ingestion || {};
+                                const prefill = (ingest && typeof ingest === 'object'
+                                    && ingest.prefill_target_samples > 0
+                                    && ingest.prefill_reached !== true)
+                                    ? ` ring ${ingest.prefill_current_samples ?? '?'}\/${ingest.prefill_target_samples}`
+                                    : '';
+                                phEl.textContent = `${metrics.phase}${pe}${prefill}`;
+                            }
+
+                            if (metrics.expert_stats) {
+                                const stats = metrics.expert_stats;
+                                const expertEl = document.getElementById('dash-experts');
+                                if (expertEl && stats.current) {
+                                    if (metrics.lazy_init && stats.current < stats.target) {
+                                        expertEl.textContent = `${stats.current}/${stats.target} (growing)`;
+                                    } else {
+                                        expertEl.textContent = stats.current;
+                                    }
+                                }
+                                if (stats.current > 0 && appState.training.lastExpertCount && stats.current > appState.training.lastExpertCount) {
+                                    if (metrics.lazy_init) {
+                                        addLogEntry('training-logs', `[GROWTH] Expert pool expanded: ${appState.training.lastExpertCount} → ${stats.current} experts`, 'info');
+                                    }
+                                }
+                                if (stats.current > 0) {
+                                    appState.training.lastExpertCount = stats.current;
                                 }
                             }
-                            
-                            // Log expert growth if actually growing (not 0, not decreasing)
-                            if (stats.current > 0 && appState.training.lastExpertCount && stats.current > appState.training.lastExpertCount) {
-                                if (metrics.lazy_init) {
-                                    addLogEntry('training-logs', `[GROWTH] Expert pool expanded: ${appState.training.lastExpertCount} → ${stats.current} experts`, 'info');
+
+                            if (metrics.is_running !== appState.training.running) {
+                                appState.training.running = metrics.is_running;
+                                updateTrainingUI(metrics.is_running);
+                            }
+
+                            const showProgress = metrics.is_running || metrics.native_launch_in_progress;
+                            if (showProgress) {
+                                const now = Date.now();
+                                    const sig = `${metrics.phase}|${metrics.epoch}|${metrics.loss}|${metrics.samples}|${metrics.samples_total || 0}`;
+                                const last = appState.training._progressSig || '';
+                                const lastT = appState.training._progressLogAt || 0;
+                                if (sig !== last || (now - lastT) > 5000) {
+                                    appState.training._progressSig = sig;
+                                    appState.training._progressLogAt = now;
+                                    const te = metrics.total_epochs ?? '?';
+                                    const lossStr = metrics.loss != null && !Number.isNaN(Number(metrics.loss))
+                                        ? Number(metrics.loss).toFixed(4) : 'n/a';
+                                    const tag = metrics.native_launch_in_progress ? 'NATIVE_LAUNCH' : 'PROGRESS';
+                                    const totalStr = metrics.samples_total != null ? ` total=${metrics.samples_total}` : '';
+                                    const ingest = metrics.ingestion || {};
+                                    const ingestStr = (ingest && typeof ingest === 'object')
+                                        ? ` q=${ingest.train_queue_depth ?? '?'} raw=${ingest.raw_queue_depth ?? '?'}`
+                                        : '';
+                                    const frontierStr = (ingest && typeof ingest === 'object')
+                                        ? ` frontier=${ingest.topic_frontier_size ?? '?'}\/${ingest.topic_frontier_max ?? '?'} evict=${ingest.topic_frontier_evictions ?? 0}`
+                                        : '';
+                                    const prefillStr = (ingest && typeof ingest === 'object'
+                                        && ingest.prefill_target_samples > 0
+                                        && ingest.prefill_reached !== true)
+                                        ? ` ring=${ingest.prefill_current_samples ?? '?'}\/${ingest.prefill_target_samples ?? '?'}`
+                                        : '';
+                                    const dropStr = (ingest && typeof ingest === 'object')
+                                        ? ` acq=${ingest.acq_queue_depth ?? '?'}/${ingest.acq_queue_max ?? '?'}`
+                                            + ` drop_s=${ingest.acq_dropped_too_short ?? 0} drop_pl=${ingest.dropped_payloads ?? 0}`
+                                        : '';
+                                    addLogEntry('training-logs',
+                                        `[${tag}] phase=${metrics.phase || '?'} epoch ${metrics.epoch}/${te} loss=${lossStr} samples=${metrics.samples}${totalStr}${ingestStr}${frontierStr}${prefillStr}${dropStr}`,
+                                        'info');
                                 }
                             }
-                            // Only update last count if current is valid (>0)
-                            if (stats.current > 0) {
-                                appState.training.lastExpertCount = stats.current;
-                            }
                         }
-                        
-                        if (metrics.is_running !== appState.training.running) {
-                            appState.training.running = metrics.is_running;
-                            updateTrainingUI(metrics.is_running);
-                        }
+                    } catch (e) {
+                        nextMs = 8000;
                     }
-                } catch (e) {
-                    // Silent fail on poll
-                }
-            }, 2000);
+                    appState.training._nextMetricsDelayMs = nextMs;
+                    scheduleTrainingMetricsPoll();
+                }, delay);
+            }
+            appState.training._nextMetricsDelayMs = 2000;
+            scheduleTrainingMetricsPoll();
         }
         
         function updateConnectionStatus(connected) {
@@ -1540,8 +1764,10 @@
                     updateDashboardMetrics({
                         epoch: metrics.epoch,
                         loss: metrics.loss,
-                        samples: metrics.samples
+                        samples: metrics.samples,
+                        samples_total: metrics.samples_total
                     });
+                    updateDashboardIngestion(metrics);
                 }
             } catch (err) {
                 logError('Init', err.message);
@@ -1898,6 +2124,7 @@ lean = ${getBool('cfg-api-lean')}`;
                 } else {
                     addLogEntry('training-logs', `[DATA] ERROR: No training data found. Add .txt files to: ${acqStatus?.data_path || 'C:\\q_mini_data\\datasets\\acquired\\'}`, 'error');
                     logError('Training', 'Cannot start: No training data available');
+                    addDebugLogEntry('startTraining aborted: no data files and no acquired items (wui_start_ff_training not called)', 'red');
                     return;  // Stop - training requires real data
                 }
                 
@@ -1922,7 +2149,9 @@ lean = ${getBool('cfg-api-lean')}`;
                     addLogEntry('training-logs', `[INIT] ${initResult.message}`, 'info');
                 }
                 
-                // Then start training
+                // Then start training (CGO + DLL; first call can block until the pipeline threads spin up)
+                addDebugLogEntry('Calling wui_start_ff_training (native; may block until training reports ready)...', '#ff0');
+                addLogEntry('training-logs', '[START] Invoking wui_start_ff_training…', 'info');
                 const startResult = await callMCP('wui_start_ff_training', { epochs: epochs });
                 
                 if (startResult && startResult.message) {
@@ -1968,6 +2197,20 @@ lean = ${getBool('cfg-api-lean')}`;
             } catch (err) {
                 logError('Training', err.message);
             }
+        }
+
+        /** Graceful process exit: MCP tells Go to stop training, drain HTTP, then exit. */
+        async function quitServerGracefully() {
+            if (!confirm('Stop native training (if any), shut down the HTTP server, and exit qminiwasm?\n\nRerun the executable to use the WUI again.')) {
+                return;
+            }
+            addLogEntry('training-logs', '[QUIT] Sending wui_shutdown_server…', 'info');
+            try {
+                await callMCP('wui_shutdown_server', {});
+            } catch (e) {
+                addLogEntry('training-logs', '[QUIT] ' + (e && e.message ? e.message : 'connection closed (server may already be exiting)'), 'info');
+            }
+            addLogEntry('training-logs', '[QUIT] Server should exit; if not, use Ctrl+C in the terminal running qminiwasm.', 'info');
         }
         
         function updateTrainingUI(running) {
@@ -2410,6 +2653,68 @@ lean = ${getBool('cfg-api-lean')}`;
         // ============================================
         // Dashboard Updates
         // ============================================
+
+        function updateDashboardIngestion(metrics) {
+            const setText = (id, text) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = text;
+            };
+            const setWarn = (id, warn) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (warn) el.classList.add('ingest-warn');
+                else el.classList.remove('ingest-warn');
+            };
+            const ingest = metrics && metrics.ingestion && typeof metrics.ingestion === 'object'
+                ? metrics.ingestion
+                : null;
+
+            if (metrics && metrics.samples_total != null) {
+                const st = Number(metrics.samples_total);
+                setText('dash-samples-total', Number.isFinite(st) ? st.toLocaleString() : String(metrics.samples_total));
+            }
+
+            if (!ingest) {
+                ['dash-ing-train', 'dash-ing-raw', 'dash-ing-acq', 'dash-ing-prefill'].forEach((id) => setText(id, '—'));
+                setText('dash-ing-drop-short', '—');
+                setText('dash-ing-drop-payload', '—');
+                setText('dash-ing-blocked', '—');
+                setWarn('dash-ing-drop-short', false);
+                setWarn('dash-ing-drop-payload', false);
+                return;
+            }
+
+            const depthCap = (depth, cap) => {
+                const d = depth != null ? depth : '—';
+                if (cap != null && Number(cap) > 0) return `${d}/${cap}`;
+                return String(d);
+            };
+
+            setText('dash-ing-train', depthCap(ingest.train_queue_depth, ingest.train_queue_cap));
+            setText('dash-ing-raw', depthCap(ingest.raw_queue_depth, ingest.raw_queue_cap));
+            setText('dash-ing-acq', depthCap(ingest.acq_queue_depth, ingest.acq_queue_max));
+
+            const ptgt = Number(ingest.prefill_target_samples) || 0;
+            if (ptgt > 0) {
+                setText('dash-ing-prefill', `${ingest.prefill_current_samples ?? '?'}/${ptgt}`);
+            } else {
+                setText('dash-ing-prefill', ingest.prefill_reached ? 'ready' : '—');
+            }
+
+            const dshort = Number(ingest.acq_dropped_too_short) || 0;
+            setText('dash-ing-drop-short', dshort.toLocaleString());
+            setWarn('dash-ing-drop-short', dshort > 0);
+
+            const dpayload = Number(ingest.dropped_payloads) || 0;
+            setText('dash-ing-drop-payload', dpayload.toLocaleString());
+            setWarn('dash-ing-drop-payload', dpayload > 0);
+
+            const br = Number(ingest.blocked_raw_pushes) || 0;
+            const bt = Number(ingest.blocked_train_pushes) || 0;
+            const ba = Number(ingest.acq_blocked_pushes) || 0;
+            const bsum = br + bt + ba;
+            setText('dash-ing-blocked', bsum.toLocaleString());
+        }
         
         function updateDashboardMetrics(data) {
             if (data.epoch !== undefined) {
@@ -2423,6 +2728,10 @@ lean = ${getBool('cfg-api-lean')}`;
             if (data.samples !== undefined) {
                 document.getElementById('dash-samples').textContent = data.samples;
                 appState.training.samples = data.samples;
+            }
+            if (data.samples_total !== undefined && data.samples_total !== null) {
+                const elTot = document.getElementById('dash-samples-total');
+                if (elTot) elTot.textContent = String(data.samples_total);
             }
             if (data.experts !== undefined) {
                 document.getElementById('dash-experts').textContent = data.experts;

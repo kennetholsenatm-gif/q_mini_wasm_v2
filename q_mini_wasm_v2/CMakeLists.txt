@@ -76,6 +76,7 @@ set(CORE_SOURCES
     core/learning/entropy_goodness.cpp
     core/moe/router.hpp
     core/moe/router.cpp
+    core/moe/router_checkpoint_io.cpp
     core/moe/gf3_layers.hpp
     core/moe/gf3_layers.cpp
     core/moe/expert_network.hpp
@@ -359,6 +360,15 @@ if(BUILD_DLL)
     set_target_properties(q_training PROPERTIES
         OUTPUT_NAME "q_training"
         PREFIX ""
+    )
+
+    # Windows/Go: best-effort copy next to qminiwasm.exe (fails quietly if DLL is locked).
+    add_custom_command(TARGET q_training POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+            -DSRC=$<TARGET_FILE:q_training>
+            -DDST=${CMAKE_SOURCE_DIR}/../q_training.dll
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/post_copy_training_dll.cmake"
+        COMMENT "q_training: best-effort copy DLL to repository root"
     )
 
     # ------------------------------------------------------------------------

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <random>
 #include <algorithm>
+#include <iosfwd>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -281,6 +282,18 @@ public:
      */
     void update_expert_weights(size_t expert_idx, const std::vector<std::vector<ternary::Trit>>& weights);
 
+    /**
+     * Persist full MoE router state (RUF2 blob; QMINI checkpoint fmt 5+).
+     * Lazy-initializes routing weights so export is deterministic.
+     */
+    void SerializeRouterState(std::ostream& os);
+
+    /**
+     * Restore router tail: fmt 3 = no blob; fmt 4 = legacy RTW1 routing matrix only;
+     * fmt 5 = full RUF2 state.
+     */
+    bool DeserializeRouterState(std::istream& is, uint32_t checkpoint_fmt);
+
     // ========================================================================
     // Dynamic Expert Scaling
     // ========================================================================
@@ -546,6 +559,9 @@ public:
         const std::vector<ternary::Trit>& input,
         const std::vector<int32_t>& system_state
     );
+
+    friend void moe_router_checkpoint_write(MoERouter&, std::ostream&);
+    friend bool moe_router_checkpoint_read(MoERouter&, std::istream&, uint32_t);
 
 private:
     size_t current_active_experts_;

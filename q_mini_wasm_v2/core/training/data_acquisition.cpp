@@ -15,6 +15,25 @@
 
 namespace q_mini_wasm_v2::core::training {
 
+namespace {
+std::vector<int32_t> encode_text_payload(const std::string& text) {
+    std::vector<int32_t> out;
+    out.reserve(text.size());
+    for (unsigned char ch : text) {
+        out.push_back(static_cast<int32_t>(ch));
+    }
+    return out;
+}
+
+std::string normalized_source_type(const std::string& source_type) {
+    std::string t = source_type;
+    std::transform(t.begin(), t.end(), t.begin(), ::tolower);
+    if (t == "directory") return "local_directory";
+    if (t == "file") return "local_file";
+    return t;
+}
+}
+
 DataAcquisitionManager::DataAcquisitionManager() {}
 
 DataAcquisitionManager::~DataAcquisitionManager() {
@@ -150,6 +169,7 @@ bool DataAcquisitionManager::start() {
 void DataAcquisitionManager::stop() {
     should_stop_ = true;
     running_ = false;
+    queue_not_full_cv_.notify_all();
     
     if (acquisition_thread_.joinable()) {
         acquisition_thread_.join();
@@ -198,17 +218,17 @@ std::vector<TrainingSample> DataAcquisitionManager::fetch_batch(size_t batch_siz
         batch.push_back(std::move(sample_queue_.front()));
         sample_queue_.pop();
     }
+    queue_not_full_cv_.notify_all();
     
     lock.unlock();
     
-    // Preprocess
+    // Normalize text payloads if a producer still emits string_view.
     for (auto& sample : batch) {
         if (std::holds_alternative<std::string_view>(sample.data)) {
             auto sv = std::get<std::string_view>(sample.data);
             std::string processed = preprocess_text(std::string(sv), min_length, max_length);
             if (!processed.empty()) {
-                // Store processed text (this creates a copy, which is fine for now)
-                // In production, use a string pool or arena allocator
+                sample.data = encode_text_payload(processed);
             }
         }
     }
@@ -224,6 +244,17 @@ bool DataAcquisitionManager::has_data() const {
 size_t DataAcquisitionManager::queue_size() const {
     std::lock_guard<std::mutex> lock(queue_mutex_);
     return sample_queue_.size();
+}
+
+AcquisitionQueueStats DataAcquisitionManager::get_queue_stats() const {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    AcquisitionQueueStats s;
+    s.queue_depth = sample_queue_.size();
+    s.max_queue_depth = max_sample_queue_depth_;
+    s.blocked_pushes = blocked_pushes_.load();
+    s.blocked_wait_ms = blocked_wait_ms_.load();
+    s.dropped_too_short = dropped_too_short_.load();
+    return s;
 }
 
 void DataAcquisitionManager::acquisition_loop() {
@@ -246,12 +277,15 @@ void DataAcquisitionManager::acquisition_loop() {
         if (should_stop_) break;
         
         // Fetch based on type
-        if (source.type == "web_api") {
+        const std::string normalized_type = normalized_source_type(source.type);
+        if (normalized_type == "web_api") {
             fetch_from_web_api(source);
-        } else if (source.type == "local_file") {
+        } else if (normalized_type == "local_file") {
             fetch_from_local_file(source);
-        } else if (source.type == "local_directory") {
+        } else if (normalized_type == "local_directory") {
             fetch_from_directory(source);
+        } else {
+            log("Unsupported source type '" + source.type + "' for source '" + source.name + "'");
         }
         
         {
@@ -301,16 +335,26 @@ void DataAcquisitionManager::fetch_from_web_api(const DataSourceConfig& source) 
         
         if (!processed.empty()) {
             TrainingSample sample;
-            // Store in string pool to ensure lifetime
-            string_pool_.push_back(processed);
-            sample.data = std::string_view(string_pool_.back());
+            sample.data = encode_text_payload(processed);
             sample.label = 1; // Positive
             sample.source_api = source.name;
             sample.domain = "web";
-            
-            std::lock_guard<std::mutex> lock(queue_mutex_);
+
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            while (!should_stop_ && sample_queue_.size() >= max_sample_queue_depth_) {
+                ++blocked_pushes_;
+                auto ws = std::chrono::steady_clock::now();
+                queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(250));
+                blocked_wait_ms_ += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - ws).count());
+            }
+            if (should_stop_) {
+                break;
+            }
             sample_queue_.push(sample);
             items++;
+        } else {
+            ++dropped_too_short_;
         }
         
         if (items % 100 == 0) {
@@ -354,15 +398,26 @@ void DataAcquisitionManager::fetch_from_local_file(const DataSourceConfig& sourc
         
         if (!processed.empty()) {
             TrainingSample sample;
-            string_pool_.push_back(processed);
-            sample.data = std::string_view(string_pool_.back());
+            sample.data = encode_text_payload(processed);
             sample.label = 1;
             sample.source_api = source.name;
             sample.domain = "local_file";
-            
-            std::lock_guard<std::mutex> lock(queue_mutex_);
+
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            while (!should_stop_ && sample_queue_.size() >= max_sample_queue_depth_) {
+                ++blocked_pushes_;
+                auto ws = std::chrono::steady_clock::now();
+                queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(250));
+                blocked_wait_ms_ += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - ws).count());
+            }
+            if (should_stop_) {
+                break;
+            }
             sample_queue_.push(sample);
             items++;
+        } else {
+            ++dropped_too_short_;
         }
         
         if (items % 100 == 0) {
@@ -405,15 +460,20 @@ void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source
     }
     // Default extensions
     if (extensions.empty()) {
-        extensions = {".txt", ".md", ".json"};
+        extensions = {".txt", ".md", ".json", ".jsonl"};
     }
     
     int items = 0;
+    size_t files_discovered = 0;
+    size_t files_accepted = 0;
+    size_t files_skipped_ext = 0;
+    size_t chunks_too_short = 0;
     
     for (const auto& entry : std::filesystem::recursive_directory_iterator(source.path)) {
         if (should_stop_) break;
         
         if (!entry.is_regular_file()) continue;
+        ++files_discovered;
         
         std::string ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
@@ -429,7 +489,11 @@ void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source
             }
         }
         
-        if (!match) continue;
+        if (!match) {
+            ++files_skipped_ext;
+            continue;
+        }
+        ++files_accepted;
         
         // Read file
         std::ifstream file(entry.path());
@@ -447,15 +511,27 @@ void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source
             
             if (!processed.empty()) {
                 TrainingSample sample;
-                string_pool_.push_back(processed);
-                sample.data = std::string_view(string_pool_.back());
+                sample.data = encode_text_payload(processed);
                 sample.label = 1;
                 sample.source_api = source.name;
                 sample.domain = "local_directory";
-                
-                std::lock_guard<std::mutex> lock(queue_mutex_);
+
+                std::unique_lock<std::mutex> lock(queue_mutex_);
+                while (!should_stop_ && sample_queue_.size() >= max_sample_queue_depth_) {
+                    ++blocked_pushes_;
+                    auto ws = std::chrono::steady_clock::now();
+                    queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(250));
+                    blocked_wait_ms_ += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - ws).count());
+                }
+                if (should_stop_) {
+                    break;
+                }
                 sample_queue_.push(sample);
                 items++;
+            } else {
+                ++chunks_too_short;
+                ++dropped_too_short_;
             }
         }
         
@@ -472,6 +548,11 @@ void DataAcquisitionManager::fetch_from_directory(const DataSourceConfig& source
     std::lock_guard<std::mutex> lock(progress_mutex_);
     progress_.processed_items += items;
     progress_.total_items += items;
+    log("Directory scan stats source=" + source.name +
+        " discovered=" + std::to_string(files_discovered) +
+        " accepted=" + std::to_string(files_accepted) +
+        " skipped_ext=" + std::to_string(files_skipped_ext) +
+        " dropped_too_short_chunks=" + std::to_string(chunks_too_short));
     log("Loaded " + std::to_string(items) + " samples from directory " + source.path);
 }
 

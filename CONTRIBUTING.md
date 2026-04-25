@@ -23,13 +23,14 @@ cd q_mini_wasm_v2
    cmake --build q_mini_wasm_v2/build_final --config Release --target q_training
    ```
 
-2. Build the Go server:
+2. Build the Go server **at the repository root** (this is the only user-facing executable):
 
    ```powershell
-   go build -o cmd/qminiwasm/qminiwasm.exe ./cmd/qminiwasm
+   cd C:\GitHub\q_mini_wasm_v2   # or your clone path
+   go build -o qminiwasm.exe ./cmd/qminiwasm
    ```
 
-3. Place **`q_training.dll`** (from `q_mini_wasm_v2/build_final/`) next to **`cmd/qminiwasm/qminiwasm.exe`**, or ensure the directory containing the DLL is on `PATH` so the dynamic loader can resolve it.
+3. Building **`q_training`** copies **`q_training.dll`** to the **repository root** (next to `qminiwasm.exe`) automatically. If you built without that target, copy the DLL from `q_mini_wasm_v2/build_final/` (or `Release/`) yourself, or add that folder to `PATH`.
 
 ## Data and config (not in git)
 
@@ -45,6 +46,11 @@ The Go host defaults to **`C:\q_mini_data`** for runtime files (`DataDir` in `cm
 
 - Source under `q_mini_wasm_v2/`, `cmd/qminiwasm/`, `config/` (templates), `wui/`, docs you want versioned (e.g. `q_mini_docs/`).
 - Avoid committing `*.exe`, `*.dll`, logs, CSV audit dumps, and extracted release assets.
+
+## WUI / MCP training flow
+
+1. **`wui_init_training_pipeline`** — validates TOML paths under `DataDir` only (no native DLL call), so the server stays up if config is wrong.
+2. **`wui_start_ff_training`** — loads **`q_training.dll`**, calls `Training_InitSession` + `Training_StartTraining`. If the DLL is missing, wrong architecture, or out of sync with the Go CGO declarations, this step fails with an MCP JSON error instead of killing the whole HTTP connection (“Failed to fetch”).
 
 ## Questions
 

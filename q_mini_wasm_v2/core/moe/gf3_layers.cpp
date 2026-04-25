@@ -1,9 +1,20 @@
 #include "gf3_layers.hpp"
+#include <atomic>
 #include <random>
 #include <algorithm>
 #include <numeric>
+#include <iostream>
+#include <cstring>
 
 namespace q_mini_wasm_v2::core::moe {
+
+namespace {
+std::atomic<uint64_t> g_gf3_hebbian_weight_cell_updates{0};
+}
+
+uint64_t gf3_hebbian_weight_cell_updates_total() noexcept {
+    return g_gf3_hebbian_weight_cell_updates.load(std::memory_order_relaxed);
+}
 
 // ============================================================================
 // GF3LinearLayer Implementation
@@ -187,15 +198,96 @@ void GF3LinearLayer::UpdateWeightsHebbian(
                 static_cast<int8_t>(input[i])
             );
             
-            // Apply update
+            // Apply update (GF(3) wrap); count each cell touched by a non-trivial Hebbian step.
             int8_t new_weight = GF3Add(
                 static_cast<int8_t>(weights_[i][j]),
                 delta
             );
             
             weights_[i][j] = static_cast<ternary::Trit>(new_weight);
+            if (delta != 0) {
+                g_gf3_hebbian_weight_cell_updates.fetch_add(1, std::memory_order_relaxed);
+            }
         }
     }
+}
+
+namespace {
+void write_raw(std::ostream& os, const void* p, std::streamsize n) {
+    os.write(static_cast<const char*>(p), n);
+}
+
+void read_raw(std::istream& is, void* p, std::streamsize n) {
+    is.read(static_cast<char*>(p), n);
+}
+
+bool trit_ok(int8_t v) {
+    return v == -1 || v == 0 || v == 1;
+}
+} // namespace
+
+void GF3LinearLayer::SerializeWeights(std::ostream& os) const {
+    const uint64_t in_d = static_cast<uint64_t>(config_.input_dim);
+    const uint64_t out_d = static_cast<uint64_t>(config_.output_dim);
+    const int8_t use_bias = static_cast<int8_t>(config_.use_bias);
+    const int8_t use_tropical = static_cast<int8_t>(config_.use_tropical);
+    write_raw(os, &in_d, sizeof(in_d));
+    write_raw(os, &out_d, sizeof(out_d));
+    write_raw(os, &use_bias, sizeof(use_bias));
+    write_raw(os, &use_tropical, sizeof(use_tropical));
+    for (size_t i = 0; i < config_.input_dim; ++i) {
+        for (size_t j = 0; j < config_.output_dim; ++j) {
+            int8_t w = static_cast<int8_t>(weights_[i][j]);
+            write_raw(os, &w, sizeof(w));
+        }
+    }
+    if (config_.use_bias == ternary::Trit::POSITIVE) {
+        for (size_t j = 0; j < bias_.size() && j < config_.output_dim; ++j) {
+            int8_t b = static_cast<int8_t>(bias_[j]);
+            write_raw(os, &b, sizeof(b));
+        }
+    }
+}
+
+bool GF3LinearLayer::DeserializeWeights(std::istream& is) {
+    uint64_t in_d = 0;
+    uint64_t out_d = 0;
+    int8_t use_bias = 0;
+    int8_t use_tropical = 0;
+    read_raw(is, &in_d, sizeof(in_d));
+    read_raw(is, &out_d, sizeof(out_d));
+    read_raw(is, &use_bias, sizeof(use_bias));
+    read_raw(is, &use_tropical, sizeof(use_tropical));
+    if (!is || in_d != config_.input_dim || out_d != config_.output_dim) {
+        return false;
+    }
+    if (static_cast<ternary::Trit>(use_bias) != config_.use_bias ||
+        static_cast<ternary::Trit>(use_tropical) != config_.use_tropical) {
+        return false;
+    }
+    for (size_t i = 0; i < config_.input_dim; ++i) {
+        for (size_t j = 0; j < config_.output_dim; ++j) {
+            int8_t w = 0;
+            read_raw(is, &w, sizeof(w));
+            if (!is || !trit_ok(w)) {
+                return false;
+            }
+            weights_[i][j] = static_cast<ternary::Trit>(w);
+        }
+    }
+    if (config_.use_bias == ternary::Trit::POSITIVE) {
+        for (size_t j = 0; j < config_.output_dim; ++j) {
+            int8_t b = 0;
+            read_raw(is, &b, sizeof(b));
+            if (!is || !trit_ok(b)) {
+                return false;
+            }
+            if (j < bias_.size()) {
+                bias_[j] = static_cast<ternary::Trit>(b);
+            }
+        }
+    }
+    return static_cast<bool>(is);
 }
 
 uint32_t GF3LinearLayer::GetSparsity() const {
@@ -322,6 +414,66 @@ int32_t GF3MultiLayerExpert::TrainForwardForward(
     stats_.total_goodness_delta += delta;
     
     return delta;
+}
+
+void GF3MultiLayerExpert::SerializeWeights(std::ostream& os) const {
+    const uint32_t magic = 0x45334647u; // 'GF3E' when serialized as uint32 LE
+    write_raw(os, &magic, sizeof(magic));
+    const uint64_t in_dim = static_cast<uint64_t>(config_.input_dim);
+    const uint64_t out_dim = static_cast<uint64_t>(config_.output_dim);
+    const uint64_t hid_dim = static_cast<uint64_t>(config_.hidden_dim);
+    const uint64_t num_layers = static_cast<uint64_t>(config_.num_layers);
+    const int8_t use_act = static_cast<int8_t>(config_.use_activation);
+    const int8_t energy = static_cast<int8_t>(config_.energy_budget);
+    write_raw(os, &in_dim, sizeof(in_dim));
+    write_raw(os, &out_dim, sizeof(out_dim));
+    write_raw(os, &hid_dim, sizeof(hid_dim));
+    write_raw(os, &num_layers, sizeof(num_layers));
+    write_raw(os, &use_act, sizeof(use_act));
+    write_raw(os, &energy, sizeof(energy));
+    const uint32_t n_lin = static_cast<uint32_t>(layers_.size());
+    write_raw(os, &n_lin, sizeof(n_lin));
+    for (const auto& layer : layers_) {
+        layer->SerializeWeights(os);
+    }
+}
+
+bool GF3MultiLayerExpert::DeserializeWeights(std::istream& is) {
+    uint32_t magic = 0;
+    read_raw(is, &magic, sizeof(magic));
+    if (!is || magic != 0x45334647u) {
+        return false;
+    }
+    uint64_t in_dim = 0;
+    uint64_t out_dim = 0;
+    uint64_t hid_dim = 0;
+    uint64_t num_layers = 0;
+    int8_t use_act = 0;
+    int8_t energy = 0;
+    read_raw(is, &in_dim, sizeof(in_dim));
+    read_raw(is, &out_dim, sizeof(out_dim));
+    read_raw(is, &hid_dim, sizeof(hid_dim));
+    read_raw(is, &num_layers, sizeof(num_layers));
+    read_raw(is, &use_act, sizeof(use_act));
+    read_raw(is, &energy, sizeof(energy));
+    if (!is || in_dim != config_.input_dim || out_dim != config_.output_dim ||
+        hid_dim != config_.hidden_dim || num_layers != config_.num_layers ||
+        static_cast<ternary::Trit>(use_act) != config_.use_activation ||
+        static_cast<ternary::EnergyTrit>(energy) != config_.energy_budget) {
+        return false;
+    }
+    uint32_t n_lin = 0;
+    read_raw(is, &n_lin, sizeof(n_lin));
+    if (!is || n_lin != layers_.size()) {
+        return false;
+    }
+    for (auto& layer : layers_) {
+        if (!layer->DeserializeWeights(is)) {
+            return false;
+        }
+    }
+    initialized_ = ternary::Trit::POSITIVE;
+    return static_cast<bool>(is);
 }
 
 std::vector<ternary::Trit> GF3MultiLayerExpert::TernaryActivation(

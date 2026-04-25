@@ -24,6 +24,7 @@ cpp/build-training-engine/
 
 # Build Artifacts
 artifacts/
+prove_artifacts/
 
 # Training WUI — single working TOML written by Save working config (not for version control)
 configs/training/wui_working.toml
@@ -416,7 +417,7 @@ ipch/
 *.lib
 *.exp
 
-# Compiled binaries (do not ignore cmd/qminiwasm/ package directory)
+# Compiled binaries — canonical user exe is repo-root /qminiwasm.exe (ignored here). Source stays in cmd/qminiwasm/.
 /qminiwasm.exe
 /qminiwasm.exe~
 /q_training.dll

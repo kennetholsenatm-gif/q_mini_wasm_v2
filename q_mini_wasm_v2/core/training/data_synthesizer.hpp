@@ -9,8 +9,10 @@
 #include <thread>
 #include <queue>
 #include <mutex>
+#include <algorithm>
 #include <condition_variable>
 #include <fstream>
+#include <atomic>
 
 namespace q_mini_wasm_v2::core::training {
 
@@ -489,6 +491,11 @@ public:
     // Start synthesis pipeline - if local data loaded, use it; else use APIs
     void start(size_t acquisition_threads = 4, 
                size_t perturbation_threads = 2);
+    void set_queue_limits(size_t raw_queue_max, size_t train_queue_max, size_t acquisition_queue_max) {
+        max_raw_queue_depth_ = std::max<size_t>(size_t{64}, raw_queue_max);
+        max_train_queue_depth_ = std::max<size_t>(size_t{128}, train_queue_max);
+        max_acquisition_queue_depth_ = std::max<size_t>(size_t{64}, acquisition_queue_max);
+    }
     
     // Check if local data is being used
     bool using_local_data() const { return has_local_data_; }
@@ -508,6 +515,23 @@ public:
         size_t total_perturbed = 0;
         size_t api_failures = 0;
         size_t queue_depth = 0;
+        size_t raw_queue_depth = 0;
+        size_t raw_queue_max = 0;
+        size_t train_queue_max = 0;
+        uint64_t blocked_raw_pushes = 0;
+        uint64_t blocked_train_pushes = 0;
+        uint64_t blocked_wait_ms = 0;
+        uint64_t dropped_payloads = 0;
+        uint64_t dropped_payload_string_view = 0;
+        uint64_t dropped_payload_other = 0;
+        size_t acquisition_queue_depth = 0;
+        size_t acquisition_queue_max = 0;
+        uint64_t acquisition_blocked_pushes = 0;
+        uint64_t acquisition_blocked_wait_ms = 0;
+        uint64_t acquisition_dropped_too_short = 0;
+        size_t topic_frontier_size = 0;
+        size_t topic_frontier_max = 0;
+        uint64_t topic_frontier_evictions = 0;
     };
     Stats get_stats() const;
 
@@ -539,6 +563,10 @@ private:
     std::queue<TrainingSample> train_queue_; // Contrastive pairs
     mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
+    std::condition_variable queue_not_full_cv_;
+    size_t max_raw_queue_depth_ = 32768;
+    size_t max_train_queue_depth_ = 65536;
+    size_t max_acquisition_queue_depth_ = 32768;
     
     // Control
     bool running_ = false;
@@ -551,6 +579,9 @@ private:
     size_t local_sample_index_ = 0;
     mutable std::mutex local_data_mutex_;
     std::string data_path_;
+
+    /** When both local corpus and config/web feeds are active, alternate draws (with fallback). */
+    std::atomic<uint64_t> interleave_counter_{0};
 };
 
 } // namespace q_mini_wasm_v2::core::training

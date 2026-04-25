@@ -28,6 +28,8 @@ struct PipelineMetrics {
     uint32_t ff_negative_goodness = 0;
     int32_t ff_goodness_delta = 0;
     uint64_t ff_total_train_calls = 0;
+    /** GF(3) expert linear layers: cumulative Hebbian weight-cell update steps (non-zero delta applied). */
+    uint64_t gf3_hebbian_weight_cell_updates = 0;
     
     // MoE metrics (GF(3) - tropical integers)
     uint32_t moe_load_balance_score = 0;        // Tropical goodness score
@@ -51,11 +53,33 @@ struct PipelineMetrics {
     size_t ds_total_perturbed = 0;
     size_t ds_api_failures = 0;
     size_t ds_queue_depth = 0;
+    size_t ds_raw_queue_depth = 0;
+    size_t ds_raw_queue_max = 0;
+    size_t ds_train_queue_max = 0;
+    uint64_t ds_blocked_raw_pushes = 0;
+    uint64_t ds_blocked_train_pushes = 0;
+    uint64_t ds_blocked_wait_ms = 0;
+    uint64_t ds_dropped_payloads = 0;
+    uint64_t ds_dropped_payload_string_view = 0;
+    uint64_t ds_dropped_payload_other = 0;
+    size_t ds_acquisition_queue_depth = 0;
+    size_t ds_acquisition_queue_max = 0;
+    uint64_t ds_acquisition_blocked_pushes = 0;
+    uint64_t ds_acquisition_blocked_wait_ms = 0;
+    uint64_t ds_acquisition_dropped_too_short = 0;
+    size_t ds_topic_frontier_size = 0;
+    size_t ds_topic_frontier_max = 0;
+    uint64_t ds_topic_frontier_evictions = 0;
+    size_t prefill_target_samples = 0;
+    size_t prefill_current_samples = 0;
+    bool prefill_reached = false;
+    uint32_t prefill_timeout_ms = 0;
     
     // Pipeline state
     uint64_t current_epoch = 0;
     uint64_t current_batch = 0;
-    uint64_t samples_processed = 0;  // Total samples processed in current epoch
+    uint64_t samples_processed = 0;  // Processed work units in current epoch (resets each epoch)
+    uint64_t samples_processed_total = 0;  // Cumulative processed work units across run
     uint32_t training_progress = 0;  // Basis points (0-10000 = 0.00%-100.00%)
     bool is_running = false;
     std::string status_message;
@@ -103,6 +127,13 @@ struct PipelineConfig {
     size_t topology_evaluation_interval = 10;  // batches between Betti analysis
     /** Checkpoints taken when current_epoch % checkpoint_interval == 0 (after epoch completes). */
     size_t checkpoint_interval = 10;
+    bool enable_prefill_ring_buffer = true;
+    size_t prefill_target_samples = 4096;
+    uint32_t prefill_timeout_ms = 120000;
+    uint32_t prefill_poll_ms = 50;
+    size_t max_acquisition_queue_depth = 32768;
+    size_t max_raw_queue_depth = 32768;
+    size_t max_train_queue_depth = 65536;
     
     // Control flags
     bool enable_betti_guidance = true;
@@ -113,6 +144,19 @@ struct PipelineConfig {
     bool enable_steane_correction = false;  // Steane error correction
     bool enable_error_correction = false;   // Alias for steane correction
     bool enable_flash_cim = false;         // Flash CIM optimization
+
+    /**
+     * When true (recommended for large moe_num_experts), expert GF3 stacks are created on
+     * first top-k route only; router still scores all expert slots (cheap vs full experts).
+     * When false, every expert is materialized at init (high RAM; only for small expert counts).
+     */
+    bool lazy_moe_experts = true;
+
+    /**
+     * Cap on internal FF layers per expert (0 = use full moe_expert_internal_layers).
+     * Lower values reduce per-expert memory once an expert is materialized.
+     */
+    size_t moe_ff_active_internal_layers = 0;
     
     // Data source - if set, load local data instead of external APIs
     std::string data_path;  // Path to local training data files
@@ -212,7 +256,7 @@ public:
      * @param path Export file path
      * @return true if export successful
      */
-    bool export_model(const std::string& path) const;
+    bool export_model(const std::string& path);
     
     /**
      * @brief Import model from file
@@ -220,6 +264,9 @@ public:
      * @return true if import successful
      */
     bool import_model(const std::string& path);
+
+    /** Update paths/epoch budget without rebuilding MoE stacks (used between training runs). */
+    void apply_run_overrides(const std::string& data_path, uint32_t num_epochs);
     
     /**
      * @brief Get current configuration
@@ -271,6 +318,8 @@ private:
     std::unique_ptr<learning::ForwardForwardLearner> ff_learner_;
     std::unique_ptr<moe::MoERouter> router_;
     std::vector<std::unique_ptr<moe::ExpertNetwork>> experts_;
+    moe::ExpertNetwork::ExpertConfig expert_template_{};
+    mutable std::mutex experts_mutex_;
     std::unique_ptr<qgnn::BettiExtractor> betti_extractor_;
     std::unique_ptr<qgnn::GraphTableau> graph_tableau_;
     
@@ -283,8 +332,13 @@ private:
     std::atomic<uint64_t> current_epoch_{0};
     std::atomic<uint64_t> current_batch_{0};
     std::atomic<uint64_t> samples_processed_{0};  // Samples processed in current epoch
+    std::atomic<uint64_t> samples_processed_total_{0};  // Cumulative across epochs
     std::atomic<uint32_t> loop_count_{0};  // Continuous mode loop counter
     size_t consecutive_empty_batches_{0};
+    std::atomic<bool> batch_inflight_active_{false};
+    std::atomic<uint32_t> batch_inflight_done_{0};
+    std::atomic<uint32_t> batch_inflight_target_{0};
+    std::atomic<bool> microbatch_guardrail_logged_{false};
     
     // Threading
     std::thread training_thread_;
@@ -323,6 +377,9 @@ private:
         size_t num_experts, 
         const moe::ExpertNetwork::ExpertConfig& expert_config
     );
+
+    /** Materialize expert at index when lazy_moe_experts; thread-safe. */
+    moe::ExpertNetwork* ensure_expert(size_t expert_idx);
     
     static std::string state_to_string(PipelineState state);
 };
