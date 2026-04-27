@@ -29,7 +29,7 @@ public:
     // Reset hash state
     void reset();
     
-    // Update rolling hash with new byte (TritPack5 encoded)
+    // Update rolling hash with one TritPack5 byte (5 balanced trits, polynomial pack; see q::ternary::unpack_5trits)
     HashState update(uint8_t tritpack_byte);
     
     // Update with full block (64 bytes = 320 trits)

@@ -1,4 +1,6 @@
 #include "wasm_api.hpp"
+#include "../../sycl/tableau_kernels.hpp"
+#include <algorithm>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -54,6 +56,8 @@ struct CliffordGateParams {
     uint32_t gateType;  // 0=H, 1=S, 2=CSUM
     uint32_t targetQubit;
     uint32_t controlQubit;  // For CSUM
+    /** Lattice width n (stride = 2n). 0 with 12-byte payloads = infer max(target,control)+1 (legacy). */
+    uint32_t numQutrits;
 };
 
 struct TableauUpdateParams {
@@ -137,6 +141,8 @@ namespace cpu_fallback {
         }
     }
 
+} // namespace cpu_fallback
+
 } // anonymous namespace
 
 // ============================================================================
@@ -204,14 +210,18 @@ Q_GF3_WASM_API void Teardown_SYCL_Device() {
         return;
     }
     
-    // Release memory mappings
-    for (auto& pair : g_syclState.memoryMappings) {
+    // Release memory mappings (USM vs cpuBuffers vector-backed pointers)
+    for (const auto& pair : g_syclState.memoryMappings) {
+        void* p = pair.second;
+        if (g_syclState.cpuBuffers.find(pair.first) != g_syclState.cpuBuffers.end()) {
+            continue;
+        }
 #ifdef USE_SYCL
-        if (g_syclState.queue) {
-            sycl::free(pair.second, *g_syclState.queue);
+        if (g_syclState.queue != nullptr && p != nullptr) {
+            sycl::free(p, *g_syclState.queue);
         }
 #else
-        std::free(pair.second);
+        (void)p;
 #endif
     }
     g_syclState.memoryMappings.clear();
@@ -325,42 +335,101 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
     
     switch (cmdType) {
         case CommandType::CLIFFORD_GATE: {
-            if (parameter_size < sizeof(CliffordGateParams)) {
-                return 3;  // Error: wrong parameter size
+            if (parameter_size < 3u * sizeof(uint32_t)) {
+                return 3;  // Error: wrong parameter size (minimum gateType, target, control)
             }
-            const auto* params = static_cast<const CliffordGateParams*>(command_parameters);
-            
-            // Execute gate operation using CPU fallback or SYCL
-            #ifdef USE_SYCL
+            CliffordGateParams params{};
+            const size_t copy_len = std::min(parameter_size, sizeof(CliffordGateParams));
+            std::memcpy(&params, command_parameters, copy_len);
+            uint32_t num_qutrits = params.numQutrits;
+            if (num_qutrits == 0) {
+                num_qutrits = (std::max)({1u, params.targetQubit + 1u, params.controlQubit + 1u});
+            }
+
+            bool applied = false;
+#ifdef USE_SYCL
             if (g_syclState.queue) {
-                // For now, use CPU fallback within SYCL context (async execution not available in this context)
-                // Future: Implement proper SYCL kernel dispatch
-                switch (params->gateType) {
-                    case 0: // Hadamard
-                        cpu_fallback::tableau_apply_hadamard(
-                            static_cast<uint8_t*>(g_syclState.memoryMappings[params->targetQubit]),
-                            params->targetQubit, params->targetQubit);
+                try {
+                    switch (params.gateType) {
+                        case 0: { // Hadamard
+                            auto it = g_syclState.memoryMappings.find(params.targetQubit);
+                            if (it != g_syclState.memoryMappings.end() && it->second != nullptr) {
+                                q_mini_wasm_v2::sycl_kernels::wasm_tableau_hadamard_sycl(
+                                    *g_syclState.queue,
+                                    static_cast<uint8_t*>(it->second),
+                                    static_cast<size_t>(num_qutrits),
+                                    static_cast<size_t>(params.targetQubit));
+                                applied = true;
+                            }
+                            break;
+                        }
+                        case 1: { // Phase
+                            auto it = g_syclState.memoryMappings.find(params.targetQubit);
+                            if (it != g_syclState.memoryMappings.end() && it->second != nullptr) {
+                                q_mini_wasm_v2::sycl_kernels::wasm_tableau_phase_sycl(
+                                    *g_syclState.queue,
+                                    static_cast<uint8_t*>(it->second),
+                                    static_cast<size_t>(num_qutrits),
+                                    static_cast<size_t>(params.targetQubit));
+                                applied = true;
+                            }
+                            break;
+                        }
+                        case 2: { // CSUM — tableau pointer keyed by control offset (legacy wasm_api convention)
+                            auto it = g_syclState.memoryMappings.find(params.controlQubit);
+                            if (it != g_syclState.memoryMappings.end() && it->second != nullptr) {
+                                q_mini_wasm_v2::sycl_kernels::wasm_tableau_csum_sycl(
+                                    *g_syclState.queue,
+                                    static_cast<uint8_t*>(it->second),
+                                    static_cast<size_t>(num_qutrits),
+                                    static_cast<size_t>(params.controlQubit),
+                                    static_cast<size_t>(params.targetQubit));
+                                applied = true;
+                            }
+                            break;
+                        }
+                        default:
+                            break;
+                    }
+                } catch (const std::exception& ex) {
+                    std::cerr << "[SYCL] Clifford gate kernel failed, CPU fallback: " << ex.what() << std::endl;
+                }
+            }
+#endif
+            if (!applied) {
+                switch (params.gateType) {
+                    case 0:
+                        if (auto it = g_syclState.memoryMappings.find(params.targetQubit);
+                            it != g_syclState.memoryMappings.end() && it->second != nullptr) {
+                            cpu_fallback::tableau_apply_hadamard(
+                                static_cast<uint8_t*>(it->second),
+                                static_cast<size_t>(num_qutrits),
+                                static_cast<size_t>(params.targetQubit));
+                        }
                         break;
-                    case 1: // Phase
-                        cpu_fallback::tableau_apply_phase(
-                            static_cast<uint8_t*>(g_syclState.memoryMappings[params->targetQubit]),
-                            params->targetQubit, params->targetQubit);
+                    case 1:
+                        if (auto it = g_syclState.memoryMappings.find(params.targetQubit);
+                            it != g_syclState.memoryMappings.end() && it->second != nullptr) {
+                            cpu_fallback::tableau_apply_phase(
+                                static_cast<uint8_t*>(it->second),
+                                static_cast<size_t>(num_qutrits),
+                                static_cast<size_t>(params.targetQubit));
+                        }
                         break;
-                    case 2: // CSUM
-                        cpu_fallback::tableau_apply_csum(
-                            static_cast<uint8_t*>(g_syclState.memoryMappings[params->controlQubit]),
-                            params->controlQubit, params->controlQubit, params->targetQubit);
+                    case 2:
+                        if (auto it = g_syclState.memoryMappings.find(params.controlQubit);
+                            it != g_syclState.memoryMappings.end() && it->second != nullptr) {
+                            cpu_fallback::tableau_apply_csum(
+                                static_cast<uint8_t*>(it->second),
+                                static_cast<size_t>(num_qutrits),
+                                static_cast<size_t>(params.controlQubit),
+                                static_cast<size_t>(params.targetQubit));
+                        }
+                        break;
+                    default:
                         break;
                 }
-            } else {
-            #endif
-                // CPU fallback - just acknowledge the command was processed
-                // The actual gate application would be done through the clifford kernels
-                // This is a dispatch acknowledgment
-                (void)params;
-            #ifdef USE_SYCL
             }
-            #endif
             break;
         }
         
@@ -420,20 +489,33 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
             uint8_t* result = const_cast<uint8_t*>(data_b + op_count);  // Result area
             
             if (cmdType == CommandType::GF3_MULTIPLY) {
-                // GF(3) multiplication batch
+#ifdef USE_SYCL
+                if (g_syclState.queue && op_count > 0) {
+                    try {
+                        q_mini_wasm_v2::sycl_kernels::gf3_uint8_mul_batch_sycl(
+                            *g_syclState.queue, result, data_a, data_b, static_cast<size_t>(op_count));
+                        break;
+                    } catch (const std::exception& ex) {
+                        std::cerr << "[SYCL] GF3 multiply batch failed, CPU fallback: " << ex.what() << std::endl;
+                    }
+                }
+#endif
                 cpu_fallback::gf3_multiply_batch(data_a, data_b, result, op_count);
             } else {
-                // GF(3) addition batch
+#ifdef USE_SYCL
+                if (g_syclState.queue && op_count > 0) {
+                    try {
+                        q_mini_wasm_v2::sycl_kernels::gf3_uint8_add_batch_sycl(
+                            *g_syclState.queue, result, data_a, data_b, static_cast<size_t>(op_count));
+                        break;
+                    } catch (const std::exception& ex) {
+                        std::cerr << "[SYCL] GF3 add batch failed, CPU fallback: " << ex.what() << std::endl;
+                    }
+                }
+#endif
                 cpu_fallback::gf3_add_batch(data_a, data_b, result, op_count);
             }
-            
-            #ifdef USE_SYCL
-            if (g_syclState.queue && op_count > 1000) {
-                // For large batches, could use SYCL - currently using CPU fallback
-                // Future: Implement SYCL kernel for GF(3) batch operations
-            }
-            #endif
-            
+
             break;
         }
         
@@ -500,7 +582,18 @@ bool UnmapMemoryRegion(uint32_t wasm_memory_offset) {
     
     auto it = g_syclState.memoryMappings.find(wasm_memory_offset);
     if (it != g_syclState.memoryMappings.end()) {
-        std::free(it->second);
+        void* p = it->second;
+        auto cpu_it = g_syclState.cpuBuffers.find(wasm_memory_offset);
+        if (cpu_it != g_syclState.cpuBuffers.end()) {
+            g_syclState.cpuBuffers.erase(cpu_it);
+        } else {
+#ifdef USE_SYCL
+            if (g_syclState.queue != nullptr && p != nullptr) {
+                sycl::free(p, *g_syclState.queue);
+            }
+#endif
+            (void)p;
+        }
         g_syclState.memoryMappings.erase(it);
         return true;
     }

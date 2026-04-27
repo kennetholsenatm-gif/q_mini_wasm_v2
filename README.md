@@ -27,7 +27,7 @@ cmake --build q_mini_wasm_v2/build_final --config Release --target q_training
 go build -o qminiwasm.exe ./cmd/qminiwasm
 ```
 
-A Release build of **`q_training`** copies **`q_training.dll`** to the repo root next to **`qminiwasm.exe`**. Set up external data at `C:\q_mini_data` per [CONTRIBUTING.md](CONTRIBUTING.md), then:
+A Release build of **`q_training`** copies **`q_training.dll`** to the repo root next to **`qminiwasm.exe`** and to **`native_runtime/`** (see [config/path_map.toml](config/path_map.toml)) so a locked root DLL does not block the alternate copy. Set up external data at `C:\q_mini_data` per [CONTRIBUTING.md](CONTRIBUTING.md), then:
 
 ```powershell
 .\qminiwasm.exe
@@ -36,6 +36,13 @@ A Release build of **`q_training`** copies **`q_training.dll`** to the repo root
 Open **http://localhost:9090** (see `Port` in `cmd/qminiwasm/main.go` if you change it).
 
 Full setup, data layout, and what is tracked in git: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+Training control is TOML-driven: `wui_init_training_pipeline` and `wui_start_ff_training` now reject explicit `epochs` overrides. Keep `training.epochs` in the active TOML as the single source of truth.
+
+The training path is strict-honesty by design:
+- no simulated/fallback sample counters in progress metrics,
+- no silent config auto-fixes for invalid core dimensions/ranges,
+- explicit failures instead of synthetic “looks-running” substitutions when required training inputs are missing.
 
 ## What This Is
 

@@ -12,9 +12,8 @@ uint32_t ExpertNetwork::ComputeGoodness(
     const std::vector<ternary::Trit>& activations
 ) const {
     uint32_t goodness = 0;
-    
-    // For ternary {-1, 0, 1}, square is always 0 or 1
-    // Goodness = sum of squared values (sum of absolute values for ternary)
+
+    // Count non-zero trits in this vector (for {-1,0,+1}, same as sum of |trit|).
     for (auto val : activations) {
         int8_t v = static_cast<int8_t>(val);
         goodness += (v == 0) ? 0 : 1;  // |v|² for ternary

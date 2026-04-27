@@ -54,6 +54,15 @@ extern uint64_t g_next_session_id;
  * @param moe_hidden_dim - Expert hidden width
  * @param moe_expert_internal_layers - Layer count inside each expert FF stack
  * @param moe_ff_active_internal_layers - Cap internal FF layers per expert (0 = use full moe_expert_internal_layers)
+ * @param samples_per_epoch_or_zero - Route-units per epoch (must be >= 1; from TOML training.samples_per_epoch)
+ * @param training_micro_batch_cap - Micro-batch hard cap (must be >= 1; from TOML training.micro_batch_cap)
+ * @param training_collect_floor - Minimum collect size after adaptive tier (must be >= 1; from TOML training.collect_floor)
+ * @param training_timing_to_stderr - Enable `[TrainingTiming]` stderr lines
+ * @param training_serial_experts - When true, disable OpenMP parallel per-route experts
+ * @param training_sycl_route_mode - 0=auto, 1=on, 2=off for symplectic routing logits (TOML training.sycl_route_mode)
+ * @param training_sycl_trit_quant_min_moe_dim - Minimum moe_input_dim to use SYCL float/int32/string->trit quant (TOML training.sycl_trit_quant_min_moe_dim); 0 means default 128 in the DLL
+ * @param training_goodness_log_level - 0=off, 1=stderr batch FF goodness summary, 2=+ first rows (TOML training.goodness_log_level; values >2 are clamped)
+ * @param training_allow_generated_negatives - If true, synthesize negatives when pair negatives are missing; if false, missing negatives fail training
  * @return 0 on success, negative error code on failure
  */
 TRAINING_API int Training_InitSession(
@@ -86,7 +95,16 @@ TRAINING_API int Training_InitSession(
     uint32_t prefill_poll_ms,
     uint32_t max_acquisition_queue_depth,
     uint32_t max_raw_queue_depth,
-    uint32_t max_train_queue_depth
+    uint32_t max_train_queue_depth,
+    uint64_t samples_per_epoch_or_zero,
+    uint32_t training_micro_batch_cap,
+    uint32_t training_collect_floor,
+    bool training_timing_to_stderr,
+    bool training_serial_experts,
+    uint32_t training_sycl_route_mode,
+    uint32_t training_sycl_trit_quant_min_moe_dim,
+    uint32_t training_goodness_log_level,
+    bool training_allow_generated_negatives
 );
 
 /**
@@ -112,7 +130,7 @@ TRAINING_API int Training_StartTraining(
  * @param current_epoch_out - Output: current epoch number
  * @param total_epochs_out - Output: total epochs
  * @param current_loss_out - Output: current loss value
- * @param samples_processed_out - Output: number of samples processed
+ * @param samples_processed_out - Output: contrastive rows completed in current epoch (real training only; no ingestion substitute)
  * @param is_running_out - Output: whether training is still running
  * @param loop_count_out - Output: continuous mode loop count (0 if not in continuous mode)
  * @return 0 on success, negative error code on failure
@@ -157,15 +175,18 @@ TRAINING_API int Training_ExportCheckpoint(uint64_t session_id, const char* path
 TRAINING_API int Training_ImportCheckpoint(uint64_t session_id, const char* path_utf8);
 
 /**
- * Get DLL version string
- * 
- * @param version_out - Output buffer for version string
- * @param max_len - Maximum length of output buffer
+ * Get DLL identity string (semantic tag plus compile date/time).
+ * Use after LoadLibrary to confirm the loaded q_training.dll matches a rebuild
+ * (compare the date/time suffix to the artifact you intended to ship).
+ *
+ * @param version_out - Output buffer for UTF-8 string (NUL-terminated)
+ * @param max_len - Size of buffer including NUL
  */
 TRAINING_API void Training_GetVersion(char* version_out, size_t max_len);
 
 /**
- * Extended pipeline / DataSynthesizer metrics (includes queue depths and cumulative samples_total).
+ * Extended pipeline / DataSynthesizer metrics (includes queue depths).
+ * @param samples_total_out Cumulative trained contrastive rows only (@c samples_processed_total), never ingestion substitutes.
  * @return 0 on success, negative error code on failure
  */
 TRAINING_API int Training_GetMetrics(
@@ -194,12 +215,16 @@ TRAINING_API int Training_GetMetrics(
     uint64_t* ds_acq_blocked_wait_ms_out,
     uint64_t* samples_total_out,
     uint64_t* ds_acq_dropped_too_short_out,
-    uint64_t* gf3_hebbian_weight_cell_updates_out
+    uint64_t* gf3_hebbian_weight_cell_updates_out,
+    /** Optional: native pipeline status (batch_inflight, queues). May be NULL / 0 to skip. */
+    char* pipeline_status_utf8_out,
+    size_t pipeline_status_utf8_cap
 );
 
 /**
  * Get ingestion/backpressure diagnostics from the current session metrics.
  *
+ * @param samples_total_out Same semantics as training: cumulative contrastive rows trained (@c samples_processed_total), not DS volume.
  * @return 0 on success, negative error code on failure
  */
 TRAINING_API int Training_GetIngestionStats(

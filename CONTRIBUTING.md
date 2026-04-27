@@ -30,11 +30,15 @@ cd q_mini_wasm_v2
    go build -o qminiwasm.exe ./cmd/qminiwasm
    ```
 
-3. Building **`q_training`** copies **`q_training.dll`** to the **repository root** (next to `qminiwasm.exe`) automatically. If you built without that target, copy the DLL from `q_mini_wasm_v2/build_final/` (or `Release/`) yourself, or add that folder to `PATH`.
+   Or: `powershell -NoProfile -File .\scripts\build_qminiwasm.ps1`
+
+3. **Layout** is defined in [`config/path_map.toml`](config/path_map.toml): canonical **`qminiwasm.exe`** at the repo root, **`wui/`** beside it, and **`q_training.dll`** next to the exe (CGO load order). Building **`q_training`** runs a post-build copy to **both** the repo root and **`native_runtime/q_training.dll`**. If the root DLL is **locked** by a running `qminiwasm.exe`, the alternate copy still updates—stop the server, then copy `native_runtime\q_training.dll` over the root copy (or rebuild after closing the process).
 
 ## Data and config (not in git)
 
-The Go host defaults to **`C:\q_mini_data`** for runtime files (`DataDir` in `cmd/qminiwasm/main.go`). Create:
+The Go host defaults to **`C:\q_mini_data`** for runtime files (`DataDir` in `cmd/qminiwasm/main.go`). Set **`QMINI_DATA_DIR`** to redirect the whole tree (config, datasets, checkpoints). **`QMINI_TRAINING_CONFIG`** can point at any absolute `.toml` (e.g. your repo copy) without moving the rest of the tree. The WUI shows the **active training TOML path** on load; editing only `config/training_config.toml` in git does nothing until that file is copied to the active path or you set the env vars.
+
+Create:
 
 - `C:\q_mini_data\config\training_config.toml` — copy from [config/training_config.toml](config/training_config.toml) in the repo as a starting point.
 - `C:\q_mini_data\config\data_sources.toml` — copy from [config/data_sources.toml](config/data_sources.toml).
@@ -46,6 +50,15 @@ The Go host defaults to **`C:\q_mini_data`** for runtime files (`DataDir` in `cm
 
 - Source under `q_mini_wasm_v2/`, `cmd/qminiwasm/`, `config/` (templates), `wui/`, docs you want versioned (e.g. `q_mini_docs/`).
 - Avoid committing `*.exe`, `*.dll`, logs, CSV audit dumps, and extracted release assets.
+
+Throughput, CPU vs GPU expectations, and **`training.timing_to_stderr`** in TOML: see **[q_mini_docs/TRAINING_THROUGHPUT.md](q_mini_docs/TRAINING_THROUGHPUT.md)**. Quick CPU check: `powershell -NoProfile -File .\scripts\verify_training_cpu_pattern.ps1` while training runs.
+
+## Strict training behavior (no fake fallbacks)
+
+- `training` progress counters report only real completed training work (`samples_processed` / `samples_processed_total`), never DS ingestion substitution.
+- WUI/API must not send `epochs` overrides; `training.epochs` comes only from the active TOML.
+- Invalid config values are hard errors (not silently clamped) in the native init path.
+- Missing required training inputs fail explicitly. Synthetic negatives are controlled by `training.allow_generated_negatives` (`true` by default), and can be disabled for strict pair-only operation.
 
 ## WUI / MCP training flow
 

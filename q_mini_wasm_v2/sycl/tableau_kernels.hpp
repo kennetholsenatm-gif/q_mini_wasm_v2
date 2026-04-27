@@ -111,6 +111,51 @@ void parallel_mod3_arithmetic(
 #ifdef USE_SYCL
 
 /**
+ * @brief Element-wise GF(3) multiply on {0,1,2} representatives (USM/host-visible buffers).
+ *
+ * Intended for WASM / bridge paths that already use SYCL USM allocations; falls back to CPU on failure.
+ */
+void gf3_uint8_mul_batch_sycl(cl::sycl::queue& q, uint8_t* result, const uint8_t* a, const uint8_t* b, size_t count);
+
+/** Element-wise GF(3) add mod 3 on uint8 lanes (values treated mod 3). */
+void gf3_uint8_add_batch_sycl(cl::sycl::queue& q, uint8_t* result, const uint8_t* a, const uint8_t* b, size_t count);
+
+/**
+ * @brief WASM-bridge tableau layout: row-major slab, `stride = 2 * num_qutrits`, X then Z blocks (see wasm_api cpu_fallback).
+ *
+ * Pointers must be SYCL-usable (e.g. USM from `sycl::malloc_shared` on the same queue's context).
+ */
+void wasm_tableau_hadamard_sycl(cl::sycl::queue& q, uint8_t* tableau, size_t num_qutrits, size_t target);
+void wasm_tableau_phase_sycl(cl::sycl::queue& q, uint8_t* tableau, size_t num_qutrits, size_t target);
+void wasm_tableau_csum_sycl(cl::sycl::queue& q, uint8_t* tableau, size_t num_qutrits, size_t control, size_t target);
+
+/**
+ * @brief Parallel MoE symplectic routing scores (one int8 score per expert).
+ *
+ * @param input_tritpack5 TritPack5 input: ceil(input_trit_count/5) bytes, base-3 polynomial (5 trits / byte, 0..242).
+ * @param input_trit_count Logical trit length of the packed stream (same convention as unpacked routing).
+ * @param weights_tritpack5 Expert rows concatenated: each row is ceil(routing_qutrits/5) TritPack5 bytes (E rows, same encoding).
+ */
+std::vector<int8_t> moe_routing_symplectic_scores_sycl(
+    const std::vector<uint8_t>& input_tritpack5,
+    size_t input_trit_count,
+    const std::vector<uint8_t>& weights_tritpack5,
+    size_t total_experts,
+    size_t routing_qutrits);
+
+/**
+ * @brief Float vector -> int8 trits {-1,0,+1} with thresholds +/-0.33f (matches CPU training path).
+ * @param src_len length of valid @p src; indices >= src_len in the output are padded with 0.
+ */
+std::vector<int8_t> quantize_float_buffer_to_trits_sycl(const float* src, size_t src_len, size_t out_dim);
+
+/** int32 -> trits via v%3 corrected to nonnegative, then mapped to {-1,0,1} (matches CPU path). */
+std::vector<int8_t> quantize_i32_buffer_to_trits_sycl(const int32_t* src, size_t src_len, size_t out_dim);
+
+/** Byte string -> trits using (byte % 3) - 1 at output index i from src[i % slen]. */
+std::vector<int8_t> quantize_string_bytes_to_trits_sycl(const char* src, size_t slen, size_t out_dim);
+
+/**
  * @brief SYCL queue for async execution
  */
 class SYCLQueue {

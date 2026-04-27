@@ -17,6 +17,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 #ifdef TRAINING_API_EXPORTS
 #define TRAINING_API __declspec(dllexport)
@@ -76,29 +77,48 @@ uint64_t g_next_session_id = 1;
 // ============================================================================
 
 static double loss_proxy_from_metrics(const PipelineMetrics& metrics) {
-    double loss = 0.0;
-    if (metrics.ff_positive_goodness > 0) {
-        loss = 100.0 - (static_cast<double>(metrics.ff_goodness_delta) / 1000.0);
+    // ff_* may be refreshed mid–micro-batch (running averages); ff_total_train_calls only increments when a batch completes.
+    const bool has_ff_signal = (metrics.ff_total_train_calls > 0) || (metrics.ff_route_steps_current_batch > 0) ||
+                               (metrics.train_batch_rows_done > 0) || (metrics.ff_positive_goodness > 0) ||
+                               (metrics.ff_negative_goodness > 0) || (metrics.ff_goodness_delta != 0);
+    if (!has_ff_signal) {
+        return 0.0;
     }
-    return loss;
+    return 100.0 - (static_cast<double>(metrics.ff_goodness_delta) / 1000.0);
 }
 
 static void on_pipeline_metrics(TrainingSession* session, const PipelineMetrics& metrics) {
     std::lock_guard<std::mutex> lock(session->metrics_mutex);
     session->last_metrics = metrics;
     session->current_epoch.store(static_cast<uint32_t>(metrics.current_epoch));
+    // Never substitute ingestion counters for trained contrastive rows (strict real counts only).
     session->samples_processed.store(metrics.samples_processed);
     session->current_loss.store(loss_proxy_from_metrics(metrics));
     
     const size_t ds_items = metrics.ds_total_acquired + metrics.ds_total_perturbed;
     const double loss = loss_proxy_from_metrics(metrics);
-    printf("[Pipeline] Epoch %llu: goodness_proxy=%.4f, samples=%zu, total=%zu, ds_items=%zu, prefill=%zu/%zu, betti=[%u,%u,%u], graph=%s\n",
+    const uint64_t train_epoch_rows = metrics.samples_processed;
+    const uint64_t train_total_rows = metrics.samples_processed_total;
+    printf("[Pipeline] Epoch %llu: goodness_proxy=%.4f, "
+           "train_samples_epoch=%llu train_samples_total=%llu "
+           "train_rows_in_batch=%u/%u ff_routes_in_batch=%llu "
+           "ds_items=%zu queue_hint=%zu prefill_tgt=%zu, "
+           "ff_total_train_calls=%llu current_batch=%llu last_betti_eval_batch=%llu, "
+           "route_t5=%d router_sycl=%d betti=[%u,%u,%u], graph=%s\n",
            static_cast<unsigned long long>(metrics.current_epoch), loss,
-           metrics.samples_processed,
-           metrics.samples_processed_total,
+           static_cast<unsigned long long>(train_epoch_rows),
+           static_cast<unsigned long long>(train_total_rows),
+           static_cast<unsigned>(metrics.train_batch_rows_done),
+           static_cast<unsigned>(metrics.train_batch_collect_limit),
+           static_cast<unsigned long long>(metrics.ff_route_steps_current_batch),
            ds_items,
            metrics.prefill_current_samples,
            metrics.prefill_target_samples,
+           static_cast<unsigned long long>(metrics.ff_total_train_calls),
+           static_cast<unsigned long long>(metrics.current_batch),
+           static_cast<unsigned long long>(metrics.last_betti_eval_batch),
+           metrics.used_tritpack5_input_route ? 1 : 0,
+           metrics.router_sycl_path_used ? 1 : 0,
            metrics.betti_beta_0, metrics.betti_beta_1, metrics.betti_beta_2,
            metrics.graph_topology.c_str());
 }
@@ -137,7 +157,16 @@ TRAINING_API int Training_InitSession(
     uint32_t prefill_poll_ms,
     uint32_t max_acquisition_queue_depth,
     uint32_t max_raw_queue_depth,
-    uint32_t max_train_queue_depth
+    uint32_t max_train_queue_depth,
+    uint64_t samples_per_epoch_or_zero,
+    uint32_t training_micro_batch_cap,
+    uint32_t training_collect_floor,
+    bool training_timing_to_stderr,
+    bool training_serial_experts,
+    uint32_t training_sycl_route_mode,
+    uint32_t training_sycl_trit_quant_min_moe_dim,
+    uint32_t training_goodness_log_level,
+    bool training_allow_generated_negatives
 ) {
     (void)context_window;
     (void)entanglement_tokens;
@@ -168,6 +197,46 @@ TRAINING_API int Training_InitSession(
     session->continuous_mode = continuous_mode;
     
     try {
+        if (samples_per_epoch_or_zero == 0ull) {
+            printf("[Training] ERROR: samples_per_epoch must be >= 1 (set training.samples_per_epoch in TOML)\n");
+            return -5;
+        }
+        if (training_micro_batch_cap == 0u || training_collect_floor == 0u) {
+            printf("[Training] ERROR: training.micro_batch_cap and training.collect_floor must be >= 1\n");
+            return -6;
+        }
+        if (num_experts == 0u || top_k == 0u || num_layers == 0u || batch_size == 0u ||
+            routing_qutrits == 0u || moe_input_dim == 0u || moe_output_dim == 0u || moe_hidden_dim == 0u ||
+            moe_expert_internal_layers == 0u) {
+            printf("[Training] ERROR: experts/top_k/layers/batch_size/routing_qutrits/MoE dims/expert_internal_layers must be >= 1\n");
+            return -7;
+        }
+        if (top_k > num_experts) {
+            printf("[Training] ERROR: model.moe_top_k must be <= model.moe_experts\n");
+            return -7;
+        }
+        if (worker_threads == 0u) {
+            printf("[Training] ERROR: features.worker_threads must be >= 1\n");
+            return -8;
+        }
+        if (prefill_target_samples < 64u || prefill_timeout_ms < 1000u || prefill_poll_ms < 10u ||
+            max_acquisition_queue_depth < 64u || max_raw_queue_depth < 64u || max_train_queue_depth < 128u) {
+            printf("[Training] ERROR: prefill/queue limits invalid (prefill_target>=64, prefill_timeout_ms>=1000, prefill_poll_ms>=10, acq/raw caps>=64, train cap>=128)\n");
+            return -9;
+        }
+        if (training_goodness_log_level > 2u) {
+            printf("[Training] ERROR: training.goodness_log_level must be in [0,2]\n");
+            return -10;
+        }
+        if (training_sycl_route_mode > 2u) {
+            printf("[Training] ERROR: training.sycl_route_mode must be 0(auto),1(on),2(off)\n");
+            return -11;
+        }
+        if (training_sycl_trit_quant_min_moe_dim == 0u) {
+            printf("[Training] ERROR: training.sycl_trit_quant_min_moe_dim must be >= 1\n");
+            return -12;
+        }
+
         PipelineConfig cfg;
         cfg.moe_num_experts = num_experts;
         cfg.moe_top_k = top_k;
@@ -182,26 +251,45 @@ TRAINING_API int Training_InitSession(
         cfg.enable_steane_correction = steane_correction;
         cfg.enable_error_correction = steane_correction;
         cfg.enable_flash_cim = flash_cim;
-        cfg.routing_qutrits = routing_qutrits > 0 ? routing_qutrits : 16u;
-        cfg.moe_input_dim = moe_input_dim > 0 ? moe_input_dim : neurons_per_layer;
-        cfg.moe_output_dim = moe_output_dim > 0 ? moe_output_dim : neurons_per_layer;
-        cfg.moe_hidden_dim = moe_hidden_dim > 0 ? moe_hidden_dim : std::max(neurons_per_layer * 2u, 128u);
-        cfg.moe_expert_internal_layers = moe_expert_internal_layers > 0 ? moe_expert_internal_layers : 2u;
+        cfg.routing_qutrits = routing_qutrits;
+        cfg.moe_input_dim = moe_input_dim;
+        cfg.moe_output_dim = moe_output_dim;
+        cfg.moe_hidden_dim = moe_hidden_dim;
+        cfg.moe_expert_internal_layers = moe_expert_internal_layers;
         cfg.moe_ff_active_internal_layers = static_cast<size_t>(moe_ff_active_internal_layers);
         cfg.ff_learning_rate_step = std::max(1u, static_cast<uint32_t>(std::llround(std::max(1.0, learning_rate))));
         
-        const uint32_t wt = std::max(1u, worker_threads);
+        const uint32_t wt = worker_threads;
         cfg.acquisition_threads = std::max<size_t>(1u, static_cast<size_t>(wt / 2u));
-        cfg.perturbation_threads = std::max<size_t>(1u, static_cast<size_t>(wt / 4u));
+        // More perturbation workers so pos/neg pairs are ready ahead of the trainer (CPU-bound path).
+        cfg.perturbation_threads = std::max<size_t>(4u, static_cast<size_t>(wt / 3u));
         
-        cfg.samples_per_epoch = std::max(cfg.batch_size * size_t{10}, size_t{1000});
+        cfg.samples_per_epoch = static_cast<size_t>(samples_per_epoch_or_zero);
+        cfg.training_micro_batch_cap = static_cast<size_t>(training_micro_batch_cap);
+        cfg.training_collect_floor = static_cast<size_t>(training_collect_floor);
+        cfg.training_timing_to_stderr = training_timing_to_stderr;
+        cfg.training_serial_experts = training_serial_experts;
+        cfg.training_sycl_route_mode =
+            static_cast<q_mini_wasm_v2::core::moe::SyclRouteMode>(training_sycl_route_mode);
+        cfg.sycl_trit_quant_min_moe_dim = static_cast<size_t>(training_sycl_trit_quant_min_moe_dim);
+        cfg.goodness_log_level = training_goodness_log_level;
+        cfg.allow_generated_negatives = training_allow_generated_negatives;
+        printf("[Training]   samples_per_epoch=%zu (training.samples_per_epoch from TOML)\n", cfg.samples_per_epoch);
+        printf("[Training]   micro_batch_cap=%zu collect_floor=%zu timing_to_stderr=%d serial_expert_train=%d sycl_route_mode=%u sycl_trit_quant_min_moe_dim=%zu goodness_log_level=%u\n",
+               cfg.training_micro_batch_cap,
+               cfg.training_collect_floor,
+               training_timing_to_stderr ? 1 : 0,
+               training_serial_experts ? 1 : 0,
+               static_cast<unsigned>(training_sycl_route_mode),
+               cfg.sycl_trit_quant_min_moe_dim,
+               static_cast<unsigned>(cfg.goodness_log_level));
         cfg.enable_prefill_ring_buffer = true;
-        cfg.prefill_target_samples = std::max<size_t>(size_t{64}, static_cast<size_t>(prefill_target_samples));
-        cfg.prefill_timeout_ms = std::max<uint32_t>(1000u, prefill_timeout_ms);
-        cfg.prefill_poll_ms = std::max<uint32_t>(10u, prefill_poll_ms);
-        cfg.max_acquisition_queue_depth = std::max<size_t>(size_t{64}, static_cast<size_t>(max_acquisition_queue_depth));
-        cfg.max_raw_queue_depth = std::max<size_t>(size_t{64}, static_cast<size_t>(max_raw_queue_depth));
-        cfg.max_train_queue_depth = std::max<size_t>(size_t{128}, static_cast<size_t>(max_train_queue_depth));
+        cfg.prefill_target_samples = static_cast<size_t>(prefill_target_samples);
+        cfg.prefill_timeout_ms = prefill_timeout_ms;
+        cfg.prefill_poll_ms = prefill_poll_ms;
+        cfg.max_acquisition_queue_depth = static_cast<size_t>(max_acquisition_queue_depth);
+        cfg.max_raw_queue_depth = static_cast<size_t>(max_raw_queue_depth);
+        cfg.max_train_queue_depth = static_cast<size_t>(max_train_queue_depth);
         
         if (data_sources_toml_path && data_sources_toml_path[0] != '\0') {
             cfg.data_sources_toml_path = data_sources_toml_path;
@@ -319,8 +407,7 @@ TRAINING_API int Training_GetProgress(
         return -1;
     }
 
-    // Prefer live pipeline metrics: last_metrics is only refreshed when emit_metrics() runs
-    // (gated by enable_wui_streaming). Go polls GetProgress every second — stale zeros mislead the WUI.
+    // Prefer live pipeline metrics via get_metrics() (FF averages update during a micro-batch).
     bool running = false;
     if (session->pipeline) {
         const PipelineMetrics m = session->pipeline->get_metrics();
@@ -331,21 +418,11 @@ TRAINING_API int Training_GetProgress(
                    state == PipelineState::PAUSED ||
                    state == PipelineState::INITIALIZING ||
                    state == PipelineState::STOPPING);
-        uint64_t observed_samples = m.samples_processed;
-        // If FF training hasn't reported sample steps yet, surface ingestion progress so WUI
-        // does not flatline at 0 while the native pipeline is actively filling queues.
-        if (running && observed_samples == 0) {
-            if (m.ds_total_perturbed > 0) {
-                observed_samples = m.ds_total_perturbed;
-            } else if (m.ds_total_acquired > 0) {
-                observed_samples = m.ds_total_acquired;
-            }
-        }
         {
             std::lock_guard<std::mutex> metrics_lock(session->metrics_mutex);
             session->last_metrics = m;
             session->current_epoch.store(static_cast<uint32_t>(m.current_epoch));
-            session->samples_processed.store(observed_samples);
+            session->samples_processed.store(m.samples_processed);
             session->loop_count.store(m.loop_count);
             session->current_loss.store(loss);
         }
@@ -468,8 +545,11 @@ TRAINING_API int Training_ImportCheckpoint(uint64_t session_id, const char* path
 }
 
 TRAINING_API void Training_GetVersion(char* version_out, size_t max_len) {
-    const char* version = "q_training_v3.8_checkpoint_router_state_v5";
-    strncpy(version_out, version, max_len - 1);
+    if (!version_out || max_len == 0) {
+        return;
+    }
+    // Compile-time stamp so hosts can verify they picked up the intended DLL build.
+    (void)snprintf(version_out, max_len, "q_training_v3.10_metrics_ff %s %s", __DATE__, __TIME__);
     version_out[max_len - 1] = '\0';
 }
 
@@ -499,7 +579,9 @@ TRAINING_API int Training_GetMetrics(
     uint64_t* ds_acq_blocked_wait_ms_out,
     uint64_t* samples_total_out,
     uint64_t* ds_acq_dropped_too_short_out,
-    uint64_t* gf3_hebbian_weight_cell_updates_out
+    uint64_t* gf3_hebbian_weight_cell_updates_out,
+    char* pipeline_status_utf8_out,
+    size_t pipeline_status_utf8_cap
 ) {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
     
@@ -538,15 +620,15 @@ TRAINING_API int Training_GetMetrics(
     *ds_dropped_payloads_out = session->last_metrics.ds_dropped_payloads;
     *ds_acq_blocked_pushes_out = session->last_metrics.ds_acquisition_blocked_pushes;
     *ds_acq_blocked_wait_ms_out = session->last_metrics.ds_acquisition_blocked_wait_ms;
-    uint64_t observed_total = session->last_metrics.samples_processed_total;
-    if (observed_total == 0) {
-        const uint64_t perturbed = static_cast<uint64_t>(session->last_metrics.ds_total_perturbed);
-        const uint64_t acquired = static_cast<uint64_t>(session->last_metrics.ds_total_acquired);
-        observed_total = std::max(perturbed, acquired);
-    }
-    *samples_total_out = observed_total;
+    *samples_total_out = session->last_metrics.samples_processed_total;
     *ds_acq_dropped_too_short_out = session->last_metrics.ds_acquisition_dropped_too_short;
     *gf3_hebbian_weight_cell_updates_out = session->last_metrics.gf3_hebbian_weight_cell_updates;
+
+    if (pipeline_status_utf8_out && pipeline_status_utf8_cap > 0) {
+        const std::string& st = session->last_metrics.status_message;
+        strncpy(pipeline_status_utf8_out, st.c_str(), pipeline_status_utf8_cap - 1);
+        pipeline_status_utf8_out[pipeline_status_utf8_cap - 1] = '\0';
+    }
 
     return 0;
 }
@@ -582,13 +664,7 @@ TRAINING_API int Training_GetIngestionStats(
 
     std::lock_guard<std::mutex> metrics_lock(session->metrics_mutex);
     const PipelineMetrics& m = session->last_metrics;
-    uint64_t observed_total = m.samples_processed_total;
-    if (observed_total == 0) {
-        const uint64_t perturbed = static_cast<uint64_t>(m.ds_total_perturbed);
-        const uint64_t acquired = static_cast<uint64_t>(m.ds_total_acquired);
-        observed_total = std::max(perturbed, acquired);
-    }
-    *samples_total_out = observed_total;
+    *samples_total_out = m.samples_processed_total;
     *ds_queue_depth_out = static_cast<uint32_t>(m.ds_queue_depth);
     *ds_raw_queue_depth_out = static_cast<uint32_t>(m.ds_raw_queue_depth);
     *ds_raw_queue_max_out = static_cast<uint32_t>(m.ds_raw_queue_max);

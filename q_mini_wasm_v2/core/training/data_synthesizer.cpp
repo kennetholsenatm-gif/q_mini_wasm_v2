@@ -1046,6 +1046,10 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
     size_t discovered_files = 0;
     size_t accepted_files = 0;
     size_t skipped_extension_files = 0;
+    size_t unreadable_files = 0;
+    size_t processed_files = 0;
+    const auto scan_started = std::chrono::steady_clock::now();
+    auto last_progress_log = scan_started;
 
     for (const auto& entry : std::filesystem::directory_iterator(dir_path, ec)) {
         if (ec) {
@@ -1061,8 +1065,10 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
             continue;
         }
         ++accepted_files;
+        ++processed_files;
         std::ifstream file(entry.path());
         if (!file.is_open()) {
+            ++unreadable_files;
             continue;
         }
         std::string line;
@@ -1085,13 +1091,28 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
                 std::move(values), static_cast<Trit>(1), "local_dir", "local_text"});
             ++loaded;
         }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_progress_log >= std::chrono::seconds(2)) {
+            const auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(now - scan_started).count();
+            std::cout << "[DataSynthesizer] Directory scan progress: elapsed=" << elapsed_s << "s"
+                      << ", discovered=" << discovered_files
+                      << ", accepted_ext=" << accepted_files
+                      << ", processed=" << processed_files
+                      << ", unreadable=" << unreadable_files
+                      << ", loaded_lines=" << loaded
+                      << ", last_file=\"" << entry.path().filename().string() << "\""
+                      << std::endl;
+            last_progress_log = now;
+        }
     }
 
     if (loaded == 0) {
         std::cerr << "[DataSynthesizer] No .txt/.jsonl lines loaded from directory: " << dir_path
                   << " (discovered_files=" << discovered_files
                   << ", accepted_files=" << accepted_files
-                  << ", skipped_extension_files=" << skipped_extension_files << ")"
+                  << ", skipped_extension_files=" << skipped_extension_files
+                  << ", unreadable_files=" << unreadable_files << ")"
                   << std::endl;
         return false;
     }
@@ -1101,7 +1122,8 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
     std::cout << "[DataSynthesizer] Loaded " << loaded << " text lines from directory: " << dir_path
               << " (discovered_files=" << discovered_files
               << ", accepted_files=" << accepted_files
-              << ", skipped_extension_files=" << skipped_extension_files << ")"
+              << ", skipped_extension_files=" << skipped_extension_files
+              << ", unreadable_files=" << unreadable_files << ")"
               << std::endl;
 
     std::mt19937 rng(42);
@@ -1439,7 +1461,7 @@ TrainingSample DataSynthesizer::get_sample() {
         std::lock_guard<std::mutex> lk(queue_mutex_);
         if (!train_queue_.empty()) {
             TrainingSample s = std::move(train_queue_.front());
-            train_queue_.pop();
+            train_queue_.pop_front();
             queue_not_full_cv_.notify_all();
             return s;
         }
@@ -1448,16 +1470,25 @@ TrainingSample DataSynthesizer::get_sample() {
 
     // When a local corpus exists, get_sample() used to prefer local forever. Acquisition threads
     // still fill raw/train queues; if the trainer never pops train_queue_, producers deadlock on
-    // full buffers while metrics show "prefill" and samples_processed stays 0. Drain train first
-    // whenever the queue is near its cap (same idea for hybrid: 50/50 interleave can still starve).
+    // full buffers while metrics show "prefill" and samples_processed stays 0. Apply backpressure
+    // here without returning a lone train_queue_ element: a single pop_front() at the cap left
+    // neg-at-head queues that made try_pop_contrastive_pair() fail forever despite a full buffer.
     {
         std::lock_guard<std::mutex> lk(queue_mutex_);
         const size_t cap = max_train_queue_depth_;
-        if (!train_queue_.empty() && cap >= 4 && train_queue_.size() >= (cap * 3) / 4) {
-            TrainingSample s = std::move(train_queue_.front());
-            train_queue_.pop();
+        size_t steps = 0;
+        const size_t max_steps = std::max<size_t>(size_t{16}, train_queue_.size());
+        while (!train_queue_.empty() && cap >= 4 && train_queue_.size() >= (cap * 3) / 4 &&
+               steps < max_steps) {
+            ++steps;
+            if (train_queue_.size() >= 2u && train_queue_[0].is_positive() &&
+                train_queue_[1].is_negative()) {
+                train_queue_.pop_front();
+                train_queue_.pop_front();
+            } else {
+                train_queue_.pop_front();
+            }
             queue_not_full_cv_.notify_all();
-            return s;
         }
     }
 
@@ -1471,7 +1502,7 @@ TrainingSample DataSynthesizer::get_sample() {
         queue_cv_.wait(lock, [this] { return !train_queue_.empty() || !running_; });
         if (!train_queue_.empty()) {
             TrainingSample sample = std::move(train_queue_.front());
-            train_queue_.pop();
+            train_queue_.pop_front();
             queue_not_full_cv_.notify_all();
             return sample;
         }
@@ -1503,7 +1534,7 @@ TrainingSample DataSynthesizer::get_sample() {
         });
         if (!train_queue_.empty()) {
             TrainingSample s = std::move(train_queue_.front());
-            train_queue_.pop();
+            train_queue_.pop_front();
             queue_not_full_cv_.notify_all();
             return s;
         }
@@ -1530,6 +1561,44 @@ bool DataSynthesizer::has_sample() const {
     }
     std::lock_guard<std::mutex> lock(queue_mutex_);
     return !train_queue_.empty();
+}
+
+std::optional<TrainingSample> DataSynthesizer::try_draw_local_training_sample() {
+    std::lock_guard<std::mutex> lk(local_data_mutex_);
+    if (!has_local_data_ || local_samples_.empty()) {
+        return std::nullopt;
+    }
+    const size_t idx = local_sample_index_++ % local_samples_.size();
+    return local_samples_[idx];
+}
+
+bool DataSynthesizer::try_pop_contrastive_pair(TrainingSample& pos_out, TrainingSample& neg_out) {
+    std::lock_guard<std::mutex> lk(queue_mutex_);
+    const size_t initial_depth = train_queue_.size();
+    // Cap work per call so a pathological queue cannot hold queue_mutex for hundreds of ms
+    // while acquisition/perturbation threads need it. Alignment continues across batch rows.
+    constexpr size_t kMaxResyncPopsPerCall = 4096;
+    const size_t discard_budget = std::min(
+        std::max(initial_depth + size_t{64}, size_t{64}),
+        kMaxResyncPopsPerCall);
+    size_t discarded = 0;
+    while (train_queue_.size() >= 2u) {
+        if (train_queue_[0].is_positive() && train_queue_[1].is_negative()) {
+            pos_out = std::move(train_queue_.front());
+            train_queue_.pop_front();
+            neg_out = std::move(train_queue_.front());
+            train_queue_.pop_front();
+            queue_not_full_cv_.notify_all();
+            return true;
+        }
+        if (discarded >= discard_budget) {
+            break;
+        }
+        ++discarded;
+        train_queue_.pop_front();
+        queue_not_full_cv_.notify_all();
+    }
+    return false;
 }
 
 DataSynthesizer::Stats DataSynthesizer::get_stats() const {
@@ -2168,8 +2237,8 @@ void DataSynthesizer::perturbation_worker() {
             if (!running_) {
                 break;
             }
-            train_queue_.push(pos_sample);
-            train_queue_.push(neg_sample);
+            train_queue_.push_back(pos_sample);
+            train_queue_.push_back(neg_sample);
             {
                 std::lock_guard<std::mutex> stats_lock(stats_mutex_);
                 stats_.total_perturbed += 2;

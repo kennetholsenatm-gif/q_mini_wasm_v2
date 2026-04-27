@@ -521,4 +521,9 @@ size_t ForwardForwardLearner::parameter_count() const {
     
     return count;
 }
+
+std::unique_ptr<ForwardForwardLearner> create_ff_learner(const FFConfig& config) {
+    return std::make_unique<ForwardForwardLearner>(config);
+}
+
 } // namespace q_mini_wasm_v2::core::learning

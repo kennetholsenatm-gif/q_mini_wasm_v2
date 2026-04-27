@@ -40,6 +40,8 @@ $dsGen = Join-Path $artifacts "data_sources.generated.toml"
 ) | Set-Content -Path $dsGen -Encoding UTF8
 
 $env:QMINI_DATA_SOURCES_TOML = $dsGen
+# Epochs are sourced from the training TOML (no WUI/CLI epochs override on this path).
+# Progress counters are strict real training counters (no ingestion substitution).
 $env:QMINI_TRAINING_CONFIG = (Join-Path $repoRoot "config\training_config.proof.toml")
 $env:QMINI_TRAINING_VERBOSE = "1"
 
@@ -58,16 +60,20 @@ function Get-FreeTcpPort {
 $httpPort = Get-FreeTcpPort
 $env:QMINI_HTTP_PORT = "$httpPort"
 
-# Build into prove_artifacts/run with a fresh q_training.dll beside the EXE. Windows resolves
-# q_training.dll from the executable's directory first, so this avoids a stale locked DLL in repo root.
-$runDir = Join-Path $artifacts "run"
-New-Item -ItemType Directory -Force -Path $runDir | Out-Null
-$exe = Join-Path $runDir "qminiwasm.exe"
+# Single canonical binary at repository root (see config/path_map.toml).
+$exe = Join-Path $repoRoot "qminiwasm.exe"
 $dllSrc = Join-Path $repoRoot "q_mini_wasm_v2\build_final\q_training.dll"
 if (-not (Test-Path -LiteralPath $dllSrc)) {
     throw "Missing $dllSrc - run: cmake --build q_mini_wasm_v2/build_final --target q_training --config Release"
 }
-Copy-Item -LiteralPath $dllSrc -Destination (Join-Path $runDir "q_training.dll") -Force
+# Prefer fresh DLL next to the canonical exe (CGO runtime load order).
+Copy-Item -LiteralPath $dllSrc -Destination (Join-Path $repoRoot "q_training.dll") -Force -ErrorAction SilentlyContinue
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "q_training.dll"))) {
+    $alt = Join-Path $repoRoot "native_runtime\q_training.dll"
+    if (Test-Path -LiteralPath $alt) {
+        Copy-Item -LiteralPath $alt -Destination (Join-Path $repoRoot "q_training.dll") -Force
+    }
+}
 Write-Host "[prove] Building qminiwasm.exe -> $exe" -ForegroundColor Yellow
 Push-Location $repoRoot
 go build -o $exe ./cmd/qminiwasm
@@ -83,7 +89,7 @@ Write-Host "[prove] QMINI_TRAINING_CONFIG=$($env:QMINI_TRAINING_CONFIG)" -Foregr
 
 $p = Start-Process -FilePath $exe -WorkingDirectory $repoRoot -PassThru `
     -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog
-# WorkingDirectory=repoRoot so WUI resolves; exe still loads DLL from $runDir (directory of qminiwasm.exe).
+# WorkingDirectory=repoRoot so WUI and config/path_map.toml resolve; q_training.dll loads from exe directory.
 
 $deadline = (Get-Date).AddSeconds(40)
 while ((Get-Date) -lt $deadline) {

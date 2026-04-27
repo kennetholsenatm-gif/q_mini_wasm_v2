@@ -1,8 +1,18 @@
 #include "router.hpp"
+#include "../ternary/packing.hpp"
 #include <numeric>
 #include <stdexcept>
 #include <algorithm>
 #include <random>
+#include <iostream>
+#include <mutex>
+#if defined(USE_SYCL) && USE_SYCL
+#include "../../sycl/tableau_kernels.hpp"
+#endif
+
+namespace {
+std::once_flag g_once_tritpack5_route_short_pack;
+} // namespace
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -62,6 +72,44 @@ std::vector<size_t> MoERouter::route_topk(const std::vector<ternary::Trit>& inpu
     return select_topk(logits, config_.active_experts);
 }
 
+std::vector<size_t> MoERouter::route_topk_from_tritpack5(
+    const std::vector<uint8_t>& input_packed,
+    size_t input_trit_count
+) {
+    last_symplectic_logits_used_sycl_ = false;
+    ensure_routing_weights_initialized();
+    if (input_trit_count == 0 || input_packed.empty()) {
+        return select_topk(std::vector<int8_t>(config_.total_experts, static_cast<int8_t>(-1)), config_.active_experts);
+    }
+    const size_t need_bytes = (input_trit_count + 4) / 5;
+    if (input_packed.size() < need_bytes) {
+        std::call_once(g_once_tritpack5_route_short_pack, [&]() {
+            std::cerr << "[MoERouter] route_topk_from_tritpack5: input_packed shorter than ceil(input_trit_count/5) "
+                      << "(need_bytes=" << need_bytes << " input_packed.size=" << input_packed.size()
+                      << " input_trit_count=" << input_trit_count << ") — using sentinel logits once\n";
+        });
+        return select_topk(std::vector<int8_t>(config_.total_experts, static_cast<int8_t>(-1)), config_.active_experts);
+    }
+
+#if defined(USE_SYCL) && USE_SYCL
+    if (moe_routing_sycl_desired(config_.total_experts, config_.sycl_route_mode)) {
+        try {
+            const size_t E = config_.total_experts;
+            const size_t R = config_.routing_qutrits;
+            std::vector<uint8_t> wt = pack_routing_weights_tritpack5_rowmajor();
+            auto logits = ::q_mini_wasm_v2::sycl_kernels::moe_routing_symplectic_scores_sycl(
+                input_packed, input_trit_count, wt, E, R);
+            last_symplectic_logits_used_sycl_ = true;
+            return select_topk(logits, config_.active_experts);
+        } catch (...) {
+            // fall through to CPU
+        }
+    }
+#endif
+
+    return select_topk(symplectic_scores_cpu_from_tritpack5(input_packed, input_trit_count), config_.active_experts);
+}
+
 // Inline helper for GF(3) modulo addition over symmetric {-1, 0, 1}
 inline int8_t gf3_add(int8_t a, int8_t b) {
     // Hardware-accelerated lookup or logical equivalent avoiding branching
@@ -70,6 +118,24 @@ inline int8_t gf3_add(int8_t a, int8_t b) {
     if (sum < -1) return 1;
     return static_cast<int8_t>(sum);
 }
+
+#if defined(USE_SYCL) && USE_SYCL
+/** SYCL routing logits: controlled by ExpertConfig::sycl_route_mode (from TOML). */
+static bool moe_routing_sycl_desired(size_t total_experts, SyclRouteMode mode) noexcept {
+    if (total_experts < 8) {
+        return false;
+    }
+    switch (mode) {
+        case SyclRouteMode::Off:
+            return false;
+        case SyclRouteMode::On:
+            return true;
+        case SyclRouteMode::Auto:
+        default:
+            return total_experts >= 128;
+    }
+}
+#endif
 
 void MoERouter::ensure_routing_weights_initialized() {
     if (!routing_weights_initialized_) {
@@ -84,41 +150,104 @@ void MoERouter::ensure_routing_weights_initialized() {
     }
 }
 
-std::vector<int8_t> MoERouter::compute_routing_logits(const std::vector<ternary::Trit>& input) {
-    ensure_routing_weights_initialized();
-    std::vector<int8_t> symplectic_scores(config_.total_experts, -1);
-    
-    // Compute GF(3) Symplectic Inner Product for each expert
-    // Implements the quantum routing mechanism described in Architecture Review
-    for (size_t e = 0; e < config_.total_experts; ++e) {
-        size_t min_size = std::min(input.size(), routing_weights_[e].size());
-        
-        int8_t symplectic_sum = 0;
-        
-        // Symplectic inner product over GF(3): sum( a_i * b_{i+n} - a_{i+n} * b_i ) mod 3
-        // This is the stabilizer state alignment metric
-        for (size_t i = 0; i < min_size; i += 2) {
-            int8_t x1 = static_cast<int8_t>(input[i]);
-            int8_t z1 = (i+1 < min_size) ? static_cast<int8_t>(input[i+1]) : 0;
-            
-            int8_t x2 = static_cast<int8_t>(routing_weights_[e][i]);
-            int8_t z2 = (i+1 < min_size) ? static_cast<int8_t>(routing_weights_[e][i+1]) : 0;
-            
-            // Symplectic pairing: x1*z2 - z1*x2 mod 3
-            int8_t pairing = (x1 * z2) - (z1 * x2);
-            
-            // Reduce to GF(3) canonical range {-1, 0, 1}
-            while (pairing > 1)  pairing -= 3;
-            while (pairing < -1) pairing += 3;
-            
-            symplectic_sum = gf3_add(symplectic_sum, pairing);
+std::vector<uint8_t> MoERouter::pack_routing_weights_tritpack5_rowmajor() const {
+    const size_t E = config_.total_experts;
+    const size_t R = config_.routing_qutrits;
+    const size_t row_bytes = (R + 4) / 5;
+    std::vector<uint8_t> wt(E * row_bytes, static_cast<uint8_t>(0));
+    for (size_t e = 0; e < E; ++e) {
+        std::vector<int8_t> row(R);
+        for (size_t j = 0; j < R; ++j) {
+            row[j] = static_cast<int8_t>(routing_weights_[e][j]);
         }
-        
+        std::vector<uint8_t> packed_row;
+        q::ternary::pack_batch_t5(row, packed_row);
+        for (size_t b = 0; b < row_bytes && b < packed_row.size(); ++b) {
+            wt[e * row_bytes + b] = packed_row[b];
+        }
+    }
+    return wt;
+}
+
+std::vector<int8_t> MoERouter::symplectic_scores_cpu_from_tritpack5(
+    const std::vector<uint8_t>& input_packed,
+    size_t input_trit_count
+) const {
+    std::vector<int8_t> symplectic_scores(config_.total_experts, -1);
+    if (input_packed.empty() || input_trit_count == 0) {
+        return symplectic_scores;
+    }
+    const size_t need_bytes = (input_trit_count + 4) / 5;
+    if (input_packed.size() < need_bytes) {
+        return symplectic_scores;
+    }
+    const uint8_t* pin = input_packed.data();
+    const std::vector<uint8_t> w_packed = pack_routing_weights_tritpack5_rowmajor();
+    const size_t R = config_.routing_qutrits;
+    const size_t w_row_bytes = (R + 4) / 5;
+    const uint8_t* pw = w_packed.data();
+
+    for (size_t e = 0; e < config_.total_experts; ++e) {
+        const size_t min_size = std::min(input_trit_count, routing_weights_[e].size());
+
+        int8_t symplectic_sum = 0;
+
+        for (size_t i = 0; i < min_size; i += 2) {
+            const int8_t x1 = q::ternary::read_trit_t5_at(pin, i);
+            const int8_t z1 =
+                (i + 1 < min_size) ? q::ternary::read_trit_t5_at(pin, i + 1) : static_cast<int8_t>(0);
+
+            const int8_t x2 = q::ternary::read_trit_t5_at(pw + e * w_row_bytes, i);
+            const int8_t z2 = (i + 1 < min_size) ? q::ternary::read_trit_t5_at(pw + e * w_row_bytes, i + 1)
+                                                : static_cast<int8_t>(0);
+
+            int pairing = static_cast<int>(x1) * static_cast<int>(z2) - static_cast<int>(z1) * static_cast<int>(x2);
+            while (pairing > 1) {
+                pairing -= 3;
+            }
+            while (pairing < -1) {
+                pairing += 3;
+            }
+
+            symplectic_sum = gf3_add(symplectic_sum, static_cast<int8_t>(pairing));
+        }
+
         symplectic_scores[e] = symplectic_sum;
     }
-    
-    // No floating point conversion, no softmax. Strict discrete GF(3) outputs only.
+
     return symplectic_scores;
+}
+
+std::vector<int8_t> MoERouter::compute_routing_logits(const std::vector<ternary::Trit>& input) {
+    last_symplectic_logits_used_sycl_ = false;
+    ensure_routing_weights_initialized();
+
+    std::vector<int8_t> inb(input.size());
+    for (size_t i = 0; i < input.size(); ++i) {
+        inb[i] = static_cast<int8_t>(input[i]);
+    }
+
+#if defined(USE_SYCL) && USE_SYCL
+    if (moe_routing_sycl_desired(config_.total_experts, config_.sycl_route_mode)) {
+        try {
+            const size_t E = config_.total_experts;
+            const size_t R = config_.routing_qutrits;
+            std::vector<uint8_t> wt = pack_routing_weights_tritpack5_rowmajor();
+            std::vector<uint8_t> in_t5;
+            q::ternary::pack_batch_t5(inb, in_t5);
+            auto logits =
+                ::q_mini_wasm_v2::sycl_kernels::moe_routing_symplectic_scores_sycl(in_t5, inb.size(), wt, E, R);
+            last_symplectic_logits_used_sycl_ = true;
+            return logits;
+        } catch (...) {
+            // CPU path below
+        }
+    }
+#endif
+
+    std::vector<uint8_t> in_t5;
+    q::ternary::pack_batch_t5(inb, in_t5);
+    return symplectic_scores_cpu_from_tritpack5(in_t5, inb.size());
 }
 
 std::vector<int32_t> MoERouter::entangled_route(

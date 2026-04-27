@@ -38,7 +38,16 @@ extern int Training_InitSession(
     uint32_t prefill_poll_ms,
     uint32_t max_acquisition_queue_depth,
     uint32_t max_raw_queue_depth,
-    uint32_t max_train_queue_depth
+    uint32_t max_train_queue_depth,
+    uint64_t samples_per_epoch_or_zero,
+    uint32_t training_micro_batch_cap,
+    uint32_t training_collect_floor,
+    bool training_timing_to_stderr,
+    bool training_serial_experts,
+    uint32_t training_sycl_route_mode,
+    uint32_t training_sycl_trit_quant_min_moe_dim,
+    uint32_t training_goodness_log_level,
+    bool training_allow_generated_negatives
 );
 
 extern int Training_StartTraining(
@@ -84,7 +93,9 @@ extern int Training_GetMetrics(
     uint64_t* ds_acq_blocked_wait_ms_out,
 	uint64_t* samples_total_out,
 	uint64_t* ds_acq_dropped_too_short_out,
-	uint64_t* gf3_hebbian_weight_cell_updates_out
+	uint64_t* gf3_hebbian_weight_cell_updates_out,
+	char* pipeline_status_utf8_out,
+	size_t pipeline_status_utf8_cap
 );
 
 extern int Training_StopTraining(uint64_t session_id);
@@ -140,6 +151,15 @@ func listenPort() int {
 	return p
 }
 
+// qminiDataRoot returns the on-disk root for config/, datasets/, checkpoints/, etc.
+// Override with QMINI_DATA_DIR (absolute path) so the WUI and native training read the same tree as your editor.
+func qminiDataRoot() string {
+	if s := strings.TrimSpace(os.Getenv("QMINI_DATA_DIR")); s != "" {
+		return filepath.Clean(s)
+	}
+	return DataDir
+}
+
 // resolveDataPath joins DataDir with a configured relative dataset directory, or returns an absolute path unchanged.
 func resolveDataPath(dataRoot, configured string) string {
 	p := strings.TrimSpace(configured)
@@ -156,25 +176,27 @@ func resolveDataPath(dataRoot, configured string) string {
 // Set QMINI_TRAINING_CONFIG to an absolute file path, or a name relative to DataDir/config/
 // (e.g. "training_config.smoke.toml"), to use a smoke or alternate profile without overwriting production.
 func resolveTrainingConfigPath() string {
+	root := qminiDataRoot()
 	if override := strings.TrimSpace(os.Getenv("QMINI_TRAINING_CONFIG")); override != "" {
 		if filepath.IsAbs(override) {
 			return filepath.Clean(override)
 		}
-		return filepath.Clean(filepath.Join(DataDir, "config", override))
+		return filepath.Clean(filepath.Join(root, "config", override))
 	}
-	return filepath.Join(DataDir, "config", "training_config.toml")
+	return filepath.Join(root, "config", "training_config.toml")
 }
 
 // resolveDataSourcesConfigPath returns data_sources.toml for acquisition. Override with QMINI_DATA_SOURCES_TOML
 // (absolute path, or filename under DataDir/config/) for isolated proof/smoke runs.
 func resolveDataSourcesConfigPath() string {
+	root := qminiDataRoot()
 	if override := strings.TrimSpace(os.Getenv("QMINI_DATA_SOURCES_TOML")); override != "" {
 		if filepath.IsAbs(override) {
 			return filepath.Clean(override)
 		}
-		return filepath.Clean(filepath.Join(DataDir, "config", override))
+		return filepath.Clean(filepath.Join(root, "config", override))
 	}
-	return filepath.Join(DataDir, "config", "data_sources.toml")
+	return filepath.Join(root, "config", "data_sources.toml")
 }
 
 // countTxtLikeInDir counts non-directory .txt / .jsonl files (same rules as acquisition status).
@@ -196,19 +218,13 @@ func countTxtLikeInDir(dir string) int {
 	return n
 }
 
-// effectiveDatasetPathForTraining matches WUI semantics: training_config [paths].dataset_dir first,
-// then C:<DataDir>/datasets/acquired if the primary folder has no text files (common layout).
-func effectiveDatasetPathForTraining(dataRoot, configured string) string {
+// effectiveDatasetPathForTraining resolves [paths].dataset_dir under dataRoot and requires at least one .txt/.jsonl.
+func effectiveDatasetPathForTraining(dataRoot, configured string) (string, error) {
 	primary := resolveDataPath(dataRoot, configured)
-	if countTxtLikeInDir(primary) > 0 {
-		return primary
+	if countTxtLikeInDir(primary) == 0 {
+		return "", fmt.Errorf("no .txt or .jsonl files under dataset path %q (paths.dataset_dir); add data or fix the path", primary)
 	}
-	acquired := filepath.Join(dataRoot, "datasets", "acquired")
-	if countTxtLikeInDir(acquired) > 0 {
-		log.Printf("[Training] No .txt/.jsonl in %s; using %s (%d files)", primary, acquired, countTxtLikeInDir(acquired))
-		return acquired
-	}
-	return primary
+	return primary, nil
 }
 
 // Global state for functional WUI
@@ -254,39 +270,41 @@ type TrainingState struct {
 	// Native q_training.dll loads on wui_start_ff_training to avoid crashing the HTTP handler mid-request.
 	PipelineConfigured bool `json:"pipeline_configured"`
 	// Phase is the Go-side process tracker (independent of is_running during long native CGO init).
-	Phase                string    `json:"phase"`
-	PhaseStartedAt       time.Time `json:"-"`
-	LastDLLPollAt        time.Time `json:"-"`
-	DSQueueDepth         uint32    `json:"ds_queue_depth"`
-	DSRawQueueDepth      uint32    `json:"ds_raw_queue_depth"`
-	DSRawQueueMax        uint32    `json:"ds_raw_queue_max"`
-	DSTrainQueueMax      uint32    `json:"ds_train_queue_max"`
-	DSAcqQueueDepth      uint32    `json:"ds_acq_queue_depth"`
-	DSAcqQueueMax        uint32    `json:"ds_acq_queue_max"`
-	DSBlockedRawPushes   uint64    `json:"ds_blocked_raw_pushes"`
-	DSBlockedTrainPushes uint64    `json:"ds_blocked_train_pushes"`
-	DSBlockedWaitMs      uint64    `json:"ds_blocked_wait_ms"`
-	DSDroppedPayloads    uint64    `json:"ds_dropped_payloads"`
-	DSAcqBlockedPushes   uint64    `json:"ds_acq_blocked_pushes"`
-	DSAcqBlockedWaitMs   uint64    `json:"ds_acq_blocked_wait_ms"`
-	DSAcqDroppedTooShort uint64    `json:"ds_acq_dropped_too_short"`
-	GF3HebbianWeightCellUpdates uint64 `json:"gf3_hebbian_weight_cell_updates"`
-	DSDataAcquired       uint32    `json:"ds_data_acquired"`
-	DSDataPerturbed      uint32    `json:"ds_data_perturbed"`
-	DSAPIFailures        uint32    `json:"ds_api_failures"`
-	DSBetti0             uint32    `json:"ds_betti_0"`
-	DSBetti1             uint32    `json:"ds_betti_1"`
-	DSBetti2             uint32    `json:"ds_betti_2"`
-	DSTopicFrontierSize  uint32    `json:"ds_topic_frontier_size"`
-	DSTopicFrontierMax   uint32    `json:"ds_topic_frontier_max"`
-	DSTopicFrontierEvict uint32    `json:"ds_topic_frontier_evictions"`
-	PrefillTargetSamples uint32    `json:"prefill_target_samples"`
-	BufferProfile        string    `json:"buffer_profile"`
-	PrefillTimeoutMs     uint32    `json:"prefill_timeout_ms"`
-	PrefillPollMs        uint32    `json:"prefill_poll_ms"`
-	DSAcqQueueCap        uint32    `json:"ds_acq_queue_cap"`
-	DSRawQueueCap        uint32    `json:"ds_raw_queue_cap"`
-	DSTrainQueueCap      uint32    `json:"ds_train_queue_cap"`
+	Phase                       string    `json:"phase"`
+	PhaseStartedAt              time.Time `json:"-"`
+	LastDLLPollAt               time.Time `json:"-"`
+	DSQueueDepth                uint32    `json:"ds_queue_depth"`
+	DSRawQueueDepth             uint32    `json:"ds_raw_queue_depth"`
+	DSRawQueueMax               uint32    `json:"ds_raw_queue_max"`
+	DSTrainQueueMax             uint32    `json:"ds_train_queue_max"`
+	DSAcqQueueDepth             uint32    `json:"ds_acq_queue_depth"`
+	DSAcqQueueMax               uint32    `json:"ds_acq_queue_max"`
+	DSBlockedRawPushes          uint64    `json:"ds_blocked_raw_pushes"`
+	DSBlockedTrainPushes        uint64    `json:"ds_blocked_train_pushes"`
+	DSBlockedWaitMs             uint64    `json:"ds_blocked_wait_ms"`
+	DSDroppedPayloads           uint64    `json:"ds_dropped_payloads"`
+	DSAcqBlockedPushes          uint64    `json:"ds_acq_blocked_pushes"`
+	DSAcqBlockedWaitMs          uint64    `json:"ds_acq_blocked_wait_ms"`
+	DSAcqDroppedTooShort        uint64    `json:"ds_acq_dropped_too_short"`
+	GF3HebbianWeightCellUpdates uint64    `json:"gf3_hebbian_weight_cell_updates"`
+	DSDataAcquired              uint32    `json:"ds_data_acquired"`
+	DSDataPerturbed             uint32    `json:"ds_data_perturbed"`
+	DSAPIFailures               uint32    `json:"ds_api_failures"`
+	DSBetti0                    uint32    `json:"ds_betti_0"`
+	DSBetti1                    uint32    `json:"ds_betti_1"`
+	DSBetti2                    uint32    `json:"ds_betti_2"`
+	DSTopicFrontierSize         uint32    `json:"ds_topic_frontier_size"`
+	DSTopicFrontierMax          uint32    `json:"ds_topic_frontier_max"`
+	DSTopicFrontierEvict        uint32    `json:"ds_topic_frontier_evictions"`
+	PrefillTargetSamples        uint32    `json:"prefill_target_samples"`
+	BufferProfile               string    `json:"buffer_profile"`
+	PrefillTimeoutMs            uint32    `json:"prefill_timeout_ms"`
+	PrefillPollMs               uint32    `json:"prefill_poll_ms"`
+	DSAcqQueueCap               uint32    `json:"ds_acq_queue_cap"`
+	DSRawQueueCap               uint32    `json:"ds_raw_queue_cap"`
+	DSTrainQueueCap             uint32    `json:"ds_train_queue_cap"`
+	// Native AutonomousTrainingPipeline::get_metrics status_message (batch_inflight, queues, …).
+	PipelineStatusText string `json:"pipeline_status"`
 }
 
 type BufferTuning struct {
@@ -299,79 +317,17 @@ type BufferTuning struct {
 	TrainQueueCap    int
 }
 
-func clampInt(v, minV, maxV int) int {
-	if v < minV {
-		return minV
-	}
-	if v > maxV {
-		return maxV
-	}
-	return v
-}
-
-func getBufferTuning(cfg *Config, batchSize int) BufferTuning {
+// getBufferTuning reads explicit [training] queue / prefill fields. Caller must run validateTrainingConfig first.
+func getBufferTuning(cfg *Config) BufferTuning {
 	profile := strings.ToLower(strings.TrimSpace(cfg.GetString("training.buffer_profile")))
-	if profile == "" {
-		profile = "balanced"
-	}
-
-	multNum, multDen := 1, 4
-	acqCap, rawCap, trainCap := 8192, 8192, 16384
-	prefillTimeoutMs := 60000
-	switch profile {
-	case "conservative":
-		multNum, multDen = 1, 8
-		acqCap, rawCap, trainCap = 4096, 4096, 8192
-		prefillTimeoutMs = 45000
-	case "aggressive":
-		multNum, multDen = 1, 2
-		acqCap, rawCap, trainCap = 32768, 32768, 65536
-		prefillTimeoutMs = 120000
-	default:
-		profile = "balanced"
-	}
-
-	target := batchSize * multNum / multDen
-	if target == 0 {
-		target = 512
-	}
-	minTarget, maxTarget := 128, 16384
-	if profile == "aggressive" {
-		minTarget = 512
-	}
-	target = clampInt(target, minTarget, maxTarget)
-
-	// Optional explicit overrides from config.
-	if v := cfg.GetInt("training.prefill_target_samples"); v > 0 {
-		target = clampInt(v, 64, 65536)
-	}
-	if v := cfg.GetInt("training.prefill_timeout_ms"); v > 0 {
-		prefillTimeoutMs = clampInt(v, 1000, 600000)
-	}
-	prefillPollMs := cfg.GetInt("training.prefill_poll_ms")
-	if prefillPollMs <= 0 {
-		prefillPollMs = 50
-	}
-	prefillPollMs = clampInt(prefillPollMs, 10, 2000)
-
-	if v := cfg.GetInt("training.acq_queue_cap"); v > 0 {
-		acqCap = clampInt(v, 64, 262144)
-	}
-	if v := cfg.GetInt("training.raw_queue_cap"); v > 0 {
-		rawCap = clampInt(v, 64, 262144)
-	}
-	if v := cfg.GetInt("training.train_queue_cap"); v > 0 {
-		trainCap = clampInt(v, 128, 524288)
-	}
-
 	return BufferTuning{
 		Profile:          profile,
-		PrefillTarget:    target,
-		PrefillTimeoutMs: prefillTimeoutMs,
-		PrefillPollMs:    prefillPollMs,
-		AcqQueueCap:      acqCap,
-		RawQueueCap:      rawCap,
-		TrainQueueCap:    trainCap,
+		PrefillTarget:    cfg.GetInt("training.prefill_target_samples"),
+		PrefillTimeoutMs: cfg.GetInt("training.prefill_timeout_ms"),
+		PrefillPollMs:    cfg.GetInt("training.prefill_poll_ms"),
+		AcqQueueCap:      cfg.GetInt("training.acq_queue_cap"),
+		RawQueueCap:      cfg.GetInt("training.raw_queue_cap"),
+		TrainQueueCap:    cfg.GetInt("training.train_queue_cap"),
 	}
 }
 
@@ -449,6 +405,7 @@ func (ts *TrainingState) Reset() {
 	ts.DSAcqQueueCap = 0
 	ts.DSRawQueueCap = 0
 	ts.DSTrainQueueCap = 0
+	ts.PipelineStatusText = ""
 }
 
 func (ts *TrainingState) Start(epochs int, lazyInit bool, targetExperts int, initMsg string) {
@@ -501,6 +458,31 @@ func main() {
 	}
 	log.Printf("Working directory: %s", workDir)
 
+	repoRoot := ""
+	if exePath, err := os.Executable(); err == nil {
+		repoRoot = findRepoRoot(filepath.Dir(exePath))
+	}
+	if repoRoot == "" {
+		repoRoot = findRepoRoot(workDir)
+	}
+	pm := loadPathMap(repoRoot)
+	if canon := canonicalExePath(repoRoot, pm); canon != "" {
+		if exePath, err := os.Executable(); err == nil {
+			if !strings.EqualFold(filepath.Clean(exePath), filepath.Clean(canon)) {
+				fmt.Printf("[Paths] Expected canonical binary (see config/path_map.toml): %s\n", canon)
+				fmt.Printf("[Paths] Actual executable: %s\n", exePath)
+				log.Printf("[Paths] Non-canonical exe: want %s have %s", canon, exePath)
+			} else {
+				fmt.Printf("[Paths] Canonical qminiwasm: %s\n", canon)
+				log.Printf("[Paths] Canonical qminiwasm: %s", canon)
+			}
+		}
+	}
+	if repoRoot != "" {
+		fmt.Printf("[Paths] Repository root: %s (native_runtime=%s)\n", repoRoot, filepath.Join(repoRoot, pm.NativeRuntimeDir))
+		log.Printf("[Paths] Repository root: %s", repoRoot)
+	}
+
 	tc := strings.TrimSpace(os.Getenv("QMINI_TRAINING_CONFIG"))
 	if tc != "" {
 		fmt.Printf("[Config] QMINI_TRAINING_CONFIG=%s\n", tc)
@@ -509,27 +491,34 @@ func main() {
 		fmt.Println("[Config] QMINI_TRAINING_CONFIG=(unset, using default path below)")
 		log.Println("[Config] QMINI_TRAINING_CONFIG=(unset)")
 	}
+	fmt.Printf("[Config] QMINI_DATA_DIR / data root: %s\n", qminiDataRoot())
+	log.Printf("[Config] QMINI_DATA_DIR / data root: %s", qminiDataRoot())
 	cfgPath := resolveTrainingConfigPath()
 	fmt.Printf("[Config] Active training TOML: %s\n", cfgPath)
 	log.Printf("[Config] Active training TOML: %s", cfgPath)
-	if cfg := loadTrainingConfig(); cfg != nil {
-		fmt.Printf("[Config] Resolved keys: training.batch_size=%d model.moe_top_k=%d features.steane_correction=%v training.epochs=%d\n",
-			cfg.GetInt("training.batch_size"),
-			cfg.GetInt("model.moe_top_k"),
-			cfg.GetBool("features.steane_correction"),
-			cfg.GetInt("training.epochs"),
-		)
-		log.Printf("[Config] Resolved keys: batch_size=%d moe_top_k=%d steane=%v epochs=%d",
-			cfg.GetInt("training.batch_size"),
-			cfg.GetInt("model.moe_top_k"),
-			cfg.GetBool("features.steane_correction"),
-			cfg.GetInt("training.epochs"),
-		)
+	cfg, err := loadAndValidateTrainingConfig()
+	if err != nil {
+		log.Fatalf("training TOML: %v", err)
 	}
+	fmt.Printf("[Config] Validated training TOML: training.batch_size=%d model.moe_top_k=%d features.steane_correction=%v training.epochs=%d\n",
+		cfg.GetInt("training.batch_size"),
+		cfg.GetInt("model.moe_top_k"),
+		cfg.GetBool("features.steane_correction"),
+		cfg.GetInt("training.epochs"),
+	)
+	log.Printf("[Config] Validated training TOML: batch_size=%d moe_top_k=%d steane=%v epochs=%d",
+		cfg.GetInt("training.batch_size"),
+		cfg.GetInt("model.moe_top_k"),
+		cfg.GetBool("features.steane_correction"),
+		cfg.GetInt("training.epochs"),
+	)
 
-	// Resolve WUI path. Canonical layout: repo_root/qminiwasm.exe + repo_root/wui/
+	// Resolve WUI path. Canonical layout: repo_root/qminiwasm.exe + repo_root/<wui_dir>/
 	assetPath := ""
 	var possiblePaths []string
+	if repoRoot != "" {
+		possiblePaths = append(possiblePaths, filepath.Join(repoRoot, pm.WuiDir))
+	}
 	if exe, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exe)
 		possiblePaths = append(possiblePaths, filepath.Join(exeDir, wuiAssetPath))
@@ -539,7 +528,6 @@ func main() {
 		filepath.Join(workDir, "..", wuiAssetPath),       // cwd = cmd
 		filepath.Join(workDir, "..", "..", wuiAssetPath), // cwd = cmd/qminiwasm
 		filepath.Join(workDir, "..", "..", "..", wuiAssetPath),
-		`C:\GitHub\q_mini_wasm_v2\wui`,
 	)
 
 	for _, path := range possiblePaths {
@@ -974,7 +962,7 @@ func handleConnect() interface{} {
 }
 
 func handleGetSystemTOML() (interface{}, error) {
-	configPath := filepath.Join(DataDir, "config", "system.toml")
+	configPath := filepath.Join(qminiDataRoot(), "config", "system.toml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -990,7 +978,7 @@ func handleSetSystemTOML(params map[string]interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf("missing 'toml' parameter")
 	}
-	configPath := filepath.Join(DataDir, "config", "system.toml")
+	configPath := filepath.Join(qminiDataRoot(), "config", "system.toml")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -1017,10 +1005,10 @@ func handleValidateSystemTOML(params map[string]interface{}) (interface{}, error
 func handleSystemSelfCheck() (interface{}, error) {
 	// Check if data directory exists
 	dataDirExists := false
-	if info, err := os.Stat(DataDir); err == nil && info.IsDir() {
+	if info, err := os.Stat(qminiDataRoot()); err == nil && info.IsDir() {
 		dataDirExists = true
 	}
-	configPath := filepath.Join(DataDir, "config", "system.toml")
+	configPath := filepath.Join(qminiDataRoot(), "config", "system.toml")
 	configExists := false
 	if _, err := os.Stat(configPath); err == nil {
 		configExists = true
@@ -1061,7 +1049,7 @@ func handleGetOpsSnapshot() (interface{}, error) {
 }
 
 func handleListModels(params map[string]interface{}) (interface{}, error) {
-	dir := filepath.Join(DataDir, "checkpoints")
+	dir := filepath.Join(qminiDataRoot(), "checkpoints")
 	if d, ok := params["directory"].(string); ok && d != "" {
 		dir = d
 	}
@@ -1109,6 +1097,20 @@ func handleGetMetrics() interface{} {
 }
 
 func handleGetTrainingMetrics() interface{} {
+	trainingStateMu.RLock()
+	sid := trainingState.SessionID
+	run := trainingState.IsRunning
+	lastPoll := trainingState.LastDLLPollAt
+	trainingStateMu.RUnlock()
+	// Background poll stops when IsRunning goes false; keep WUI aligned with DLL on every metrics fetch.
+	// Also recover if the poll goroutine stalls (stale LastDLLPollAt) while native work continues.
+	if sid != 0 {
+		stale := lastPoll.IsZero() || time.Since(lastPoll) > 3*time.Second
+		if !run || stale {
+			refreshTrainingProgressFromDLL()
+		}
+	}
+
 	s := copyTrainingState()
 	maybeLogTrainingMetricsServer(s)
 
@@ -1138,28 +1140,30 @@ func handleGetTrainingMetrics() interface{} {
 	}
 
 	return map[string]interface{}{
-		"training_config_path":          resolveTrainingConfigPath(),
-		"data_sources_config_path":      resolveDataSourcesConfigPath(),
-		"epoch":                         s.CurrentEpoch,
-		"total_epochs":                  s.TotalEpochs,
-		"loss":                          s.Loss,
-		"is_running":                    s.IsRunning,
-		"samples":                       s.Samples,
-		"samples_epoch":                 s.Samples,
-		"samples_total":                 s.SamplesTotal,
+		"training_config_path":            resolveTrainingConfigPath(),
+		"data_root":                       qminiDataRoot(),
+		"data_sources_config_path":        resolveDataSourcesConfigPath(),
+		"epoch":                           s.CurrentEpoch,
+		"total_epochs":                    s.TotalEpochs,
+		"loss":                            s.Loss,
+		"is_running":                      s.IsRunning,
+		"samples":                         s.Samples,
+		"samples_epoch":                   s.Samples,
+		"samples_total":                   s.SamplesTotal,
 		"gf3_hebbian_weight_cell_updates": s.GF3HebbianWeightCellUpdates,
-		"session_id":                    s.SessionID,
-		"phase":                         s.Phase,
-		"phase_elapsed_seconds":         phaseElapsed,
-		"native_launch_in_progress":     nativeLaunch,
-		"recommended_poll_interval_sec": recommendedPoll,
-		"last_dll_poll_age_seconds":     lastDLLAge,
-		"learning_rate":                 0.001,
-		"history":                       metricsHistory,
-		"init_message":                  s.InitMessage,
-		"lazy_init":                     s.LazyInit,
-		"pipeline_configured":           s.PipelineConfigured,
-		"buffer_profile":                s.BufferProfile,
+		"session_id":                      s.SessionID,
+		"phase":                           s.Phase,
+		"phase_elapsed_seconds":           phaseElapsed,
+		"native_launch_in_progress":       nativeLaunch,
+		"recommended_poll_interval_sec":   recommendedPoll,
+		"last_dll_poll_age_seconds":       lastDLLAge,
+		"learning_rate":                   0.001,
+		"history":                         metricsHistory,
+		"init_message":                    s.InitMessage,
+		"pipeline_status":                 s.PipelineStatusText,
+		"lazy_init":                       s.LazyInit,
+		"pipeline_configured":             s.PipelineConfigured,
+		"buffer_profile":                  s.BufferProfile,
 		"ingestion": map[string]interface{}{
 			"train_queue_depth":        s.DSQueueDepth,
 			"raw_queue_depth":          s.DSRawQueueDepth,
@@ -1251,28 +1255,24 @@ func handleInitTrainingPipeline(params map[string]interface{}) (interface{}, err
 	}
 	trainingStateMu.Unlock()
 
-	// Load config to get actual settings
-	config := loadTrainingConfig()
+	config, err := loadAndValidateTrainingConfig()
+	if err != nil {
+		return nil, err
+	}
 
-	// Read all values from config - CONFIG FILE IS SOURCE OF TRUTH
-	// WUI params only override if explicitly provided and non-zero
 	epochs := config.GetInt("training.epochs")
 	if epochs == 0 {
 		return nil, fmt.Errorf("training.epochs not set in config")
 	}
-	// Only override with WUI param if explicitly provided
-	if e, ok := params["epochs"].(float64); ok && e > 0 && int(e) != epochs {
-		fmt.Printf("[Init] Overriding epochs: TOML=%d, WUI=%d\n", epochs, int(e))
-		epochs = int(e)
-	} else {
-		fmt.Printf("[Init] Using TOML epochs=%d (WUI param ignored or same)\n", epochs)
+	if _, has := params["epochs"]; has {
+		return nil, fmt.Errorf("epochs must come only from training TOML (remove WUI epochs override)")
 	}
 
 	batchSize := config.GetInt("training.batch_size")
 	if batchSize == 0 {
 		return nil, fmt.Errorf("training.batch_size not set in config")
 	}
-	buffer := getBufferTuning(config, batchSize)
+	buffer := getBufferTuning(config)
 
 	numLayers := config.GetInt("model.num_layers")
 	if numLayers == 0 {
@@ -1293,9 +1293,10 @@ func handleInitTrainingPipeline(params map[string]interface{}) (interface{}, err
 		return nil, fmt.Errorf("model.moe_top_k not set in config")
 	}
 
+	lazyInitInitial := config.GetInt("training.lazy_init_initial_experts")
 	initialExperts := targetExperts
 	if lazyInit {
-		initialExperts = 16
+		initialExperts = lazyInitInitial
 	}
 
 	// Go-only validation: native DLL loads on Start so this handler cannot crash the HTTP server.
@@ -1377,14 +1378,16 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	}
 	trainingStateMu.RUnlock()
 
-	// Load config
-	config := loadTrainingConfig()
+	config, err := loadAndValidateTrainingConfig()
+	if err != nil {
+		return nil, err
+	}
 	lazyInit := config.GetBool("features.lazy_init")
 	dataAccumulation := config.GetBool("features.data_accumulation")
 
 	epochs := config.GetInt("training.epochs")
-	if e, ok := params["epochs"].(float64); ok {
-		epochs = int(e)
+	if _, has := params["epochs"]; has {
+		return nil, fmt.Errorf("epochs must come only from training TOML (remove WUI epochs override)")
 	}
 
 	forceNewNativeSession := false
@@ -1399,7 +1402,7 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	if batchSize == 0 {
 		return nil, fmt.Errorf("training.batch_size not set in config")
 	}
-	buffer := getBufferTuning(config, batchSize)
+	buffer := getBufferTuning(config)
 	numLayers := config.GetInt("model.num_layers")
 	if numLayers == 0 {
 		return nil, fmt.Errorf("model.num_layers not set in config")
@@ -1427,13 +1430,30 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	moeOut := config.GetInt("model.moe_output_dim")
 	moeHidden := config.GetInt("model.moe_hidden_dim")
 	expertInternal := config.GetInt("model.expert_internal_layers")
-	if expertInternal == 0 {
-		expertInternal = 2
-	}
 	ffActiveInternal := config.GetInt("model.moe_ff_active_internal_layers")
 	if ffActiveInternal < 0 {
-		ffActiveInternal = 0
+		return nil, fmt.Errorf("model.moe_ff_active_internal_layers must be >= 0 (got %d)", ffActiveInternal)
 	}
+
+	samplesPerEpoch := config.GetUint64("training.samples_per_epoch")
+	microBatchCap := config.GetInt("training.micro_batch_cap")
+	collectFloor := config.GetInt("training.collect_floor")
+	timingToStderr := config.GetBool("training.timing_to_stderr")
+	serialExpertTrain := config.GetBool("training.serial_expert_train")
+	syclRouteModeStr := strings.ToLower(strings.TrimSpace(config.GetString("training.sycl_route_mode")))
+	var syclRouteModeCode uint32
+	switch syclRouteModeStr {
+	case "on":
+		syclRouteModeCode = 1
+	case "off":
+		syclRouteModeCode = 2
+	default:
+		syclRouteModeCode = 0 // "auto" (validated in validateTrainingConfig)
+	}
+
+	syclTritQuantMinMoeDim := uint32(config.GetInt("training.sycl_trit_quant_min_moe_dim"))
+	goodnessLogLevel := uint32(config.GetInt("training.goodness_log_level"))
+	allowGeneratedNegatives := config.GetBoolDefault("training.allow_generated_negatives", true)
 
 	trainingStateMu.Lock()
 	oldSID := trainingState.SessionID
@@ -1512,6 +1532,15 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 			C.uint32_t(buffer.AcqQueueCap),
 			C.uint32_t(buffer.RawQueueCap),
 			C.uint32_t(buffer.TrainQueueCap),
+			C.uint64_t(samplesPerEpoch),
+			C.uint32_t(microBatchCap),
+			C.uint32_t(collectFloor),
+			C.bool(timingToStderr),
+			C.bool(serialExpertTrain),
+			C.uint32_t(syclRouteModeCode),
+			C.uint32_t(syclTritQuantMinMoeDim),
+			C.uint32_t(goodnessLogLevel),
+			C.bool(allowGeneratedNegatives),
 		)
 		if initRes != 0 {
 			trainingStateMu.Lock()
@@ -1519,7 +1548,7 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 			trainingState.PhaseStartedAt = time.Now()
 			trainingState.InitMessage = fmt.Sprintf("Training_InitSession failed (%d). Pipeline still configured; fix DLL/config and retry.", initRes)
 			trainingStateMu.Unlock()
-			return nil, fmt.Errorf("Training_InitSession failed with code %d (check q_training.dll next to the executable and rebuild C++/Go together)", initRes)
+			return nil, fmt.Errorf("Training_InitSession failed with code %d (check q_training.dll matches Go; codes -5 samples_per_epoch, -6 micro/collect floor, -7 MoE dims, -8 worker_threads, -9 prefill/queue limits, -10 goodness_log_level, -11 sycl_route_mode, -12 sycl_trit_quant_min_moe_dim)", initRes)
 		}
 
 		goSessionID = uint64(sessionID)
@@ -1528,8 +1557,10 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 		trainingStateMu.Unlock()
 	}
 
-	// Start real training via DLL (dataset path from TOML [paths].dataset_dir; fallback to datasets/acquired)
-	dataPathStr := effectiveDatasetPathForTraining(DataDir, config.GetString("paths.dataset_dir"))
+	dataPathStr, err := effectiveDatasetPathForTraining(qminiDataRoot(), config.GetString("paths.dataset_dir"))
+	if err != nil {
+		return nil, err
+	}
 	dataPath := C.CString(dataPathStr)
 	defer C.free(unsafe.Pointer(dataPath))
 
@@ -1595,27 +1626,136 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	go pollTrainingProgress()
 
 	if initialExperts <= 0 {
-		initialExperts = targetExperts
-		if lazyInit {
-			initialExperts = 16
-		}
+		return nil, fmt.Errorf("pipeline CurrentExperts is unset; call wui_init_training_pipeline before start")
 	}
 	if tgt <= 0 {
 		tgt = targetExperts
 	}
 
 	return map[string]interface{}{
-		"started":                    true,
-		"epochs":                     epochs,
-		"lazy_init":                  lazyInit,
-		"session_id":                 outSID,
-		"native_session_reused":      reuseNative,
-		"force_new_native_session":   forceNewNativeSession,
-		"message":                    initMsg,
-		"phase":                        phaseTraining,
-		"initial_experts":              initialExperts,
-		"target_experts":               tgt,
+		"started":                  true,
+		"epochs":                   epochs,
+		"lazy_init":                lazyInit,
+		"session_id":               outSID,
+		"native_session_reused":    reuseNative,
+		"force_new_native_session": forceNewNativeSession,
+		"message":                  initMsg,
+		"phase":                    phaseTraining,
+		"initial_experts":          initialExperts,
+		"target_experts":           tgt,
 	}, nil
+}
+
+// refreshTrainingProgressFromDLL copies one native snapshot into trainingState (CGO).
+func refreshTrainingProgressFromDLL() {
+	trainingStateMu.Lock()
+	sid := trainingState.SessionID
+	if sid == 0 {
+		trainingStateMu.Unlock()
+		return
+	}
+	trainingStateMu.Unlock()
+
+	var currentEpoch, totalEpochs C.uint32_t
+	var currentLoss C.double
+	var samplesProcessed C.uint64_t
+	var isRunning C.bool
+	var loopCount C.uint32_t
+	res := C.Training_GetProgress(
+		C.uint64_t(sid),
+		&currentEpoch,
+		&totalEpochs,
+		&currentLoss,
+		&samplesProcessed,
+		&isRunning,
+		&loopCount,
+	)
+	var expertsActive, dataAcquired, dataPerturbed, apiFailures C.uint32_t
+	var betti0, betti1, betti2 C.uint32_t
+	var topicFrontierSize, topicFrontierMax, topicFrontierEvict C.uint32_t
+	var samplesTotalNative C.uint64_t
+	var dsQueueDepth, dsRawQueueDepth, dsRawQueueMax, dsTrainQueueMax C.uint32_t
+	var dsAcqQueueDepth, dsAcqQueueMax C.uint32_t
+	var dsBlockedRawPushes, dsBlockedTrainPushes, dsBlockedWaitMs C.uint64_t
+	var dsDroppedPayloads, dsAcqBlockedPushes, dsAcqBlockedWaitMs C.uint64_t
+	var dsAcqDroppedTooShort C.uint64_t
+	var gf3HebbianWeightCellUpdates C.uint64_t
+	statusBuf := make([]byte, 512)
+	metricsRes := C.Training_GetMetrics(
+		C.uint64_t(sid),
+		&expertsActive,
+		&dataAcquired,
+		&dataPerturbed,
+		&apiFailures,
+		&betti0,
+		&betti1,
+		&betti2,
+		&topicFrontierSize,
+		&topicFrontierMax,
+		&topicFrontierEvict,
+		&dsQueueDepth,
+		&dsRawQueueDepth,
+		&dsRawQueueMax,
+		&dsTrainQueueMax,
+		&dsAcqQueueDepth,
+		&dsAcqQueueMax,
+		&dsBlockedRawPushes,
+		&dsBlockedTrainPushes,
+		&dsBlockedWaitMs,
+		&dsDroppedPayloads,
+		&dsAcqBlockedPushes,
+		&dsAcqBlockedWaitMs,
+		&samplesTotalNative,
+		&dsAcqDroppedTooShort,
+		&gf3HebbianWeightCellUpdates,
+		(*C.char)(unsafe.Pointer(&statusBuf[0])),
+		C.size_t(len(statusBuf)),
+	)
+
+	trainingStateMu.Lock()
+	defer trainingStateMu.Unlock()
+	if res != 0 {
+		return
+	}
+	trainingState.CurrentEpoch = int(currentEpoch)
+	trainingState.TotalEpochs = int(totalEpochs)
+	trainingState.Loss = float64(currentLoss)
+	trainingState.Samples = int(samplesProcessed)
+	trainingState.IsRunning = bool(isRunning)
+	trainingState.LoopCount = int(loopCount)
+	trainingState.LastDLLPollAt = time.Now()
+	trainingState.LastUpdate = time.Now()
+	if metricsRes == 0 {
+		nativeStatus := C.GoString((*C.char)(unsafe.Pointer(&statusBuf[0])))
+		trainingState.SamplesTotal = uint64(samplesTotalNative)
+		trainingState.DSDataAcquired = uint32(dataAcquired)
+		trainingState.DSDataPerturbed = uint32(dataPerturbed)
+		trainingState.DSAPIFailures = uint32(apiFailures)
+		trainingState.DSBetti0 = uint32(betti0)
+		trainingState.DSBetti1 = uint32(betti1)
+		trainingState.DSBetti2 = uint32(betti2)
+		trainingState.DSTopicFrontierSize = uint32(topicFrontierSize)
+		trainingState.DSTopicFrontierMax = uint32(topicFrontierMax)
+		trainingState.DSTopicFrontierEvict = uint32(topicFrontierEvict)
+		if trainingState.CurrentExperts <= 0 && int(expertsActive) > 0 {
+			trainingState.CurrentExperts = int(expertsActive)
+		}
+		trainingState.DSQueueDepth = uint32(dsQueueDepth)
+		trainingState.DSRawQueueDepth = uint32(dsRawQueueDepth)
+		trainingState.DSRawQueueMax = uint32(dsRawQueueMax)
+		trainingState.DSTrainQueueMax = uint32(dsTrainQueueMax)
+		trainingState.DSAcqQueueDepth = uint32(dsAcqQueueDepth)
+		trainingState.DSAcqQueueMax = uint32(dsAcqQueueMax)
+		trainingState.DSBlockedRawPushes = uint64(dsBlockedRawPushes)
+		trainingState.DSBlockedTrainPushes = uint64(dsBlockedTrainPushes)
+		trainingState.DSBlockedWaitMs = uint64(dsBlockedWaitMs)
+		trainingState.DSDroppedPayloads = uint64(dsDroppedPayloads)
+		trainingState.DSAcqBlockedPushes = uint64(dsAcqBlockedPushes)
+		trainingState.DSAcqBlockedWaitMs = uint64(dsAcqBlockedWaitMs)
+		trainingState.DSAcqDroppedTooShort = uint64(dsAcqDroppedTooShort)
+		trainingState.GF3HebbianWeightCellUpdates = uint64(gf3HebbianWeightCellUpdates)
+		trainingState.PipelineStatusText = nativeStatus
+	}
 }
 
 func pollTrainingProgress() {
@@ -1626,6 +1766,8 @@ func pollTrainingProgress() {
 		fmt.Printf("[pollTrainingProgress] Native q_training.dll version: %s\n",
 			C.GoString((*C.char)(unsafe.Pointer(&versionBuf[0]))))
 		fmt.Printf("[pollTrainingProgress] Watch stderr for: [TrainingPipeline] TIMEOUT | Waiting for DataSynthesizer | moe_input_dim is 0 | PREFILL_STARVATION\n")
+		fmt.Printf("[pollTrainingProgress] Set training.timing_to_stderr = true in training TOML for [TrainingTiming] collect/route/ff_train ms per batch (stderr).\n")
+		fmt.Printf("[pollTrainingProgress] Set training.goodness_log_level = 1 or 2 in training TOML for [TrainingPipeline][Goodness] stderr lines (FF output metric).\n")
 	}
 	trainingStateMu.RLock()
 	startSID := trainingState.SessionID
@@ -1674,6 +1816,7 @@ func pollTrainingProgress() {
 		var dsDroppedPayloads, dsAcqBlockedPushes, dsAcqBlockedWaitMs C.uint64_t
 		var dsAcqDroppedTooShort C.uint64_t
 		var gf3HebbianWeightCellUpdates C.uint64_t
+		statusBuf := make([]byte, 512)
 		metricsRes := C.Training_GetMetrics(
 			C.uint64_t(sid),
 			&expertsActive,
@@ -1701,7 +1844,13 @@ func pollTrainingProgress() {
 			&samplesTotalNative,
 			&dsAcqDroppedTooShort,
 			&gf3HebbianWeightCellUpdates,
+			(*C.char)(unsafe.Pointer(&statusBuf[0])),
+			C.size_t(len(statusBuf)),
 		)
+		nativeStatus := ""
+		if metricsRes == 0 {
+			nativeStatus = C.GoString((*C.char)(unsafe.Pointer(&statusBuf[0])))
+		}
 
 		ep := int(currentEpoch)
 		samp := int(samplesProcessed)
@@ -1759,6 +1908,7 @@ func pollTrainingProgress() {
 				trainingState.DSAcqDroppedTooShort = uint64(dsAcqDroppedTooShort)
 				trainingState.GF3HebbianWeightCellUpdates = uint64(gf3HebbianWeightCellUpdates)
 			}
+			trainingState.PipelineStatusText = nativeStatus
 			trainingState.IsRunning = running
 			trainingState.LoopCount = lc
 			trainingState.LastUpdate = time.Now()
@@ -1900,7 +2050,7 @@ func handleExportTrainingCheckpoint(params map[string]interface{}) (interface{},
 		path = strings.TrimSpace(p)
 	}
 	if path == "" {
-		cpDir := filepath.Join(DataDir, "checkpoints")
+		cpDir := filepath.Join(qminiDataRoot(), "checkpoints")
 		if err := os.MkdirAll(cpDir, 0755); err != nil {
 			return nil, fmt.Errorf("mkdir checkpoints: %w", err)
 		}
@@ -2044,7 +2194,7 @@ func parseDataSourcesToml(content string) []map[string]interface{} {
 }
 
 func appendLocalDatasetSources(sources []map[string]interface{}) []map[string]interface{} {
-	localPath := filepath.Join(DataDir, "datasets")
+	localPath := filepath.Join(qminiDataRoot(), "datasets")
 	info, err := os.Stat(localPath)
 	if err != nil || !info.IsDir() {
 		return sources
@@ -2073,7 +2223,7 @@ func appendLocalDatasetSources(sources []map[string]interface{}) []map[string]in
 }
 
 func handleListDataSources() interface{} {
-	sourcesPath := filepath.Join(DataDir, "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return map[string]interface{}{
@@ -2125,7 +2275,7 @@ func handleStartDataAcquisition(params map[string]interface{}) (interface{}, err
 
 	// Setup output directory
 	if outputDir == "" {
-		outputDir = filepath.Join(DataDir, "datasets", "acquired")
+		outputDir = filepath.Join(qminiDataRoot(), "datasets", "acquired")
 	}
 	os.MkdirAll(outputDir, 0755)
 
@@ -2245,7 +2395,7 @@ func handleGetAcquisitionStatus() interface{} {
 
 	// Also check for actual data files on disk
 	dataFiles := 0
-	dataDir := filepath.Join(DataDir, "datasets", "acquired")
+	dataDir := filepath.Join(qminiDataRoot(), "datasets", "acquired")
 	entries, err := os.ReadDir(dataDir)
 	if err == nil {
 		for _, entry := range entries {
@@ -2282,7 +2432,7 @@ func handleAddDataSource(params map[string]interface{}) (interface{}, error) {
 	}
 
 	// Append to data_sources.toml
-	sourcesPath := filepath.Join(DataDir, "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 
 	var entry strings.Builder
 	entry.WriteString("\n[[source]]\n")
@@ -2327,7 +2477,7 @@ func handleUpdateDataSource(params map[string]interface{}) (interface{}, error) 
 	}
 
 	// Read and modify data_sources.toml
-	sourcesPath := filepath.Join(DataDir, "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data_sources.toml: %w", err)
@@ -2391,19 +2541,15 @@ func handleLoadConfig() (interface{}, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Return default config
-			return map[string]interface{}{
-				"content": defaultTOMLConfig(),
-				"exists":  false,
-				"path":    configPath,
-			}, nil
+			return nil, fmt.Errorf("training TOML is required at %q (no baked-in defaults); copy config/training_config.toml from the repository", configPath)
 		}
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 	return map[string]interface{}{
-		"content": string(data),
-		"exists":  true,
-		"path":    configPath,
+		"content":   string(data),
+		"exists":    true,
+		"path":      configPath,
+		"data_root": qminiDataRoot(),
 	}, nil
 }
 
@@ -2421,9 +2567,14 @@ func handleSaveConfig(params map[string]interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("failed to write config: %w", err)
 	}
 
+	if _, err := loadAndValidateTrainingConfig(); err != nil {
+		return nil, fmt.Errorf("saved training TOML failed validation (file was written; fix errors): %w", err)
+	}
+
 	return map[string]interface{}{
-		"saved": true,
-		"path":  configPath,
+		"saved":     true,
+		"path":      configPath,
+		"data_root": qminiDataRoot(),
 	}, nil
 }
 
@@ -2434,10 +2585,7 @@ func updateTrainingConfigKey(section, key, value string) (string, error) {
 	}
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return "", fmt.Errorf("failed to read config: %w", err)
-		}
-		raw = []byte(defaultTOMLConfig())
+		return "", fmt.Errorf("training TOML required at %q: %w", configPath, err)
 	}
 
 	lines := strings.Split(string(raw), "\n")
@@ -2482,20 +2630,19 @@ func updateTrainingConfigKey(section, key, value string) (string, error) {
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("failed to write config: %w", err)
 	}
+	if _, err := loadAndValidateTrainingConfig(); err != nil {
+		return "", fmt.Errorf("updated training TOML failed validation (file was written; fix errors): %w", err)
+	}
 	return configPath, nil
 }
 
 func handleGetBufferProfile() (interface{}, error) {
-	cfg := loadTrainingConfig()
+	cfg, err := loadAndValidateTrainingConfig()
+	if err != nil {
+		return nil, err
+	}
 	profile := strings.ToLower(strings.TrimSpace(cfg.GetString("training.buffer_profile")))
-	if profile == "" {
-		profile = "balanced"
-	}
-	batchSize := cfg.GetInt("training.batch_size")
-	if batchSize <= 0 {
-		batchSize = 16384
-	}
-	t := getBufferTuning(cfg, batchSize)
+	t := getBufferTuning(cfg)
 	return map[string]interface{}{
 		"profile": profile,
 		"effective": map[string]interface{}{
@@ -2524,12 +2671,11 @@ func handleSetBufferProfile(params map[string]interface{}) (interface{}, error) 
 		return nil, err
 	}
 
-	cfg := loadTrainingConfig()
-	batchSize := cfg.GetInt("training.batch_size")
-	if batchSize <= 0 {
-		batchSize = 16384
+	cfg, err := loadAndValidateTrainingConfig()
+	if err != nil {
+		return nil, err
 	}
-	t := getBufferTuning(cfg, batchSize)
+	t := getBufferTuning(cfg)
 	return map[string]interface{}{
 		"updated":               true,
 		"profile":               profile,
@@ -2560,7 +2706,7 @@ func handleGetAPIKeys() interface{} {
 
 func handleSaveAPIKeys(params map[string]interface{}) (interface{}, error) {
 	// In real implementation, these would be encrypted and stored securely
-	keysPath := filepath.Join(DataDir, "config", "api_keys.json")
+	keysPath := filepath.Join(qminiDataRoot(), "config", "api_keys.json")
 
 	data, _ := json.Marshal(params)
 	if err := os.MkdirAll(filepath.Dir(keysPath), 0755); err != nil {
@@ -2574,7 +2720,7 @@ func handleSaveAPIKeys(params map[string]interface{}) (interface{}, error) {
 }
 
 func handleGetDataSources() interface{} {
-	sourcesPath := filepath.Join(DataDir, "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return map[string]interface{}{
@@ -2600,13 +2746,11 @@ func handleAddSourcesToConfig(params map[string]interface{}) (interface{}, error
 
 	configPath := resolveTrainingConfigPath()
 
-	// Read existing
-	var content string
-	if data, err := os.ReadFile(configPath); err == nil {
-		content = string(data)
-	} else {
-		content = defaultTOMLConfig()
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("training TOML required at %q: %w", configPath, err)
 	}
+	content := string(data)
 
 	// Append sources section
 	content += "\n[data_sources]\n"
@@ -2621,118 +2765,280 @@ func handleAddSourcesToConfig(params map[string]interface{}) (interface{}, error
 		return nil, err
 	}
 
+	if _, err := loadAndValidateTrainingConfig(); err != nil {
+		return nil, fmt.Errorf("training TOML invalid after appending sources (file was written; fix errors): %w", err)
+	}
+
 	return map[string]interface{}{
 		"added":   len(sources),
 		"updated": true,
 	}, nil
 }
 
-// Simple TOML config loader
+// Config holds only keys present in the training TOML on disk (no implicit defaults).
 type Config struct {
-	data map[string]map[string]interface{}
+	data    map[string]map[string]interface{}
+	present map[string]map[string]struct{}
 }
 
-func loadTrainingConfig() *Config {
+func (c *Config) Has(key string) bool {
+	parts := strings.Split(key, ".")
+	if len(parts) != 2 {
+		return false
+	}
+	sec, k := parts[0], parts[1]
+	if c.present == nil {
+		return false
+	}
+	row, ok := c.present[sec]
+	if !ok {
+		return false
+	}
+	_, ok = row[k]
+	return ok
+}
+
+func parseTrainingConfig(data []byte) (*Config, error) {
+	cfg := &Config{
+		data:    make(map[string]map[string]interface{}),
+		present: make(map[string]map[string]struct{}),
+	}
+	currentSection := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			currentSection = line[1 : len(line)-1]
+			if cfg.data[currentSection] == nil {
+				cfg.data[currentSection] = make(map[string]interface{})
+			}
+			if cfg.present[currentSection] == nil {
+				cfg.present[currentSection] = make(map[string]struct{})
+			}
+			continue
+		}
+		if !strings.Contains(line, "=") || currentSection == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if idx := strings.Index(value, "#"); idx != -1 {
+			value = strings.TrimSpace(value[:idx])
+		}
+		var parsed interface{}
+		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
+			parsed = int(i)
+		} else if f, err := strconv.ParseFloat(value, 64); err == nil {
+			parsed = f
+		} else if b, err := strconv.ParseBool(value); err == nil {
+			parsed = b
+		} else {
+			parsed = strings.Trim(value, `"`)
+		}
+		cfg.data[currentSection][key] = parsed
+		cfg.present[currentSection][key] = struct{}{}
+	}
+	return cfg, nil
+}
+
+func loadTrainingConfig() (*Config, error) {
 	configPath := resolveTrainingConfigPath()
 	fmt.Printf("[Config] Loading from: %s\n", configPath)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		fmt.Printf("[Config] File not found, using DEFAULTS (error: %v)\n", err)
-		// Return default config - ALL fields must match WUI defaults
-		return &Config{data: map[string]map[string]interface{}{
-			"paths": {
-				"dataset_dir": "datasets",
-			},
-			"training": {
-				"epochs":              100,
-				"batch_size":          16384,
-				"learning_rate":       10.0,
-				"checkpoint_interval": 10,
-				"buffer_profile":      "balanced",
-			},
-			"model": {
-				"moe_experts":            8192,
-				"moe_top_k":              128,
-				"context_window":         8192,
-				"num_layers":             64,
-				"entanglement_tokens":    1024,
-				"shadow_dim":             4096,
-				"neurons_per_layer":      2048,
-				"routing_qutrits":        12,
-				"moe_input_dim":          2048,
-				"moe_output_dim":         2048,
-				"moe_hidden_dim":         4096,
-				"expert_internal_layers": 2,
-			},
-			"features": {
-				"steane_correction": true,
-				"flash_cim":         false,
-				"worker_threads":    32,
-				"continuous_mode":   true,
-				"lazy_init":         true,
-				"data_accumulation": true,
-			},
-			"apis": {
-				"enabled":  false,
-				"wolfram":  false,
-				"wikidata": false,
-				"arxiv":    false,
-				"github":   false,
-				"nasa":     false,
-				"pubchem":  false,
-				"pdb":      false,
-				"oeis":     false,
-				"lean":     false,
-			},
-			"system": {
-				"num_threads":     32,
-				"memory_limit_mb": 2048,
-			},
-		}}
+		return nil, fmt.Errorf("training TOML not readable at %q: %w (copy a complete file from the repo config/ directory)", configPath, err)
 	}
-
-	cfg := &Config{data: make(map[string]map[string]interface{})}
-	currentSection := ""
-
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			currentSection = line[1 : len(line)-1]
-			cfg.data[currentSection] = make(map[string]interface{})
-			continue
-		}
-		if strings.Contains(line, "=") && currentSection != "" {
-			parts := strings.SplitN(line, "=", 2)
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-
-			// Remove comments
-			if idx := strings.Index(value, "#"); idx != -1 {
-				value = strings.TrimSpace(value[:idx])
-			}
-
-			// Parse value
-			if b, err := strconv.ParseBool(value); err == nil {
-				cfg.data[currentSection][key] = b
-			} else if i, err := strconv.Atoi(value); err == nil {
-				cfg.data[currentSection][key] = i
-			} else if f, err := strconv.ParseFloat(value, 64); err == nil {
-				cfg.data[currentSection][key] = f
-			} else {
-				cfg.data[currentSection][key] = strings.Trim(value, `"`)
-			}
-		}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, fmt.Errorf("training TOML %q is empty", configPath)
 	}
-
-	// Log what was loaded
+	cfg, err := parseTrainingConfig(data)
+	if err != nil {
+		return nil, err
+	}
 	if epochs, ok := cfg.data["training"]["epochs"]; ok {
 		fmt.Printf("[Config] Loaded from file: epochs=%v\n", epochs)
 	}
 	if batchSize, ok := cfg.data["training"]["batch_size"]; ok {
 		fmt.Printf("[Config] Loaded from file: batch_size=%v\n", batchSize)
 	}
+	return cfg, nil
+}
 
-	return cfg
+func validateIntInRange(name string, v, lo, hi int) error {
+	if v < lo || v > hi {
+		return fmt.Errorf("%s must be in [%d,%d] (got %d)", name, lo, hi, v)
+	}
+	return nil
+}
+
+func validateTrainingConfig(c *Config) error {
+	required := []string{
+		"paths.dataset_dir",
+		"training.epochs",
+		"training.batch_size",
+		"training.learning_rate",
+		"training.checkpoint_interval",
+		"training.buffer_profile",
+		"training.samples_per_epoch",
+		"training.micro_batch_cap",
+		"training.collect_floor",
+		"training.timing_to_stderr",
+		"training.serial_expert_train",
+		"training.sycl_route_mode",
+		"training.sycl_trit_quant_min_moe_dim",
+		"training.goodness_log_level",
+		"training.allow_generated_negatives",
+		"training.prefill_target_samples",
+		"training.prefill_timeout_ms",
+		"training.prefill_poll_ms",
+		"training.acq_queue_cap",
+		"training.raw_queue_cap",
+		"training.train_queue_cap",
+		"training.lazy_init_initial_experts",
+		"model.num_layers",
+		"model.moe_experts",
+		"model.moe_top_k",
+		"model.context_window",
+		"model.entanglement_tokens",
+		"model.shadow_dim",
+		"model.neurons_per_layer",
+		"model.routing_qutrits",
+		"model.moe_input_dim",
+		"model.moe_output_dim",
+		"model.moe_hidden_dim",
+		"model.expert_internal_layers",
+		"model.moe_ff_active_internal_layers",
+		"features.lazy_init",
+		"features.data_accumulation",
+		"features.continuous_mode",
+		"features.steane_correction",
+		"features.flash_cim",
+		"features.worker_threads",
+	}
+	var missing []string
+	for _, k := range required {
+		if !c.Has(k) {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required keys: %s", strings.Join(missing, ", "))
+	}
+
+	if strings.TrimSpace(c.GetString("paths.dataset_dir")) == "" {
+		return fmt.Errorf("paths.dataset_dir must be a non-empty string")
+	}
+	if c.GetFloat("training.learning_rate") <= 0 {
+		return fmt.Errorf("training.learning_rate must be > 0")
+	}
+	if c.GetUint64("training.samples_per_epoch") < 1 {
+		return fmt.Errorf("training.samples_per_epoch must be >= 1")
+	}
+	if err := validateIntInRange("training.micro_batch_cap", c.GetInt("training.micro_batch_cap"), 1, 4096); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.collect_floor", c.GetInt("training.collect_floor"), 1, 512); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.epochs", c.GetInt("training.epochs"), 1, 1<<30); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.batch_size", c.GetInt("training.batch_size"), 1, 1<<30); err != nil {
+		return err
+	}
+	if c.GetInt("training.checkpoint_interval") < 0 {
+		return fmt.Errorf("training.checkpoint_interval must be >= 0")
+	}
+	profile := strings.ToLower(strings.TrimSpace(c.GetString("training.buffer_profile")))
+	switch profile {
+	case "conservative", "balanced", "aggressive":
+	default:
+		return fmt.Errorf("training.buffer_profile must be conservative|balanced|aggressive (got %q)", profile)
+	}
+	syclRM := strings.ToLower(strings.TrimSpace(c.GetString("training.sycl_route_mode")))
+	switch syclRM {
+	case "auto", "on", "off":
+	default:
+		return fmt.Errorf(`training.sycl_route_mode must be "auto", "on", or "off" (got %q)`, c.GetString("training.sycl_route_mode"))
+	}
+	if err := validateIntInRange("training.prefill_target_samples", c.GetInt("training.prefill_target_samples"), 1, 65536); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.prefill_timeout_ms", c.GetInt("training.prefill_timeout_ms"), 1000, 600000); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.prefill_poll_ms", c.GetInt("training.prefill_poll_ms"), 10, 2000); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.acq_queue_cap", c.GetInt("training.acq_queue_cap"), 64, 262144); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.raw_queue_cap", c.GetInt("training.raw_queue_cap"), 64, 262144); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.train_queue_cap", c.GetInt("training.train_queue_cap"), 128, 524288); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.sycl_trit_quant_min_moe_dim", c.GetInt("training.sycl_trit_quant_min_moe_dim"), 1, 65536); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.goodness_log_level", c.GetInt("training.goodness_log_level"), 0, 2); err != nil {
+		return err
+	}
+	if err := validateIntInRange("features.worker_threads", c.GetInt("features.worker_threads"), 1, 65536); err != nil {
+		return err
+	}
+	expertN := c.GetInt("model.moe_experts")
+	lazyInit := c.GetBool("features.lazy_init")
+	lazyInitial := c.GetInt("training.lazy_init_initial_experts")
+	if err := validateIntInRange("training.lazy_init_initial_experts", lazyInitial, 1, expertN); err != nil {
+		return err
+	}
+	if !lazyInit && lazyInitial != expertN {
+		return fmt.Errorf("when features.lazy_init is false, training.lazy_init_initial_experts must equal model.moe_experts (got %d vs %d)", lazyInitial, expertN)
+	}
+
+	intPos := []struct {
+		key string
+		lo  int
+	}{
+		{"model.num_layers", 1},
+		{"model.moe_experts", 1},
+		{"model.moe_top_k", 1},
+		{"model.context_window", 1},
+		{"model.entanglement_tokens", 1},
+		{"model.shadow_dim", 1},
+		{"model.neurons_per_layer", 1},
+		{"model.routing_qutrits", 1},
+		{"model.moe_input_dim", 1},
+		{"model.moe_output_dim", 1},
+		{"model.moe_hidden_dim", 1},
+		{"model.expert_internal_layers", 1},
+	}
+	for _, e := range intPos {
+		v := c.GetInt(e.key)
+		if v < e.lo {
+			return fmt.Errorf("%s must be >= %d (got %d)", e.key, e.lo, v)
+		}
+	}
+	if c.GetInt("model.moe_ff_active_internal_layers") < 0 {
+		return fmt.Errorf("model.moe_ff_active_internal_layers must be >= 0")
+	}
+	return nil
+}
+
+func loadAndValidateTrainingConfig() (*Config, error) {
+	cfg, err := loadTrainingConfig()
+	if err != nil {
+		return nil, err
+	}
+	if err := validateTrainingConfig(cfg); err != nil {
+		return nil, fmt.Errorf("%s: %w", resolveTrainingConfigPath(), err)
+	}
+	return cfg, nil
 }
 
 func (c *Config) GetBool(key string) bool {
@@ -2751,6 +3057,22 @@ func (c *Config) GetBool(key string) bool {
 	return false
 }
 
+func (c *Config) GetBoolDefault(key string, defaultValue bool) bool {
+	parts := strings.Split(key, ".")
+	if len(parts) != 2 {
+		return defaultValue
+	}
+	section, key := parts[0], parts[1]
+	if sec, ok := c.data[section]; ok {
+		if v, ok := sec[key]; ok {
+			if b, ok := v.(bool); ok {
+				return b
+			}
+		}
+	}
+	return defaultValue
+}
+
 func (c *Config) GetInt(key string) int {
 	parts := strings.Split(key, ".")
 	if len(parts) != 2 {
@@ -2762,8 +3084,88 @@ func (c *Config) GetInt(key string) int {
 			switch v := v.(type) {
 			case int:
 				return v
+			case int8:
+				return int(v)
+			case int16:
+				return int(v)
+			case int32:
+				return int(v)
+			case int64:
+				return int(v)
+			case uint:
+				return int(v)
+			case uint8:
+				return int(v)
+			case uint16:
+				return int(v)
+			case uint32:
+				return int(v)
+			case uint64:
+				return int(v)
+			case float32:
+				return int(v)
 			case float64:
 				return int(v)
+			}
+		}
+	}
+	return 0
+}
+
+func (c *Config) GetUint64(key string) uint64 {
+	parts := strings.Split(key, ".")
+	if len(parts) != 2 {
+		return 0
+	}
+	section, k := parts[0], parts[1]
+	if sec, ok := c.data[section]; ok {
+		if v, ok := sec[k]; ok {
+			switch v := v.(type) {
+			case int:
+				if v < 0 {
+					return 0
+				}
+				return uint64(v)
+			case int8:
+				if v < 0 {
+					return 0
+				}
+				return uint64(v)
+			case int16:
+				if v < 0 {
+					return 0
+				}
+				return uint64(v)
+			case int32:
+				if v < 0 {
+					return 0
+				}
+				return uint64(v)
+			case int64:
+				if v < 0 {
+					return 0
+				}
+				return uint64(v)
+			case uint:
+				return uint64(v)
+			case uint8:
+				return uint64(v)
+			case uint16:
+				return uint64(v)
+			case uint32:
+				return uint64(v)
+			case uint64:
+				return v
+			case float32:
+				if v < 0 {
+					return 0
+				}
+				return uint64(v)
+			case float64:
+				if v < 0 {
+					return 0
+				}
+				return uint64(v)
 			}
 		}
 	}
@@ -2803,55 +3205,4 @@ func (c *Config) GetString(key string) string {
 		}
 	}
 	return ""
-}
-
-func defaultTOMLConfig() string {
-	return `[training]
-epochs = 100
-batch_size = 16384
-learning_rate = 10.0
-checkpoint_interval = 10
-buffer_profile = "balanced"
-
-[paths]
-dataset_dir = "datasets"
-
-[model]
-moe_experts = 8192
-moe_top_k = 128
-context_window = 8192
-num_layers = 64
-entanglement_tokens = 1024
-shadow_dim = 4096
-neurons_per_layer = 2048
-routing_qutrits = 12
-moe_input_dim = 2048
-moe_output_dim = 2048
-moe_hidden_dim = 4096
-expert_internal_layers = 2
-
-[features]
-steane_correction = true
-flash_cim = false
-worker_threads = 32
-continuous_mode = true
-lazy_init = true
-data_accumulation = true
-
-[apis]
-enabled = false
-wolfram = false
-wikidata = false
-arxiv = false
-github = false
-nasa = false
-pubchem = false
-pdb = false
-oeis = false
-lean = false
-
-[system]
-num_threads = 32
-memory_limit_mb = 2048
-`
 }

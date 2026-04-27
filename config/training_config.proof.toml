@@ -7,9 +7,22 @@ batch_size = 16
 checkpoint_interval = 1
 learning_rate = 1
 buffer_profile = "conservative"
+samples_per_epoch = 500
+micro_batch_cap = 256
+collect_floor = 1
+timing_to_stderr = false
+serial_expert_train = false
+sycl_route_mode = "auto"
+sycl_trit_quant_min_moe_dim = 128
+goodness_log_level = 0
+allow_generated_negatives = true
 prefill_target_samples = 24
 prefill_timeout_ms = 25000
 prefill_poll_ms = 20
+acq_queue_cap = 4096
+raw_queue_cap = 4096
+train_queue_cap = 8192
+lazy_init_initial_experts = 16
 
 [model]
 moe_experts = 64

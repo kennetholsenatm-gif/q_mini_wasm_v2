@@ -1,4 +1,5 @@
 #include "gf3_polynomial_hash.hpp"
+#include "../ternary/packing.hpp"
 #include <cstring>
 #include <unordered_set>
 
@@ -98,46 +99,31 @@ uint32_t GF3PolynomialHash::reduce_to_20_trits(uint64_t accumulator) {
 }
 
 GF3PolynomialHash::HashState GF3PolynomialHash::update(uint8_t tritpack_byte) {
-    // Decode 5 trits from TritPack5 byte
-    // Each trit is 2 bits, packed as: t0 | (t1 << 2) | (t2 << 4) | (t3 << 6) | (t4 << 8)
-    // But we only have 8 bits, so actually it's base-243 encoding
-    
-    uint32_t value = tritpack_byte;
-    
-    // Convert to balanced ternary offset representation
-    // TritPack5 maps to values 0-242, offset by +121 for balanced
-    int8_t balanced = static_cast<int8_t>(value) - 121;
-    
-    // Pack balanced trit: -1->2, 0->1, +1->0 (reverse of decoding)
-    uint32_t trit_packed = (balanced == 0) ? 1 : (balanced > 0 ? 2 : 0);
-    
-    // Rolling hash: H' = (H * 3 + trit) mod P(x)
-    // In GF(3): multiply by x (shift) and add new coefficient
-    
-    // Shift current state (multiply by x)
-    uint64_t shifted = static_cast<uint64_t>(state_) * 3;
-    
-    // Add new trit
-    shifted += trit_packed;
-    
-    // Reduce modulo irreducible polynomial P(x) = x^20 + 2x^3 + 1
-    // For degree >= 20, reduce using: x^20 ≡ 2x^3 + 1 (mod P)
-    while (shifted >= (1ULL << 40)) {  // While degree >= 20
-        uint64_t high_bits = shifted >> 40;
-        shifted &= ((1ULL << 40) - 1);  // Keep low 40 bits
-        
-        // Add high_bits * (2x^3 + 1) back
-        // 2x^3 term: shift by 3 and multiply by 2
-        shifted += (high_bits << 3) * 2;
-        // +1 term: add directly
-        shifted += high_bits;
+    // One TritPack5 byte = 5 balanced trits (same polynomial as q::ternary::unpack_5trits).
+    int8_t lanes[5];
+    q::ternary::unpack_5trits(tritpack_byte, lanes);
+
+    for (int i = 0; i < 5; ++i) {
+        const int8_t balanced = lanes[i];
+        // Map balanced {-1,0,+1} to hash digit {2,1,0} (legacy GF3 hash convention)
+        const uint32_t trit_packed = (balanced == 0) ? 1 : (balanced > 0 ? 2 : 0);
+
+        uint64_t shifted = static_cast<uint64_t>(state_) * 3;
+        shifted += trit_packed;
+
+        while (shifted >= (1ULL << 40)) {
+            const uint64_t high_bits = shifted >> 40;
+            shifted &= ((1ULL << 40) - 1);
+            shifted += (high_bits << 3) * 2;
+            shifted += high_bits;
+        }
+
+        state_ = reduce_to_20_trits(shifted);
     }
-    
-    state_ = reduce_to_20_trits(shifted);
-    
+
     stats_.bytes_processed++;
     stats_.hashes_computed++;
-    
+
     return state_;
 }
 

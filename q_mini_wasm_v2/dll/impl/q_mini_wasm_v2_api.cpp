@@ -1,5 +1,5 @@
 #include "../q_mini_wasm_v2_api.hpp"
-#include "../core/moe/router.hpp"
+#include "../../core/moe/router.hpp"
 #include <unordered_map>
 #include <mutex>
 #include <cstring>
@@ -140,7 +140,6 @@ Q_MINI_WASM_V2_API void ternary_gemm_execute(
 #include "../../core/ternary/trit.hpp"
 #include "../../core/qutrit_stabilizer.h"
 #include "../../core/stabilizer/tableau.hpp"
-#include "../../core/moe/router.hpp"
 #include "../../core/learning/forward_forward.hpp"
 #include "../../runtime/orchestrator.hpp"
 
@@ -838,7 +837,7 @@ Q_MINI_WASM_V2_API size_t ff_learner_batch_forward(
 // Autonomous Training Pipeline Operations
 // ============================================================================
 
-#include "../core/training/autonomous_training_pipeline.hpp"
+#include "../../core/training/autonomous_training_pipeline.hpp"
 
 using namespace q_mini_wasm_v2::core::training;
 
@@ -964,6 +963,13 @@ Q_MINI_WASM_V2_API size_t training_pipeline_get_metrics(
     json += "\"ff_positive_goodness\":" + std::to_string(metrics.ff_positive_goodness) + ",";
     json += "\"ff_negative_goodness\":" + std::to_string(metrics.ff_negative_goodness) + ",";
     json += "\"ff_goodness_delta\":" + std::to_string(metrics.ff_goodness_delta) + ",";
+    json += "\"ff_total_train_calls\":" + std::to_string(metrics.ff_total_train_calls) + ",";
+    json += "\"ff_route_steps_current_batch\":" + std::to_string(metrics.ff_route_steps_current_batch) + ",";
+    json += "\"train_batch_rows_done\":" + std::to_string(metrics.train_batch_rows_done) + ",";
+    json += "\"train_batch_collect_limit\":" + std::to_string(metrics.train_batch_collect_limit) + ",";
+    json += "\"last_betti_eval_batch\":" + std::to_string(metrics.last_betti_eval_batch) + ",";
+    json += "\"used_tritpack5_input_route\":" + std::string(metrics.used_tritpack5_input_route ? "true" : "false") + ",";
+    json += "\"router_sycl_path_used\":" + std::string(metrics.router_sycl_path_used ? "true" : "false") + ",";
     json += "\"moe_load_balance_score\":" + std::to_string(metrics.moe_load_balance_score) + ",";
     json += "\"betti_beta_0\":" + std::to_string(metrics.betti_beta_0) + ",";
     json += "\"betti_beta_1\":" + std::to_string(metrics.betti_beta_1) + ",";
@@ -1044,7 +1050,7 @@ Q_MINI_WASM_V2_API const char* training_pipeline_get_state(void* handle) {
         case PipelineState::TRAINING: state_str = "training"; break;
         case PipelineState::PAUSED: state_str = "paused"; break;
         case PipelineState::COMPLETE: state_str = "complete"; break;
-        case PipelineState::ERROR: state_str = "error"; break;
+        case PipelineState::FAILED: state_str = "error"; break;
         default: state_str = "unknown"; break;
     }
     

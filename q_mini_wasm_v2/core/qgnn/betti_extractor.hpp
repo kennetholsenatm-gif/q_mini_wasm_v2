@@ -25,7 +25,7 @@ public:
      * @brief Simplicial complex representation for TDA
      * 
      * Maps classical simplicial complex to quantum stabilizer code:
-     * - Edges → Qutrits (TritPack5 for memory efficiency)
+     * - Edges → Qutrits (ternary::TritPack5 = q::ternary polynomial 5-trit byte)
      * - Vertices → X-stabilizers
      * - Faces → Z-stabilizers
      */

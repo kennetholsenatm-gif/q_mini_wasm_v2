@@ -798,6 +798,7 @@
         
         <!-- Training Tab -->
         <div class="tab-content" id="training">
+            <div id="training-tab-config-path-banner" class="config-path-banner" style="font-size: 0.72rem; color: var(--text-secondary); padding: 0.35rem 1rem 0; line-height: 1.45;"></div>
             <div class="panel" style="position: sticky; top: 0; z-index: 30; margin-bottom: 0.8rem;">
                 <div class="panel-body" style="padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap;">
                     <div style="font-weight: 600; color: var(--text-primary);">Training Controls</div>
@@ -877,6 +878,26 @@
                                     <div class="form-group">
                                         <label>Routing Qutrits</label>
                                         <input type="number" id="cfg-routing-qutrits" value="12" min="1" max="32">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>MoE input dim</label>
+                                        <input type="number" id="cfg-moe-input-dim" value="2048" min="64" max="16384" step="64">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>MoE output dim</label>
+                                        <input type="number" id="cfg-moe-output-dim" value="2048" min="64" max="16384" step="64">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>MoE hidden dim</label>
+                                        <input type="number" id="cfg-moe-hidden-dim" value="4096" min="128" max="32768" step="128">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Expert internal layers</label>
+                                        <input type="number" id="cfg-expert-internal-layers" value="2" min="1" max="16">
                                     </div>
                                 </div>
                             </div>
@@ -1168,6 +1189,7 @@
                         </div>
                     </div>
                     <div class="panel-body">
+                        <div id="training-config-path-banner" class="config-path-banner" style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.75rem; line-height: 1.45;"></div>
                         <div class="form-group">
                             <label>training_config.toml</label>
                             <textarea id="config-training" rows="25" style="font-family: 'SF Mono', monospace; font-size: 0.8rem; line-height: 1.4;"></textarea>
@@ -1482,6 +1504,9 @@
                     if (result.init_message) {
                         extra = ' init=' + String(result.init_message).slice(0, 48);
                     }
+                    if (result.pipeline_status) {
+                        extra += ' pipe=' + String(result.pipeline_status).slice(0, 140);
+                    }
                     const iq = result.ingestion && typeof result.ingestion === 'object'
                         ? ` q=${result.ingestion.train_queue_depth ?? '?'} raw=${result.ingestion.raw_queue_depth ?? '?'}`
                         : '';
@@ -1608,6 +1633,9 @@
                     try {
                         const metrics = await callMCP('wui_get_training_metrics');
                         if (metrics) {
+                            if (metrics.training_config_path || metrics.data_root) {
+                                updateTrainingConfigPathBanners(metrics.training_config_path, metrics.data_root);
+                            }
                             if (typeof metrics.recommended_poll_interval_sec === 'number') {
                                 nextMs = Math.max(1500, Math.min(30000, metrics.recommended_poll_interval_sec * 1000));
                             } else {
@@ -1834,6 +1862,25 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
         }
+
+        /** Show which on-disk TOML qminiwasm reads (default under QMINI_DATA_DIR or C:/q_mini_data). */
+        function updateTrainingConfigPathBanners(absPath, dataRoot) {
+            const p = (absPath && String(absPath).trim()) ? String(absPath).trim() : '';
+            const d = (dataRoot && String(dataRoot).trim()) ? String(dataRoot).trim() : '';
+            let html = '';
+            if (p) {
+                html += '<strong>Active training TOML</strong> (native training always loads this file — not the repo copy unless you point here):<br>';
+                html += '<code style="user-select:all;word-break:break-all">' + escapeHtml(p) + '</code>';
+            }
+            if (d) {
+                html += (html ? '<br><br>' : '') + '<strong>Data root</strong> <code style="user-select:all;word-break:break-all">' + escapeHtml(d) + '</code>';
+                html += '<br><span style="opacity:0.88">Override with <code>QMINI_DATA_DIR</code> (whole tree) or <code>QMINI_TRAINING_CONFIG</code> (this file only). After editing on disk, use <strong>Config → Load</strong>.</span>';
+            }
+            const el = document.getElementById('training-config-path-banner');
+            const el2 = document.getElementById('training-tab-config-path-banner');
+            if (el) el.innerHTML = html || '<span style="opacity:0.8">Load training config to show active paths.</span>';
+            if (el2) el2.innerHTML = html || '';
+        }
         // Legacy compatibility - callMCP is now the primary interface
         
         // ============================================
@@ -1897,6 +1944,10 @@
                 'model.shadow_dim': 'cfg-shadow-dim',
                 'model.neurons_per_layer': 'cfg-neurons-per-layer',
                 'model.routing_qutrits': 'cfg-routing-qutrits',
+                'model.moe_input_dim': 'cfg-moe-input-dim',
+                'model.moe_output_dim': 'cfg-moe-output-dim',
+                'model.moe_hidden_dim': 'cfg-moe-hidden-dim',
+                'model.expert_internal_layers': 'cfg-expert-internal-layers',
                 'features.steane_correction': 'cfg-steane-correction',
                 'features.flash_cim': 'cfg-flash-cim',
                 'features.worker_threads': 'cfg-worker-threads',
@@ -1974,6 +2025,10 @@ lean = ${getBool('cfg-api-lean')}`;
             document.getElementById('cfg-num-layers').value = 64;
             document.getElementById('cfg-neurons-per-layer').value = 2048;
             document.getElementById('cfg-routing-qutrits').value = 12;
+            document.getElementById('cfg-moe-input-dim').value = 2048;
+            document.getElementById('cfg-moe-output-dim').value = 2048;
+            document.getElementById('cfg-moe-hidden-dim').value = 4096;
+            document.getElementById('cfg-expert-internal-layers').value = 2;
             
             // Features defaults
             document.getElementById('cfg-steane-correction').checked = true;
@@ -2015,7 +2070,9 @@ lean = ${getBool('cfg-api-lean')}`;
                 if (result && result.content) {
                     document.getElementById('config-training').value = result.content;
                     populateTrainingConfig(result.content);
-                    logSuccess('Config', 'Training config loaded');
+                    updateTrainingConfigPathBanners(result.path, result.data_root);
+                    const hint = result.path ? ` from ${result.path}` : '';
+                    logSuccess('Config', 'Training config loaded' + hint);
                 }
             } catch (err) {
                 logError('Config', err.message);
@@ -2025,8 +2082,13 @@ lean = ${getBool('cfg-api-lean')}`;
         async function saveTrainingConfigFile() {
             try {
                 const content = document.getElementById('config-training').value;
-                await callMCP('wui_save_config', { content: content });
-                logSuccess('Config', 'Training config saved');
+                const result = await callMCP('wui_save_config', { content: content });
+                if (result) {
+                    updateTrainingConfigPathBanners(result.path, result.data_root);
+                    populateTrainingConfig(content);
+                    const hint = result.path ? ` → ${result.path}` : '';
+                    logSuccess('Config', 'Training config saved' + hint);
+                }
             } catch (err) {
                 logError('Config', err.message);
             }
@@ -2104,6 +2166,19 @@ lean = ${getBool('cfg-api-lean')}`;
                 document.getElementById('btn-start-training').disabled = true;
                 document.getElementById('btn-stop-training').disabled = false;
                 document.getElementById('btn-pause-training').disabled = false;
+
+                // Native stack reloads TOML from disk — refresh textarea + spinners from authoritative file
+                // so the Training tab matches what Go/DLL will use (avoids stale fields vs editor).
+                try {
+                    const snap = await callMCP('wui_load_config', {});
+                    if (snap && snap.content) {
+                        document.getElementById('config-training').value = snap.content;
+                        populateTrainingConfig(snap.content);
+                        updateTrainingConfigPathBanners(snap.path, snap.data_root);
+                    }
+                } catch (e) {
+                    addLogEntry('training-logs', '[CONFIG] Could not refresh TOML from disk before start: ' + (e && e.message ? e.message : e), 'warn');
+                }
                 
                 const epochs = parseInt(document.getElementById('cfg-epochs').value);
                 const batchSize = parseInt(document.getElementById('cfg-batch-size').value);
@@ -2138,7 +2213,6 @@ lean = ${getBool('cfg-api-lean')}`;
                 addDebugLogEntry('Init pipeline starting...', '#ff0');
                 
                 const initResult = await callMCP('wui_init_training_pipeline', {
-                    epochs: epochs,
                     batch_size: batchSize,
                     num_experts: numExperts
                 });
@@ -2152,7 +2226,7 @@ lean = ${getBool('cfg-api-lean')}`;
                 // Then start training (CGO + DLL; first call can block until the pipeline threads spin up)
                 addDebugLogEntry('Calling wui_start_ff_training (native; may block until training reports ready)...', '#ff0');
                 addLogEntry('training-logs', '[START] Invoking wui_start_ff_training…', 'info');
-                const startResult = await callMCP('wui_start_ff_training', { epochs: epochs });
+                const startResult = await callMCP('wui_start_ff_training', {});
                 
                 if (startResult && startResult.message) {
                     logSuccess('Training', startResult.message);

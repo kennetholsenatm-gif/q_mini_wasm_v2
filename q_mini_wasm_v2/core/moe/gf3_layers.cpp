@@ -5,6 +5,7 @@
 #include <numeric>
 #include <iostream>
 #include <cstring>
+#include <cstdint>
 
 namespace q_mini_wasm_v2::core::moe {
 
@@ -49,8 +50,12 @@ std::vector<ternary::Trit> GF3LinearLayer::TropicalForward(
     const std::vector<ternary::Trit>& input
 ) {
     std::vector<ternary::Trit> output(config_.output_dim, ternary::Trit::NEGATIVE);
-    
-    for (size_t j = 0; j < config_.output_dim; ++j) {
+    const int64_t out_d = static_cast<int64_t>(config_.output_dim);
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static) if(out_d > 256)
+#endif
+    for (int64_t jj = 0; jj < out_d; ++jj) {
+        const size_t j = static_cast<size_t>(jj);
         int8_t max_val = -2;  // Below minimum ternary value
         
         for (size_t i = 0; i < config_.input_dim; ++i) {
@@ -83,9 +88,14 @@ std::vector<ternary::Trit> GF3LinearLayer::StandardForward(
     const std::vector<ternary::Trit>& input
 ) {
     std::vector<int32_t> pre_output(config_.output_dim, 0);
+    const int64_t out_d = static_cast<int64_t>(config_.output_dim);
     
     // Compute weighted sum
-    for (size_t j = 0; j < config_.output_dim; ++j) {
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static) if(out_d > 256)
+#endif
+    for (int64_t jj = 0; jj < out_d; ++jj) {
+        const size_t j = static_cast<size_t>(jj);
         int32_t sum = 0;
         
         for (size_t i = 0; i < config_.input_dim; ++i) {
@@ -187,8 +197,12 @@ void GF3LinearLayer::UpdateWeightsHebbian(
     if (goodness_delta == 0) return;
     
     int8_t update_sign = (goodness_delta > 0) ? learning_rate : -learning_rate;
-    
-    for (size_t j = 0; j < config_.output_dim; ++j) {
+    const int64_t out_d = static_cast<int64_t>(config_.output_dim);
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static) if(out_d > 128)
+#endif
+    for (int64_t jj = 0; jj < out_d; ++jj) {
+        const size_t j = static_cast<size_t>(jj);
         for (size_t i = 0; i < config_.input_dim; ++i) {
             if (i >= input.size()) break;
             
@@ -378,7 +392,9 @@ int32_t GF3MultiLayerExpert::TrainForwardForward(
     
     // Compute delta
     int32_t delta = static_cast<int32_t>(pos_goodness) - static_cast<int32_t>(neg_goodness);
-    
+
+    record_ff_route_output_goodness(pos_goodness, neg_goodness);
+
     // Update weights for each layer using Hebbian rule
     if (delta > 0) {
         std::vector<ternary::Trit> current_input = positive;
@@ -388,7 +404,12 @@ int32_t GF3MultiLayerExpert::TrainForwardForward(
             
             // Get pre-activation output for this layer
             std::vector<int32_t> pre_act(layer->GetOutputDim());
-            for (size_t j = 0; j < layer->GetOutputDim(); ++j) {
+            const int64_t layer_out = static_cast<int64_t>(layer->GetOutputDim());
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static) if(layer_out > 128)
+#endif
+            for (int64_t jj = 0; jj < layer_out; ++jj) {
+                const size_t j = static_cast<size_t>(jj);
                 int32_t sum = 0;
                 for (size_t k = 0; k < layer->GetInputDim(); ++k) {
                     if (k < current_input.size()) {

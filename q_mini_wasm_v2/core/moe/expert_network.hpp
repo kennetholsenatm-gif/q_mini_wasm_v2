@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ternary/trit.hpp"
+#include <utility>
 #include <vector>
 #include <string>
 #include <map>
@@ -65,13 +66,21 @@ public:
     // ========================================================================
     
     /**
-     * @brief Compute tropical goodness metric
-     * 
-     * Goodness = sum of squared activations (sum of abs values for ternary)
+     * @brief Goodness on an arbitrary ternary activation vector.
+     *
+     * For MoE metrics, prefer @ref last_forward_forward_route_goodness() after
+     * @ref TrainForwardForward — that reflects the expert's **final-layer output**
+     * used inside the training step. This helper counts non-zero trits in the
+     * vector passed in (for ternary {-1,0,+1}, equivalent to sum of |trit|).
      */
     virtual uint32_t ComputeGoodness(
         const std::vector<ternary::Trit>& activations
     ) const;
+
+    /** Goodness values from the most recent @ref TrainForwardForward (final-layer outputs). */
+    std::pair<uint32_t, uint32_t> last_forward_forward_route_goodness() const noexcept {
+        return {last_ff_pos_out_good_, last_ff_neg_out_good_};
+    }
     
     /**
      * @brief Generate negative sample by corrupting input
@@ -99,9 +108,18 @@ public:
     void ResetStats() { stats_ = ExpertStats{}; }
 
 protected:
+    void record_ff_route_output_goodness(uint32_t pos_goodness, uint32_t neg_goodness) noexcept {
+        last_ff_pos_out_good_ = pos_goodness;
+        last_ff_neg_out_good_ = neg_goodness;
+    }
+
     ExpertConfig config_;
     ExpertStats stats_;
-    
+
+    /** Last FF step: goodness on positive/negative **network outputs** (not raw inputs). */
+    uint32_t last_ff_pos_out_good_ = 0;
+    uint32_t last_ff_neg_out_good_ = 0;
+
     // Helper: GF(3) modulo arithmetic
     static int8_t GF3Add(int8_t a, int8_t b) {
         int8_t sum = a + b;

@@ -20,22 +20,45 @@
 namespace q_mini_wasm_v2::core::training {
 
 /**
+ * @brief Ternary input for FF training plus optional int8 pack for SYCL MoE routing.
+ *
+ * When @ref route_packed_t5 is non-empty, features use @c q::ternary::pack_batch_t5 (same polynomial TritPack5 as @c ternary::TritPack5)
+ * for @c MoERouter::route_topk_from_tritpack5 symplectic logits without one-byte-per-trit waste.
+ */
+struct TernaryRouteInput {
+    std::vector<ternary::Trit> trits;
+    std::vector<uint8_t> route_packed_t5;
+};
+
+/**
  * @brief Comprehensive training metrics from all pipeline stages
  */
 struct PipelineMetrics {
-    // Forward-Forward metrics
+    // Forward-Forward metrics (running averages over the in-flight micro-batch once routes > 0; finalized at batch end)
     uint32_t ff_positive_goodness = 0;
     uint32_t ff_negative_goodness = 0;
     int32_t ff_goodness_delta = 0;
     uint64_t ff_total_train_calls = 0;
+    /** Expert-level FF steps completed in the current in-flight micro-batch (0 when idle). */
+    uint64_t ff_route_steps_current_batch = 0;
+    /** Contrastive rows completed for the current micro-batch / @ref train_batch_collect_limit (0 when idle). */
+    uint32_t train_batch_rows_done = 0;
+    /** Target contrastive rows for the current micro-batch (0 between batches). */
+    uint32_t train_batch_collect_limit = 0;
+    /** Batch counter when @ref evaluate_topology last completed (0 = never yet). */
+    uint64_t last_betti_eval_batch = 0;
     /** GF(3) expert linear layers: cumulative Hebbian weight-cell update steps (non-zero delta applied). */
     uint64_t gf3_hebbian_weight_cell_updates = 0;
     
     // MoE metrics (GF(3) - tropical integers)
     uint32_t moe_load_balance_score = 0;        // Tropical goodness score
     uint32_t avg_routing_latency_ms = 0;        // Integer milliseconds
-    std::vector<uint32_t> expert_utilization;   // Tropical utilization counts
+    std::vector<uint32_t> expert_utilization;   // Last batch: per-expert route counts
     std::vector<int32_t> expert_deltas;
+    /** True if the last completed training batch used packed TritPack5 input for Top-K (vs dense trits). */
+    bool used_tritpack5_input_route = false;
+    /** True if symplectic routing logits used SYCL on the last completed batch (USE_SYCL builds only). */
+    bool router_sycl_path_used = false;
     
     // Betti numbers (topology analysis)
     uint32_t betti_beta_0 = 0;  // Connected components
@@ -71,6 +94,7 @@ struct PipelineMetrics {
     size_t ds_topic_frontier_max = 0;
     uint64_t ds_topic_frontier_evictions = 0;
     size_t prefill_target_samples = 0;
+    /** Raw payloads waiting + contrastive pairs ready (train queue holds 2 entries per pair). */
     size_t prefill_current_samples = 0;
     bool prefill_reached = false;
     uint32_t prefill_timeout_ms = 0;
@@ -78,8 +102,8 @@ struct PipelineMetrics {
     // Pipeline state
     uint64_t current_epoch = 0;
     uint64_t current_batch = 0;
-    uint64_t samples_processed = 0;  // Processed work units in current epoch (resets each epoch)
-    uint64_t samples_processed_total = 0;  // Cumulative processed work units across run
+    uint64_t samples_processed = 0;  // Contrastive rows in current epoch (resets each epoch)
+    uint64_t samples_processed_total = 0;  // Cumulative contrastive rows across run
     uint32_t training_progress = 0;  // Basis points (0-10000 = 0.00%-100.00%)
     bool is_running = false;
     std::string status_message;
@@ -124,6 +148,23 @@ struct PipelineConfig {
     size_t batch_size = 32;
     size_t num_epochs = 100;
     size_t samples_per_epoch = 1000;  // samples to process per epoch
+    /** Upper bound on samples collected per training micro-batch (from TOML; must be > 0 before training runs). */
+    size_t training_micro_batch_cap = 0;
+    /** Minimum micro-batch after adaptive clamp (from TOML; must be > 0 before training runs). */
+    size_t training_collect_floor = 0;
+    /** When true, emit `[TrainingTiming]` lines to stderr. */
+    bool training_timing_to_stderr = false;
+    /** When true, disable OpenMP parallel expert train for a single route. */
+    bool training_serial_experts = false;
+    /** Symplectic routing logits: SYCL vs CPU when built with USE_SYCL (see training.sycl_route_mode in TOML). */
+    moe::SyclRouteMode training_sycl_route_mode = moe::SyclRouteMode::Auto;
+    /** Minimum @c moe_input_dim to use SYCL float/int32/string quantization (0 in DLL = default 128). */
+    size_t sycl_trit_quant_min_moe_dim = 128;
+    /**
+     * 0 = no extra stderr lines; 1 = per micro-batch FF goodness summary; 2 = also first 3 contrastive rows
+     * per expert (see TOML training.goodness_log_level; passed from Training_InitSession).
+     */
+    uint32_t goodness_log_level = 0;
     size_t topology_evaluation_interval = 10;  // batches between Betti analysis
     /** Checkpoints taken when current_epoch % checkpoint_interval == 0 (after epoch completes). */
     size_t checkpoint_interval = 10;
@@ -160,9 +201,11 @@ struct PipelineConfig {
     
     // Data source - if set, load local data instead of external APIs
     std::string data_path;  // Path to local training data files
-    bool prefer_local_data = true;  // Use local data if available, fall back to APIs
+    bool prefer_local_data = true;  // Prefer local data when available.
     /** Absolute or CWD-relative path to data_sources.toml (host should pass absolute). */
     std::string data_sources_toml_path;
+    /** If true, generate a synthetic negative when a pair is missing. If false, missing negatives fail training. */
+    bool allow_generated_negatives = true;
 };
 
 /**
@@ -331,8 +374,8 @@ private:
     // Training state
     std::atomic<uint64_t> current_epoch_{0};
     std::atomic<uint64_t> current_batch_{0};
-    std::atomic<uint64_t> samples_processed_{0};  // Samples processed in current epoch
-    std::atomic<uint64_t> samples_processed_total_{0};  // Cumulative across epochs
+    std::atomic<uint64_t> samples_processed_{0};  // Contrastive rows / epoch (see process_batch return)
+    std::atomic<uint64_t> samples_processed_total_{0};  // Cumulative contrastive rows
     std::atomic<uint32_t> loop_count_{0};  // Continuous mode loop counter
     size_t consecutive_empty_batches_{0};
     std::atomic<bool> batch_inflight_active_{false};
@@ -370,7 +413,7 @@ private:
     void adjust_topology_based_on_betti(const qgnn::BettiExtractor::BettiNumbers& betti);
     
     // Helper functions
-    std::vector<ternary::Trit> extract_ternary_vector(const TrainingSample& sample);
+    TernaryRouteInput extract_ternary_route_input(const TrainingSample& sample);
     std::vector<ternary::Trit> generate_negative_sample(const std::vector<ternary::Trit>& positive);
     
     std::vector<std::unique_ptr<moe::ExpertNetwork>> create_experts(

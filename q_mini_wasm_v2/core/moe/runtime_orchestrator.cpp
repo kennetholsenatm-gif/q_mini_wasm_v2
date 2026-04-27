@@ -27,11 +27,12 @@ std::future<Goodness> RuntimeOrchestrator::submit_ff_training(
         
         // Train the expert
         expert.TrainForwardForward(pos_sample, neg_sample);
-        
-        // Compute goodness
+
+        // Goodness on final-layer outputs (same as pipeline / TrainForwardForward internals)
+        const auto route_g = expert.last_forward_forward_route_goodness();
         Goodness goodness;
-        goodness.positive_goodness = expert.ComputeGoodness(pos_sample);
-        goodness.negative_goodness = expert.ComputeGoodness(neg_sample);
+        goodness.positive_goodness = static_cast<double>(route_g.first);
+        goodness.negative_goodness = static_cast<double>(route_g.second);
         goodness.delta = goodness.positive_goodness - goodness.negative_goodness;
         
         promise.set_value(goodness);

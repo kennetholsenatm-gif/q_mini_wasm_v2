@@ -1,0 +1,17 @@
+# Canonical layout for the Go + native training host.
+# Paths below are relative to the repository root (directory containing go.mod).
+#
+# Windows DLL note: CGO loads q_training.dll from the executable directory first (same
+# directory as qminiwasm.exe). PATH does not override that for a DLL with the same name
+# sitting next to the exe—stop qminiwasm.exe before replacing a locked q_training.dll,
+# or copy from native_runtime/ after CMake built it there.
+#
+# CMake copies the built DLL to BOTH:
+#   - <repo>/q_training.dll  (primary)
+#   - <repo>/native_runtime/q_training.dll  (alternate when the primary copy is locked)
+
+[paths]
+qminiwasm_exe = "qminiwasm.exe"
+wui_dir = "wui"
+native_runtime_dir = "native_runtime"
+q_training_dll = "q_training.dll"

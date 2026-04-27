@@ -421,6 +421,13 @@ ipch/
 /qminiwasm.exe
 /qminiwasm.exe~
 /q_training.dll
+/native_runtime/
+/cmd/qminiwasm/q_training.dll
+/releases/desktop/extracted-assets/
+/temp/
+/audit/
+/STATUS_SUMMARY.md
+/test_config.go
 /qmini
 /qmini.err
 q_mini_wasm_v2/build_final/

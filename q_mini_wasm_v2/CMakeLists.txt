@@ -39,6 +39,7 @@ set_target_properties(q_mini_wasm_v2_agents PROPERTIES
 # ============================================================================
 
 option(USE_SYCL "Enable SYCL acceleration for multi-core/multi-thread" OFF)
+option(QMINI_TRAINING_OPENMP "OpenMP: parallel GF3 layer loops + multi-expert routes (MSVC /openmp or libgomp)" ON)
 option(BUILD_TESTS "Build test suite" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BUILD_WASM "Build WebAssembly target" OFF)
@@ -79,6 +80,8 @@ set(CORE_SOURCES
     core/moe/router_checkpoint_io.cpp
     core/moe/gf3_layers.hpp
     core/moe/gf3_layers.cpp
+    core/moe/gf3_sycl_probe.hpp
+    core/moe/gf3_sycl_probe.cpp
     core/moe/expert_network.hpp
     core/moe/expert_network.cpp
     core/moe/unified_router.hpp
@@ -100,6 +103,8 @@ set(CORE_SOURCES
     core/training/dataset_storage.hpp
     core/training/dataset_storage.cpp
     core/qgnn/graph_native.cpp
+    core/qgnn/message_passing.hpp
+    core/qgnn/message_passing.cpp
     core/qgnn/betti_extractor.hpp
     core/qgnn/betti_extractor.cpp
     core/qgnn/fast_betti_estimator.hpp
@@ -151,6 +156,23 @@ target_include_directories(q_mini_wasm_v2_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+if(QMINI_TRAINING_OPENMP)
+    if(MSVC)
+        target_compile_options(q_mini_wasm_v2_core PRIVATE /openmp)
+        message(STATUS "OpenMP: enabled for q_mini_wasm_v2_core (/openmp)")
+    else()
+        find_package(OpenMP COMPONENTS CXX)
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(q_mini_wasm_v2_core PUBLIC OpenMP::OpenMP_CXX)
+            message(STATUS "OpenMP: enabled for q_mini_wasm_v2_core (OpenMP::OpenMP_CXX)")
+        else()
+            message(WARNING "QMINI_TRAINING_OPENMP=ON but OpenMP not found; GF3 loops stay serial")
+        endif()
+    endif()
+else()
+    message(STATUS "OpenMP: disabled (QMINI_TRAINING_OPENMP=OFF)")
+endif()
+
 # ============================================================================
 # DLL Target for CGO Bindings
 # ============================================================================
@@ -170,6 +192,9 @@ if(BUILD_DLL)
     target_include_directories(q_mini_wasm_v2_dll PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
+
+    # q_mini_wasm_v2_api.hpp uses Q_MINI_WASM_V2_EXPORTS for dllexport (CMake only sets <target>_EXPORTS).
+    target_compile_definitions(q_mini_wasm_v2_dll PRIVATE Q_MINI_WASM_V2_EXPORTS)
 
     set_target_properties(q_mini_wasm_v2_dll PROPERTIES
         OUTPUT_NAME "q_mini_wasm_v2"
@@ -366,9 +391,10 @@ if(BUILD_DLL)
     add_custom_command(TARGET q_training POST_BUILD
         COMMAND ${CMAKE_COMMAND}
             -DSRC=$<TARGET_FILE:q_training>
-            -DDST=${CMAKE_SOURCE_DIR}/../q_training.dll
+            -DDST_PRIMARY=${CMAKE_SOURCE_DIR}/../q_training.dll
+            -DDST_ALT=${CMAKE_SOURCE_DIR}/../native_runtime/q_training.dll
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/post_copy_training_dll.cmake"
-        COMMENT "q_training: best-effort copy DLL to repository root"
+        COMMENT "q_training: copy DLL to repo root and native_runtime (path_map.toml)"
     )
 
     # ------------------------------------------------------------------------
@@ -428,8 +454,12 @@ if(USE_SYCL)
             message(STATUS "SYCL: Using AdaptiveCpp")
         endif()
         
-        # Add SYCL kernel sources
+        # Add SYCL kernel sources (tableau + QGNN message passing device code)
         target_sources(q_mini_wasm_v2_core PRIVATE ${SYCL_SOURCES})
+        target_sources(q_mini_wasm_v2_core PRIVATE
+            core/qgnn/message_passing_sycl.hpp
+            core/qgnn/message_passing_sycl.cpp
+        )
         
         # XPU-specific optimizations
         target_compile_options(q_mini_wasm_v2_core PRIVATE
@@ -459,6 +489,15 @@ if(BUILD_TESTS)
     
     add_executable(q_mini_wasm_v2_betti_test tests/test_betti_extractor.cpp)
     target_link_libraries(q_mini_wasm_v2_betti_test PRIVATE q_mini_wasm_v2_core)
+
+    add_executable(q_moe_tritpack5_symplectic_test tests/test_moe_tritpack5_symplectic.cpp)
+    target_link_libraries(q_moe_tritpack5_symplectic_test PRIVATE q_mini_wasm_v2_core)
+
+    add_executable(q_moe_route_dense_vs_tritpack5_test tests/test_moe_route_dense_vs_tritpack5.cpp)
+    target_link_libraries(q_moe_route_dense_vs_tritpack5_test PRIVATE q_mini_wasm_v2_core)
+
+    add_executable(q_e2e_train_infer_smoke tests/e2e_train_infer_smoke.cpp)
+    target_link_libraries(q_e2e_train_infer_smoke PRIVATE q_mini_wasm_v2_core)
     
     # DLL integration test
     if(BUILD_DLL)
@@ -483,6 +522,9 @@ if(BUILD_TESTS)
     add_test(NAME q_mini_wasm_v2_network_test COMMAND q_mini_wasm_v2_network_test)
     add_test(NAME q_mini_wasm_v2_remediation_test COMMAND q_mini_wasm_v2_remediation_test)
     add_test(NAME q_mini_wasm_v2_betti_test COMMAND q_mini_wasm_v2_betti_test)
+    add_test(NAME q_moe_tritpack5_symplectic_test COMMAND q_moe_tritpack5_symplectic_test)
+    add_test(NAME q_moe_route_dense_vs_tritpack5_test COMMAND q_moe_route_dense_vs_tritpack5_test)
+    add_test(NAME q_e2e_train_infer_smoke COMMAND q_e2e_train_infer_smoke)
 endif()
 
 # ============================================================================

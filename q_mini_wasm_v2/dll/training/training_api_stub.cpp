@@ -42,7 +42,16 @@ TRAINING_API int Training_InitSession(
     uint32_t prefill_poll_ms,
     uint32_t max_acquisition_queue_depth,
     uint32_t max_raw_queue_depth,
-    uint32_t max_train_queue_depth
+    uint32_t max_train_queue_depth,
+    uint64_t samples_per_epoch_or_zero,
+    uint32_t training_micro_batch_cap,
+    uint32_t training_collect_floor,
+    bool training_timing_to_stderr,
+    bool training_serial_experts,
+    uint32_t training_sycl_route_mode,
+    uint32_t training_sycl_trit_quant_min_moe_dim,
+    uint32_t training_goodness_log_level,
+    bool training_allow_generated_negatives
 ) {
     (void)session_id_out;
     (void)num_experts;
@@ -74,6 +83,15 @@ TRAINING_API int Training_InitSession(
     (void)max_acquisition_queue_depth;
     (void)max_raw_queue_depth;
     (void)max_train_queue_depth;
+    (void)samples_per_epoch_or_zero;
+    (void)training_micro_batch_cap;
+    (void)training_collect_floor;
+    (void)training_timing_to_stderr;
+    (void)training_serial_experts;
+    (void)training_sycl_route_mode;
+    (void)training_sycl_trit_quant_min_moe_dim;
+    (void)training_goodness_log_level;
+    (void)training_allow_generated_negatives;
     printf("[Training] ERROR: Real training not compiled in this DLL\n");
     return -1;
 }
@@ -137,7 +155,9 @@ TRAINING_API int Training_GetMetrics(
     uint64_t* ds_acq_blocked_wait_ms_out,
     uint64_t* samples_total_out,
     uint64_t* ds_acq_dropped_too_short_out,
-    uint64_t* gf3_hebbian_weight_cell_updates_out
+    uint64_t* gf3_hebbian_weight_cell_updates_out,
+    char* pipeline_status_utf8_out,
+    size_t pipeline_status_utf8_cap
 ) {
     (void)session_id;
     (void)experts_active_out;
@@ -165,6 +185,8 @@ TRAINING_API int Training_GetMetrics(
     (void)samples_total_out;
     (void)ds_acq_dropped_too_short_out;
     (void)gf3_hebbian_weight_cell_updates_out;
+    (void)pipeline_status_utf8_out;
+    (void)pipeline_status_utf8_cap;
     return -1;
 }
 
@@ -191,7 +213,10 @@ TRAINING_API int Training_ImportCheckpoint(uint64_t session_id, const char* path
 }
 
 TRAINING_API void Training_GetVersion(char* version_out, size_t max_len) {
-    strncpy(version_out, "q_training_stub_no_real_code", max_len - 1);
+    if (!version_out || max_len == 0) {
+        return;
+    }
+    (void)snprintf(version_out, max_len, "q_training_stub %s %s", __DATE__, __TIME__);
     version_out[max_len - 1] = '\0';
 }
 

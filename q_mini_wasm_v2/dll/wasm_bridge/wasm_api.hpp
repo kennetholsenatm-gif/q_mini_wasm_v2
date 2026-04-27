@@ -44,7 +44,11 @@ Q_GF3_WASM_API void* WASM_MapMemoryOffset(
 Q_GF3_WASM_API uint32_t SYCL_SynchronizeQueue();
 
 /**
- * Dispatch execution command from WASM module
+ * Dispatch execution command from WASM module.
+ *
+ * Clifford gate parameters (command id 1): at least 12 bytes: gateType, targetQubit, controlQubit.
+ * Optional 4th uint32_t `numQutrits` (total 16 bytes): lattice width n for tableau stride 2n; if absent or zero,
+ * n is inferred as max(1, target+1, control+1) for backward compatibility.
  */
 Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
     uint32_t command_id,

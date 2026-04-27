@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "packing.hpp"
+
 namespace q_mini_wasm_v2::core::ternary {
 
 /**
@@ -156,31 +158,22 @@ struct BCT {
  */
 struct TritBlock5 {
     Trit trits[5];
-    
-    /**
-     * @brief Pack 5 trits into single byte using base-3 polynomial
-     * byte = trit[0] + 3*trit[1] + 9*trit[2] + 27*trit[3] + 81*trit[4]
-     */
+
+    /** Same encoding as @c q::ternary::pack_5trits / @c pack_batch_t5 (base-3 polynomial, 0..242). */
     uint8_t pack() const noexcept {
-        int sum = 0;
-        int power = 1;
+        int8_t lanes[5];
         for (int i = 0; i < 5; ++i) {
-            sum += to_gf3(trits[i]) * power;
-            power *= 3;
+            lanes[i] = static_cast<int8_t>(trits[i]);
         }
-        return static_cast<uint8_t>(sum);
+        return ::q::ternary::pack_5trits(lanes);
     }
-    
-    /**
-     * @brief Unpack byte into 5 trits (precomputed LUT approach, simulated with constexpr)
-     * Eliminates modulo division operations for maximum WASM performance
-     */
-    static constexpr TritBlock5 unpack(uint8_t byte) noexcept {
+
+    static TritBlock5 unpack(uint8_t byte) noexcept {
+        int8_t lanes[5];
+        ::q::ternary::unpack_5trits(byte, lanes);
         TritBlock5 block{};
-        int val = byte;
         for (int i = 0; i < 5; ++i) {
-            block.trits[i] = from_gf3(val % 3);
-            val /= 3;
+            block.trits[i] = static_cast<Trit>(lanes[i]);
         }
         return block;
     }
@@ -188,48 +181,32 @@ struct TritBlock5 {
 
 /**
  * @brief 5-Trit packed structure for memory-efficient storage
- * 
- * Packs 5 ternary values {-1, 0, +1} into 8 bits (vs 160 bits for 5x32-bit floats)
- * Memory reduction: 60% vs floating-point representations
- * 
- * Used for Betti number computation edge storage in simplicial complexes.
- * Encoding: trit[i] = (packed >> (i*2)) & 0x3
- * Mapping: 0->0 (ZERO), 1->+1 (POSITIVE), 2->-1 (NEGATIVE), 3->unused
+ *
+ * Same wire format as @c q::ternary::pack_batch_t5 / @c unpack_batch_t5:
+ * one byte encodes 5 balanced trits via base-3 polynomial (values 0..242).
+ *
+ * Used for Betti / QGNN edge storage and anywhere a single-byte 5-trit block is needed.
  */
 struct TritPack5 {
-    uint8_t packed; // 5 trits in 8 bits: 2 bits per trit + 2 bits padding
-    
-    static constexpr uint8_t TRIT_ZERO = 0;
-    static constexpr uint8_t TRIT_POS  = 1;
-    static constexpr uint8_t TRIT_NEG  = 2;
-    
+    uint8_t packed{};
+
     void set(size_t idx, Trit value) noexcept {
-        uint8_t bits = trit_to_bits(value);
-        packed &= ~(0x3 << (idx * 2));  // Clear bits at position
-        packed |= (bits << (idx * 2));   // Set new bits
+        if (idx >= 5) {
+            return;
+        }
+        int8_t lanes[5];
+        ::q::ternary::unpack_5trits(packed, lanes);
+        lanes[idx] = static_cast<int8_t>(value);
+        packed = ::q::ternary::pack_5trits(lanes);
     }
-    
+
     Trit get(size_t idx) const noexcept {
-        uint8_t bits = (packed >> (idx * 2)) & 0x3;
-        return bits_to_trit(bits);
-    }
-    
-    static uint8_t trit_to_bits(Trit t) noexcept {
-        switch (t) {
-            case Trit::ZERO:     return TRIT_ZERO;
-            case Trit::POSITIVE: return TRIT_POS;
-            case Trit::NEGATIVE: return TRIT_NEG;
+        if (idx >= 5) {
+            return Trit::ZERO;
         }
-        return TRIT_ZERO;
-    }
-    
-    static Trit bits_to_trit(uint8_t bits) noexcept {
-        switch (bits) {
-            case TRIT_ZERO: return Trit::ZERO;
-            case TRIT_POS:  return Trit::POSITIVE;
-            case TRIT_NEG:  return Trit::NEGATIVE;
-        }
-        return Trit::ZERO;
+        int8_t lanes[5];
+        ::q::ternary::unpack_5trits(packed, lanes);
+        return static_cast<Trit>(lanes[idx]);
     }
 };
 

@@ -11,6 +11,13 @@
 
 namespace q_mini_wasm_v2::core::moe {
 
+/** Whether symplectic routing logits run on SYCL (GPU when available) vs CPU. */
+enum class SyclRouteMode : uint8_t {
+    Auto = 0,  // SYCL when USE_SYCL and expert count is large (>= 128)
+    On = 1,    // Prefer SYCL whenever USE_SYCL and E >= 8 (kernel minimum)
+    Off = 2    // Always CPU logits
+};
+
 /**
  * @brief Expert routing configuration
  */
@@ -18,6 +25,7 @@ struct ExpertConfig {
     size_t total_experts;       // Total number of available experts
     size_t active_experts;      // Number of experts to activate (Top-K)
     size_t routing_qutrits;     // Number of qutrits for routing decisions
+    SyclRouteMode sycl_route_mode = SyclRouteMode::Auto;
 };
 
 /**
@@ -107,7 +115,18 @@ public:
      * @return Indices of selected experts
      */
     std::vector<size_t> route_topk(const std::vector<ternary::Trit>& input);
-    
+
+    /**
+     * @brief Top-K routing from TritPack5-packed features (polynomial 5 trits/byte; @p input_trit_count logical trits).
+     */
+    std::vector<size_t> route_topk_from_tritpack5(const std::vector<uint8_t>& input_packed, size_t input_trit_count);
+
+    /**
+     * Whether the most recent dense or packed Top-K symplectic logits evaluation ran on SYCL.
+     * Always false when built without USE_SYCL. Reset at each routing call.
+     */
+    bool symplectic_logits_last_used_sycl() const noexcept { return last_symplectic_logits_used_sycl_; }
+
     /**
      * @brief Compute routing logits using tropical inner product
      * @param input Input features
@@ -573,6 +592,10 @@ private:
      * @brief Lazy initialization of routing weights (67M elements!)
      */
     void ensure_routing_weights_initialized();
+
+    /** MoE routing matrix: E rows × R trits, each row TritPack5-packed (ceil(R/5) bytes per row). */
+    std::vector<uint8_t> pack_routing_weights_tritpack5_rowmajor() const;
+    std::vector<int8_t> symplectic_scores_cpu_from_tritpack5(const std::vector<uint8_t>& input_packed, size_t input_trit_count) const;
     
     // Expert weight matrices (ternary)
     std::vector<std::vector<std::vector<ternary::Trit>>> expert_weights_;
@@ -626,6 +649,9 @@ private:
     // Expert load tracking (CRITICAL: replaces dummy_loads)
     std::vector<size_t> expert_loads_;
     std::vector<size_t> expert_request_counts_;
+
+    /** Set per route_topk / route_topk_from_tritpack5 / compute_routing_logits call (SYCL vs CPU symplectic). */
+    bool last_symplectic_logits_used_sycl_ = false;
     
     // ========================================================================
     // Internal Helpers

@@ -8,6 +8,7 @@
 #include <functional>
 #include <thread>
 #include <queue>
+#include <deque>
 #include <mutex>
 #include <algorithm>
 #include <condition_variable>
@@ -509,6 +510,16 @@ public:
     // Non-blocking check
     bool has_sample() const;
 
+    /**
+     * Next local corpus row (non-blocking). Used by the training pipeline to fill microbatches
+     * without calling get_sample(), which may single-pop train_queue_ and break pos/neg adjacency
+     * in hybrid mode.
+     */
+    std::optional<TrainingSample> try_draw_local_training_sample();
+
+    /** Pop consecutive (positive, negative) samples from the train queue when present. */
+    bool try_pop_contrastive_pair(TrainingSample& pos_out, TrainingSample& neg_out);
+
     // Statistics
     struct Stats {
         size_t total_acquired = 0;
@@ -560,7 +571,7 @@ private:
     
     // Queues
     std::queue<ApiPayload> raw_queue_;      // From APIs
-    std::queue<TrainingSample> train_queue_; // Contrastive pairs
+    std::deque<TrainingSample> train_queue_; // Contrastive pairs (pos then neg from perturbation_worker)
     mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
     std::condition_variable queue_not_full_cv_;

@@ -7,7 +7,7 @@ namespace q {
 namespace ternary {
 
 // Dual trit packing schemes from Q-MINI research
-// TritPack5: 5 trits per byte (95% capacity) - optimal for ≤20 trits
+// TritPack5: 5 trits per byte via base-3 polynomial (0..242) — optimal for ≤20 trits
 // Trit20: 20 trits per 32-bit word (500% vs uncompressed) - optimal for >20 trits
 
 enum class PackingScheme {
@@ -42,7 +42,7 @@ constexpr std::array<uint32_t, 21> POW3_TABLE = {{
     3486784401U   // 3^20 (fits in uint32)
 }};
 
-// Constants
+// Constants (same polynomial byte as q_mini_wasm_v2::core::ternary::TritPack5 / TritBlock5)
 constexpr uint32_t TRITS_PER_BYTE_T5 = 5;
 constexpr uint32_t TRITS_PER_WORD_T20 = 20;
 constexpr uint32_t TRIT20_MAX_VALUE = 3486784401U; // 3^20 - 1
@@ -56,25 +56,37 @@ inline int8_t unbalanced_to_trit(uint8_t u) {
     return static_cast<int8_t>(u) - 1; // 0→-1, 1→0, 2→+1
 }
 
-// TritPack5: Pack 5 trits into 1 byte
-// Each trit uses ~1.58 bits, achieving 95% byte capacity
-// trits must point to at least 5 int8_t values
+// TritPack5: Pack 5 trits into 1 byte (base-3 polynomial, 0..242 fits in uint8).
+// Encoding: byte = Σ_{i=0..4} unbalanced(trit[i]) * 3^i  (trit[0] is least significant digit).
 inline uint8_t pack_5trits(const int8_t* trits) {
-    uint8_t packed = 0;
+    uint32_t acc = 0;
     for (int i = 0; i < 5; ++i) {
-        uint8_t u = trit_to_unbalanced(trits[i]);
-        packed |= (u << (i * 2)); // 2 bits per trit
+        const uint32_t u = static_cast<uint32_t>(trit_to_unbalanced(trits[i]));
+        acc += u * POW3_TABLE[static_cast<size_t>(i)];
     }
-    return packed;
+    return static_cast<uint8_t>(acc);
 }
 
-// TritPack5: Unpack 1 byte to 5 trits
-// trits must point to at least 5 int8_t values
+// TritPack5: Unpack 1 byte to 5 trits (inverse of pack_5trits).
 inline void unpack_5trits(uint8_t packed, int8_t* trits) {
+    uint8_t x = packed;
     for (int i = 0; i < 5; ++i) {
-        uint8_t u = (packed >> (i * 2)) & 0x3;
+        const uint8_t u = static_cast<uint8_t>(x % 3u);
+        x = static_cast<uint8_t>(x / 3u);
         trits[i] = unbalanced_to_trit(u);
     }
+}
+
+/** Balanced trit at global index @p tri in a TritPack5 byte stream (polynomial per byte). */
+inline int8_t read_trit_t5_at(const uint8_t* p, size_t tri) {
+    const size_t bi = tri / 5u;
+    const unsigned lane = static_cast<unsigned>(tri % 5u);
+    uint8_t x = p[bi];
+    for (unsigned k = 0; k < lane; ++k) {
+        x = static_cast<uint8_t>(x / 3u);
+    }
+    const uint8_t u = static_cast<uint8_t>(x % 3u);
+    return unbalanced_to_trit(u);
 }
 
 // Trit20: Pack 20 trits into 1 uint32 (i32)

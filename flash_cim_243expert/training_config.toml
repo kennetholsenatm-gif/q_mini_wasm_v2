@@ -4,6 +4,22 @@ batch_size = 32768
 checkpoint_interval = 10
 learning_rate = 10
 buffer_profile = "aggressive"
+samples_per_epoch = 163840
+micro_batch_cap = 256
+collect_floor = 1
+timing_to_stderr = false
+serial_expert_train = false
+sycl_route_mode = "auto"
+sycl_trit_quant_min_moe_dim = 128
+goodness_log_level = 0
+allow_generated_negatives = true
+prefill_target_samples = 8192
+prefill_timeout_ms = 120000
+prefill_poll_ms = 50
+acq_queue_cap = 32768
+raw_queue_cap = 32768
+train_queue_cap = 65536
+lazy_init_initial_experts = 16
 
 [model]
 moe_experts = 8192
@@ -14,6 +30,9 @@ shadow_dim = 4096
 num_layers = 64
 neurons_per_layer = 2048
 routing_qutrits = 12
+moe_input_dim = 2048
+moe_output_dim = 2048
+moe_hidden_dim = 4096
 expert_internal_layers = 2
 moe_ff_active_internal_layers = 0
 learning_rate_shift = 2
@@ -22,6 +41,9 @@ learning_rate_shift = 2
 steane_correction = true
 flash_cim = false
 worker_threads = 32
+continuous_mode = true
+lazy_init = true
+data_accumulation = true
 
 [apis]
 enabled = true

@@ -1,4 +1,5 @@
 #include "tlwl_checkpoint.hpp"
+#include "../ternary/packing.hpp"
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
@@ -205,16 +206,18 @@ void TLWLCheckpointManager::analyze_trit_density(const std::vector<uint8_t>& dat
                                                   uint32_t& plus, 
                                                   uint32_t& minus) {
     zeros = plus = minus = 0;
-    
-    // Decode TritPack5: each byte contains 5 trits
-    // But for statistics, we can just count bytes with certain patterns
+    // Each byte is one TritPack5 group: decode 5 balanced trits (padding in last group matches pack_batch_t5).
+    int8_t lanes[5];
     for (uint8_t byte : data) {
-        if (byte == 121) {  // Center value = zero trit
-            zeros++;
-        } else if (byte > 121) {
-            plus++;
-        } else {
-            minus++;
+        q::ternary::unpack_5trits(byte, lanes);
+        for (int i = 0; i < 5; ++i) {
+            if (lanes[i] < 0) {
+                ++minus;
+            } else if (lanes[i] > 0) {
+                ++plus;
+            } else {
+                ++zeros;
+            }
         }
     }
 }

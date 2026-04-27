@@ -19,8 +19,10 @@
   cmd\qminiwasm\qminiwasm.exe - older builds ignore QMINI_TRAINING_CONFIG, so -Smoke would
   look identical to normal.
 
-  Build: go build -o qminiwasm.exe ./cmd/qminiwasm
-  Run from repo root so CGO can find q_training.dll under q_mini_wasm_v2/build_final.
+  Build: go build -o qminiwasm.exe ./cmd/qminiwasm  (or .\scripts\build_qminiwasm.ps1)
+  Layout: config/path_map.toml — q_training.dll is loaded from the exe directory; CMake also publishes to native_runtime/ when the root copy is locked.
+  Control-plane rule: epochs come from the active TOML only. Do not send WUI epochs overrides.
+  Progress rule: samples/samples_total are real training counters (no ingestion substitution).
 #>
 param(
     [switch]$Smoke,
