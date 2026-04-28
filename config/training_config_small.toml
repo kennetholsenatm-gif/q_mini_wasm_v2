@@ -21,7 +21,21 @@ prefill_poll_ms = 50
 acq_queue_cap = 8192
 raw_queue_cap = 8192
 train_queue_cap = 16384
+acquisition_threads = 2
+perturbation_threads = 4
+checkpoint_async_queue_max = 24
+collect_empty_backoff_base_ms = 10
+collect_empty_backoff_max_shift = 10
+collect_empty_backoff_cap_ms = 1000
+metrics_heartbeat_sec = 2
+max_jsonl_local_samples = 100000
 lazy_init_initial_experts = 8
+
+[training.data_filter]
+min_text_length = 50
+max_text_length = 10000
+checkpoint_interval_samples = 500
+directory_max_lines = 1000000
 
 [model]
 moe_experts = 8

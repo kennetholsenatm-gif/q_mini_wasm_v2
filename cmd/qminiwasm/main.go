@@ -47,7 +47,18 @@ extern int Training_InitSession(
     uint32_t training_sycl_route_mode,
     uint32_t training_sycl_trit_quant_min_moe_dim,
     uint32_t training_goodness_log_level,
-    bool training_allow_generated_negatives
+    uint32_t training_allow_generated_negatives,
+    uint64_t directory_max_lines,
+    uint64_t max_jsonl_local_samples,
+    uint32_t min_text_length,
+    uint32_t max_text_length,
+    uint32_t acquisition_threads,
+    uint32_t perturbation_threads,
+    uint32_t checkpoint_async_queue_max,
+    uint32_t collect_empty_backoff_base_ms,
+    uint32_t collect_empty_backoff_max_shift,
+    uint32_t collect_empty_backoff_cap_ms,
+    uint32_t metrics_heartbeat_sec
 );
 
 extern int Training_StartTraining(
@@ -270,64 +281,72 @@ type TrainingState struct {
 	// Native q_training.dll loads on wui_start_ff_training to avoid crashing the HTTP handler mid-request.
 	PipelineConfigured bool `json:"pipeline_configured"`
 	// Phase is the Go-side process tracker (independent of is_running during long native CGO init).
-	Phase                       string    `json:"phase"`
-	PhaseStartedAt              time.Time `json:"-"`
-	LastDLLPollAt               time.Time `json:"-"`
-	DSQueueDepth                uint32    `json:"ds_queue_depth"`
-	DSRawQueueDepth             uint32    `json:"ds_raw_queue_depth"`
-	DSRawQueueMax               uint32    `json:"ds_raw_queue_max"`
-	DSTrainQueueMax             uint32    `json:"ds_train_queue_max"`
-	DSAcqQueueDepth             uint32    `json:"ds_acq_queue_depth"`
-	DSAcqQueueMax               uint32    `json:"ds_acq_queue_max"`
-	DSBlockedRawPushes          uint64    `json:"ds_blocked_raw_pushes"`
-	DSBlockedTrainPushes        uint64    `json:"ds_blocked_train_pushes"`
-	DSBlockedWaitMs             uint64    `json:"ds_blocked_wait_ms"`
-	DSDroppedPayloads           uint64    `json:"ds_dropped_payloads"`
-	DSAcqBlockedPushes          uint64    `json:"ds_acq_blocked_pushes"`
-	DSAcqBlockedWaitMs          uint64    `json:"ds_acq_blocked_wait_ms"`
-	DSAcqDroppedTooShort        uint64    `json:"ds_acq_dropped_too_short"`
-	GF3HebbianWeightCellUpdates uint64    `json:"gf3_hebbian_weight_cell_updates"`
-	DSDataAcquired              uint32    `json:"ds_data_acquired"`
-	DSDataPerturbed             uint32    `json:"ds_data_perturbed"`
-	DSAPIFailures               uint32    `json:"ds_api_failures"`
-	DSBetti0                    uint32    `json:"ds_betti_0"`
-	DSBetti1                    uint32    `json:"ds_betti_1"`
-	DSBetti2                    uint32    `json:"ds_betti_2"`
-	DSTopicFrontierSize         uint32    `json:"ds_topic_frontier_size"`
-	DSTopicFrontierMax          uint32    `json:"ds_topic_frontier_max"`
-	DSTopicFrontierEvict        uint32    `json:"ds_topic_frontier_evictions"`
-	PrefillTargetSamples        uint32    `json:"prefill_target_samples"`
-	BufferProfile               string    `json:"buffer_profile"`
-	PrefillTimeoutMs            uint32    `json:"prefill_timeout_ms"`
-	PrefillPollMs               uint32    `json:"prefill_poll_ms"`
-	DSAcqQueueCap               uint32    `json:"ds_acq_queue_cap"`
-	DSRawQueueCap               uint32    `json:"ds_raw_queue_cap"`
-	DSTrainQueueCap             uint32    `json:"ds_train_queue_cap"`
+	Phase                string    `json:"phase"`
+	PhaseStartedAt       time.Time `json:"-"`
+	LastDLLPollAt        time.Time `json:"-"`
+	DSQueueDepth         uint32    `json:"ds_queue_depth"`
+	DSRawQueueDepth      uint32    `json:"ds_raw_queue_depth"`
+	DSRawQueueMax        uint32    `json:"ds_raw_queue_max"`
+	DSTrainQueueMax      uint32    `json:"ds_train_queue_max"`
+	DSAcqQueueDepth      uint32    `json:"ds_acq_queue_depth"`
+	DSAcqQueueMax        uint32    `json:"ds_acq_queue_max"`
+	DSBlockedRawPushes   uint64    `json:"ds_blocked_raw_pushes"`
+	DSBlockedTrainPushes uint64    `json:"ds_blocked_train_pushes"`
+	DSBlockedWaitMs      uint64    `json:"ds_blocked_wait_ms"`
+	DSDroppedPayloads    uint64    `json:"ds_dropped_payloads"`
+	DSAcqBlockedPushes   uint64    `json:"ds_acq_blocked_pushes"`
+	DSAcqBlockedWaitMs   uint64    `json:"ds_acq_blocked_wait_ms"`
+	DSAcqDroppedTooShort uint64    `json:"ds_acq_dropped_too_short"`
+	GF3HebbianWeightCellUpdates uint64 `json:"gf3_hebbian_weight_cell_updates"`
+	DSDataAcquired       uint32    `json:"ds_data_acquired"`
+	DSDataPerturbed      uint32    `json:"ds_data_perturbed"`
+	DSAPIFailures        uint32    `json:"ds_api_failures"`
+	DSBetti0             uint32    `json:"ds_betti_0"`
+	DSBetti1             uint32    `json:"ds_betti_1"`
+	DSBetti2             uint32    `json:"ds_betti_2"`
+	DSTopicFrontierSize  uint32    `json:"ds_topic_frontier_size"`
+	DSTopicFrontierMax   uint32    `json:"ds_topic_frontier_max"`
+	DSTopicFrontierEvict uint32    `json:"ds_topic_frontier_evictions"`
+	PrefillTargetSamples uint32    `json:"prefill_target_samples"`
+	BufferProfile        string    `json:"buffer_profile"`
+	PrefillTimeoutMs     uint32    `json:"prefill_timeout_ms"`
+	PrefillPollMs        uint32    `json:"prefill_poll_ms"`
+	DSAcqQueueCap        uint32    `json:"ds_acq_queue_cap"`
+	DSRawQueueCap        uint32    `json:"ds_raw_queue_cap"`
+	DSTrainQueueCap      uint32    `json:"ds_train_queue_cap"`
 	// Native AutonomousTrainingPipeline::get_metrics status_message (batch_inflight, queues, …).
 	PipelineStatusText string `json:"pipeline_status"`
 }
 
 type BufferTuning struct {
-	Profile          string
-	PrefillTarget    int
-	PrefillTimeoutMs int
-	PrefillPollMs    int
-	AcqQueueCap      int
-	RawQueueCap      int
-	TrainQueueCap    int
+	Profile            string
+	PrefillTarget      int
+	PrefillTimeoutMs   int
+	PrefillPollMs      int
+	AcqQueueCap         int
+	RawQueueCap         int
+	TrainQueueCap       int
+	DirectoryMaxLines   uint64
+	MaxJsonlLocalSamples uint64
+	MinTextLength       int
+	MaxTextLength       int
 }
 
 // getBufferTuning reads explicit [training] queue / prefill fields. Caller must run validateTrainingConfig first.
 func getBufferTuning(cfg *Config) BufferTuning {
 	profile := strings.ToLower(strings.TrimSpace(cfg.GetString("training.buffer_profile")))
 	return BufferTuning{
-		Profile:          profile,
-		PrefillTarget:    cfg.GetInt("training.prefill_target_samples"),
-		PrefillTimeoutMs: cfg.GetInt("training.prefill_timeout_ms"),
-		PrefillPollMs:    cfg.GetInt("training.prefill_poll_ms"),
-		AcqQueueCap:      cfg.GetInt("training.acq_queue_cap"),
-		RawQueueCap:      cfg.GetInt("training.raw_queue_cap"),
-		TrainQueueCap:    cfg.GetInt("training.train_queue_cap"),
+		Profile:              profile,
+		PrefillTarget:        cfg.GetInt("training.prefill_target_samples"),
+		PrefillTimeoutMs:     cfg.GetInt("training.prefill_timeout_ms"),
+		PrefillPollMs:        cfg.GetInt("training.prefill_poll_ms"),
+		AcqQueueCap:          cfg.GetInt("training.acq_queue_cap"),
+		RawQueueCap:          cfg.GetInt("training.raw_queue_cap"),
+		TrainQueueCap:        cfg.GetInt("training.train_queue_cap"),
+		DirectoryMaxLines:    cfg.GetUint64("training.data_filter.directory_max_lines"),
+		MaxJsonlLocalSamples: cfg.GetUint64("training.max_jsonl_local_samples"),
+		MinTextLength:        cfg.GetInt("training.data_filter.min_text_length"),
+		MaxTextLength:        cfg.GetInt("training.data_filter.max_text_length"),
 	}
 }
 
@@ -441,10 +460,11 @@ func (ts *TrainingState) runTrainingLoop() {
 }
 
 func main() {
-	// Open log file
+	// Open log file — also mirror log.* to stderr so log.Fatalf / log.Panic do not "silently" kill
+	// the server (e.g. HTTP listen error) with no console line.
 	logFile, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err == nil {
-		log.SetOutput(logFile)
+		log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 		defer logFile.Close()
 	}
 
@@ -1140,30 +1160,30 @@ func handleGetTrainingMetrics() interface{} {
 	}
 
 	return map[string]interface{}{
-		"training_config_path":            resolveTrainingConfigPath(),
-		"data_root":                       qminiDataRoot(),
-		"data_sources_config_path":        resolveDataSourcesConfigPath(),
-		"epoch":                           s.CurrentEpoch,
-		"total_epochs":                    s.TotalEpochs,
-		"loss":                            s.Loss,
-		"is_running":                      s.IsRunning,
-		"samples":                         s.Samples,
-		"samples_epoch":                   s.Samples,
-		"samples_total":                   s.SamplesTotal,
+		"training_config_path":          resolveTrainingConfigPath(),
+		"data_root":                     qminiDataRoot(),
+		"data_sources_config_path":      resolveDataSourcesConfigPath(),
+		"epoch":                         s.CurrentEpoch,
+		"total_epochs":                  s.TotalEpochs,
+		"loss":                          s.Loss,
+		"is_running":                    s.IsRunning,
+		"samples":                       s.Samples,
+		"samples_epoch":                 s.Samples,
+		"samples_total":                 s.SamplesTotal,
 		"gf3_hebbian_weight_cell_updates": s.GF3HebbianWeightCellUpdates,
-		"session_id":                      s.SessionID,
-		"phase":                           s.Phase,
-		"phase_elapsed_seconds":           phaseElapsed,
-		"native_launch_in_progress":       nativeLaunch,
-		"recommended_poll_interval_sec":   recommendedPoll,
-		"last_dll_poll_age_seconds":       lastDLLAge,
-		"learning_rate":                   0.001,
-		"history":                         metricsHistory,
-		"init_message":                    s.InitMessage,
-		"pipeline_status":                 s.PipelineStatusText,
-		"lazy_init":                       s.LazyInit,
-		"pipeline_configured":             s.PipelineConfigured,
-		"buffer_profile":                  s.BufferProfile,
+		"session_id":                    s.SessionID,
+		"phase":                         s.Phase,
+		"phase_elapsed_seconds":         phaseElapsed,
+		"native_launch_in_progress":     nativeLaunch,
+		"recommended_poll_interval_sec": recommendedPoll,
+		"last_dll_poll_age_seconds":     lastDLLAge,
+		"learning_rate":                 0.001,
+		"history":                       metricsHistory,
+		"init_message":                  s.InitMessage,
+		"pipeline_status":               s.PipelineStatusText,
+		"lazy_init":                     s.LazyInit,
+		"pipeline_configured":           s.PipelineConfigured,
+		"buffer_profile":                s.BufferProfile,
 		"ingestion": map[string]interface{}{
 			"train_queue_depth":        s.DSQueueDepth,
 			"raw_queue_depth":          s.DSRawQueueDepth,
@@ -1501,6 +1521,13 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 		dsToml := C.CString(dataSourcesPath)
 		defer C.free(unsafe.Pointer(dsToml))
 
+		allowGenNegU32 := C.uint32_t(0)
+		if allowGeneratedNegatives {
+			allowGenNegU32 = 1
+		}
+		fmt.Printf("[Training] InitSession corpus (Go→DLL): directory_max_lines=%d max_jsonl_local_samples=%d min_text_length=%d max_text_length=%d allow_generated_negatives=%d\n",
+			buffer.DirectoryMaxLines, buffer.MaxJsonlLocalSamples, buffer.MinTextLength, buffer.MaxTextLength, allowGenNegU32)
+
 		initRes := C.Training_InitSession(
 			&sessionID,
 			C.uint32_t(targetExperts),
@@ -1540,7 +1567,18 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 			C.uint32_t(syclRouteModeCode),
 			C.uint32_t(syclTritQuantMinMoeDim),
 			C.uint32_t(goodnessLogLevel),
-			C.bool(allowGeneratedNegatives),
+			allowGenNegU32,
+			C.uint64_t(buffer.DirectoryMaxLines),
+			C.uint64_t(buffer.MaxJsonlLocalSamples),
+			C.uint32_t(uint32(buffer.MinTextLength)),
+			C.uint32_t(uint32(buffer.MaxTextLength)),
+			C.uint32_t(uint32(config.GetInt("training.acquisition_threads"))),
+			C.uint32_t(uint32(config.GetInt("training.perturbation_threads"))),
+			C.uint32_t(uint32(config.GetInt("training.checkpoint_async_queue_max"))),
+			C.uint32_t(uint32(config.GetInt("training.collect_empty_backoff_base_ms"))),
+			C.uint32_t(uint32(config.GetInt("training.collect_empty_backoff_max_shift"))),
+			C.uint32_t(uint32(config.GetInt("training.collect_empty_backoff_cap_ms"))),
+			C.uint32_t(uint32(config.GetInt("training.metrics_heartbeat_sec"))),
 		)
 		if initRes != 0 {
 			trainingStateMu.Lock()
@@ -1548,7 +1586,7 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 			trainingState.PhaseStartedAt = time.Now()
 			trainingState.InitMessage = fmt.Sprintf("Training_InitSession failed (%d). Pipeline still configured; fix DLL/config and retry.", initRes)
 			trainingStateMu.Unlock()
-			return nil, fmt.Errorf("Training_InitSession failed with code %d (check q_training.dll matches Go; codes -5 samples_per_epoch, -6 micro/collect floor, -7 MoE dims, -8 worker_threads, -9 prefill/queue limits, -10 goodness_log_level, -11 sycl_route_mode, -12 sycl_trit_quant_min_moe_dim)", initRes)
+			return nil, fmt.Errorf("Training_InitSession failed with code %d (check q_training.dll matches Go; codes -5 samples_per_epoch, -6 micro/collect floor, -7 MoE dims, -8 worker_threads, -9 prefill/queue limits, -11 sycl_route_mode, -12 sycl_trit_quant_min_moe_dim, -13 local corpus limits, -14 acquisition/perturbation/checkpoint_async_queue_max)", initRes)
 		}
 
 		goSessionID = uint64(sessionID)
@@ -1564,15 +1602,26 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	dataPath := C.CString(dataPathStr)
 	defer C.free(unsafe.Pointer(dataPath))
 
-	// Debug: Verify data files exist before calling DLL
+	// Count corpus files for the DLL; avoid printing one line per file (large dirs = thousands of
+	// fmt calls and a very slow, "stuck" feeling before Training_StartTraining).
+	const maxDataFilesToLog = 12
 	entries, err := os.ReadDir(dataPathStr)
 	dataFileCount := 0
+	var sampleNames []string
 	if err == nil {
 		for _, entry := range entries {
 			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".txt") || strings.HasSuffix(entry.Name(), ".jsonl")) {
 				dataFileCount++
-				fmt.Printf("[Training] Found data file: %s\n", entry.Name())
+				if len(sampleNames) < maxDataFilesToLog {
+					sampleNames = append(sampleNames, entry.Name())
+				}
 			}
+		}
+		for _, n := range sampleNames {
+			fmt.Printf("[Training] Found data file: %s\n", n)
+		}
+		if dataFileCount > len(sampleNames) {
+			fmt.Printf("[Training] ... %d more data files not listed (total=%d)\n", dataFileCount-len(sampleNames), dataFileCount)
 		}
 	}
 	fmt.Printf("[Training] Starting with data path: %s (%d files)\n", dataPathStr, dataFileCount)
@@ -1623,7 +1672,14 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	tgt := trainingState.TargetExperts
 	trainingStateMu.Unlock()
 
-	go pollTrainingProgress()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "[pollTrainingProgress] PANIC (Go): %v\n", r)
+			}
+		}()
+		pollTrainingProgress()
+	}()
 
 	if initialExperts <= 0 {
 		return nil, fmt.Errorf("pipeline CurrentExperts is unset; call wui_init_training_pipeline before start")
@@ -1633,16 +1689,16 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"started":                  true,
-		"epochs":                   epochs,
-		"lazy_init":                lazyInit,
-		"session_id":               outSID,
-		"native_session_reused":    reuseNative,
-		"force_new_native_session": forceNewNativeSession,
-		"message":                  initMsg,
-		"phase":                    phaseTraining,
-		"initial_experts":          initialExperts,
-		"target_experts":           tgt,
+		"started":                    true,
+		"epochs":                     epochs,
+		"lazy_init":                  lazyInit,
+		"session_id":                 outSID,
+		"native_session_reused":      reuseNative,
+		"force_new_native_session":   forceNewNativeSession,
+		"message":                    initMsg,
+		"phase":                        phaseTraining,
+		"initial_experts":              initialExperts,
+		"target_experts":               tgt,
 	}, nil
 }
 
@@ -1759,6 +1815,8 @@ func refreshTrainingProgressFromDLL() {
 }
 
 func pollTrainingProgress() {
+	// If the process vanishes with no "[pollTrainingProgress] Exited..." line, the likely cause
+	// is a native fault in q_training.dll (see %LOCALAPPDATA%\q_mini_training_crash.log) or oom-kill.
 	verbose := os.Getenv("QMINI_TRAINING_VERBOSE") == "1"
 	if verbose {
 		versionBuf := make([]byte, 256)
@@ -2223,7 +2281,7 @@ func appendLocalDatasetSources(sources []map[string]interface{}) []map[string]in
 }
 
 func handleListDataSources() interface{} {
-	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return map[string]interface{}{
@@ -2432,7 +2490,7 @@ func handleAddDataSource(params map[string]interface{}) (interface{}, error) {
 	}
 
 	// Append to data_sources.toml
-	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 
 	var entry strings.Builder
 	entry.WriteString("\n[[source]]\n")
@@ -2477,7 +2535,7 @@ func handleUpdateDataSource(params map[string]interface{}) (interface{}, error) 
 	}
 
 	// Read and modify data_sources.toml
-	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data_sources.toml: %w", err)
@@ -2646,12 +2704,16 @@ func handleGetBufferProfile() (interface{}, error) {
 	return map[string]interface{}{
 		"profile": profile,
 		"effective": map[string]interface{}{
-			"prefill_target_samples": t.PrefillTarget,
-			"prefill_timeout_ms":     t.PrefillTimeoutMs,
-			"prefill_poll_ms":        t.PrefillPollMs,
-			"acq_queue_cap":          t.AcqQueueCap,
-			"raw_queue_cap":          t.RawQueueCap,
-			"train_queue_cap":        t.TrainQueueCap,
+			"prefill_target_samples":         t.PrefillTarget,
+			"prefill_timeout_ms":           t.PrefillTimeoutMs,
+			"prefill_poll_ms":              t.PrefillPollMs,
+			"acq_queue_cap":                t.AcqQueueCap,
+			"raw_queue_cap":                t.RawQueueCap,
+			"train_queue_cap":              t.TrainQueueCap,
+			"directory_max_lines":    t.DirectoryMaxLines,
+			"max_jsonl_local_samples": t.MaxJsonlLocalSamples,
+			"min_text_length":         t.MinTextLength,
+			"max_text_length":         t.MaxTextLength,
 		},
 		"applies_on_next_start": true,
 	}, nil
@@ -2682,12 +2744,16 @@ func handleSetBufferProfile(params map[string]interface{}) (interface{}, error) 
 		"path":                  path,
 		"applies_on_next_start": true,
 		"effective": map[string]interface{}{
-			"prefill_target_samples": t.PrefillTarget,
-			"prefill_timeout_ms":     t.PrefillTimeoutMs,
-			"prefill_poll_ms":        t.PrefillPollMs,
-			"acq_queue_cap":          t.AcqQueueCap,
-			"raw_queue_cap":          t.RawQueueCap,
-			"train_queue_cap":        t.TrainQueueCap,
+			"prefill_target_samples":         t.PrefillTarget,
+			"prefill_timeout_ms":           t.PrefillTimeoutMs,
+			"prefill_poll_ms":              t.PrefillPollMs,
+			"acq_queue_cap":                t.AcqQueueCap,
+			"raw_queue_cap":                t.RawQueueCap,
+			"train_queue_cap":              t.TrainQueueCap,
+			"directory_max_lines":    t.DirectoryMaxLines,
+			"max_jsonl_local_samples": t.MaxJsonlLocalSamples,
+			"min_text_length":         t.MinTextLength,
+			"max_text_length":         t.MaxTextLength,
 		},
 	}, nil
 }
@@ -2720,7 +2786,7 @@ func handleSaveAPIKeys(params map[string]interface{}) (interface{}, error) {
 }
 
 func handleGetDataSources() interface{} {
-	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return map[string]interface{}{
@@ -2781,12 +2847,22 @@ type Config struct {
 	present map[string]map[string]struct{}
 }
 
+// splitSectionKey supports dotted TOML headers like [training.data_filter] → section "training.data_filter".
+func (c *Config) splitSectionKey(fullKey string) (section, field string, ok bool) {
+	parts := strings.Split(fullKey, ".")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	field = parts[len(parts)-1]
+	section = strings.Join(parts[:len(parts)-1], ".")
+	return section, field, true
+}
+
 func (c *Config) Has(key string) bool {
-	parts := strings.Split(key, ".")
-	if len(parts) != 2 {
+	sec, k, ok := c.splitSectionKey(key)
+	if !ok {
 		return false
 	}
-	sec, k := parts[0], parts[1]
 	if c.present == nil {
 		return false
 	}
@@ -2874,6 +2950,13 @@ func validateIntInRange(name string, v, lo, hi int) error {
 	return nil
 }
 
+func validateUint64InRange(name string, v, lo, hi uint64) error {
+	if v < lo || v > hi {
+		return fmt.Errorf("%s must be in [%d,%d] (got %d)", name, lo, hi, v)
+	}
+	return nil
+}
+
 func validateTrainingConfig(c *Config) error {
 	required := []string{
 		"paths.dataset_dir",
@@ -2897,6 +2980,18 @@ func validateTrainingConfig(c *Config) error {
 		"training.acq_queue_cap",
 		"training.raw_queue_cap",
 		"training.train_queue_cap",
+		"training.acquisition_threads",
+		"training.perturbation_threads",
+		"training.checkpoint_async_queue_max",
+		"training.collect_empty_backoff_base_ms",
+		"training.collect_empty_backoff_max_shift",
+		"training.collect_empty_backoff_cap_ms",
+		"training.metrics_heartbeat_sec",
+		"training.max_jsonl_local_samples",
+		"training.data_filter.directory_max_lines",
+		"training.data_filter.min_text_length",
+		"training.data_filter.max_text_length",
+		"training.data_filter.checkpoint_interval_samples",
 		"training.lazy_init_initial_experts",
 		"model.num_layers",
 		"model.moe_experts",
@@ -2937,16 +3032,16 @@ func validateTrainingConfig(c *Config) error {
 	if c.GetUint64("training.samples_per_epoch") < 1 {
 		return fmt.Errorf("training.samples_per_epoch must be >= 1")
 	}
-	if err := validateIntInRange("training.micro_batch_cap", c.GetInt("training.micro_batch_cap"), 1, 4096); err != nil {
+	if err := validateIntInRange("training.micro_batch_cap", c.GetInt("training.micro_batch_cap"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.collect_floor", c.GetInt("training.collect_floor"), 1, 512); err != nil {
+	if err := validateIntInRange("training.collect_floor", c.GetInt("training.collect_floor"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.epochs", c.GetInt("training.epochs"), 1, 1<<30); err != nil {
+	if err := validateIntInRange("training.epochs", c.GetInt("training.epochs"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.batch_size", c.GetInt("training.batch_size"), 1, 1<<30); err != nil {
+	if err := validateIntInRange("training.batch_size", c.GetInt("training.batch_size"), 1, math.MaxInt); err != nil {
 		return err
 	}
 	if c.GetInt("training.checkpoint_interval") < 0 {
@@ -2964,31 +3059,70 @@ func validateTrainingConfig(c *Config) error {
 	default:
 		return fmt.Errorf(`training.sycl_route_mode must be "auto", "on", or "off" (got %q)`, c.GetString("training.sycl_route_mode"))
 	}
-	if err := validateIntInRange("training.prefill_target_samples", c.GetInt("training.prefill_target_samples"), 1, 65536); err != nil {
+	if err := validateIntInRange("training.prefill_target_samples", c.GetInt("training.prefill_target_samples"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.prefill_timeout_ms", c.GetInt("training.prefill_timeout_ms"), 1000, 600000); err != nil {
+	if err := validateIntInRange("training.prefill_timeout_ms", c.GetInt("training.prefill_timeout_ms"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.prefill_poll_ms", c.GetInt("training.prefill_poll_ms"), 10, 2000); err != nil {
+	if err := validateIntInRange("training.prefill_poll_ms", c.GetInt("training.prefill_poll_ms"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.acq_queue_cap", c.GetInt("training.acq_queue_cap"), 64, 262144); err != nil {
+	if err := validateIntInRange("training.acq_queue_cap", c.GetInt("training.acq_queue_cap"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.raw_queue_cap", c.GetInt("training.raw_queue_cap"), 64, 262144); err != nil {
+	if err := validateIntInRange("training.raw_queue_cap", c.GetInt("training.raw_queue_cap"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.train_queue_cap", c.GetInt("training.train_queue_cap"), 128, 524288); err != nil {
+	if err := validateIntInRange("training.train_queue_cap", c.GetInt("training.train_queue_cap"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.sycl_trit_quant_min_moe_dim", c.GetInt("training.sycl_trit_quant_min_moe_dim"), 1, 65536); err != nil {
+	if err := validateIntInRange("training.acquisition_threads", c.GetInt("training.acquisition_threads"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.goodness_log_level", c.GetInt("training.goodness_log_level"), 0, 2); err != nil {
+	if err := validateIntInRange("training.perturbation_threads", c.GetInt("training.perturbation_threads"), 1, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("features.worker_threads", c.GetInt("features.worker_threads"), 1, 65536); err != nil {
+	if err := validateIntInRange("training.checkpoint_async_queue_max", c.GetInt("training.checkpoint_async_queue_max"), 1, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.collect_empty_backoff_base_ms", c.GetInt("training.collect_empty_backoff_base_ms"), 0, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.collect_empty_backoff_max_shift", c.GetInt("training.collect_empty_backoff_max_shift"), 0, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.collect_empty_backoff_cap_ms", c.GetInt("training.collect_empty_backoff_cap_ms"), 0, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.metrics_heartbeat_sec", c.GetInt("training.metrics_heartbeat_sec"), 0, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateUint64InRange("training.max_jsonl_local_samples", c.GetUint64("training.max_jsonl_local_samples"), 1, math.MaxUint64); err != nil {
+		return err
+	}
+	if err := validateUint64InRange("training.data_filter.directory_max_lines", c.GetUint64("training.data_filter.directory_max_lines"), 1, math.MaxUint64); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.data_filter.min_text_length", c.GetInt("training.data_filter.min_text_length"), 1, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.data_filter.max_text_length", c.GetInt("training.data_filter.max_text_length"), 1, math.MaxInt); err != nil {
+		return err
+	}
+	if c.GetInt("training.data_filter.min_text_length") > c.GetInt("training.data_filter.max_text_length") {
+		return fmt.Errorf("training.data_filter.min_text_length must be <= training.data_filter.max_text_length")
+	}
+	if err := validateIntInRange("training.data_filter.checkpoint_interval_samples", c.GetInt("training.data_filter.checkpoint_interval_samples"), 1, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.sycl_trit_quant_min_moe_dim", c.GetInt("training.sycl_trit_quant_min_moe_dim"), 1, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("training.goodness_log_level", c.GetInt("training.goodness_log_level"), 0, math.MaxInt); err != nil {
+		return err
+	}
+	if err := validateIntInRange("features.worker_threads", c.GetInt("features.worker_threads"), 1, math.MaxInt); err != nil {
 		return err
 	}
 	expertN := c.GetInt("model.moe_experts")
@@ -3042,11 +3176,10 @@ func loadAndValidateTrainingConfig() (*Config, error) {
 }
 
 func (c *Config) GetBool(key string) bool {
-	parts := strings.Split(key, ".")
-	if len(parts) != 2 {
+	section, key, ok := c.splitSectionKey(key)
+	if !ok {
 		return false
 	}
-	section, key := parts[0], parts[1]
 	if sec, ok := c.data[section]; ok {
 		if v, ok := sec[key]; ok {
 			if b, ok := v.(bool); ok {
@@ -3058,11 +3191,10 @@ func (c *Config) GetBool(key string) bool {
 }
 
 func (c *Config) GetBoolDefault(key string, defaultValue bool) bool {
-	parts := strings.Split(key, ".")
-	if len(parts) != 2 {
+	section, key, ok := c.splitSectionKey(key)
+	if !ok {
 		return defaultValue
 	}
-	section, key := parts[0], parts[1]
 	if sec, ok := c.data[section]; ok {
 		if v, ok := sec[key]; ok {
 			if b, ok := v.(bool); ok {
@@ -3074,11 +3206,10 @@ func (c *Config) GetBoolDefault(key string, defaultValue bool) bool {
 }
 
 func (c *Config) GetInt(key string) int {
-	parts := strings.Split(key, ".")
-	if len(parts) != 2 {
+	section, key, ok := c.splitSectionKey(key)
+	if !ok {
 		return 0
 	}
-	section, key := parts[0], parts[1]
 	if sec, ok := c.data[section]; ok {
 		if v, ok := sec[key]; ok {
 			switch v := v.(type) {
@@ -3113,11 +3244,10 @@ func (c *Config) GetInt(key string) int {
 }
 
 func (c *Config) GetUint64(key string) uint64 {
-	parts := strings.Split(key, ".")
-	if len(parts) != 2 {
+	section, k, ok := c.splitSectionKey(key)
+	if !ok {
 		return 0
 	}
-	section, k := parts[0], parts[1]
 	if sec, ok := c.data[section]; ok {
 		if v, ok := sec[k]; ok {
 			switch v := v.(type) {
@@ -3173,11 +3303,10 @@ func (c *Config) GetUint64(key string) uint64 {
 }
 
 func (c *Config) GetFloat(key string) float64 {
-	parts := strings.Split(key, ".")
-	if len(parts) != 2 {
+	section, key, ok := c.splitSectionKey(key)
+	if !ok {
 		return 0
 	}
-	section, key := parts[0], parts[1]
 	if sec, ok := c.data[section]; ok {
 		if v, ok := sec[key]; ok {
 			switch v := v.(type) {
@@ -3192,11 +3321,10 @@ func (c *Config) GetFloat(key string) float64 {
 }
 
 func (c *Config) GetString(key string) string {
-	parts := strings.Split(key, ".")
-	if len(parts) != 2 {
+	section, k, ok := c.splitSectionKey(key)
+	if !ok {
 		return ""
 	}
-	section, k := parts[0], parts[1]
 	if sec, ok := c.data[section]; ok {
 		if v, ok := sec[k]; ok {
 			if s, ok := v.(string); ok {
@@ -3206,3 +3334,4 @@ func (c *Config) GetString(key string) string {
 	}
 	return ""
 }
+

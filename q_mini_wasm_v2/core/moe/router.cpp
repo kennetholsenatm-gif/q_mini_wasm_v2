@@ -16,6 +16,10 @@ std::once_flag g_once_tritpack5_route_short_pack;
 
 namespace q_mini_wasm_v2::core::moe {
 
+#if defined(USE_SYCL) && USE_SYCL
+static bool moe_routing_sycl_desired(size_t total_experts, SyclRouteMode mode) noexcept;
+#endif
+
 MoERouter::MoERouter(const ExpertConfig& config)
     : config_(config)
     , current_active_experts_(config.active_experts)

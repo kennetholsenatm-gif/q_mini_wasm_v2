@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <fstream>
 #include <atomic>
+#include <string>
 
 namespace q_mini_wasm_v2::core::training {
 
@@ -497,6 +498,12 @@ public:
         max_train_queue_depth_ = std::max<size_t>(size_t{128}, train_queue_max);
         max_acquisition_queue_depth_ = std::max<size_t>(size_t{64}, acquisition_queue_max);
     }
+
+    /** From TOML — applied before `load_local_data` / directory indexing (see PipelineConfig fields). */
+    void set_local_corpus_limits(size_t directory_max_lines,
+                                 size_t max_jsonl_local_samples,
+                                 size_t min_text_length,
+                                 size_t max_text_length);
     
     // Check if local data is being used
     bool using_local_data() const { return has_local_data_; }
@@ -575,9 +582,10 @@ private:
     mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
     std::condition_variable queue_not_full_cv_;
-    size_t max_raw_queue_depth_ = 32768;
-    size_t max_train_queue_depth_ = 65536;
-    size_t max_acquisition_queue_depth_ = 32768;
+    // Native q_training defaults: sized for high-RAM hosts (queues are still capped by TOML via set_queue_limits).
+    size_t max_raw_queue_depth_ = 98304;
+    size_t max_train_queue_depth_ = 196608;
+    size_t max_acquisition_queue_depth_ = 98304;
     
     // Control
     bool running_ = false;
@@ -590,6 +598,29 @@ private:
     size_t local_sample_index_ = 0;
     mutable std::mutex local_data_mutex_;
     std::string data_path_;
+
+    /** Directory corpus: only (file, byte offset) per line; positives are read from disk on demand. */
+    struct CorpusLineRef {
+        uint32_t file_index = 0;
+        uint64_t byte_offset = 0;
+    };
+    bool local_directory_indexed_ = false;
+    std::vector<std::string> corpus_file_paths_;
+    /** Parallel to corpus_file_paths_: 1 = `.jsonl` (parsed like single-file JSONL), 0 = raw `.txt`. */
+    std::vector<uint8_t> corpus_file_is_jsonl_;
+    std::vector<CorpusLineRef> corpus_line_index_;
+
+    void clear_indexed_directory_state();
+    std::optional<TrainingSample> read_corpus_line_positive(const CorpusLineRef& ref) const;
+    std::optional<TrainingSample> pop_next_local_sample_locked();
+
+    size_t directory_max_lines_ = 1'000'000'000ull;
+    size_t max_jsonl_local_samples_ = 5'000'000ull;
+    size_t min_text_length_ = 50;
+    size_t max_text_length_ = 100'000;
+
+    bool corpus_line_should_index(const std::string& line, bool is_jsonl) const;
+    std::optional<std::vector<int32_t>> corpus_line_to_features(std::string& line) const;
 
     /** When both local corpus and config/web feeds are active, alternate draws (with fallback). */
     std::atomic<uint64_t> interleave_counter_{0};

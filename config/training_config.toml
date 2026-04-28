@@ -1,43 +1,52 @@
 # =============================================================================
-# Frontier profile (~48 GB RAM envelope) — ratio notes
-# - Queues: acq : raw : train = 1 : 1 : 2 (staging). Slightly below prior 32k/32k/64k to
-#   budget headroom for wider GF(3) tensors + more materialized experts while staying
-#   inside ~48 GB when raw/train items hold text payloads (trim acq/raw/train first if RSS spikes).
+# Frontier profile (~48 GB RAM envelope, native q_training / qminiwasm host — not a WASM heap cap)
+# - Queues: acq : raw : train = 1 : 1 : 2 (staging). Tune acq/raw/train caps in TOML if RSS spikes
+#   from wide GF(3) tensors or large text payloads in raw/train queues.
 # - Prefill: target ≈ 3/7 of raw cap so prefill completes before raw is chronically full.
 # - samples_per_epoch: 3 × train_queue_cap = one epoch ~= three full train-buffer turnovers at cap.
 # - Widths: neurons = moe_in = moe_out; shadow_dim = 2×neurons; moe_hidden ≈ 8/3×neurons (~2.67×).
-# - MoE: 8192 experts — autonomous_training_pipeline adaptive guardrails force effective
-#   collect_limit≈1 and effective top_k≈1 at this expert count (router work ~ E×qutrits).
-#   moe_top_k here stays 128 as the logical/router config; per-route FF parallelism stays bounded.
+# - MoE: 8192 experts — per-batch collect/top-k come from TOML (see adaptive_* helpers in
+#   autonomous_training_pipeline.cpp): collect is min(batch, micro_batch_cap) vs collect_floor;
+#   top-k is capped only by expert count (no tier/workload caps in code).
 # =============================================================================
 [training]
 epochs = 120
 batch_size = 32768
-checkpoint_interval = 10
+checkpoint_interval = 2
 learning_rate = 10
 buffer_profile = "aggressive"
 # Route-units per epoch (native q_training); see q_mini_docs/TRAINING_THROUGHPUT.md.
 samples_per_epoch = 172032
 micro_batch_cap = 4096
-collect_floor = 1
+collect_floor = 8
 timing_to_stderr = false
 serial_expert_train = false
 # Symplectic MoE routing logits: auto (SYCL when USE_SYCL and expert count high), on, or off — see q_mini_docs/TRAINING_THROUGHPUT.md.
-sycl_route_mode = "auto"
+sycl_route_mode = "on"
 # Minimum model.moe_input_dim to run SYCL float/int32/string -> trit quantization (below = CPU path).
-sycl_trit_quant_min_moe_dim = 128
+sycl_trit_quant_min_moe_dim = 1
 # 0=no extra stderr; 1=batch FF goodness summary; 2=+ first contrastive rows (see q_training Training_InitSession).
-goodness_log_level = 0
+goodness_log_level = 1
 allow_generated_negatives = true
+# Max JSONL rows for a single local file (in RAM); directory line cap lives in [training.data_filter].
+max_jsonl_local_samples = 5000000
 # DataSynthesizer / prefill — explicit integers (qminiwasm rejects missing keys).
-prefill_target_samples = 12288
+prefill_target_samples = 24576
 prefill_timeout_ms = 180000
-prefill_poll_ms = 40
-acq_queue_cap = 28672
-raw_queue_cap = 28672
-train_queue_cap = 57344
+prefill_poll_ms = 20
+acq_queue_cap = 32768
+raw_queue_cap = 32768
+train_queue_cap = 98304
+# DataSynthesizer + checkpoint writer (explicit; not derived from features.worker_threads).
+acquisition_threads = 24
+perturbation_threads = 16
+checkpoint_async_queue_max = 24
+collect_empty_backoff_base_ms = 10
+collect_empty_backoff_max_shift = 10
+collect_empty_backoff_cap_ms = 1000
+metrics_heartbeat_sec = 2
 # When features.lazy_init is true, pipeline starts with this many materialized experts (<= moe_experts).
-lazy_init_initial_experts = 96
+lazy_init_initial_experts = 256
 
 [model]
 moe_experts = 8192
@@ -131,6 +140,8 @@ initial_edges = 112  # Initial graph topology edges (tree-like + cycles)
 min_text_length = 50      # Minimum text length for training samples
 max_text_length = 100000  # Maximum text length for training samples
 checkpoint_interval_samples = 500  # Checkpoint every N samples
+# Max indexed lines for a directory corpus (byte-offset index); not a parse failure when progress hits this cap.
+directory_max_lines = 1000000000
 
 [network]
 http_timeout_ms = 30000  # HTTP request timeout

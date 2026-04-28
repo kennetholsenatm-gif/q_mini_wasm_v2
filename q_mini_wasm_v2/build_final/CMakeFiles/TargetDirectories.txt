@@ -12,6 +12,9 @@ C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_mini_wasm_v2_te
 C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_mini_wasm_v2_network_test.dir
 C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_mini_wasm_v2_remediation_test.dir
 C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_mini_wasm_v2_betti_test.dir
+C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_moe_tritpack5_symplectic_test.dir
+C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_moe_route_dense_vs_tritpack5_test.dir
+C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_e2e_train_infer_smoke.dir
 C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_mini_wasm_v2_dll_test.dir
 C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/q_mini_wasm_v2_dll_api_test.dir
 C:/GitHub/q_mini_wasm_v2/q_mini_wasm_v2/build_final/CMakeFiles/test.dir

@@ -14,6 +14,8 @@
 #include <filesystem>
 #include <optional>
 #include <deque>
+#include <array>
+#include <string_view>
 
 // HTTP client support - requires libcurl or similar
 // For production: link with -lcurl
@@ -1006,9 +1008,223 @@ ApiPayload LeanClient::perturb_proof(const ApiPayload& positive) {
 // DataSynthesizer Implementation
 // ============================================================================
 
+namespace {
+
+/** Shared JSONL row parser: `{"input":[...], "label": ...}` — same semantics as `load_local_data` file path. */
+std::optional<TrainingSample> parse_jsonl_training_sample(const std::string& line) {
+    if (line.empty() || line[0] == '#') {
+        return std::nullopt;
+    }
+    const size_t input_pos = line.find("\"input\"");
+    if (input_pos == std::string::npos) {
+        return std::nullopt;
+    }
+    const size_t arr_start = line.find('[', input_pos);
+    const size_t arr_end = line.find(']', arr_start);
+    if (arr_start == std::string::npos || arr_end == std::string::npos) {
+        return std::nullopt;
+    }
+    const std::string arr_str = line.substr(arr_start + 1, arr_end - arr_start - 1);
+    std::vector<int32_t> values;
+    std::stringstream ss(arr_str);
+    std::string val;
+    while (std::getline(ss, val, ',')) {
+        val.erase(0, val.find_first_not_of(" \t"));
+        val.erase(val.find_last_not_of(" \t") + 1);
+        if (!val.empty()) {
+            try {
+                values.push_back(static_cast<int32_t>(std::stoi(val)));
+            } catch (...) {
+            }
+        }
+    }
+    if (values.empty()) {
+        return std::nullopt;
+    }
+    Trit label = 1;
+    const size_t label_pos = line.find("\"label\"");
+    if (label_pos != std::string::npos) {
+        const size_t colon = line.find(':', label_pos);
+        if (colon != std::string::npos) {
+            std::string label_str = line.substr(colon + 1);
+            const size_t end = label_str.find_first_of(",}");
+            if (end != std::string::npos) {
+                label_str = label_str.substr(0, end);
+                label_str.erase(0, label_str.find_first_not_of(" \t"));
+                label_str.erase(label_str.find_last_not_of(" \t") + 1);
+                try {
+                    label = static_cast<Trit>(std::stoi(label_str));
+                } catch (...) {
+                }
+            }
+        }
+    }
+    return TrainingSample{std::move(values), label, "local_file", "local_data"};
+}
+
+TrainingSample corrupt_directory_negative_from_positive(TrainingSample pos, size_t line_idx) {
+    pos.label = static_cast<Trit>(-1);
+    if (!std::holds_alternative<std::vector<int32_t>>(pos.data)) {
+        return pos;
+    }
+    auto& vec = std::get<std::vector<int32_t>>(pos.data);
+    if (vec.empty()) {
+        return pos;
+    }
+    std::array<uint32_t, 4> seeds{
+        42u,
+        static_cast<uint32_t>(line_idx),
+        static_cast<uint32_t>(line_idx >> 32),
+        0xA5A5A5A5u,
+    };
+    std::seed_seq seq(seeds.begin(), seeds.end());
+    std::mt19937 rng(seq);
+    std::uniform_int_distribution<size_t> pos_dist(0, vec.size() - 1);
+    std::uniform_int_distribution<int> val_dist(-1000, 1000);
+    for (int j = 0; j < 3 && j < static_cast<int>(vec.size()); ++j) {
+        vec[pos_dist(rng)] = val_dist(rng);
+    }
+    return pos;
+}
+
+} // namespace
+
 DataSynthesizer::DataSynthesizer() = default;
 DataSynthesizer::~DataSynthesizer() {
     if (running_) stop();
+}
+
+void DataSynthesizer::clear_indexed_directory_state() {
+    local_directory_indexed_ = false;
+    corpus_file_paths_.clear();
+    corpus_file_is_jsonl_.clear();
+    corpus_line_index_.clear();
+}
+
+void DataSynthesizer::set_local_corpus_limits(size_t directory_max_lines,
+                                              size_t max_jsonl_local_samples,
+                                              size_t min_text_length,
+                                              size_t max_text_length) {
+    directory_max_lines_ = std::max<size_t>(size_t{1}, directory_max_lines);
+    max_jsonl_local_samples_ = std::max<size_t>(size_t{1}, max_jsonl_local_samples);
+    min_text_length_ = std::max<size_t>(size_t{1}, min_text_length);
+    max_text_length_ = std::max<size_t>(size_t{64}, max_text_length);
+    if (min_text_length_ > max_text_length_) {
+        std::swap(min_text_length_, max_text_length_);
+    }
+}
+
+bool DataSynthesizer::corpus_line_should_index(const std::string& line, bool is_jsonl) const {
+    if (is_jsonl) {
+        const auto sample = parse_jsonl_training_sample(line);
+        if (!sample) {
+            return false;
+        }
+        if (!std::holds_alternative<std::vector<int32_t>>(sample->data)) {
+            return false;
+        }
+        const auto& vec = std::get<std::vector<int32_t>>(sample->data);
+        return vec.size() >= min_text_length_ && vec.size() <= max_text_length_;
+    }
+    std::string_view v(line);
+    while (!v.empty() && (v.back() == '\r' || v.back() == '\n')) {
+        v.remove_suffix(1);
+    }
+    if (v.empty() || v[0] == '#') {
+        return false;
+    }
+    if (v.size() < min_text_length_) {
+        return false;
+    }
+    size_t n = 0;
+    for (unsigned char ch : v) {
+        if (++n >= max_text_length_) {
+            break;
+        }
+        (void)ch;
+    }
+    return n >= min_text_length_;
+}
+
+std::optional<std::vector<int32_t>> DataSynthesizer::corpus_line_to_features(std::string& line) const {
+    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
+        line.pop_back();
+    }
+    if (line.empty() || line[0] == '#') {
+        return std::nullopt;
+    }
+    if (line.size() < min_text_length_) {
+        return std::nullopt;
+    }
+    std::vector<int32_t> values;
+    values.reserve((std::min)(line.size(), max_text_length_));
+    for (unsigned char ch : line) {
+        if (values.size() >= max_text_length_) {
+            break;
+        }
+        values.push_back(static_cast<int32_t>(ch));
+    }
+    if (values.size() < min_text_length_) {
+        return std::nullopt;
+    }
+    return values;
+}
+
+std::optional<TrainingSample> DataSynthesizer::read_corpus_line_positive(const CorpusLineRef& ref) const {
+    if (ref.file_index >= corpus_file_paths_.size()) {
+        return std::nullopt;
+    }
+    std::ifstream file(corpus_file_paths_[ref.file_index], std::ios::binary);
+    if (!file) {
+        return std::nullopt;
+    }
+    file.seekg(static_cast<std::streamoff>(ref.byte_offset));
+    if (!file) {
+        return std::nullopt;
+    }
+    std::string line;
+    if (!std::getline(file, line)) {
+        return std::nullopt;
+    }
+    if (ref.file_index < corpus_file_is_jsonl_.size() && corpus_file_is_jsonl_[ref.file_index] != 0) {
+        std::optional<TrainingSample> sample = parse_jsonl_training_sample(line);
+        if (!sample) {
+            return std::nullopt;
+        }
+        sample->source_api = "local_dir";
+        sample->domain = "local_jsonl";
+        return sample;
+    }
+    auto values = corpus_line_to_features(line);
+    if (!values) {
+        return std::nullopt;
+    }
+    return TrainingSample{std::move(*values), static_cast<Trit>(1), "local_dir", "local_text"};
+}
+
+std::optional<TrainingSample> DataSynthesizer::pop_next_local_sample_locked() {
+    if (local_directory_indexed_) {
+        const size_t n = corpus_line_index_.size();
+        if (n == 0) {
+            return std::nullopt;
+        }
+        const size_t cycle = local_sample_index_++ % (2 * n);
+        const size_t line_idx = (cycle < n) ? cycle : (cycle - n);
+        const CorpusLineRef& ref = corpus_line_index_[line_idx];
+        auto pos = read_corpus_line_positive(ref);
+        if (!pos) {
+            return std::nullopt;
+        }
+        if (cycle < n) {
+            return std::move(*pos);
+        }
+        return corrupt_directory_negative_from_positive(std::move(*pos), line_idx);
+    }
+    if (!local_samples_.empty()) {
+        const size_t idx = local_sample_index_++ % local_samples_.size();
+        return local_samples_[idx];
+    }
+    return std::nullopt;
 }
 
 void DataSynthesizer::initialize_apis() {
@@ -1035,22 +1251,17 @@ void DataSynthesizer::initialize_apis() {
 bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
     local_samples_.clear();
     local_sample_index_ = 0;
+    clear_indexed_directory_state();
+
     std::error_code ec;
     if (!std::filesystem::is_directory(dir_path, ec)) {
         std::cerr << "[DataSynthesizer] Not a directory: " << dir_path << std::endl;
         return false;
     }
-    constexpr size_t kMaxLines = 100000;
-    constexpr size_t kMaxLineFeatures = 512;
-    size_t loaded = 0;
-    size_t discovered_files = 0;
-    size_t accepted_files = 0;
-    size_t skipped_extension_files = 0;
-    size_t unreadable_files = 0;
-    size_t processed_files = 0;
-    const auto scan_started = std::chrono::steady_clock::now();
-    auto last_progress_log = scan_started;
 
+    std::vector<std::filesystem::path> sorted_paths;
+    size_t discovered_files = 0;
+    size_t skipped_extension_files = 0;
     for (const auto& entry : std::filesystem::directory_iterator(dir_path, ec)) {
         if (ec) {
             break;
@@ -1064,51 +1275,82 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
             ++skipped_extension_files;
             continue;
         }
-        ++accepted_files;
+        sorted_paths.push_back(entry.path());
+    }
+    std::sort(sorted_paths.begin(), sorted_paths.end());
+
+    corpus_file_paths_.clear();
+    corpus_file_is_jsonl_.clear();
+    corpus_file_paths_.reserve(sorted_paths.size());
+    corpus_file_is_jsonl_.reserve(sorted_paths.size());
+    for (const auto& p : sorted_paths) {
+        corpus_file_paths_.push_back(p.string());
+        corpus_file_is_jsonl_.push_back(p.extension() == ".jsonl" ? uint8_t{1} : uint8_t{0});
+    }
+
+    const size_t accepted_files = sorted_paths.size();
+    size_t unreadable_files = 0;
+    size_t processed_files = 0;
+    size_t indexed_lines = 0;
+    const auto scan_started = std::chrono::steady_clock::now();
+    auto last_progress_log = scan_started;
+
+    for (uint32_t file_index = 0; file_index < corpus_file_paths_.size(); ++file_index) {
         ++processed_files;
-        std::ifstream file(entry.path());
-        if (!file.is_open()) {
+        std::ifstream file(corpus_file_paths_[file_index], std::ios::binary);
+        if (!file) {
             ++unreadable_files;
             continue;
         }
+        uint64_t next_line_begin = static_cast<uint64_t>(file.tellg());
         std::string line;
-        while (std::getline(file, line) && loaded < kMaxLines) {
-            if (line.empty() || line[0] == '#') {
+        const bool is_jsonl = (file_index < corpus_file_is_jsonl_.size()) && (corpus_file_is_jsonl_[file_index] != 0);
+        while (indexed_lines < directory_max_lines_) {
+            const uint64_t line_start = next_line_begin;
+            if (!std::getline(file, line)) {
+                break;
+            }
+            const std::streampos g = file.tellg();
+            if (g != std::streampos(-1)) {
+                next_line_begin = static_cast<uint64_t>(g);
+            } else {
+                next_line_begin = line_start + static_cast<uint64_t>(line.size()) + 1u;
+            }
+
+            if (!corpus_line_should_index(line, is_jsonl)) {
                 continue;
             }
-            std::vector<int32_t> values;
-            values.reserve(std::min(line.size(), kMaxLineFeatures));
-            for (unsigned char ch : line) {
-                if (values.size() >= kMaxLineFeatures) {
-                    break;
-                }
-                values.push_back(static_cast<int32_t>(ch));
-            }
-            if (values.empty()) {
-                continue;
-            }
-            local_samples_.push_back(TrainingSample{
-                std::move(values), static_cast<Trit>(1), "local_dir", "local_text"});
-            ++loaded;
+            corpus_line_index_.push_back(CorpusLineRef{file_index, line_start});
+            ++indexed_lines;
         }
 
         const auto now = std::chrono::steady_clock::now();
         if (now - last_progress_log >= std::chrono::seconds(2)) {
             const auto elapsed_s = std::chrono::duration_cast<std::chrono::seconds>(now - scan_started).count();
-            std::cout << "[DataSynthesizer] Directory scan progress: elapsed=" << elapsed_s << "s"
+            const int at_line_cap = (indexed_lines >= directory_max_lines_) ? 1 : 0;
+            std::cout << "[DataSynthesizer] Directory index progress: elapsed=" << elapsed_s << "s"
                       << ", discovered=" << discovered_files
                       << ", accepted_ext=" << accepted_files
                       << ", processed=" << processed_files
                       << ", unreadable=" << unreadable_files
-                      << ", loaded_lines=" << loaded
-                      << ", last_file=\"" << entry.path().filename().string() << "\""
-                      << std::endl;
+                      << ", indexed_lines=" << indexed_lines
+                      << ", line_cap=" << directory_max_lines_
+                      << ", at_line_cap=" << at_line_cap
+                      << ", last_file=\"" << std::filesystem::path(corpus_file_paths_[file_index]).filename().string()
+                      << "\"" << std::endl;
             last_progress_log = now;
+        }
+
+        if (indexed_lines >= directory_max_lines_) {
+            std::cout << "[DataSynthesizer] stopped_scan_early_at_line_cap=1 line_cap=" << directory_max_lines_
+                      << " (remaining directory files not opened)" << std::endl;
+            break;
         }
     }
 
-    if (loaded == 0) {
-        std::cerr << "[DataSynthesizer] No .txt/.jsonl lines loaded from directory: " << dir_path
+    if (indexed_lines == 0) {
+        clear_indexed_directory_state();
+        std::cerr << "[DataSynthesizer] No .txt/.jsonl lines indexed from directory: " << dir_path
                   << " (discovered_files=" << discovered_files
                   << ", accepted_files=" << accepted_files
                   << ", skipped_extension_files=" << skipped_extension_files
@@ -1119,31 +1361,14 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
 
     data_path_ = dir_path;
     has_local_data_ = true;
-    std::cout << "[DataSynthesizer] Loaded " << loaded << " text lines from directory: " << dir_path
-              << " (discovered_files=" << discovered_files
+    local_directory_indexed_ = true;
+    std::cout << "[DataSynthesizer] Indexed " << indexed_lines << " text lines (byte offsets only) from directory: "
+              << dir_path << " (discovered_files=" << discovered_files
               << ", accepted_files=" << accepted_files
               << ", skipped_extension_files=" << skipped_extension_files
-              << ", unreadable_files=" << unreadable_files << ")"
+              << ", unreadable_files=" << unreadable_files << ")" << std::endl;
+    std::cout << "[DataSynthesizer] Negatives are generated on read (same schedule as prior pos-block + neg-block)."
               << std::endl;
-
-    std::mt19937 rng(42);
-    const size_t original_count = local_samples_.size();
-    for (size_t i = 0; i < original_count; ++i) {
-        auto neg_sample = local_samples_[i];
-        neg_sample.label = static_cast<Trit>(-1);
-        if (std::holds_alternative<std::vector<int32_t>>(neg_sample.data)) {
-            auto& vec = std::get<std::vector<int32_t>>(neg_sample.data);
-            if (!vec.empty()) {
-                std::uniform_int_distribution<size_t> pos_dist(0, vec.size() - 1);
-                std::uniform_int_distribution<int> val_dist(-1000, 1000);
-                for (int j = 0; j < 3 && j < static_cast<int>(vec.size()); ++j) {
-                    vec[pos_dist(rng)] = val_dist(rng);
-                }
-            }
-        }
-        local_samples_.push_back(std::move(neg_sample));
-    }
-    std::cout << "[DataSynthesizer] With negatives, total samples: " << local_samples_.size() << std::endl;
     return true;
 }
 
@@ -1180,9 +1405,10 @@ bool DataSynthesizer::load_local_data(const std::string& data_path) {
         return load_from_directory(data_path);
     }
     
-    // Clear existing local samples
+    // Clear existing local samples (directory index is mutually exclusive with in-memory JSONL rows).
     local_samples_.clear();
     local_sample_index_ = 0;
+    clear_indexed_directory_state();
     std::ifstream file(data_path);
     std::cout << "[DataSynthesizer] Loading local data from: " << data_path << std::endl;
 
@@ -1199,64 +1425,13 @@ bool DataSynthesizer::load_local_data(const std::string& data_path) {
 
     while (std::getline(file, line)) {
         line_num++;
-        if (line.empty() || line[0] == '#') continue;  // Skip empty lines and comments
-        
-        // Simple parsing: look for "input" and "label" fields
-        // Format: {"input": [1, 0, -1, ...], "label": 1}
-        size_t input_pos = line.find("\"input\"");
-        if (input_pos == std::string::npos) continue;
-        
-        // Extract numeric array between brackets
-        size_t arr_start = line.find('[', input_pos);
-        size_t arr_end = line.find(']', arr_start);
-        if (arr_start == std::string::npos || arr_end == std::string::npos) continue;
-        
-        std::string arr_str = line.substr(arr_start + 1, arr_end - arr_start - 1);
-        std::vector<int32_t> values;
-        std::stringstream ss(arr_str);
-        std::string val;
-        
-        while (std::getline(ss, val, ',')) {
-            // Trim whitespace
-            val.erase(0, val.find_first_not_of(" \t"));
-            val.erase(val.find_last_not_of(" \t") + 1);
-            if (!val.empty()) {
-                try {
-                    values.push_back(std::stoi(val));
-                } catch (...) {
-                    // Skip invalid values
-                }
-            }
+        if (auto row = parse_jsonl_training_sample(line)) {
+            local_samples_.push_back(std::move(*row));
+            ++loaded;
         }
-        
-        if (!values.empty()) {
-            // Create training sample with positive label by default
-            Trit label = 1;
-            // Try to extract label if present
-            size_t label_pos = line.find("\"label\"");
-            if (label_pos != std::string::npos) {
-                size_t colon = line.find(':', label_pos);
-                if (colon != std::string::npos) {
-                    std::string label_str = line.substr(colon + 1);
-                    // Find next comma or brace
-                    size_t end = label_str.find_first_of(",}");
-                    if (end != std::string::npos) {
-                        label_str = label_str.substr(0, end);
-                        // Trim
-                        label_str.erase(0, label_str.find_first_not_of(" \t"));
-                        label_str.erase(label_str.find_last_not_of(" \t") + 1);
-                        try {
-                            label = static_cast<Trit>(std::stoi(label_str));
-                        } catch (...) {}
-                    }
-                }
-            }
-            
-            local_samples_.push_back(TrainingSample{values, label, "local_file", "local_data"});
-            loaded++;
+        if (loaded >= max_jsonl_local_samples_) {
+            break;
         }
-        
-        if (loaded >= 10000) break;  // Limit to 10k samples for memory
     }
     
     file.close();
@@ -1306,9 +1481,19 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
 
     const bool hybrid = has_local_data_ && use_config_sources_ && acquisition_mgr_;
 
+    size_t local_draw_pool = 0;
+    {
+        std::lock_guard<std::mutex> lk(local_data_mutex_);
+        if (local_directory_indexed_) {
+            local_draw_pool = corpus_line_index_.size() * 2;
+        } else {
+            local_draw_pool = local_samples_.size();
+        }
+    }
+
     if (hybrid) {
-        std::cout << "[DataSynthesizer] Hybrid: " << local_samples_.size()
-                  << " local samples + config/web acquisition (interleaved draws)" << std::endl;
+        std::cout << "[DataSynthesizer] Hybrid: " << local_draw_pool
+                  << " local draw slots + config/web acquisition (interleaved draws)" << std::endl;
         if (!acquisition_mgr_->start()) {
             std::cerr << "[DataSynthesizer] Failed to start DataAcquisitionManager (hybrid)" << std::endl;
             use_config_sources_ = false;
@@ -1329,10 +1514,10 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
         return;
     }
 
-    // Local-only: corpus already in memory; no acquisition threads
+    // Local-only: corpus in memory (JSONL) or indexed directory (offsets); no acquisition threads
     if (has_local_data_) {
         std::cout << "[DataSynthesizer] Using local data from: " << data_path_ << std::endl;
-        std::cout << "[DataSynthesizer] Samples available: " << local_samples_.size() << std::endl;
+        std::cout << "[DataSynthesizer] Samples available: " << local_draw_pool << std::endl;
         return;
     }
 
@@ -1451,11 +1636,10 @@ void DataSynthesizer::stop() {
 TrainingSample DataSynthesizer::get_sample() {
     auto try_pop_local = [this]() -> std::optional<TrainingSample> {
         std::lock_guard<std::mutex> lk(local_data_mutex_);
-        if (has_local_data_ && !local_samples_.empty()) {
-            const size_t idx = local_sample_index_++ % local_samples_.size();
-            return local_samples_[idx];
+        if (!has_local_data_) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        return pop_next_local_sample_locked();
     };
     auto try_pop_queue = [this]() -> std::optional<TrainingSample> {
         std::lock_guard<std::mutex> lk(queue_mutex_);
@@ -1555,7 +1739,8 @@ TrainingSample DataSynthesizer::get_sample() {
 bool DataSynthesizer::has_sample() const {
     {
         std::lock_guard<std::mutex> local_lock(local_data_mutex_);
-        if (has_local_data_ && !local_samples_.empty()) {
+        if (has_local_data_ &&
+            ((local_directory_indexed_ && !corpus_line_index_.empty()) || !local_samples_.empty())) {
             return true;
         }
     }
@@ -1565,11 +1750,10 @@ bool DataSynthesizer::has_sample() const {
 
 std::optional<TrainingSample> DataSynthesizer::try_draw_local_training_sample() {
     std::lock_guard<std::mutex> lk(local_data_mutex_);
-    if (!has_local_data_ || local_samples_.empty()) {
+    if (!has_local_data_) {
         return std::nullopt;
     }
-    const size_t idx = local_sample_index_++ % local_samples_.size();
-    return local_samples_[idx];
+    return pop_next_local_sample_locked();
 }
 
 bool DataSynthesizer::try_pop_contrastive_pair(TrainingSample& pos_out, TrainingSample& neg_out) {
@@ -1578,8 +1762,8 @@ bool DataSynthesizer::try_pop_contrastive_pair(TrainingSample& pos_out, Training
     // Cap work per call so a pathological queue cannot hold queue_mutex for hundreds of ms
     // while acquisition/perturbation threads need it. Alignment continues across batch rows.
     constexpr size_t kMaxResyncPopsPerCall = 4096;
-    const size_t discard_budget = std::min(
-        std::max(initial_depth + size_t{64}, size_t{64}),
+    const size_t discard_budget = (std::min)(
+        (std::max)(initial_depth + size_t{64}, size_t{64}),
         kMaxResyncPopsPerCall);
     size_t discarded = 0;
     while (train_queue_.size() >= 2u) {
@@ -1650,7 +1834,7 @@ void DataSynthesizer::config_acquisition_worker() {
             if (!logged_relaxed_min_text) {
                 logged_relaxed_min_text = true;
                 std::cerr << "[DataSynthesizer] config_acquisition_worker: min_text relaxed to 1 after "
-                          << empty_batch_streak << " empty acquisition batches (tiny-corpus / prefill guardrail)\n";
+                          << empty_batch_streak << " empty acquisition batches (tiny-corpus / prefill target not met)\n";
             }
         }
 

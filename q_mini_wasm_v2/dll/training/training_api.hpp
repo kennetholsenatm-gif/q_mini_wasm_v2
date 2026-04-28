@@ -61,8 +61,19 @@ extern uint64_t g_next_session_id;
  * @param training_serial_experts - When true, disable OpenMP parallel per-route experts
  * @param training_sycl_route_mode - 0=auto, 1=on, 2=off for symplectic routing logits (TOML training.sycl_route_mode)
  * @param training_sycl_trit_quant_min_moe_dim - Minimum moe_input_dim to use SYCL float/int32/string->trit quant (TOML training.sycl_trit_quant_min_moe_dim); 0 means default 128 in the DLL
- * @param training_goodness_log_level - 0=off, 1=stderr batch FF goodness summary, 2=+ first rows (TOML training.goodness_log_level; values >2 are clamped)
- * @param training_allow_generated_negatives - If true, synthesize negatives when pair negatives are missing; if false, missing negatives fail training
+ * @param training_goodness_log_level - 0=off, 1=stderr batch FF goodness summary, 2=+ first rows (TOML training.goodness_log_level; higher values reserved / clamped in pipeline)
+ * @param training_allow_generated_negatives - Nonzero = allow generated negatives (stable FFI: uint32, not bool — bool before uint64 misaligns on Win64 CGO/MSVC)
+ * @param directory_max_lines - Max directory corpus lines indexed (TOML `[training.data_filter].directory_max_lines`)
+ * @param max_jsonl_local_samples - Max JSONL rows in RAM for single local file (TOML `training.max_jsonl_local_samples`)
+ * @param min_text_length - Min feature / text length (TOML `[training.data_filter].min_text_length`)
+ * @param max_text_length - Max feature / text length (TOML `[training.data_filter].max_text_length`)
+ * @param acquisition_threads - DataSynthesizer acquisition pool size (TOML training.acquisition_threads)
+ * @param perturbation_threads - DataSynthesizer perturbation pool size (TOML training.perturbation_threads)
+ * @param checkpoint_async_queue_max - Pending checkpoint write jobs (TOML training.checkpoint_async_queue_max)
+ * @param collect_empty_backoff_base_ms - Empty-queue backoff base (TOML)
+ * @param collect_empty_backoff_max_shift - Empty-queue backoff exponent cap (TOML)
+ * @param collect_empty_backoff_cap_ms - Empty-queue backoff ceiling ms (TOML)
+ * @param metrics_heartbeat_sec - Metrics emit interval while waiting for samples; 0=every poll (TOML)
  * @return 0 on success, negative error code on failure
  */
 TRAINING_API int Training_InitSession(
@@ -104,7 +115,18 @@ TRAINING_API int Training_InitSession(
     uint32_t training_sycl_route_mode,
     uint32_t training_sycl_trit_quant_min_moe_dim,
     uint32_t training_goodness_log_level,
-    bool training_allow_generated_negatives
+    uint32_t training_allow_generated_negatives,
+    uint64_t directory_max_lines,
+    uint64_t max_jsonl_local_samples,
+    uint32_t min_text_length,
+    uint32_t max_text_length,
+    uint32_t acquisition_threads,
+    uint32_t perturbation_threads,
+    uint32_t checkpoint_async_queue_max,
+    uint32_t collect_empty_backoff_base_ms,
+    uint32_t collect_empty_backoff_max_shift,
+    uint32_t collect_empty_backoff_cap_ms,
+    uint32_t metrics_heartbeat_sec
 );
 
 /**

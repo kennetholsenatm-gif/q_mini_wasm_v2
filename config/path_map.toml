@@ -5,6 +5,8 @@
 # directory as qminiwasm.exe). PATH does not override that for a DLL with the same name
 # sitting next to the exe—stop qminiwasm.exe before replacing a locked q_training.dll,
 # or copy from native_runtime/ after CMake built it there.
+# When libcurl is enabled via vcpkg, CMake also copies libcurl.dll (and common OpenSSL/zlib
+# peers) to the same directories as q_training.dll after each q_training build.
 #
 # CMake copies the built DLL to BOTH:
 #   - <repo>/q_training.dll  (primary)

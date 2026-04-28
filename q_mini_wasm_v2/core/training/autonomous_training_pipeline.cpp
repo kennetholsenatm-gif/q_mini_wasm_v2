@@ -10,6 +10,7 @@
 #include "../ternary/trit.hpp"
 #include "../ternary/packing.hpp"
 #include <fstream>
+#include <sstream>
 #include <iostream>
 #include <algorithm>
 #include <numeric>
@@ -51,14 +52,14 @@ void goodness_log_banner_once(unsigned level) {
                  level);
 }
 
-/** Upper bound on samples collected per training batch (bounded by batch_size). Set only from TOML via InitSession (must be > 0). */
+/** Upper bound on samples collected per training batch: `training.micro_batch_cap` (capped by `training.batch_size` only). */
 size_t training_micro_batch_cap_for(const PipelineConfig& c) {
-    return std::min(c.training_micro_batch_cap, size_t{4096});
+    return c.training_micro_batch_cap;
 }
 
-/** Minimum micro-batch size after adaptive clamp. Set only from TOML (must be > 0). */
+/** Minimum micro-batch target from TOML: `training.collect_floor`. */
 size_t training_collect_floor_for(const PipelineConfig& c) {
-    return std::min(c.training_collect_floor, size_t{512});
+    return c.training_collect_floor;
 }
 
 bool training_timing_enabled_for(const PipelineConfig& c) {
@@ -88,57 +89,17 @@ uint64_t router_work_estimate(const PipelineConfig& c) {
 size_t adaptive_collect_limit(const PipelineConfig& c) {
     const size_t hard_cap = std::min(c.batch_size, training_micro_batch_cap_for(c));
     const size_t floor_v = training_collect_floor_for(c);
-    if (hard_cap <= 1) {
-        return std::max(size_t{1}, std::min(hard_cap, floor_v));
-    }
-    size_t tier = std::min(hard_cap, size_t{32});
-    if (c.moe_num_experts >= 4096) {
-        tier = std::min(hard_cap, size_t{1});
-    } else if (c.moe_num_experts >= 2048) {
-        tier = std::min(hard_cap, size_t{2});
-    } else {
-        const uint64_t work = router_work_estimate(c);
-        if (work >= 200000000ull) {
-            tier = std::min(hard_cap, size_t{1});
-        } else if (work >= 100000000ull) {
-            tier = std::min(hard_cap, size_t{2});
-        } else if (work >= 40000000ull) {
-            tier = std::min(hard_cap, size_t{4});
-        } else if (work >= 10000000ull) {
-            tier = std::min(hard_cap, size_t{8});
-        } else if (work >= 3000000ull) {
-            tier = std::min(hard_cap, size_t{16});
-        }
-    }
-    return std::max(size_t{1}, std::min(hard_cap, std::max(floor_v, tier)));
+    // 100% TOML: rows per `process_batch` = min(batch_size, micro_batch_cap), floored by collect_floor
+    // when that is smaller than the cap (if floor exceeds cap, the cap wins).
+    return std::max(size_t{1}, std::min(hard_cap, std::max(floor_v, size_t{1})));
 }
 
 size_t adaptive_route_topk_cap(const PipelineConfig& c) {
+    if (c.moe_num_experts == 0) {
+        return 1;
+    }
     const size_t requested = std::max<size_t>(size_t{1}, c.moe_top_k);
-    if (c.moe_num_experts >= 4096) {
-        return std::min(requested, size_t{1});
-    }
-    if (c.moe_num_experts >= 2048) {
-        return std::min(requested, size_t{2});
-    }
-    const uint64_t route_work =
-        static_cast<uint64_t>(c.moe_num_experts) *
-        static_cast<uint64_t>(c.routing_qutrits) *
-        static_cast<uint64_t>(requested);
-
-    if (route_work >= 300000000ull) {
-        return std::min(requested, size_t{4});
-    }
-    if (route_work >= 120000000ull) {
-        return std::min(requested, size_t{8});
-    }
-    if (route_work >= 40000000ull) {
-        return std::min(requested, size_t{16});
-    }
-    if (route_work >= 12000000ull) {
-        return std::min(requested, size_t{32});
-    }
-    return requested;
+    return std::min(requested, c.moe_num_experts);
 }
 
 #if defined(USE_SYCL) && USE_SYCL
@@ -300,9 +261,18 @@ void write_pipeline_config(std::ostream& os, const PipelineConfig& c) {
     wr_sz(os, c.sycl_trit_quant_min_moe_dim);
     wr_u8(os, static_cast<uint8_t>(std::min<uint32_t>(2u, c.goodness_log_level)));
     wr_u8(os, c.allow_generated_negatives ? uint8_t{1} : uint8_t{0});
+    wr_sz(os, c.directory_max_lines);
+    wr_sz(os, c.max_jsonl_local_samples);
+    wr_sz(os, c.max_text_length);
+    wr_sz(os, c.min_text_length);
+    wr_sz(os, c.checkpoint_async_queue_max);
+    wr_u32(os, c.collect_empty_backoff_base_ms);
+    wr_u32(os, c.collect_empty_backoff_max_shift);
+    wr_u32(os, c.collect_empty_backoff_cap_ms);
+    wr_u32(os, c.metrics_heartbeat_sec);
 }
 
-bool read_pipeline_config(std::istream& is, PipelineConfig& c) {
+bool read_pipeline_config(std::istream& is, PipelineConfig& c, uint32_t checkpoint_fmt) {
     if (!rd_sz(is, c.acquisition_threads)) {
         return false;
     }
@@ -526,6 +496,91 @@ bool read_pipeline_config(std::istream& is, PipelineConfig& c) {
         }
         c.allow_generated_negatives = (agn != 0);
     }
+    if (!is.good()) {
+        return true;
+    }
+    {
+        const int peek6 = is.peek();
+        if (peek6 == std::istream::traits_type::eof()) {
+            return true;
+        }
+        size_t dmax = 0;
+        size_t jmax = 0;
+        size_t tmax = 0;
+        if (!rd_sz(is, dmax) || !rd_sz(is, jmax) || !rd_sz(is, tmax)) {
+            return false;
+        }
+        c.directory_max_lines = std::max<size_t>(size_t{1}, dmax);
+        c.max_jsonl_local_samples = std::max<size_t>(size_t{1}, jmax);
+        c.max_text_length = std::max<size_t>(size_t{1}, tmax);
+
+        // Corpus tail: older checkpoints wrote three u64 (directory cap, jsonl cap, line/utf8 cap)
+        // after allow_generated_negatives; newer writes a fourth (min_text_length). Reading a
+        // fourth field when only three exist misaligns epoch/slots and corrupts deserialization.
+        // fmt >= 6 always has four fields; fmt 3–5 may have three or four — disambiguate with
+        // num_slots vs moe_num_experts.
+        if (checkpoint_fmt >= 6) {
+            size_t tmin = 0;
+            if (!rd_sz(is, tmin)) {
+                return false;
+            }
+            c.min_text_length = std::max<size_t>(size_t{1}, tmin);
+        } else {
+            const std::streampos pos_after_three = is.tellg();
+            if (!is.good()) {
+                return false;
+            }
+            const uint64_t expected_slots = static_cast<uint64_t>(c.moe_num_experts);
+
+            uint64_t u0 = 0, u1 = 0, u2 = 0, u3 = 0, u4 = 0;
+            is.seekg(pos_after_three);
+            if (!rd_u64(is, u0) || !rd_u64(is, u1) || !rd_u64(is, u2) || !rd_u64(is, u3) || !rd_u64(is, u4)) {
+                return false;
+            }
+            const std::streampos pos_after_h3 = is.tellg();
+            const bool h3 = (u4 == expected_slots);
+
+            uint64_t tmin_c = 0, s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
+            is.seekg(pos_after_three);
+            if (!rd_u64(is, tmin_c) || !rd_u64(is, s0) || !rd_u64(is, s1) || !rd_u64(is, s2) || !rd_u64(is, s3) ||
+                !rd_u64(is, s4)) {
+                return false;
+            }
+            const std::streampos pos_after_h4 = is.tellg();
+            const bool h4 = (s4 == expected_slots);
+
+            const bool tmin_plausible =
+                (tmin_c > 0u) && (tmin_c <= static_cast<uint64_t>(c.max_text_length)) && (tmin_c < (1ull << 24));
+
+            if (h4 && (!h3 || tmin_plausible)) {
+                c.min_text_length = std::max<size_t>(size_t{1}, static_cast<size_t>(tmin_c));
+                is.seekg(pos_after_h4);
+            } else if (h3) {
+                c.min_text_length = size_t{1};
+                is.seekg(pos_after_h3);
+            } else if (h4) {
+                c.min_text_length = std::max<size_t>(size_t{1}, static_cast<size_t>(tmin_c));
+                is.seekg(pos_after_h4);
+            } else {
+                return false;
+            }
+            if (!is.good()) {
+                return false;
+            }
+        }
+        if (c.min_text_length > c.max_text_length) {
+            std::swap(c.min_text_length, c.max_text_length);
+        }
+    }
+    if (checkpoint_fmt >= 7) {
+        size_t cq = 0;
+        if (!rd_sz(is, cq) || !rd_u32(is, c.collect_empty_backoff_base_ms) ||
+            !rd_u32(is, c.collect_empty_backoff_max_shift) || !rd_u32(is, c.collect_empty_backoff_cap_ms) ||
+            !rd_u32(is, c.metrics_heartbeat_sec)) {
+            return false;
+        }
+        c.checkpoint_async_queue_max = std::max<size_t>(size_t{1}, cq);
+    }
     return true;
 }
 
@@ -538,6 +593,7 @@ AutonomousTrainingPipeline::~AutonomousTrainingPipeline() {
     if (training_thread_.joinable()) {
         training_thread_.join();
     }
+    shutdown_checkpoint_writer();
     if (synthesizer_) {
         synthesizer_->stop();
     }
@@ -569,20 +625,23 @@ bool AutonomousTrainingPipeline::initialize_components() {
         config_.max_train_queue_depth,
         config_.max_acquisition_queue_depth
     );
+    synthesizer_->set_local_corpus_limits(
+        config_.directory_max_lines,
+        config_.max_jsonl_local_samples,
+        config_.min_text_length,
+        config_.max_text_length);
 
-    // 1) Local corpus first (lines under dataset_dir / acquired, etc.)
-    bool have_local = false;
-    if (!config_.data_path.empty()) {
-        have_local = synthesizer_->load_local_data(config_.data_path);
-        if (have_local) {
-            std::cout << "[TrainingPipeline] Local data loaded from: " << config_.data_path << std::endl;
-        } else {
-            std::cerr << "[TrainingPipeline] WARN: Could not load local data from: " << config_.data_path
-                      << " (continuing if TOML/web sources load)" << std::endl;
-        }
+    // 1) Local corpus (disk) and 2) data_sources.toml can run in parallel: they touch disjoint
+    // synthesizer state (local_samples_ vs acquisition_mgr_) and reduce wall-clock init wait.
+    std::future<bool> local_future;
+    const bool want_local = !config_.data_path.empty();
+    if (want_local) {
+        const std::string path_copy = config_.data_path;
+        local_future = std::async(std::launch::async, [this, path_copy]() {
+            return synthesizer_->load_local_data(path_copy);
+        });
     }
 
-    // 2) Config / web acquisition (always attempted when TOML path is known)
     const std::string& ds_path = config_.data_sources_toml_path.empty()
         ? std::string("config/data_sources.toml")
         : config_.data_sources_toml_path;
@@ -591,6 +650,17 @@ bool AutonomousTrainingPipeline::initialize_components() {
         std::cout << "[TrainingPipeline] Data sources config loaded: " << ds_path << std::endl;
     } else {
         std::cerr << "[TrainingPipeline] WARN: Failed to load data_sources.toml at: " << ds_path << std::endl;
+    }
+
+    bool have_local = false;
+    if (want_local) {
+        have_local = local_future.get();
+        if (have_local) {
+            std::cout << "[TrainingPipeline] Local data loaded from: " << config_.data_path << std::endl;
+        } else {
+            std::cerr << "[TrainingPipeline] WARN: Could not load local data from: " << config_.data_path
+                      << " (continuing if TOML/web sources load)" << std::endl;
+        }
     }
 
     if (!have_local && !have_config) {
@@ -617,9 +687,7 @@ bool AutonomousTrainingPipeline::initialize_components() {
     // Initialize MoE Router
     moe::ExpertConfig router_config;
     router_config.total_experts = config_.moe_num_experts;
-    // Align router Top-K with process_batch guardrails: scoring partial_sort used to
-    // use full moe_top_k even when training only applies adaptive_route_topk_cap(),
-    // which wasted CPU and looked like a stall (metrics frozen for long intervals).
+    // Align router active experts with TOML-driven top-k (min(moe_top_k, moe_experts)).
     {
         const size_t route_k = std::max<size_t>(
             size_t{1},
@@ -791,20 +859,15 @@ bool AutonomousTrainingPipeline::start_training() {
     synthesizer_->start(config_.acquisition_threads, config_.perturbation_threads);
     const size_t collect_limit = adaptive_collect_limit(config_);
     const size_t hard_cap = std::min(config_.batch_size, training_micro_batch_cap_for(config_));
-    if (collect_limit < hard_cap && !microbatch_guardrail_logged_.exchange(true)) {
-        std::cout << "[TrainingPipeline] Microbatch guardrail active: collect_limit="
-                  << collect_limit << " (from hard_cap=" << hard_cap
-                  << ", experts=" << config_.moe_num_experts
-                  << ", routing_qutrits=" << config_.routing_qutrits
-                  << ", estimated_router_work=" << router_work_estimate(config_) << ")"
+    if (collect_limit < hard_cap && !pipeline_collect_hint_logged_.exchange(true)) {
+        std::cout << "[TrainingPipeline] collect_limit=" << collect_limit << " < hard_cap=" << hard_cap
+                  << " (training.collect_floor vs min(training.batch_size, training.micro_batch_cap))"
                   << std::endl;
     }
     const size_t route_cap = adaptive_route_topk_cap(config_);
     if (route_cap < std::max<size_t>(size_t{1}, config_.moe_top_k)) {
-        std::cout << "[TrainingPipeline] Routing guardrail active: effective_top_k="
-                  << route_cap << " (requested=" << config_.moe_top_k
-                  << ", experts=" << config_.moe_num_experts
-                  << ", routing_qutrits=" << config_.routing_qutrits << ")"
+        std::cout << "[TrainingPipeline] effective_top_k=" << route_cap << " < model.moe_top_k="
+                  << config_.moe_top_k << " (capped by model.moe_experts=" << config_.moe_num_experts << ")"
                   << std::endl;
     }
     if (synthesizer_) {
@@ -918,7 +981,8 @@ void AutonomousTrainingPipeline::resume_training() {
 
 void AutonomousTrainingPipeline::training_loop() {
     set_state(PipelineState::TRAINING);
-    
+    bool traced_first_process_batch = false;
+
     while (!stop_requested_) {
         // Check for pause
         if (pause_requested_) {
@@ -929,10 +993,22 @@ void AutonomousTrainingPipeline::training_loop() {
             if (stop_requested_) break;
             set_state(PipelineState::TRAINING);
         }
-        
+
+        if (!traced_first_process_batch) {
+            std::cerr << "[TrainingPipeline] training_loop: entering first process_batch() "
+                         "(native path after Training_StartTraining returned)\n"
+                      << std::flush;
+        }
+
         // Process batch - returns number of samples actually trained
         size_t samples_trained = process_batch();
-        
+
+        if (!traced_first_process_batch) {
+            traced_first_process_batch = true;
+            std::cerr << "[TrainingPipeline] training_loop: first process_batch returned, samples_trained="
+                      << samples_trained << std::endl;
+        }
+
         if (samples_trained == 0) {
             // No samples available - DataSynthesizer not producing data
             // Log periodically but don't fail - APIs might recover
@@ -962,6 +1038,16 @@ void AutonomousTrainingPipeline::training_loop() {
         if (config_.enable_betti_guidance && 
             current_batch_ % config_.topology_evaluation_interval == 0) {
             evaluate_topology();
+        }
+
+        // Frequent checkpoints prevent long runs from losing hours of progress.
+        if (config_.enable_checkpoints && config_.checkpoint_interval > 0) {
+            const uint64_t batch_now = current_batch_.load();
+            if (batch_now > 0 && (batch_now % config_.checkpoint_interval) == 0 &&
+                last_checkpoint_batch_.load() != batch_now) {
+                checkpoint_if_needed();
+                last_checkpoint_batch_.store(batch_now);
+            }
         }
         
         // samples_trained = contrastive rows this batch (not MoE route fan-out).
@@ -1014,6 +1100,12 @@ void AutonomousTrainingPipeline::training_loop() {
 }
 
 size_t AutonomousTrainingPipeline::process_batch() {
+    const bool trace_phases = trace_first_process_batch_phases_;
+    const detail::FirstProcessBatchPhaseTraceScope first_batch_phase_trace{this, trace_phases};
+    if (trace_phases) {
+        std::cerr << "[TrainingPipeline] process_batch: phase=enter" << std::endl;
+    }
+
     if (config_.moe_input_dim == 0) {
         std::cerr << "[TrainingPipeline] moe_input_dim is 0; cannot form training vectors." << std::endl;
         return 0;
@@ -1036,8 +1128,7 @@ size_t AutonomousTrainingPipeline::process_batch() {
         std::optional<TrainingSample> prepared_negative;
     };
     std::vector<ContrastiveRow> batch_work;
-    // Do not wait for full training.batch_size before first MoE step.
-    // For large MoE routing matrices, clamp aggressively so metrics and counters advance steadily.
+    // Do not wait for full training.batch_size before first MoE step (see TOML collect_limit).
     const size_t collect_limit = std::max(size_t{1}, adaptive_collect_limit(config_));
     const size_t effective_top_k = adaptive_route_topk_cap(config_);
     batch_work.reserve(collect_limit);
@@ -1084,15 +1175,27 @@ size_t AutonomousTrainingPipeline::process_batch() {
             batch_inflight_done_.store(static_cast<uint32_t>(batch_work.size()));
             consecutive_empty_checks = 0;
         } else {
-            // Wait for samples with exponential backoff
+            // Wait for samples with exponential backoff (TOML-driven).
             consecutive_empty_checks++;
-            auto wait_ms = std::min(10 * (1 << std::min(consecutive_empty_checks, size_t(10))), 1000);
+            const uint32_t base_ms = config_.collect_empty_backoff_base_ms;
+            const uint32_t cap_ms = config_.collect_empty_backoff_cap_ms;
+            const size_t max_shift = static_cast<size_t>(config_.collect_empty_backoff_max_shift);
+            const size_t shift = std::min(consecutive_empty_checks, max_shift);
+            uint64_t mult = static_cast<uint64_t>(base_ms);
+            if (shift < 63) {
+                mult <<= shift;
+            } else {
+                mult = std::numeric_limits<uint64_t>::max();
+            }
+            const uint64_t wait_u64 = std::min(mult, static_cast<uint64_t>(cap_ms));
+            const auto wait_ms = static_cast<unsigned long>(std::min<uint64_t>(wait_u64, 86400000ull));
             std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
             --i;  // Retry this sample
         }
 
         const auto now = std::chrono::steady_clock::now();
-        if (now - last_heartbeat >= std::chrono::seconds(2)) {
+        const uint32_t hb_sec = config_.metrics_heartbeat_sec;
+        if (hb_sec == 0u || now - last_heartbeat >= std::chrono::seconds(static_cast<long long>(hb_sec))) {
             update_metrics();
             if (config_.enable_wui_streaming) {
                 emit_metrics();
@@ -1110,6 +1213,11 @@ size_t AutonomousTrainingPipeline::process_batch() {
         batch_inflight_done_.store(0);
         batch_inflight_target_.store(0);
         return 0;  // Return 0 samples trained - no progress was made
+    }
+
+    if (trace_phases) {
+        std::cerr << "[TrainingPipeline] process_batch: phase=collect_done rows=" << batch_work.size()
+                  << " collect_limit=" << collect_limit << std::endl;
     }
 
     {
@@ -1197,6 +1305,10 @@ size_t AutonomousTrainingPipeline::process_batch() {
         if (selected_experts.size() > effective_top_k) {
             selected_experts.resize(effective_top_k);
         }
+        if (trace_phases && row_index == 0) {
+            std::cerr << "[TrainingPipeline] process_batch: phase=first_route_done topk="
+                      << selected_experts.size() << std::endl;
+        }
         if (selected_experts.empty() && !experts_.empty()) {
             std::cerr << "[TrainingPipeline] ERROR: router returned no experts for a row; failing batch." << std::endl;
             {
@@ -1257,6 +1369,11 @@ size_t AutonomousTrainingPipeline::process_batch() {
             if (kTiming) {
                 ff_ms_part[static_cast<size_t>(ri)] = elapsed_ms(timing_ff_t0);
             }
+        }
+
+        if (trace_phases && row_index == 0) {
+            std::cerr << "[TrainingPipeline] process_batch: phase=first_row_ff_train_done route_experts=" << nr
+                      << std::endl;
         }
 
         for (int ri = 0; ri < nr; ++ri) {
@@ -1771,6 +1888,8 @@ PipelineMetrics AutonomousTrainingPipeline::get_metrics() const {
     
     // Add status message with detailed DataSynthesizer health
     std::string status = state_to_string(state_.load());
+    metrics.train_collect_limit_effective = static_cast<uint32_t>(adaptive_collect_limit(config_));
+    metrics.route_topk_effective = static_cast<uint32_t>(adaptive_route_topk_cap(config_));
     
     // Get DataSynthesizer stats
     if (synthesizer_) {
@@ -1837,6 +1956,11 @@ PipelineMetrics AutonomousTrainingPipeline::get_metrics() const {
             status += " | batch_inflight " + std::to_string(done) + "/" + std::to_string(target);
         }
     }
+    status += " | collect_limit=" + std::to_string(adaptive_collect_limit(config_)) +
+              " top_k=" + std::to_string(adaptive_route_topk_cap(config_)) +
+              " sycl_route_mode=" +
+              (config_.training_sycl_route_mode == moe::SyclRouteMode::On ? "on" :
+               (config_.training_sycl_route_mode == moe::SyclRouteMode::Off ? "off" : "auto"));
     
     metrics.status_message = status;
     metrics.gf3_hebbian_weight_cell_updates = moe::gf3_hebbian_weight_cell_updates_total();
@@ -1877,11 +2001,31 @@ void AutonomousTrainingPipeline::emit_metrics() {
 }
 
 void AutonomousTrainingPipeline::checkpoint_if_needed() {
-    if (config_.enable_checkpoints) {
-        std::string checkpoint_path = "checkpoint_epoch_" + 
-            std::to_string(current_epoch_) + "_batch_" + 
-            std::to_string(current_batch_) + ".qmini";
-        export_model(checkpoint_path);
+    if (!config_.enable_checkpoints) {
+        return;
+    }
+
+    ensure_checkpoint_writer_started();
+
+    set_state(PipelineState::CHECKPOINTING);
+    std::string checkpoint_path = "checkpoint_epoch_" +
+        std::to_string(current_epoch_) + "_batch_" +
+        std::to_string(current_batch_) + ".qmini";
+
+    std::ostringstream oss;
+    if (!serialize_checkpoint_blob(oss)) {
+        std::cerr << "[TrainingPipeline] ERROR: checkpoint serialization failed: " << checkpoint_path << std::endl;
+        if (state_.load() != PipelineState::FAILED && state_.load() != PipelineState::STOPPING) {
+            set_state(PipelineState::TRAINING);
+        }
+        return;
+    }
+
+    std::string payload = oss.str();
+    enqueue_checkpoint_job(std::move(checkpoint_path), std::move(payload));
+
+    if (state_.load() != PipelineState::FAILED && state_.load() != PipelineState::STOPPING) {
+        set_state(PipelineState::TRAINING);
     }
 }
 
@@ -1891,40 +2035,30 @@ void AutonomousTrainingPipeline::apply_run_overrides(const std::string& data_pat
     config_.num_epochs = static_cast<size_t>(num_epochs);
 }
 
-bool AutonomousTrainingPipeline::export_model(const std::string& path) {
-    const PipelineState st0 = state_.load();
-    if (st0 == PipelineState::TRAINING || st0 == PipelineState::ACQUIRING_DATA) {
-        return false;
-    }
-
+bool AutonomousTrainingPipeline::serialize_checkpoint_blob(std::ostream& os) {
     std::scoped_lock lock(config_mutex_, experts_mutex_);
 
-    std::ofstream file(path, std::ios::binary);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    file.write(kFileMagicV3, 8);
-    const uint32_t fmt = 5; // v5: full MoE router state (RUF2) after expert blobs
-    wr_u32(file, fmt);
-    write_pipeline_config(file, config_);
+    os.write(kFileMagicV3, 8);
+    const uint32_t fmt = 7; // v7: + checkpoint_async_queue_max + collect backoff + metrics heartbeat
+    wr_u32(os, fmt);
+    write_pipeline_config(os, config_);
 
     const uint64_t epoch = current_epoch_.load();
     const uint64_t batch = current_batch_.load();
     const uint64_t samples_total = samples_processed_total_.load();
-    wr_u64(file, epoch);
-    wr_u64(file, batch);
-    wr_u64(file, samples_total);
+    wr_u64(os, epoch);
+    wr_u64(os, batch);
+    wr_u64(os, samples_total);
 
     const uint64_t graph_nodes = graph_tableau_ ? static_cast<uint64_t>(graph_tableau_->num_qutrits()) : 0ull;
-    wr_u64(file, graph_nodes);
+    wr_u64(os, graph_nodes);
 
     const uint64_t num_slots = static_cast<uint64_t>(experts_.size());
-    wr_u64(file, num_slots);
+    wr_u64(os, num_slots);
 
     for (size_t i = 0; i < experts_.size(); ++i) {
         const uint8_t present = experts_[i] ? uint8_t{1} : uint8_t{0};
-        wr_u8(file, present);
+        wr_u8(os, present);
         if (!present) {
             continue;
         }
@@ -1932,14 +2066,96 @@ bool AutonomousTrainingPipeline::export_model(const std::string& path) {
         if (!gf3) {
             return false;
         }
-        gf3->SerializeWeights(file);
+        gf3->SerializeWeights(os);
     }
 
     if (router_) {
-        router_->SerializeRouterState(file);
+        router_->SerializeRouterState(os);
     }
 
+    return static_cast<bool>(os);
+}
+
+bool AutonomousTrainingPipeline::export_model(const std::string& path) {
+    const PipelineState st0 = state_.load();
+    if (st0 == PipelineState::TRAINING || st0 == PipelineState::ACQUIRING_DATA) {
+        return false;
+    }
+
+    std::ofstream file(path, std::ios::binary);
+    if (!file.is_open()) {
+        return false;
+    }
+    if (!serialize_checkpoint_blob(file)) {
+        return false;
+    }
     return static_cast<bool>(file);
+}
+
+void AutonomousTrainingPipeline::ensure_checkpoint_writer_started() {
+    std::call_once(checkpoint_writer_once_, [this]() {
+        checkpoint_writer_stop_.store(false);
+        checkpoint_writer_thread_ = std::thread(&AutonomousTrainingPipeline::checkpoint_writer_loop, this);
+    });
+}
+
+void AutonomousTrainingPipeline::enqueue_checkpoint_job(std::string path, std::string payload) {
+    std::unique_lock<std::mutex> lk(checkpoint_queue_mutex_);
+    checkpoint_queue_slots_cv_.wait(lk, [this] {
+        return checkpoint_queue_.size() < config_.checkpoint_async_queue_max || checkpoint_writer_stop_.load();
+    });
+    if (checkpoint_writer_stop_.load()) {
+        return;
+    }
+    checkpoint_queue_.emplace_back(std::move(path), std::move(payload));
+    lk.unlock();
+    checkpoint_queue_cv_.notify_one();
+}
+
+void AutonomousTrainingPipeline::checkpoint_writer_loop() {
+    while (true) {
+        std::unique_lock<std::mutex> lk(checkpoint_queue_mutex_);
+        checkpoint_queue_cv_.wait(lk, [this] {
+            return checkpoint_writer_stop_.load() || !checkpoint_queue_.empty();
+        });
+        if (checkpoint_writer_stop_.load() && checkpoint_queue_.empty()) {
+            return;
+        }
+        if (checkpoint_queue_.empty()) {
+            continue;
+        }
+        std::pair<std::string, std::string> job = std::move(checkpoint_queue_.front());
+        checkpoint_queue_.pop_front();
+        lk.unlock();
+        checkpoint_queue_slots_cv_.notify_all();
+
+        std::ofstream file(job.first, std::ios::binary);
+        if (!file.is_open()) {
+            std::cerr << "[TrainingPipeline] ERROR: checkpoint open failed (async): " << job.first << std::endl;
+            continue;
+        }
+        file.write(job.second.data(), static_cast<std::streamsize>(job.second.size()));
+        if (file && static_cast<bool>(file.flush())) {
+            std::cout << "[TrainingPipeline] Checkpoint written (async): " << job.first << " bytes=" << job.second.size()
+                      << std::endl;
+        } else {
+            std::cerr << "[TrainingPipeline] ERROR: checkpoint write failed (async): " << job.first << std::endl;
+        }
+    }
+}
+
+void AutonomousTrainingPipeline::shutdown_checkpoint_writer() {
+    if (!checkpoint_writer_thread_.joinable()) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lk(checkpoint_queue_mutex_);
+        checkpoint_writer_stop_.store(true);
+    }
+    checkpoint_queue_cv_.notify_all();
+    checkpoint_queue_slots_cv_.notify_all();
+    checkpoint_writer_thread_.join();
+    checkpoint_writer_stop_.store(false);
 }
 
 bool AutonomousTrainingPipeline::import_model(const std::string& path) {
@@ -1962,12 +2178,12 @@ bool AutonomousTrainingPipeline::import_model(const std::string& path) {
     }
 
     uint32_t fmt = 0;
-    if (!rd_u32(file, fmt) || (fmt != 3 && fmt != 4 && fmt != 5)) {
+    if (!rd_u32(file, fmt) || (fmt != 3 && fmt != 4 && fmt != 5 && fmt != 6 && fmt != 7)) {
         return false;
     }
 
     PipelineConfig imported{};
-    if (!read_pipeline_config(file, imported)) {
+    if (!read_pipeline_config(file, imported, fmt)) {
         return false;
     }
 

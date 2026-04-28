@@ -1,4 +1,5 @@
 #include "gf3_layers.hpp"
+#include "../../sycl/gf3_layers_sycl.hpp"
 #include <atomic>
 #include <random>
 #include <algorithm>
@@ -49,10 +50,48 @@ std::vector<ternary::Trit> GF3LinearLayer::Forward(
 std::vector<ternary::Trit> GF3LinearLayer::TropicalForward(
     const std::vector<ternary::Trit>& input
 ) {
+    if (q_mini_wasm_v2::sycl_kernels::gf3_sycl_forward_enabled_for_shape(config_.input_dim, config_.output_dim)) {
+        std::vector<int8_t> in_b(config_.input_dim, 0);
+        const size_t in_lim = std::min(input.size(), config_.input_dim);
+        for (size_t i = 0; i < in_lim; ++i) {
+            in_b[i] = static_cast<int8_t>(input[i]);
+        }
+        std::vector<int8_t> w_row(config_.input_dim * config_.output_dim);
+        for (size_t i = 0; i < config_.input_dim; ++i) {
+            for (size_t j = 0; j < config_.output_dim; ++j) {
+                w_row[i * config_.output_dim + j] = static_cast<int8_t>(weights_[i][j]);
+            }
+        }
+        const bool use_bias = config_.use_bias == ternary::Trit::POSITIVE;
+        std::vector<int8_t> bias_b;
+        if (use_bias) {
+            bias_b.resize(config_.output_dim, 0);
+            for (size_t j = 0; j < config_.output_dim && j < bias_.size(); ++j) {
+                bias_b[j] = static_cast<int8_t>(bias_[j]);
+            }
+        }
+        std::vector<int8_t> out_b;
+        if (q_mini_wasm_v2::sycl_kernels::gf3_tropical_linear_forward_sycl(
+                in_b,
+                w_row,
+                bias_b,
+                use_bias,
+                config_.input_dim,
+                config_.output_dim,
+                out_b)
+            && out_b.size() == config_.output_dim) {
+            std::vector<ternary::Trit> output(config_.output_dim);
+            for (size_t j = 0; j < config_.output_dim; ++j) {
+                output[j] = static_cast<ternary::Trit>(out_b[j]);
+            }
+            return output;
+        }
+    }
+
     std::vector<ternary::Trit> output(config_.output_dim, ternary::Trit::NEGATIVE);
     const int64_t out_d = static_cast<int64_t>(config_.output_dim);
 #if defined(_OPENMP)
-#pragma omp parallel for schedule(static) if(out_d > 256)
+#pragma omp parallel for schedule(static) if(out_d > 64)
 #endif
     for (int64_t jj = 0; jj < out_d; ++jj) {
         const size_t j = static_cast<size_t>(jj);
@@ -87,12 +126,50 @@ std::vector<ternary::Trit> GF3LinearLayer::TropicalForward(
 std::vector<ternary::Trit> GF3LinearLayer::StandardForward(
     const std::vector<ternary::Trit>& input
 ) {
+    if (q_mini_wasm_v2::sycl_kernels::gf3_sycl_forward_enabled_for_shape(config_.input_dim, config_.output_dim)) {
+        std::vector<int8_t> in_b(config_.input_dim, 0);
+        const size_t in_lim = std::min(input.size(), config_.input_dim);
+        for (size_t i = 0; i < in_lim; ++i) {
+            in_b[i] = static_cast<int8_t>(input[i]);
+        }
+        std::vector<int8_t> w_row(config_.input_dim * config_.output_dim);
+        for (size_t i = 0; i < config_.input_dim; ++i) {
+            for (size_t j = 0; j < config_.output_dim; ++j) {
+                w_row[i * config_.output_dim + j] = static_cast<int8_t>(weights_[i][j]);
+            }
+        }
+        const bool use_bias = config_.use_bias == ternary::Trit::POSITIVE;
+        std::vector<int8_t> bias_b;
+        if (use_bias) {
+            bias_b.resize(config_.output_dim, 0);
+            for (size_t j = 0; j < config_.output_dim && j < bias_.size(); ++j) {
+                bias_b[j] = static_cast<int8_t>(bias_[j]);
+            }
+        }
+        std::vector<int8_t> out_b;
+        if (q_mini_wasm_v2::sycl_kernels::gf3_standard_linear_forward_sycl(
+                in_b,
+                w_row,
+                bias_b,
+                use_bias,
+                config_.input_dim,
+                config_.output_dim,
+                out_b)
+            && out_b.size() == config_.output_dim) {
+            std::vector<ternary::Trit> output(config_.output_dim);
+            for (size_t j = 0; j < config_.output_dim; ++j) {
+                output[j] = static_cast<ternary::Trit>(out_b[j]);
+            }
+            return output;
+        }
+    }
+
     std::vector<int32_t> pre_output(config_.output_dim, 0);
     const int64_t out_d = static_cast<int64_t>(config_.output_dim);
     
     // Compute weighted sum
 #if defined(_OPENMP)
-#pragma omp parallel for schedule(static) if(out_d > 256)
+#pragma omp parallel for schedule(static) if(out_d > 64)
 #endif
     for (int64_t jj = 0; jj < out_d; ++jj) {
         const size_t j = static_cast<size_t>(jj);
@@ -195,11 +272,41 @@ void GF3LinearLayer::UpdateWeightsHebbian(
     // Δw = learning_rate × goodness_delta × input × output (ternary)
     
     if (goodness_delta == 0) return;
+
+    if (q_mini_wasm_v2::sycl_kernels::gf3_sycl_forward_enabled_for_shape(config_.input_dim, config_.output_dim)) {
+        std::vector<int8_t> in_b(config_.input_dim, 0);
+        const size_t in_lim = std::min(input.size(), config_.input_dim);
+        for (size_t i = 0; i < in_lim; ++i) {
+            in_b[i] = static_cast<int8_t>(input[i]);
+        }
+        std::vector<int8_t> w_row(config_.input_dim * config_.output_dim);
+        for (size_t i = 0; i < config_.input_dim; ++i) {
+            for (size_t j = 0; j < config_.output_dim; ++j) {
+                w_row[i * config_.output_dim + j] = static_cast<int8_t>(weights_[i][j]);
+            }
+        }
+        if (q_mini_wasm_v2::sycl_kernels::gf3_hebbian_update_sycl(
+                in_b, goodness_delta, learning_rate, config_.input_dim, config_.output_dim, w_row)) {
+            const int8_t update_sign = (goodness_delta > 0) ? learning_rate : -learning_rate;
+            for (size_t i = 0; i < config_.input_dim; ++i) {
+                for (size_t j = 0; j < config_.output_dim; ++j) {
+                    weights_[i][j] = static_cast<ternary::Trit>(w_row[i * config_.output_dim + j]);
+                    if (i < in_lim) {
+                        const int8_t delta = GF3Multiply(update_sign, static_cast<int8_t>(input[i]));
+                        if (delta != 0) {
+                            g_gf3_hebbian_weight_cell_updates.fetch_add(1, std::memory_order_relaxed);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
     
     int8_t update_sign = (goodness_delta > 0) ? learning_rate : -learning_rate;
     const int64_t out_d = static_cast<int64_t>(config_.output_dim);
 #if defined(_OPENMP)
-#pragma omp parallel for schedule(static) if(out_d > 128)
+#pragma omp parallel for schedule(static) if(out_d > 48)
 #endif
     for (int64_t jj = 0; jj < out_d; ++jj) {
         const size_t j = static_cast<size_t>(jj);
@@ -406,7 +513,7 @@ int32_t GF3MultiLayerExpert::TrainForwardForward(
             std::vector<int32_t> pre_act(layer->GetOutputDim());
             const int64_t layer_out = static_cast<int64_t>(layer->GetOutputDim());
 #if defined(_OPENMP)
-#pragma omp parallel for schedule(static) if(layer_out > 128)
+#pragma omp parallel for schedule(static) if(layer_out > 48)
 #endif
             for (int64_t jj = 0; jj < layer_out; ++jj) {
                 const size_t j = static_cast<size_t>(jj);

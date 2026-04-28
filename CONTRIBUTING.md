@@ -65,6 +65,10 @@ Throughput, CPU vs GPU expectations, and **`training.timing_to_stderr`** in TOML
 1. **`wui_init_training_pipeline`** — validates TOML paths under `DataDir` only (no native DLL call), so the server stays up if config is wrong.
 2. **`wui_start_ff_training`** — loads **`q_training.dll`**, calls `Training_InitSession` + `Training_StartTraining`. If the DLL is missing, wrong architecture, or out of sync with the Go CGO declarations, this step fails with an MCP JSON error instead of killing the whole HTTP connection (“Failed to fetch”).
 
+### Post-prefill / “Poll 1” native crash (first `process_batch`)
+
+If training starts then the process exits with no Go stack, use [q_mini_docs/POST_POLL_NATIVE_DEBUG.md](q_mini_docs/POST_POLL_NATIVE_DEBUG.md): confirm **crash hook** lines and `directory`+`sycl` / **smoke TOML** binary search. For WER dumps, run **`scripts/enable_wer_localdumps.ps1`** elevated.
+
 ## Questions
 
 See [GROUND_TRUTH.md](GROUND_TRUTH.md) for capability limits and [README.md](README.md) for project intent.

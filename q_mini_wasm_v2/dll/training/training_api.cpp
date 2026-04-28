@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <exception>
 
 #ifdef TRAINING_API_EXPORTS
 #define TRAINING_API __declspec(dllexport)
@@ -28,8 +29,75 @@
 // Include the REAL pipeline
 #include "core/training/autonomous_training_pipeline.hpp"
 #include "core/training/data_synthesizer.hpp"
+#include "../common/sycl_dll_bootstrap.hpp"
 
 using namespace q_mini_wasm_v2::core::training;
+
+#if defined(_WIN32)
+namespace {
+
+std::once_flag g_crash_hooks_installed;
+std::terminate_handler g_prev_terminate = nullptr;
+
+static void append_training_crash_log(const char* prefix, const char* detail) noexcept {
+    char localappdata[MAX_PATH]{};
+    const DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", localappdata, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) {
+        return;
+    }
+    char path[MAX_PATH + 48]{};
+    sprintf_s(path, "%s\\q_mini_training_crash.log", localappdata);
+    FILE* f = nullptr;
+    if (fopen_s(&f, path, "a") != 0 || !f) {
+        return;
+    }
+    fprintf(f, "%s %s\n", prefix, detail ? detail : "");
+    fclose(f);
+    fprintf(stderr, "%s %s\nSee %%LOCALAPPDATA%%\\q_mini_training_crash.log\n", prefix,
+            detail ? detail : "");
+    fflush(stderr);
+}
+
+static LONG WINAPI qmini_vectored_exception(EXCEPTION_POINTERS* ep) {
+    if (!ep || !ep->ExceptionRecord) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    const DWORD code = ep->ExceptionRecord->ExceptionCode;
+    if (code == EXCEPTION_BREAKPOINT || code == 0x40010006) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    // MSVC C++ throw / catch uses 0xE06D7363 ("msc"); log = one line per throw (huge spam, not a hard fault).
+    if (code == 0xE06D7363) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    char detail[320]{};
+    sprintf_s(detail, "vectored SEH code=0x%08lX rip=%p",
+              static_cast<unsigned long>(code),
+              ep->ExceptionRecord->ExceptionAddress);
+    append_training_crash_log("[q_training.dll]", detail);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void qmini_on_terminate() noexcept {
+    append_training_crash_log("[q_training.dll]", "std::terminate() uncaught exception");
+    if (g_prev_terminate && g_prev_terminate != qmini_on_terminate) {
+        g_prev_terminate();
+    }
+    std::abort();
+}
+
+static void install_training_crash_hooks() {
+    std::call_once(g_crash_hooks_installed, [] {
+        AddVectoredExceptionHandler(1, qmini_vectored_exception);
+        g_prev_terminate = std::set_terminate(qmini_on_terminate);
+        fprintf(stderr,
+                "[q_training.dll] crash hooks: MSVC C++ exception code 0xE06D7363 is not logged "
+                "(useful hard faults still go to %%LOCALAPPDATA%%\\q_mini_training_crash.log)\n");
+    });
+}
+
+} // namespace
+#endif
 
 extern "C" {
 
@@ -102,6 +170,7 @@ static void on_pipeline_metrics(TrainingSession* session, const PipelineMetrics&
     printf("[Pipeline] Epoch %llu: goodness_proxy=%.4f, "
            "train_samples_epoch=%llu train_samples_total=%llu "
            "train_rows_in_batch=%u/%u ff_routes_in_batch=%llu "
+           "collect_effective=%u route_topk=%u "
            "ds_items=%zu queue_hint=%zu prefill_tgt=%zu, "
            "ff_total_train_calls=%llu current_batch=%llu last_betti_eval_batch=%llu, "
            "route_t5=%d router_sycl=%d betti=[%u,%u,%u], graph=%s\n",
@@ -111,6 +180,8 @@ static void on_pipeline_metrics(TrainingSession* session, const PipelineMetrics&
            static_cast<unsigned>(metrics.train_batch_rows_done),
            static_cast<unsigned>(metrics.train_batch_collect_limit),
            static_cast<unsigned long long>(metrics.ff_route_steps_current_batch),
+           static_cast<unsigned>(metrics.train_collect_limit_effective),
+           static_cast<unsigned>(metrics.route_topk_effective),
            ds_items,
            metrics.prefill_current_samples,
            metrics.prefill_target_samples,
@@ -166,8 +237,25 @@ TRAINING_API int Training_InitSession(
     uint32_t training_sycl_route_mode,
     uint32_t training_sycl_trit_quant_min_moe_dim,
     uint32_t training_goodness_log_level,
-    bool training_allow_generated_negatives
+    uint32_t training_allow_generated_negatives,
+    uint64_t directory_max_lines,
+    uint64_t max_jsonl_local_samples,
+    uint32_t min_text_length,
+    uint32_t max_text_length,
+    uint32_t acquisition_threads,
+    uint32_t perturbation_threads,
+    uint32_t checkpoint_async_queue_max,
+    uint32_t collect_empty_backoff_base_ms,
+    uint32_t collect_empty_backoff_max_shift,
+    uint32_t collect_empty_backoff_cap_ms,
+    uint32_t metrics_heartbeat_sec
 ) {
+#if defined(_WIN32)
+    install_training_crash_hooks();
+    printf("[Training] crash_hooks_installed=1: MSVC C++ SEH 0xE06D7363 is filtered "
+           "(see stderr banner; %%LOCALAPPDATA%%\\q_mini_training_crash.log stays small unless hard fault)\n");
+#endif
+    q_mini_wasm_v2::dll::common::qmini_dll_touch_sycl_device_once();
     (void)context_window;
     (void)entanglement_tokens;
     
@@ -219,14 +307,15 @@ TRAINING_API int Training_InitSession(
             printf("[Training] ERROR: features.worker_threads must be >= 1\n");
             return -8;
         }
-        if (prefill_target_samples < 64u || prefill_timeout_ms < 1000u || prefill_poll_ms < 10u ||
-            max_acquisition_queue_depth < 64u || max_raw_queue_depth < 64u || max_train_queue_depth < 128u) {
-            printf("[Training] ERROR: prefill/queue limits invalid (prefill_target>=64, prefill_timeout_ms>=1000, prefill_poll_ms>=10, acq/raw caps>=64, train cap>=128)\n");
+        if (prefill_target_samples < 1u || prefill_timeout_ms < 1u || prefill_poll_ms < 1u ||
+            max_acquisition_queue_depth < 1u || max_raw_queue_depth < 1u || max_train_queue_depth < 1u) {
+            printf("[Training] ERROR: prefill/queue limits invalid (all must be >= 1)\n");
             return -9;
         }
-        if (training_goodness_log_level > 2u) {
-            printf("[Training] ERROR: training.goodness_log_level must be in [0,2]\n");
-            return -10;
+        if (acquisition_threads < 1u || perturbation_threads < 1u || checkpoint_async_queue_max < 1u) {
+            printf("[Training] ERROR: training.acquisition_threads, training.perturbation_threads, "
+                   "training.checkpoint_async_queue_max must be >= 1\n");
+            return -14;
         }
         if (training_sycl_route_mode > 2u) {
             printf("[Training] ERROR: training.sycl_route_mode must be 0(auto),1(on),2(off)\n");
@@ -235,6 +324,19 @@ TRAINING_API int Training_InitSession(
         if (training_sycl_trit_quant_min_moe_dim == 0u) {
             printf("[Training] ERROR: training.sycl_trit_quant_min_moe_dim must be >= 1\n");
             return -12;
+        }
+        if (directory_max_lines == 0ull || max_jsonl_local_samples == 0ull || min_text_length == 0u ||
+            max_text_length < 1u || min_text_length > max_text_length) {
+            printf("[Training] ERROR: local corpus limits invalid (directory_max_lines>=1, max_jsonl>=1, "
+                   "min_text_length>=1, max_text_length>=1, min_text_length<=max_text_length)\n");
+            printf("[Training]   received: directory_max_lines=%llu max_jsonl_local_samples=%llu "
+                   "min_text_length=%u max_text_length=%u (if zeros with valid TOML, rebuild qminiwasm + q_training; "
+                   "CGO bool-before-uint64 ABI was fixed to uint32 for allow_generated_negatives)\n",
+                   static_cast<unsigned long long>(directory_max_lines),
+                   static_cast<unsigned long long>(max_jsonl_local_samples),
+                   static_cast<unsigned>(min_text_length),
+                   static_cast<unsigned>(max_text_length));
+            return -13;
         }
 
         PipelineConfig cfg;
@@ -259,11 +361,25 @@ TRAINING_API int Training_InitSession(
         cfg.moe_ff_active_internal_layers = static_cast<size_t>(moe_ff_active_internal_layers);
         cfg.ff_learning_rate_step = std::max(1u, static_cast<uint32_t>(std::llround(std::max(1.0, learning_rate))));
         
-        const uint32_t wt = worker_threads;
-        cfg.acquisition_threads = std::max<size_t>(1u, static_cast<size_t>(wt / 2u));
-        // More perturbation workers so pos/neg pairs are ready ahead of the trainer (CPU-bound path).
-        cfg.perturbation_threads = std::max<size_t>(4u, static_cast<size_t>(wt / 3u));
-        
+        cfg.acquisition_threads = static_cast<size_t>(acquisition_threads);
+        cfg.perturbation_threads = static_cast<size_t>(perturbation_threads);
+        cfg.checkpoint_async_queue_max = static_cast<size_t>(checkpoint_async_queue_max);
+        cfg.collect_empty_backoff_base_ms = collect_empty_backoff_base_ms;
+        cfg.collect_empty_backoff_max_shift = collect_empty_backoff_max_shift;
+        cfg.collect_empty_backoff_cap_ms = collect_empty_backoff_cap_ms;
+        cfg.metrics_heartbeat_sec = metrics_heartbeat_sec;
+        printf("[Training]   features.worker_threads=%u (OMP hint) acquisition_threads=%zu perturbation_threads=%zu "
+               "checkpoint_async_queue_max=%zu collect_empty_backoff(base/max_shift/cap_ms)=%u/%u/%u "
+               "metrics_heartbeat_sec=%u\n",
+               static_cast<unsigned>(worker_threads),
+               cfg.acquisition_threads,
+               cfg.perturbation_threads,
+               cfg.checkpoint_async_queue_max,
+               static_cast<unsigned>(cfg.collect_empty_backoff_base_ms),
+               static_cast<unsigned>(cfg.collect_empty_backoff_max_shift),
+               static_cast<unsigned>(cfg.collect_empty_backoff_cap_ms),
+               static_cast<unsigned>(cfg.metrics_heartbeat_sec));
+
         cfg.samples_per_epoch = static_cast<size_t>(samples_per_epoch_or_zero);
         cfg.training_micro_batch_cap = static_cast<size_t>(training_micro_batch_cap);
         cfg.training_collect_floor = static_cast<size_t>(training_collect_floor);
@@ -273,8 +389,17 @@ TRAINING_API int Training_InitSession(
             static_cast<q_mini_wasm_v2::core::moe::SyclRouteMode>(training_sycl_route_mode);
         cfg.sycl_trit_quant_min_moe_dim = static_cast<size_t>(training_sycl_trit_quant_min_moe_dim);
         cfg.goodness_log_level = training_goodness_log_level;
-        cfg.allow_generated_negatives = training_allow_generated_negatives;
+        cfg.allow_generated_negatives = (training_allow_generated_negatives != 0u);
+        cfg.directory_max_lines = static_cast<size_t>(directory_max_lines);
+        cfg.max_jsonl_local_samples = static_cast<size_t>(max_jsonl_local_samples);
+        cfg.min_text_length = static_cast<size_t>(min_text_length);
+        cfg.max_text_length = static_cast<size_t>(max_text_length);
         printf("[Training]   samples_per_epoch=%zu (training.samples_per_epoch from TOML)\n", cfg.samples_per_epoch);
+        printf("[Training]   directory_max_lines=%zu max_jsonl_local_samples=%zu min_text_length=%zu max_text_length=%zu\n",
+               cfg.directory_max_lines,
+               cfg.max_jsonl_local_samples,
+               cfg.min_text_length,
+               cfg.max_text_length);
         printf("[Training]   micro_batch_cap=%zu collect_floor=%zu timing_to_stderr=%d serial_expert_train=%d sycl_route_mode=%u sycl_trit_quant_min_moe_dim=%zu goodness_log_level=%u\n",
                cfg.training_micro_batch_cap,
                cfg.training_collect_floor,

@@ -38,7 +38,9 @@ set_target_properties(q_mini_wasm_v2_agents PROPERTIES
 # Runtime Orchestrator Operations
 # ============================================================================
 
-option(USE_SYCL "Enable SYCL acceleration for multi-core/multi-thread" OFF)
+# Default ON: native DLLs should prefer GPU-capable SYCL builds when Intel oneAPI / AdaptiveCpp is installed.
+# Without a toolkit CMake emits a warning and falls back (no USE_SYCL define); install oneAPI Base/HPC Toolkit for GPU routing kernels.
+option(USE_SYCL "Enable SYCL (Intel oneAPI / AdaptiveCpp) device acceleration where kernels exist" ON)
 option(QMINI_TRAINING_OPENMP "OpenMP: parallel GF3 layer loops + multi-expert routes (MSVC /openmp or libgomp)" ON)
 option(BUILD_TESTS "Build test suite" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
@@ -80,6 +82,8 @@ set(CORE_SOURCES
     core/moe/router_checkpoint_io.cpp
     core/moe/gf3_layers.hpp
     core/moe/gf3_layers.cpp
+    sycl/gf3_layers_sycl.hpp
+    sycl/gf3_layers_sycl.cpp
     core/moe/gf3_sycl_probe.hpp
     core/moe/gf3_sycl_probe.cpp
     core/moe/expert_network.hpp
@@ -149,7 +153,12 @@ if(MSVC)
     target_compile_options(q_mini_wasm_v2_core PRIVATE /FS)
     # Disable debug info to avoid PDB conflicts entirely
     set_property(TARGET q_mini_wasm_v2_core PROPERTY MSVC_DEBUG_INFORMATION_FORMAT "")
-    target_compile_options(q_mini_wasm_v2_core PRIVATE /Zi-)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+        target_compile_options(q_mini_wasm_v2_core PRIVATE /Zi-)
+    else()
+        # VS 18 headers reject legacy macro if present; force-undef for Intel oneAPI clang-cl.
+        target_compile_options(q_mini_wasm_v2_core PRIVATE /U_CONTAINER_DEBUG_LEVEL)
+    endif()
 endif()
 
 target_include_directories(q_mini_wasm_v2_core PUBLIC
@@ -204,7 +213,11 @@ if(BUILD_DLL)
     if(MSVC)
         target_compile_options(q_mini_wasm_v2_dll PRIVATE /FS)
         set_property(TARGET q_mini_wasm_v2_dll PROPERTY MSVC_DEBUG_INFORMATION_FORMAT "")
-        target_compile_options(q_mini_wasm_v2_dll PRIVATE /Zi-)
+        if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+            target_compile_options(q_mini_wasm_v2_dll PRIVATE /Zi-)
+        else()
+            target_compile_options(q_mini_wasm_v2_dll PRIVATE /U_CONTAINER_DEBUG_LEVEL)
+        endif()
     endif()
 endif()
 
@@ -381,6 +394,9 @@ if(BUILD_DLL)
     target_compile_definitions(q_training PRIVATE
         TRAINING_API_EXPORTS
     )
+    if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+        target_compile_options(q_training PRIVATE /U_CONTAINER_DEBUG_LEVEL)
+    endif()
     
     set_target_properties(q_training PROPERTIES
         OUTPUT_NAME "q_training"
@@ -396,6 +412,20 @@ if(BUILD_DLL)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/post_copy_training_dll.cmake"
         COMMENT "q_training: copy DLL to repo root and native_runtime (path_map.toml)"
     )
+
+    # libcurl is linked via vcpkg import libs; Windows resolves dependents from the loaded DLL's
+    # directory before PATH, so copy libcurl (and common OpenSSL/zlib peers) next to q_training.dll.
+    if(WIN32 AND USE_LIBCURL AND CURL_FOUND AND DEFINED ENV{VCPKG_ROOT})
+        add_custom_command(TARGET q_training POST_BUILD
+            COMMAND ${CMAKE_COMMAND}
+                "-DVCPKG_ROOT=$ENV{VCPKG_ROOT}"
+                -DCONFIG=$<CONFIG>
+                -DDST_PRIMARY_DIR=${CMAKE_SOURCE_DIR}/..
+                -DDST_ALT_DIR=${CMAKE_SOURCE_DIR}/../native_runtime
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/post_copy_vcpkg_curl_runtime_dlls.cmake"
+            COMMENT "q_training: copy vcpkg libcurl runtime DLLs beside published q_training.dll"
+        )
+    endif()
 
     # ------------------------------------------------------------------------
     # Install all DLL targets
@@ -428,6 +458,7 @@ endif()
 if(USE_SYCL)
     # Try multiple SYCL implementations for XPU compatibility
     find_package(IntelSYCL QUIET)
+    set(QMINI_LLVM_SYCL_FOUND FALSE)
     
     if(NOT IntelSYCL_FOUND)
         # Fallback: Check for AdaptiveCpp (formerly hipSYCL)
@@ -435,23 +466,62 @@ if(USE_SYCL)
     endif()
     
     if(NOT IntelSYCL_FOUND AND NOT AdaptiveCpp_FOUND)
-        # Fallback: Check for DPC++ via environment
+        # Fallback: Check oneAPI location and retry package discovery.
         if(DEFINED ENV{ONEAPI_ROOT})
-            message(STATUS "Using oneAPI DPC++ from ONEAPI_ROOT")
-            set(CMAKE_CXX_COMPILER "$ENV{ONEAPI_ROOT}/compiler/latest/bin/dpcpp.exe" CACHE FILEPATH "DPC++ compiler" FORCE)
-            set(IntelSYCL_FOUND TRUE)
+            message(STATUS "Using oneAPI hints from ONEAPI_ROOT")
+            list(APPEND CMAKE_PREFIX_PATH "$ENV{ONEAPI_ROOT}/compiler/latest/lib/cmake")
+            list(APPEND CMAKE_PREFIX_PATH "$ENV{ONEAPI_ROOT}/lib/cmake")
+            find_package(IntelSYCL QUIET)
         endif()
     endif()
     
-    if(IntelSYCL_FOUND OR AdaptiveCpp_FOUND)
+    # Final fallback: clang++ with built-in -fsycl support (LLVM SYCL toolchain).
+    if(NOT IntelSYCL_FOUND AND NOT AdaptiveCpp_FOUND AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT WIN32)
+        execute_process(
+            COMMAND ${CMAKE_CXX_COMPILER} --help
+            OUTPUT_VARIABLE QMINI_CLANG_HELP
+            ERROR_QUIET
+            RESULT_VARIABLE QMINI_CLANG_HELP_RC
+        )
+        if(QMINI_CLANG_HELP_RC EQUAL 0)
+            string(FIND "${QMINI_CLANG_HELP}" "-fsycl" QMINI_CLANG_FSYCL_POS)
+            if(NOT QMINI_CLANG_FSYCL_POS EQUAL -1)
+                set(QMINI_LLVM_SYCL_FOUND TRUE)
+                message(STATUS "SYCL: Using clang++ -fsycl fallback")
+            endif()
+        endif()
+    endif()
+    
+    if(IntelSYCL_FOUND OR AdaptiveCpp_FOUND OR QMINI_LLVM_SYCL_FOUND)
         target_compile_definitions(q_mini_wasm_v2_core PUBLIC USE_SYCL=1)
         
         if(IntelSYCL_FOUND)
-            target_link_libraries(q_mini_wasm_v2_core PUBLIC IntelSYCL::SYCL_CXX)
-            message(STATUS "SYCL: Using IntelSYCL")
+            if(TARGET IntelSYCL::SYCL_CXX)
+                target_link_libraries(q_mini_wasm_v2_core PUBLIC IntelSYCL::SYCL_CXX)
+                message(STATUS "SYCL: Using IntelSYCL::SYCL_CXX target")
+            elseif(COMMAND add_sycl_to_target)
+                # Some IntelSYCL packages expose helper function but not imported target.
+                add_sycl_to_target(TARGET q_mini_wasm_v2_core SOURCES
+                    ${SYCL_SOURCES}
+                    core/qgnn/message_passing_sycl.cpp
+                )
+                message(STATUS "SYCL: Using IntelSYCL add_sycl_to_target() helper")
+            else()
+                if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+                    message(WARNING "IntelSYCL found but compiler is clang++ on Windows. Use icpx (IntelLLVM) for stable SYCL builds.")
+                else()
+                    message(WARNING "IntelSYCL package found, but no SYCL target/helper exported; falling back to generic -fsycl flags.")
+                    target_compile_options(q_mini_wasm_v2_core PRIVATE -fsycl)
+                    target_link_options(q_mini_wasm_v2_core PRIVATE -fsycl)
+                endif()
+            endif()
         elseif(AdaptiveCpp_FOUND)
             target_link_libraries(q_mini_wasm_v2_core PUBLIC AdaptiveCpp::acpp)
             message(STATUS "SYCL: Using AdaptiveCpp")
+        elseif(QMINI_LLVM_SYCL_FOUND)
+            target_compile_options(q_mini_wasm_v2_core PRIVATE -fsycl)
+            target_link_options(q_mini_wasm_v2_core PRIVATE -fsycl)
+            message(STATUS "SYCL: Using LLVM clang -fsycl")
         endif()
         
         # Add SYCL kernel sources (tableau + QGNN message passing device code)
@@ -467,11 +537,63 @@ if(USE_SYCL)
         )
         
         message(STATUS "SYCL acceleration enabled for XPU")
+
+        # MSVC + static lib core: ensure each SHARED DLL explicitly links the SYCL runtime so device code and
+        # sycl7.dll / loader deps resolve at load time (IntelSYCL PUBLIC on core does not always suffice).
+        set(_QMINI_SYCL_DLL_TARGETS
+            q_mini_wasm_v2_agents
+            q_mini_wasm_v2_dll
+            q_gf3_clifford
+            q_gf3_serialize
+            q_gf3_wasm
+            q_gf3_maxplus
+            q_training
+        )
+        foreach(_qmini_dll ${_QMINI_SYCL_DLL_TARGETS})
+            if(TARGET ${_qmini_dll})
+                if(TARGET IntelSYCL::SYCL_CXX)
+                    target_link_libraries(${_qmini_dll} PRIVATE IntelSYCL::SYCL_CXX)
+                elseif(TARGET AdaptiveCpp::acpp)
+                    target_link_libraries(${_qmini_dll} PRIVATE AdaptiveCpp::acpp)
+                endif()
+            endif()
+        endforeach()
+
+        # Infer links core SYCL APIs; standalone trainer intentionally does NOT link core — omit here.
+        foreach(_qmini_exe q_mini_wasm_v2_infer)
+            if(TARGET ${_qmini_exe})
+                if(TARGET IntelSYCL::SYCL_CXX)
+                    target_link_libraries(${_qmini_exe} PRIVATE IntelSYCL::SYCL_CXX)
+                elseif(TARGET AdaptiveCpp::acpp)
+                    target_link_libraries(${_qmini_exe} PRIVATE AdaptiveCpp::acpp)
+                endif()
+            endif()
+        endforeach()
     else()
+        if(WIN32)
+            message(STATUS "SYCL note: On Windows, install Intel oneAPI DPC++ or AdaptiveCpp for stable SYCL builds.")
+        endif()
         message(WARNING "SYCL requested but no SYCL implementation found. Install Intel oneAPI or AdaptiveCpp.")
         message(STATUS "Continuing without SYCL acceleration")
     endif()
 endif()
+
+# Every SHARED DLL that loads q_mini_wasm_v2_core: SYCL probe + tiny parallel_for on attach (USE_SYCL builds).
+set(QMINI_SYCL_BOOTSTRAP "${CMAKE_CURRENT_SOURCE_DIR}/dll/common/sycl_dll_bootstrap.cpp")
+set(_QMINI_BOOT_TARGETS
+    q_mini_wasm_v2_agents
+    q_mini_wasm_v2_dll
+    q_gf3_clifford
+    q_gf3_serialize
+    q_gf3_wasm
+    q_gf3_maxplus
+    q_training
+)
+foreach(_bt ${_QMINI_BOOT_TARGETS})
+    if(TARGET ${_bt} AND EXISTS "${QMINI_SYCL_BOOTSTRAP}")
+        target_sources(${_bt} PRIVATE "${QMINI_SYCL_BOOTSTRAP}")
+    endif()
+endforeach()
 
 # ============================================================================
 # Test Suite

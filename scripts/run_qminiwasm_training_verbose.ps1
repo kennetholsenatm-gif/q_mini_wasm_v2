@@ -21,6 +21,10 @@
 
   Build: go build -o qminiwasm.exe ./cmd/qminiwasm  (or .\scripts\build_qminiwasm.ps1)
   Layout: config/path_map.toml — q_training.dll is loaded from the exe directory; CMake also publishes to native_runtime/ when the root copy is locked.
+
+  Parallelism:
+  - OMP_NUM_THREADS defaults here to ProcessorCount so GF3/OpenMP layers in q_training.dll use all logical CPUs (override env if needed).
+  - GPU/SYCL routing requires building q_training with CMake -DUSE_SYCL=ON (Intel oneAPI); training.sycl_route_mode alone does not bundle SYCL code.
   Control-plane rule: epochs come from the active TOML only. Do not send WUI epochs overrides.
   Progress rule: samples/samples_total are real training counters (no ingestion substitution).
 #>
@@ -33,6 +37,15 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
+
+# OpenMP in q_training.dll (GF3 / layer loops): use all logical processors if unset.
+if (-not $env:OMP_NUM_THREADS) {
+    $n = [Environment]::ProcessorCount
+    $env:OMP_NUM_THREADS = "$n"
+    Write-Host "[run] OMP_NUM_THREADS=$n (GF3 OpenMP; set env yourself to cap/override)" -ForegroundColor Cyan
+} else {
+    Write-Host "[run] OMP_NUM_THREADS=$($env:OMP_NUM_THREADS) (already set)" -ForegroundColor Cyan
+}
 
 $env:QMINI_TRAINING_VERBOSE = "1"
 

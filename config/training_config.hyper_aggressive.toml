@@ -1,0 +1,175 @@
+# =============================================================================
+# HYPER-AGGRESSIVE FRONTIER (stress / throughput tuning)
+# - Queues, prefill, micro_batch_cap, collect_floor, JSONL RAM cap, and thread pools are
+#   explicit TOML (qminiwasm validates presence and positivity only).
+# - SYCL routing logits: "on" (needs q_training built with USE_SYCL=ON to hit GPU;
+#   CPU OpenMP still does most FF work — see q_mini_docs/TRAINING_THROUGHPUT.md).
+# - lazy_init_initial_experts = 2048: much higher RAM than default 256; reduce if OOM.
+# - timing_to_stderr = true: expect [TrainingTiming] lines on stderr.
+# Activate: set QMINI_TRAINING_CONFIG=training_config.hyper_aggressive.toml (relative to
+# DataDir/config) or copy beside qminiwasm and point env at the absolute path.
+# =============================================================================
+[training]
+epochs = 120
+batch_size = 32768
+checkpoint_interval = 10
+learning_rate = 10
+buffer_profile = "aggressive"
+# Three full train-queue turnovers per epoch at max train_queue_cap (524288).
+samples_per_epoch = 1572864
+micro_batch_cap = 4096
+collect_floor = 512
+timing_to_stderr = true
+serial_expert_train = false
+sycl_route_mode = "on"
+sycl_trit_quant_min_moe_dim = 1
+goodness_log_level = 0
+allow_generated_negatives = true
+max_jsonl_local_samples = 1000000000
+prefill_target_samples = 65536
+prefill_timeout_ms = 600000
+prefill_poll_ms = 10
+acq_queue_cap = 262144
+raw_queue_cap = 262144
+train_queue_cap = 524288
+acquisition_threads = 64
+perturbation_threads = 42
+checkpoint_async_queue_max = 24
+collect_empty_backoff_base_ms = 10
+collect_empty_backoff_max_shift = 10
+collect_empty_backoff_cap_ms = 1000
+metrics_heartbeat_sec = 2
+lazy_init_initial_experts = 2048
+
+[model]
+moe_experts = 8192
+moe_top_k = 128
+context_window = 12288
+entanglement_tokens = 1536
+shadow_dim = 6144
+num_layers = 80
+neurons_per_layer = 3072
+routing_qutrits = 12
+moe_input_dim = 3072
+moe_output_dim = 3072
+moe_hidden_dim = 8192
+expert_internal_layers = 3
+moe_ff_active_internal_layers = 0
+learning_rate_shift = 2
+
+[features]
+steane_correction = true
+flash_cim = false
+worker_threads = 128
+continuous_mode = true
+lazy_init = true
+data_accumulation = true
+
+[apis]
+enabled = false
+wolfram = false
+pubchem = false
+oeis = false
+wikidata = false
+arxiv = false
+nasa = false
+pdb = false
+github = false
+lean = false
+
+[streaming]
+enabled = true
+port = 9090
+
+[paths]
+base_model = "checkpoints/final_model.json"
+output_dir = "checkpoints/"
+dataset_dir = "datasets/"
+
+[model.expert]
+sparsity = 0.05
+neurons_per_layer = 3072
+learning_rate_shift = 2
+
+[som]
+initial_experts = 2
+split_beta1_threshold = 5
+target_graph_density = 0.15
+min_graph_density = 0.05
+max_graph_density = 0.40
+max_experts_hard_cap = 100000
+merge_min_activation_rate = 0.001
+
+[graph]
+initial_nodes = 64
+initial_edges = 112
+
+[training.data_filter]
+min_text_length = 32
+max_text_length = 2000000
+checkpoint_interval_samples = 100000
+# 50M lines: large corpus without multi-hour full-disk scan; raise if you have RAM/SSD headroom.
+directory_max_lines = 50000000
+
+[network]
+http_timeout_ms = 30000
+https_port = 443
+routing_qutrits = 8
+
+[apis.limits]
+rate_limit_daily = 100000
+backoff_ms = 100
+http_timeout_ms = 5000
+
+[sycl]
+work_group_size = 256
+local_mem_nodes = 32
+
+[flash_cim]
+num_blocks = 1024
+energy_fixed_point_scale = 1000000
+
+[memory]
+arena_mb = 8192
+
+[bridge]
+mcp_timeout_ms = 15000
+
+[data_sources]
+urls = [
+    "arxiv.org/abs/quant-ph",
+    "mathworld.wolfram.com",
+    "oeis.org",
+    "datasets-server.huggingface.co",
+    "huggingface.co/datasets/bigcode/the-stack",
+    "ebi.ac.uk/chembl",
+    "materialsproject.org",
+    "dbpedia.org",
+    "yago-knowledge.org",
+    "ensembl.org",
+    "dbpedia.org",
+    "yago-knowledge.org",
+    "ensembl.org",
+    "gamma.sympy.org",
+    "github.com/leanprover-community/mathlib4",
+    "arxiv.org",
+    "wolframalpha.com",
+    "wikidata.org",
+    "pubchem.ncbi.nlm.nih.gov",
+    "rcsb.org",
+    "oeis.org",
+    "export.arxiv.org",
+    "query.wikidata.org",
+    "oeis.org",
+    "api.openalex.org",
+    "gutendex.com",
+    "earthquake.usgs.gov",
+    "api.spacexdata.com",
+    "chroniclingamerica.loc.gov",
+    "api.gbif.org",
+    "data/wikipedia_math",
+    "data/stackexchange_physics"
+]
+recursive = true
+max_depth = 5
+max_pages_per_source = 50000

@@ -74,3 +74,52 @@ Combine with **external** sample profilers (Very Sleepy, Visual Studio CPU Usage
 | **GPU / SYCL** | **New implementation** | Requires real kernels or libraries for GF(3) ops in the expert stack; not activated by existing TOML flags alone. |
 
 Pick one primary direction before large refactors; use **`[TrainingTiming]`** stderr lines from **`training.timing_to_stderr`** to justify it.
+
+## Aggressive profile (high-throughput + partial GPU routing)
+
+When you want to push hard (and accept higher CPU/GPU load), prefer:
+
+- `training.sycl_route_mode = "on"` to force SYCL routing logits when SYCL is available.
+- `training.sycl_trit_quant_min_moe_dim = 1` so quantization does not silently stay on CPU for smaller inputs.
+- High queue/prefill caps so the trainer never starves (`acq/raw/train` and `prefill_target_samples`).
+- `training.micro_batch_cap` and `training.collect_floor` as large as you want (host validates positive integers only). The pipeline derives the per-batch collect limit from TOML (`min(batch_size, micro_batch_cap)` vs `collect_floor`).
+- Explicit thread pools and I/O pacing (no hidden mapping from `features.worker_threads`): `training.acquisition_threads`, `training.perturbation_threads`, `training.checkpoint_async_queue_max`, `training.collect_empty_backoff_*`, `training.metrics_heartbeat_sec`.
+
+New `[Pipeline]` logs expose effective sizing from config:
+
+- `collect_effective=<n>`
+- `route_topk=<k>`
+
+If `collect_effective` stays very low while queues remain full, throughput is limited by your TOML collect sizing (or by batch/micro-batch settings), not by a hidden code cap.
+
+## Aggressive checkpointing (do not lose long runs)
+
+`training.checkpoint_interval` now controls frequent checkpoint cadence (batches, with epoch-boundary checkpoints still preserved). For long-running frontier jobs, keep this value small (for example `1-2`) so a crash does not discard hours of progress.
+
+Expected behavior:
+
+- frequent `[TrainingPipeline] Checkpoint written: checkpoint_epoch_..._batch_....qmini` logs
+- successful stop/restart resume from the newest checkpoint file
+
+Tradeoff:
+
+- lower interval => more disk I/O and slight training overhead
+- higher interval => better peak throughput but higher progress-loss risk
+
+## Windows SYCL bring-up (one command)
+
+Use:
+
+```powershell
+powershell -NoProfile -File .\scripts\build_qminiwasm.ps1
+```
+
+What it does:
+
+- checks for `dpcpp` / `icpx` on `PATH`
+- configures native build with `-DUSE_SYCL=ON`
+- rebuilds `q_training` and **`qminiwasm.exe` at the repo root** (same directory as `q_training.dll`; not under `cmd/qminiwasm/`)
+- copies Intel oneAPI runtime DLLs next to that `qminiwasm.exe` so launch does not depend on `PATH`
+- prints runtime verification targets (`SYCL default device`, `router_sycl=1`, `collect_effective` / `route_topk` fields)
+
+If oneAPI is not installed, the script still performs a deterministic configure/build and reports the exact blocker.

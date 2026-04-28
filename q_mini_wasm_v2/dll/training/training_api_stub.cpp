@@ -51,7 +51,18 @@ TRAINING_API int Training_InitSession(
     uint32_t training_sycl_route_mode,
     uint32_t training_sycl_trit_quant_min_moe_dim,
     uint32_t training_goodness_log_level,
-    bool training_allow_generated_negatives
+    uint32_t training_allow_generated_negatives,
+    uint64_t directory_max_lines,
+    uint64_t max_jsonl_local_samples,
+    uint32_t min_text_length,
+    uint32_t max_text_length,
+    uint32_t acquisition_threads,
+    uint32_t perturbation_threads,
+    uint32_t checkpoint_async_queue_max,
+    uint32_t collect_empty_backoff_base_ms,
+    uint32_t collect_empty_backoff_max_shift,
+    uint32_t collect_empty_backoff_cap_ms,
+    uint32_t metrics_heartbeat_sec
 ) {
     (void)session_id_out;
     (void)num_experts;
@@ -92,6 +103,17 @@ TRAINING_API int Training_InitSession(
     (void)training_sycl_trit_quant_min_moe_dim;
     (void)training_goodness_log_level;
     (void)training_allow_generated_negatives;
+    (void)directory_max_lines;
+    (void)max_jsonl_local_samples;
+    (void)min_text_length;
+    (void)max_text_length;
+    (void)acquisition_threads;
+    (void)perturbation_threads;
+    (void)checkpoint_async_queue_max;
+    (void)collect_empty_backoff_base_ms;
+    (void)collect_empty_backoff_max_shift;
+    (void)collect_empty_backoff_cap_ms;
+    (void)metrics_heartbeat_sec;
     printf("[Training] ERROR: Real training not compiled in this DLL\n");
     return -1;
 }

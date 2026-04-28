@@ -7,7 +7,9 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <deque>
 #include <functional>
+#include <ostream>
 #include <string>
 
 #include "data_synthesizer.hpp"
@@ -45,6 +47,10 @@ struct PipelineMetrics {
     uint32_t train_batch_rows_done = 0;
     /** Target contrastive rows for the current micro-batch (0 between batches). */
     uint32_t train_batch_collect_limit = 0;
+    /** Effective per-batch collect limit from TOML (min(batch, micro_batch_cap) vs collect_floor). */
+    uint32_t train_collect_limit_effective = 0;
+    /** Effective route top-k from TOML (capped by expert count). */
+    uint32_t route_topk_effective = 0;
     /** Batch counter when @ref evaluate_topology last completed (0 = never yet). */
     uint64_t last_betti_eval_batch = 0;
     /** GF(3) expert linear layers: cumulative Hebbian weight-cell update steps (non-zero delta applied). */
@@ -116,7 +122,7 @@ struct PipelineMetrics {
  * @brief Configuration for the autonomous training pipeline
  */
 struct PipelineConfig {
-    // Data Synthesizer settings
+    // Data Synthesizer settings (TOML training.acquisition_threads / training.perturbation_threads)
     size_t acquisition_threads = 4;
     size_t perturbation_threads = 2;
     
@@ -166,15 +172,15 @@ struct PipelineConfig {
      */
     uint32_t goodness_log_level = 0;
     size_t topology_evaluation_interval = 10;  // batches between Betti analysis
-    /** Checkpoints taken when current_epoch % checkpoint_interval == 0 (after epoch completes). */
+    /** Checkpoints taken every checkpoint_interval batches (and on epoch boundaries). */
     size_t checkpoint_interval = 10;
     bool enable_prefill_ring_buffer = true;
     size_t prefill_target_samples = 4096;
     uint32_t prefill_timeout_ms = 120000;
     uint32_t prefill_poll_ms = 50;
-    size_t max_acquisition_queue_depth = 32768;
-    size_t max_raw_queue_depth = 32768;
-    size_t max_train_queue_depth = 65536;
+    size_t max_acquisition_queue_depth = 98304;
+    size_t max_raw_queue_depth = 98304;
+    size_t max_train_queue_depth = 196608;
     
     // Control flags
     bool enable_betti_guidance = true;
@@ -206,6 +212,23 @@ struct PipelineConfig {
     std::string data_sources_toml_path;
     /** If true, generate a synthetic negative when a pair is missing. If false, missing negatives fail training. */
     bool allow_generated_negatives = true;
+
+    /** Max directory corpus lines indexed (offsets); TOML `[training.data_filter].directory_max_lines`. */
+    size_t directory_max_lines = 1'000'000'000ull;
+    /** Max JSONL rows kept in RAM for a single local file; TOML `training.max_jsonl_local_samples`. */
+    size_t max_jsonl_local_samples = 5'000'000ull;
+    /** From `[training.data_filter]` — min/max feature length for directory rows (and JSONL `input` width). */
+    size_t min_text_length = 50;
+    size_t max_text_length = 100'000;
+
+    /** Max pending async checkpoint blobs before enqueue blocks (TOML training.checkpoint_async_queue_max). */
+    size_t checkpoint_async_queue_max = 24;
+    /** Empty-queue spin backoff: wait ms = min(base_ms << min(attempts, max_shift), cap_ms). */
+    uint32_t collect_empty_backoff_base_ms = 10;
+    uint32_t collect_empty_backoff_max_shift = 10;
+    uint32_t collect_empty_backoff_cap_ms = 1000;
+    /** WUI/metrics heartbeat while collecting; 0 = update every empty-queue poll iteration. */
+    uint32_t metrics_heartbeat_sec = 2;
 };
 
 /**
@@ -247,6 +270,10 @@ enum class PipelineState {
  *   pipeline.start_training();
  *   auto metrics = pipeline.get_metrics();
  */
+namespace detail {
+struct FirstProcessBatchPhaseTraceScope;
+}
+
 class AutonomousTrainingPipeline {
 public:
     AutonomousTrainingPipeline();
@@ -353,6 +380,8 @@ public:
     void on_metrics_update(std::function<void(const PipelineMetrics&)> callback);
 
 private:
+    friend struct detail::FirstProcessBatchPhaseTraceScope;
+
     // Configuration
     PipelineConfig config_;
     
@@ -381,8 +410,20 @@ private:
     std::atomic<bool> batch_inflight_active_{false};
     std::atomic<uint32_t> batch_inflight_done_{0};
     std::atomic<uint32_t> batch_inflight_target_{0};
-    std::atomic<bool> microbatch_guardrail_logged_{false};
-    
+    std::atomic<bool> pipeline_collect_hint_logged_{false};
+    std::atomic<uint64_t> last_checkpoint_batch_{0};
+    /** First `process_batch()` call only: stderr phase markers; cleared when the call returns (any path). */
+    bool trace_first_process_batch_phases_{true};
+
+    /** Background disk writes for automatic checkpoints (bounded queue; blocks producer if full). */
+    std::once_flag checkpoint_writer_once_;
+    std::thread checkpoint_writer_thread_;
+    std::mutex checkpoint_queue_mutex_;
+    std::condition_variable checkpoint_queue_cv_;
+    std::condition_variable checkpoint_queue_slots_cv_;
+    std::deque<std::pair<std::string, std::string>> checkpoint_queue_;
+    std::atomic<bool> checkpoint_writer_stop_{false};
+
     // Threading
     std::thread training_thread_;
     mutable std::mutex metrics_mutex_;
@@ -407,7 +448,13 @@ private:
     void update_metrics();
     void emit_metrics();
     void checkpoint_if_needed();
-    
+    /** Serialize checkpoint while holding expert/router locks (same bytes as @ref export_model). */
+    bool serialize_checkpoint_blob(std::ostream& os);
+    void ensure_checkpoint_writer_started();
+    void checkpoint_writer_loop();
+    void enqueue_checkpoint_job(std::string path, std::string payload);
+    void shutdown_checkpoint_writer();
+
     // Betti guidance
     qgnn::BettiExtractor::SimplicialComplex build_simplicial_complex();
     void adjust_topology_based_on_betti(const qgnn::BettiExtractor::BettiNumbers& betti);
@@ -426,6 +473,28 @@ private:
     
     static std::string state_to_string(PipelineState state);
 };
+
+namespace detail {
+
+/** Clears @c AutonomousTrainingPipeline::trace_first_process_batch_phases_ on scope exit. */
+struct FirstProcessBatchPhaseTraceScope {
+    AutonomousTrainingPipeline* pipe{nullptr};
+    bool had_trace{false};
+
+    FirstProcessBatchPhaseTraceScope(AutonomousTrainingPipeline* p, bool h) noexcept
+        : pipe(p), had_trace(h) {}
+
+    ~FirstProcessBatchPhaseTraceScope() {
+        if (pipe && had_trace) {
+            pipe->trace_first_process_batch_phases_ = false;
+        }
+    }
+
+    FirstProcessBatchPhaseTraceScope(const FirstProcessBatchPhaseTraceScope&) = delete;
+    FirstProcessBatchPhaseTraceScope& operator=(const FirstProcessBatchPhaseTraceScope&) = delete;
+};
+
+} // namespace detail
 
 /**
  * @brief Factory: new pipeline only; caller must initialize(config) then start_training().
