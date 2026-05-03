@@ -16,7 +16,7 @@
 | `process_batch()` implementation | ✅ COMPLETE | Full training loop with routing, Forward-Forward training, metrics accumulation |
 | HTTP clients with libcurl | ✅ COMPLETE | `SimpleHttpClient` added, graceful fallback to mock data |
 | Betti population logic | ✅ COMPLETE | Expert utilization tracking from actual routing decisions |
-| SYCL integration | ✅ COMPLETE | `USE_SYCL` detection, CPU fallback, USM memory management |
+| SYCL integration | ✅ COMPLETE | Mandatory SYCL CMake path, CPU fallback where applicable, USM memory management |
 | Cognitive ergonomics docs | ✅ COMPLETE | Comprehensive guide with diagrams and mental models |
 
 ### ❌ Issues Discovered
@@ -99,7 +99,7 @@
 
 7. Add unit tests for `extract_ternary_vector()` and `generate_negative_sample()`
 8. Performance benchmark the new HTTP client vs pure mock data
-9. Document SYCL compilation requirements (`-DUSE_SYCL`, libcurl linkage)
+9. Document SYCL compilation requirements (Intel **icpx/icx** / AdaptiveCpp, libcurl linkage)
 
 ---
 
@@ -115,7 +115,7 @@ cmake --build build --target q_mini_wasm_v2_tests
 ./build/q_mini_wasm_v2_inference_test
 
 # With SYCL support (requires Intel oneAPI)
-cmake -DUSE_SYCL=ON -B build_sycl
+cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_sycl -DCMAKE_CXX_COMPILER=icpx
 cmake --build build_sycl
 ```
 

@@ -1,29 +1,31 @@
 # =============================================================================
-# Frontier profile (~48 GB RAM envelope, native q_training / qminiwasm host — not a WASM heap cap)
-# - Queues: acq : raw : train = 1 : 1 : 2 (staging). Tune acq/raw/train caps in TOML if RSS spikes
-#   from wide GF(3) tensors or large text payloads in raw/train queues.
-# - Prefill: target ≈ 3/7 of raw cap so prefill completes before raw is chronically full.
-# - samples_per_epoch: 3 × train_queue_cap = one epoch ~= three full train-buffer turnovers at cap.
-# - Widths: neurons = moe_in = moe_out; shadow_dim = 2×neurons; moe_hidden ≈ 8/3×neurons (~2.67×).
-# - MoE: 8192 experts — per-batch collect/top-k come from TOML (see adaptive_* helpers in
-#   autonomous_training_pipeline.cpp): collect is min(batch, micro_batch_cap) vs collect_floor;
-#   top-k is capped only by expert count (no tier/workload caps in code).
+# Zero / “derive” semantics for many integers: see q_mini_docs/TRAINING_CONFIG_ZERO.md
+# =============================================================================
+# Frontier profile — fresh runs, no silent checkpoint restore (set auto_resume true to opt back in).
+# Saturate ~32 GiB shared VRAM / UMA + large host staging; native q_training / qminiwasm.
+# - Queues: acq : raw : train = 1 : 1 : 2 (staging). Sized to keep pipelines fed, not to idle under memory pressure.
+# - Prefill: keep below raw cap so prefill can finish before raw is chronically full.
+# - samples_per_epoch: scaled vs train_queue_cap for epoch turnover at cap.
+# - Widths: neurons = moe_in = moe_out; shadow_dim = 2*neurons; moe_hidden ~ 8/3 * neurons.
+# - MoE: 8192 experts — per-batch collect is min(batch_size, micro_batch_cap); top-k capped by expert count.
 # =============================================================================
 [training]
+# 0 = never auto-import latest checkpoint at start_training (explicit import_model still works).
+auto_resume_from_checkpoint = false
 epochs = 120
-batch_size = 32768
+# GPU starvation fix: collect_limit = min(batch_size, micro_batch_cap). micro_batch_cap=0 uses full batch_size.
+batch_size = 4096
 checkpoint_interval = 2
 learning_rate = 10
 buffer_profile = "aggressive"
 # Route-units per epoch (native q_training); see q_mini_docs/TRAINING_THROUGHPUT.md.
-samples_per_epoch = 172032
-micro_batch_cap = 4096
-collect_floor = 8
+samples_per_epoch = 50331648
+micro_batch_cap = 0
+collect_floor = 0
 timing_to_stderr = false
-serial_expert_train = false
-# Symplectic MoE routing logits: auto (SYCL when USE_SYCL and expert count high), on, or off — see q_mini_docs/TRAINING_THROUGHPUT.md.
+# Symplectic MoE routing logits: auto (SYCL when expert count high), on, or off — see q_mini_docs/TRAINING_THROUGHPUT.md.
 sycl_route_mode = "on"
-# Minimum model.moe_input_dim to run SYCL float/int32/string -> trit quantization (below = CPU path).
+# ABI field (must be >=1). With a SYCL-enabled q_training build, float/int32/string -> trit quantization uses SYCL when moe_input_dim>0.
 sycl_trit_quant_min_moe_dim = 1
 # 0=no extra stderr; 1=batch FF goodness summary; 2=+ first contrastive rows (see q_training Training_InitSession).
 goodness_log_level = 1
@@ -31,26 +33,108 @@ allow_generated_negatives = true
 # Max JSONL rows for a single local file (in RAM); directory line cap lives in [training.data_filter].
 max_jsonl_local_samples = 5000000
 # DataSynthesizer / prefill — explicit integers (qminiwasm rejects missing keys).
-prefill_target_samples = 24576
+# prefill_target_samples: ring-buffer contrastive *pairs* before training_loop runs. 0 = first pair only (fast start).
+# Use 262144–1048576 when you want the pipe fully primed before FF (adds tens of seconds after index/cache ready).
+prefill_target_samples = 0
 prefill_timeout_ms = 180000
-prefill_poll_ms = 20
-acq_queue_cap = 32768
-raw_queue_cap = 32768
-train_queue_cap = 98304
+prefill_poll_ms = 1
+acq_queue_cap = 8388608
+raw_queue_cap = 8388608
+train_queue_cap = 16777216
 # DataSynthesizer + checkpoint writer (explicit; not derived from features.worker_threads).
-acquisition_threads = 24
-perturbation_threads = 16
-checkpoint_async_queue_max = 24
-collect_empty_backoff_base_ms = 10
-collect_empty_backoff_max_shift = 10
-collect_empty_backoff_cap_ms = 1000
+acquisition_threads = 48
+perturbation_threads = 32
+checkpoint_async_queue_max = 128
+collect_empty_backoff_base_ms = 4
+collect_empty_backoff_max_shift = 8
+collect_empty_backoff_cap_ms = 256
 metrics_heartbeat_sec = 2
-# When features.lazy_init is true, pipeline starts with this many materialized experts (<= moe_experts).
-lazy_init_initial_experts = 256
+# Pipeline behavior (native q_training only; all from TOML - no env overrides in the DLL).
+# parallel_contrastive_rows: OpenMP across contrastive rows — keep true on multi-core hosts when stable (big vs serial rows).
+parallel_contrastive_rows = true
+# parallel_batches: concurrent process_batch workers per training_loop tick (own SYCL queue / thread).
+# Feed the pipe in proportion: route pressure scales × parallel_batches for lazy resident sizing; keep train/raw/acq
+# queues and target_routes large enough vs collect_limit × parallel_batches (see TRAINING_THROUGHPUT.md / GPU_FEED_TUNING).
+# Concurrent process_batch workers (each OS thread + SYCL queue). Very high values (256+) often *reduce* samples/s on
+# iGPU/UMA: host RAM pins near 100%, realtime_live_parallel trims constantly, and driver overhead grows. Discrete GPUs
+# with headroom can raise (e.g. 256–512). Start moderate; watch blocked_Δ and mem_load in scaler logs.
+parallel_batches = 192
+# Hard cap on *effective* concurrent process_batch workers: min(live parallel_batches, this). 0 = uncapped.
+# If this key is omitted, qminiwasm defaults to 96 (iGPU/UMA). Set 0 for full ceiling when you have the RAM/GPU headroom.
+parallel_batches_runtime_cap = 96
+# Go poll loop: ramp live parallel_batches from start_fraction×ceiling using memory + queue backpressure (see training_live_scale.go).
+realtime_live_parallel_scale = true
+# Start at full ceiling when scaler runs (lower start_fraction if host memory spikes during warmup).
+realtime_live_start_fraction = 1.0
+# Faster recovery toward ceiling after a trim; poll every second.
+realtime_live_poll_sec = 1
+realtime_live_step_up = 16
+realtime_live_step_down = 1
+# Blocked-push burst threshold (only used when raw queue ratio < feed_floor — see training_live_scale.go).
+realtime_live_blocked_burst = 512
+# Longer at ceiling before optional memory-based trim (pairs with mem_trim below).
+realtime_live_top_hold_ticks = 24
+# iGPU/UMA: bias scaler toward staying at parallel_batches ceiling (shared “GPU memory” shows high % while compute runs).
+# Windows Task Manager “GPU %” often under-reports Intel compute; prefer DLL timing / oneAPI metrics for occupancy.
+realtime_live_host_mem_high_pct = 97
+realtime_live_host_mem_low_pct = 91
+realtime_live_host_mem_trim_pct = 99
+realtime_live_queue_feed_floor = 0.025
+realtime_live_top_trim = 1
+# Optional: Go-side resource probe scales parallel_batches, queues, threads, gf3_ff_batched_weight_mib together (TOML = ceiling).
+# resource_autoscale = false
+# resource_autoscale_ref_logical_cpus = 32
+# resource_autoscale_ref_ram_gib = 128
+# resource_autoscale_ram_headroom = 0.9
+# resource_autoscale_ref_vram_gib = 32
+# resource_autoscale_vram_headroom = 0.85
+# resource_autoscale_include_vram = true
+# resource_autoscale_min_parallel_batches = 1
+#
+# Real-time parallel_batches scaler: optional overrides; omitted keys use qminiwasm built-in defaults
+# (see training_live_scale.go — they now bias iGPU/UMA toward staying at ceiling). Active profile above.
+# 0 = one FF progress chunk per route (less host overhead between expert steps).
+ff_expert_chunk_size = 0
+# 0 => derive collect_limit×top_k (keeps route budget aligned when batch_size / micro_batch_cap change).
+target_routes_per_batch = 0
+collect_window_ms = 5
+# 0 => derive to effective_collect_limit; explicit values are bounded by effective_collect_limit.
+collect_min_rows_per_batch = 0
+# SYCL / GF(3) (all from TOML; no process environment toggles on this path).
+# 32 GiB device pre-reserve on a 32 GiB UMA part; 0 disables (see pipeline SYCL init).
+sycl_prereserve_gib = 0
+# MiB per malloc_device chunk while pre-reserving (0 = pipeline_defaults / generated default).
+sycl_prereserve_chunk_mib = 2048
+sycl_gpu_device_index = -1
+gf3_sycl_min_weight_cells = 0
+# When true, throttled stderr lines log batched GF3 SYCL parallel_for grid sizing (B, pack5 byte dims, range).
+gf3_sycl_submit_grid_log = false
+# 0 = run all expert FF layers in one SYCL layer-batch (fewer submits); >0 splits stacks — same depth, less launch overhead.
+gf3_ff_layers_per_batch = 0
+# Host MiB hint for batched SYCL FF: caps multi-slot chunk size when ff_multi_row_slots_chunk=0 (larger MiB ⇒ fewer chunks, wider B per SYCL submit if RAM allows).
+# Wide MoE (8192×top_k routes) needs a large host staging budget or SYCL falls back to tiny B and wall time explodes.
+gf3_ff_batched_weight_mib = 65536
+ff_multi_row_batch = true
+# --- Multi-row SYCL FF chunk caps (what logs call slots_chunk_cap) — all in this [training] table ---
+# ff_multi_row_slots_chunk: 0 = derive from host estimate + gf3_ff_batched_weight_mib; >=2 = HARD cap on slots per chunk.
+# gf3_ff_batched_weight_mib: raises host RAM budget used by that estimate (when ff_multi_row_slots_chunk=0).
+# gf3_ff_multislot_slots_chunk_max: optional extra ceiling (0=off). Applied after budget; use e.g. 65536 to clamp wide runs.
+# gf3_ff_multislot_ignore_host_slot_budget: when true, apply 5/4× the MiB-derived slot cap (does not discard the cap).
+#   Pair with gf3_ff_multislot_slots_chunk_max / ff_multi_row_slots_chunk to hard-cap slots per SYCL wave.
+ff_multi_row_slots_chunk = 0
+gf3_ff_multislot_slots_chunk_max = 0
+gf3_ff_multislot_ignore_host_slot_budget = false
+lazy_moe_resident_cap = 0
+# Native lazy MoE: residents default to ~16×moe_top_k unless lazy_moe_resident_cap > 0 (then that hard cap).
+# MoE routing: symplectic logits are SYCL-only (no host-CPU scorer). With experts>=8, auto and on both select SYCL.
+# Parent directory for checkpoint output (`<path>/checkpoints`). Use data dir outside the repo (same tree as this file when using C:\q_mini_data\config).
+checkpoint_data_dir = "C:/q_mini_data"
+# When features.lazy_init is true: 0 => derive from parent knobs (effective_top_k).
+lazy_init_initial_experts = 0
 
 [model]
 moe_experts = 8192
-moe_top_k = 128
+moe_top_k = 256
 context_window = 12288
 entanglement_tokens = 1536
 shadow_dim = 6144
@@ -68,7 +152,7 @@ learning_rate_shift = 2
 [features]
 steane_correction = true
 flash_cim = false
-worker_threads = 48
+worker_threads = 64
 continuous_mode = true
 lazy_init = true
 data_accumulation = true
@@ -125,7 +209,7 @@ learning_rate_shift = 2    # Fixed-point learning rate shift
 
 [som]
 initial_experts = 2              # Seed experts to start with
-split_beta1_threshold = 5        # Split when β₁ > 5 cycles detected
+split_beta1_threshold = 5        # Split when ÃŽÂ²Ã¢â€šÂ > 5 cycles detected
 target_graph_density = 0.15      # 15% connectivity (sparse but connected)
 min_graph_density = 0.05         # Below 5% = too sparse, add edges
 max_graph_density = 0.40         # Above 40% = too dense, remove edges
@@ -141,30 +225,35 @@ min_text_length = 50      # Minimum text length for training samples
 max_text_length = 100000  # Maximum text length for training samples
 checkpoint_interval_samples = 500  # Checkpoint every N samples
 # Max indexed lines for a directory corpus (byte-offset index); not a parse failure when progress hits this cap.
-directory_max_lines = 1000000000
-
+directory_max_lines = 2000000
 [network]
+# Not consumed by native q_training throughput path today (metadata/future use).
 http_timeout_ms = 30000  # HTTP request timeout
 https_port = 443         # Default HTTPS port
 routing_qutrits = 8      # Qutrits for MoE routing
 
 [apis.limits]
+# Not consumed by native q_training throughput path today.
 rate_limit_daily = 100000  # API calls per day limit
 backoff_ms = 100           # Initial backoff between retries
 http_timeout_ms = 5000     # API HTTP timeout
 
 [sycl]
+# Not consumed by native q_training throughput path today. Build/runtime SYCL knobs live under [training].
 work_group_size = 256   # SYCL kernel work group size
 local_mem_nodes = 32    # SYCL local memory nodes
 
 [flash_cim]
+# Not consumed by native q_training throughput path today.
 num_blocks = 1024              # Simulated Flash-CIM blocks
 energy_fixed_point_scale = 1000000  # Fixed-point energy calculation scale
 
 [memory]
-arena_mb = 2048  # Memory arena size in MB (frontier host; still small vs 48 GB process budget)
+# Not consumed by native q_training throughput path today.
+arena_mb = 4096  # Memory arena size in MB (targeting ~16 GB total host footprint)
 
 [bridge]
+# Not consumed by native q_training throughput path today.
 mcp_timeout_ms = 15000  # MCP request timeout
 
 [data_sources]
@@ -205,3 +294,7 @@ urls = [
 recursive = true
 max_depth = 5
 max_pages_per_source = 50000
+
+
+
+

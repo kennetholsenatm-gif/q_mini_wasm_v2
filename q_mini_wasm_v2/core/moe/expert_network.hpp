@@ -13,10 +13,10 @@
 namespace q_mini_wasm_v2::core::moe {
 
 /**
- * @brief Abstract base class for expert neural networks
- * 
- * All expert implementations must inherit from this and implement
- * GF(3) ternary operations for forward pass and Forward-Forward training.
+ * @brief Abstract expert network (max-plus layers over GF(3) trits)
+ *
+ * Concrete experts implement max-plus (tropical) linear forwards and Forward–Forward training; FF uses TritPack5
+ * buffers for the same GF(3) alphabet—encoding only, not a different semiring.
  */
 class ExpertNetwork {
 public:
@@ -28,6 +28,7 @@ public:
         size_t output_dim = 64;         // Output feature dimension
         size_t hidden_dim = 128;        // Hidden layer dimension
         size_t num_layers = 2;          // Number of layers
+        size_t ff_active_internal_layers = 0; // 0 = use all layers each FF step
         ternary::Trit use_activation = ternary::Trit::POSITIVE;     // Apply ternary activation
         ternary::EnergyTrit energy_budget = ternary::EnergyTrit::MEDIUM;
     };
@@ -40,26 +41,22 @@ public:
     // ========================================================================
     
     /**
-     * @brief Forward pass using GF(3) ternary arithmetic
-     * 
-     * @param input Input features as ternary values
-     * @return Output features as ternary values
+     * @brief Forward pass (max-plus linear map over GF(3) trits; see concrete expert)
+     * @param input Input trits
      */
     virtual std::vector<ternary::Trit> Forward(
         const std::vector<ternary::Trit>& input
     ) = 0;
     
     /**
-     * @brief Training step using Forward-Forward algorithm
-     * 
-     * @param positive Positive sample (real data)
-     * @param negative Negative sample (corrupted data)
-     * @return Goodness delta (positive - negative)
+     * @brief Training step using Forward-Forward algorithm (TritPack5 wire only).
+     *
+     * Each buffer is @c q::ternary::pack_batch_t5 over @c config_.input_dim balanced trits
+     * (length ceil(input_dim/5) bytes). No dense @c ternary::Trit vectors on this path.
      */
     virtual int32_t TrainForwardForward(
-        const std::vector<ternary::Trit>& positive,
-        const std::vector<ternary::Trit>& negative
-    ) = 0;
+        const std::vector<uint8_t>& positive_pack5,
+        const std::vector<uint8_t>& negative_pack5) = 0;
 
     // ========================================================================
     // Common Utilities (provided by base class)

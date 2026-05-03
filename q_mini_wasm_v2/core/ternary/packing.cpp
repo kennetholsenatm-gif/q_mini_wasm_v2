@@ -1,5 +1,9 @@
 #include "packing.hpp"
 #include <cstring>
+#include <algorithm>
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
 
 namespace q {
 namespace ternary {
@@ -8,12 +12,18 @@ void pack_batch_t5(const std::vector<int8_t>& trits, std::vector<uint8_t>& packe
     const size_t trit_count = trits.size();
     const size_t num_bytes = (trit_count + TRITS_PER_BYTE_T5 - 1) / TRITS_PER_BYTE_T5;
     packed.resize(num_bytes);
-    
-    size_t trit_idx = 0;
-    for (size_t byte_idx = 0; byte_idx < num_bytes; ++byte_idx) {
+
+    const int64_t n = static_cast<int64_t>(num_bytes);
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static) if(n > 2048)
+#endif
+    for (int64_t bi = 0; bi < n; ++bi) {
+        const size_t byte_idx = static_cast<size_t>(bi);
+        const size_t base = byte_idx * TRITS_PER_BYTE_T5;
         int8_t t5[5] = {0, 0, 0, 0, 0};
-        for (int i = 0; i < 5 && trit_idx < trit_count; ++i, ++trit_idx) {
-            t5[i] = trits[trit_idx];
+        const size_t end = std::min(base + TRITS_PER_BYTE_T5, trit_count);
+        for (size_t k = base; k < end; ++k) {
+            t5[k - base] = trits[k];
         }
         packed[byte_idx] = pack_5trits(t5);
     }
@@ -35,15 +45,23 @@ void pack_batch_t20(const std::vector<int8_t>& trits, std::vector<uint32_t>& pac
     }
 }
 
-void unpack_batch_t5(const std::vector<uint8_t>& packed, std::vector<int8_t>& trits, uint32_t trit_count) {
+void unpack_batch_t5(const std::vector<uint8_t>& packed, std::vector<int8_t>& trits, size_t trit_count) {
     trits.resize(trit_count);
-    
-    size_t trit_idx = 0;
-    for (uint8_t byte_val : packed) {
+
+    const size_t total = trit_count;
+    const int64_t n = static_cast<int64_t>(packed.size());
+#if defined(_OPENMP)
+#pragma omp parallel for schedule(static) if(n > 2048)
+#endif
+    for (int64_t bi = 0; bi < n; ++bi) {
+        const size_t byte_idx = static_cast<size_t>(bi);
+        const uint8_t byte_val = packed[byte_idx];
         int8_t t5[5];
         unpack_5trits(byte_val, t5);
-        for (int i = 0; i < 5 && trit_idx < trit_count; ++i, ++trit_idx) {
-            trits[trit_idx] = t5[i];
+        const size_t base = byte_idx * TRITS_PER_BYTE_T5;
+        const size_t end = std::min(base + TRITS_PER_BYTE_T5, total);
+        for (size_t k = base; k < end; ++k) {
+            trits[k] = t5[k - base];
         }
     }
 }

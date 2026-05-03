@@ -1,6 +1,19 @@
 #include "runtime_orchestrator.hpp"
+#include "../ternary/packing.hpp"
 
 namespace q_mini_wasm_v2::core::moe {
+
+namespace {
+
+void trits_to_ff_pack5(const std::vector<ternary::Trit>& trits, size_t input_dim, std::vector<uint8_t>& out) {
+    std::vector<int8_t> lanes(input_dim, 0);
+    for (size_t i = 0; i < trits.size() && i < input_dim; ++i) {
+        lanes[i] = static_cast<int8_t>(trits[i]);
+    }
+    q::ternary::pack_batch_t5(lanes, out);
+}
+
+} // namespace
 
 std::future<Goodness> RuntimeOrchestrator::submit_ff_training(
     ExpertNetwork& expert,
@@ -24,9 +37,15 @@ std::future<Goodness> RuntimeOrchestrator::submit_ff_training(
         if (!negative.empty()) {
             neg_sample = negative[0];
         }
-        
+
+        const size_t in_d = expert.GetConfig().input_dim;
+        std::vector<uint8_t> pos_pack;
+        std::vector<uint8_t> neg_pack;
+        trits_to_ff_pack5(pos_sample, in_d, pos_pack);
+        trits_to_ff_pack5(neg_sample, in_d, neg_pack);
+
         // Train the expert
-        expert.TrainForwardForward(pos_sample, neg_sample);
+        expert.TrainForwardForward(pos_pack, neg_pack);
 
         // Goodness on final-layer outputs (same as pipeline / TrainForwardForward internals)
         const auto route_g = expert.last_forward_forward_route_goodness();

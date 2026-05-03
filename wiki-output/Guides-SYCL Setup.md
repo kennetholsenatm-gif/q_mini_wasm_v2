@@ -13,7 +13,7 @@ source /opt/intel/oneapi/setvars.sh
 ## Build with SYCL
 
 ```bash
-cmake -DUSE_SYCL=ON -DCMAKE_CXX_COMPILER=icpx ..
+cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_sycl -G Ninja -DCMAKE_CXX_COMPILER=icpx ..
 cmake --build . -j$(nproc)
 ```
 

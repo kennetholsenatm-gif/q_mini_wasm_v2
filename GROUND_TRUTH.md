@@ -287,7 +287,7 @@ wui/
 
 ```powershell
 # C++ Core (via CMake)
-cmake --build q_mini_wasm_v2/build_final --config Release
+cmake --build q_mini_wasm_v2/build_sycl --config Release
 
 # Go WUI Server
 go build -o qminiwasm.exe ./cmd/qminiwasm
@@ -310,7 +310,7 @@ C:\GitHub\q_mini_wasm_v2\
 │   ├── data_sources.toml
 │   └── training_run.toml
 └── q_mini_wasm_v2\
-    └── build_final\
+    └── build_sycl\
         └── Release\
             └── q_training.dll  # Training backend (CGO-linked)
 ```
@@ -542,7 +542,7 @@ Do not market this as production-ready. It is a research framework with a functi
 
 ### "DLL not found"
 **Symptom:** CGO error about q_training.dll
-**Fix:** Ensure `q_mini_wasm_v2/build_final/Release/q_training.dll` exists and is in PATH
+**Fix:** Ensure `q_mini_wasm_v2/build_sycl/Release/q_training.dll` exists and is in PATH
 
 ### "Training not starting"
 **Symptom:** Click start, nothing happens

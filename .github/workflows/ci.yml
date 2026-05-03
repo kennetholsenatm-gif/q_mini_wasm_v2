@@ -58,6 +58,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Policy — no sycl_route_mode Off regression
+        run: python scripts/check_no_sycl_route_off.py .
+
+      - name: Policy — no hidden throughput / multislot caps
+        run: python scripts/check_no_throughput_hidden_caps.py .
+
       - name: Check C++ formatting
         run: |
           sudo apt-get install -y clang-format
@@ -67,42 +73,49 @@ jobs:
             -exec clang-format --dry-run --Werror {} \; || echo "::warning::Format issues found"
 
   # ===========================================================================
-  # BUILD MATRIX
+  # NATIVE BUILD + TEST (Linux + Intel oneAPI DPC++; SYCL is mandatory in CMake)
   # ===========================================================================
   build:
-    name: Build (${{ matrix.os }}, SYCL=${{ matrix.sycl }})
+    name: Native SYCL (${{ matrix.build_type }})
     needs: [gf3-validation, lint]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            sycl: "OFF"
-            build_type: "Release"
-          - os: windows-latest
-            sycl: "OFF"
-            build_type: "Debug"
-          - os: ubuntu-latest
-            sycl: "OFF"
-            build_type: "Release"
-          - os: ubuntu-latest
-            sycl: "OFF"
-            build_type: "Debug"
+        build_type: [Release, Debug]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure CMake
+      - name: Install Intel oneAPI DPC++ compiler
         run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | sudo gpg --yes --dearmor --output /usr/share/keyrings/oneapi-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y ninja-build intel-oneapi-compiler-dpcpp-cpp
+        shell: bash
+
+      - name: Configure CMake (icpx)
+        run: |
+          source /opt/intel/oneapi/setvars.sh
           cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DBUILD_TESTS=ON \
-            -DUSE_SYCL=${{ matrix.sycl }}
+            -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_C_COMPILER=icx \
+            -DBUILD_TESTS=ON
         shell: bash
 
       - name: Build
-        run: cmake --build q_mini_wasm_v2/build --config ${{ matrix.build_type }} -j$(nproc 2>/dev/null || echo 4)
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --build q_mini_wasm_v2/build -j$(nproc)
+        shell: bash
+
+      - name: Run tests
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cd q_mini_wasm_v2/build && ctest --output-on-failure --timeout 120
         shell: bash
 
       - name: Post-build GF(3) Validation
@@ -114,75 +127,9 @@ jobs:
         if: matrix.build_type == 'Release'
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.os }}-sycl${{ matrix.sycl }}
+          name: build-ubuntu-sycl-${{ matrix.build_type }}
           path: |
             q_mini_wasm_v2/build/**/q_mini_wasm_v2_core.*
             q_mini_wasm_v2/build/**/q_mini_wasm_v2_tests*
             q_mini_wasm_v2/build/**/q_mini_wasm_v2_network_test*
           retention-days: 7
-
-  # ===========================================================================
-  # TEST
-  # ===========================================================================
-  test:
-    name: Test (${{ matrix.os }})
-    needs: build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure & Build
-        run: |
-          cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTS=ON \
-            -DUSE_SYCL=OFF
-          cmake --build q_mini_wasm_v2/build --config Release -j$(nproc 2>/dev/null || echo 4)
-        shell: bash
-
-      - name: Run tests
-        working-directory: q_mini_wasm_v2/build
-        run: ctest --build-config Release --output-on-failure --timeout 120
-        shell: bash
-
-  # ===========================================================================
-  # SYCL BUILD (Linux only, if SYCL SDK available)
-  # ===========================================================================
-  sycl-build:
-    name: SYCL Build
-    needs: [gf3-validation, lint]
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check for SYCL
-        id: sycl-check
-        run: |
-          if command -v icpx &> /dev/null; then
-            echo "available=true" >> $GITHUB_OUTPUT
-          else
-            echo "available=false" >> $GITHUB_OUTPUT
-            echo "::notice::SYCL SDK not available in this environment"
-          fi
-
-      - name: Configure & Build with SYCL
-        if: steps.sycl-check.outputs.available == 'true'
-        run: |
-          cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTS=ON \
-            -DUSE_SYCL=ON
-          cmake --build q_mini_wasm_v2/build --config Release -j$(nproc)
-        shell: bash
-
-      - name: Run SYCL tests
-        if: steps.sycl-check.outputs.available == 'true'
-        working-directory: q_mini_wasm_v2/build
-        run: ctest --build-config Release --output-on-failure --timeout 120
-        shell: bash

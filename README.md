@@ -18,12 +18,11 @@ git clone https://github.com/kennetholsenatm-gif/q_mini_wasm_v2.git
 cd q_mini_wasm_v2
 ```
 
-Build the training DLL (MSVC / CMake), then the Go host (CGO links `q_training.dll`). **Always build and run a single `qminiwasm.exe` at the repository root** (for example `C:\GitHub\q_mini_wasm_v2\qminiwasm.exe`):
+Build the training DLL (**Intel oneAPI SYCL** / CMake; see **[CONTRIBUTING.md](CONTRIBUTING.md)** or `scripts/build_qminiwasm.ps1`), then the Go host (CGO looks under `q_mini_wasm_v2/build_sycl` and the repo root for `q_training`). **Always build and run a single `qminiwasm.exe` at the repository root** (for example `C:\GitHub\q_mini_wasm_v2\qminiwasm.exe`):
 
 ```powershell
 cd C:\GitHub\q_mini_wasm_v2
-cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_final
-cmake --build q_mini_wasm_v2/build_final --config Release --target q_training
+powershell -NoProfile -File .\scripts\build_qminiwasm.ps1   # configures q_mini_wasm_v2/build_sycl + q_training + copies DLLs
 go build -o qminiwasm.exe ./cmd/qminiwasm
 ```
 
@@ -36,6 +35,7 @@ A Release build of **`q_training`** copies **`q_training.dll`** to the repo root
 Open **http://localhost:9090** (see `Port` in `cmd/qminiwasm/main.go` if you change it).
 
 Full setup, data layout, and what is tracked in git: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+Build recall shortcut: **[BUILD_MEMORY.md](BUILD_MEMORY.md)**.
 
 Training control is TOML-driven: `wui_init_training_pipeline` and `wui_start_ff_training` now reject explicit `epochs` overrides. Keep `training.epochs` in the active TOML as the single source of truth.
 
@@ -124,8 +124,8 @@ See [wiki-output/Guides-Building.md](wiki-output/Guides-Building.md) for detaile
 
 **Quick Build:**
 ```powershell
-# C++ training DLL
-cmake --build q_mini_wasm_v2/build_final --config Release
+# C++ training DLL (SYCL / Intel oneAPI — see CONTRIBUTING.md)
+cmake --build q_mini_wasm_v2/build_sycl --config Release
 
 # Go WUI server
 go build -o qminiwasm.exe ./cmd/qminiwasm
@@ -136,7 +136,7 @@ npm install
 npm run build
 ```
 
-**Requirements:** Visual Studio 2022, CMake 3.20+, Go 1.26+, Node.js 18+
+**Requirements:** Intel oneAPI DPC++ (or other supported SYCL toolchain per CMake), CMake 3.20+, Go 1.26+, Node.js 18+; Visual Studio optional when using Ninja + `icx`
 
 ## License
 

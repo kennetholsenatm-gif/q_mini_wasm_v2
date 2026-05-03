@@ -14,9 +14,9 @@
 #### Added Functions
 - `findTrainerExecutable()`: Robust discovery with multiple search paths:
   1. Project root: `q_mini_wasm_v2_trainer.exe`
-  2. Build release: `q_mini_wasm_v2/build_final/Release/q_mini_wasm_v2_trainer.exe`
-  3. Build debug: `q_mini_wasm_v2/build_final/Debug/q_mini_wasm_v2_trainer.exe`
-  4. Alternative: `build_final/Release/q_mini_wasm_v2_trainer.exe`
+  2. Build release: `q_mini_wasm_v2/build_sycl/Release/q_mini_wasm_v2_trainer.exe`
+  3. Build debug: `q_mini_wasm_v2/build_sycl/Debug/q_mini_wasm_v2_trainer.exe`
+  4. Alternative: `build_sycl/Release/q_mini_wasm_v2_trainer.exe`
   5. Current working directory
   6. Custom path from `training_config.toml` `trainer_path` setting
 
@@ -79,9 +79,9 @@ Added architecture documentation references to:
 ### Trainer Discovery
 When user clicks "Start Training", the WUI searches for the trainer in order:
 1. `q_mini_wasm_v2_trainer.exe` (project root - where qminiwasm.exe typically is)
-2. `q_mini_wasm_v2/build_final/Release/q_mini_wasm_v2_trainer.exe`
-3. `q_mini_wasm_v2/build_final/Debug/q_mini_wasm_v2_trainer.exe`
-4. `build_final/Release/q_mini_wasm_v2_trainer.exe`
+2. `q_mini_wasm_v2/build_sycl/Release/q_mini_wasm_v2_trainer.exe`
+3. `q_mini_wasm_v2/build_sycl/Debug/q_mini_wasm_v2_trainer.exe`
+4. `build_sycl/Release/q_mini_wasm_v2_trainer.exe`
 5. Current working directory
 6. Custom path from `training_config.toml`
 
@@ -112,7 +112,7 @@ If not found, error shows ALL searched paths.
 
 ## Testing Checklist
 
-- [ ] Build trainer: `cmake --build q_mini_wasm_v2/build_final --target q_mini_wasm_v2_trainer`
+- [ ] Build trainer: `cmake --build q_mini_wasm_v2/build_sycl --target q_mini_wasm_v2_trainer`
 - [ ] Build qminiwasm.exe: `go build -o qminiwasm.exe ./cmd/wui-cli-bridge` (from agents/)
 - [ ] Run qminiwasm.exe and verify browser opens
 - [ ] Click "Start Training" with valid dataset

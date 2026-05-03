@@ -21,7 +21,8 @@ dropout_rate = 0.1
 
 [features]
 use_wasm = false
-use_sycl = false
+# Native q_mini_wasm_v2 / q_training is always built with SYCL (no CMake toggle).
+use_sycl = true
 use_sse = true
 
 [dataset]

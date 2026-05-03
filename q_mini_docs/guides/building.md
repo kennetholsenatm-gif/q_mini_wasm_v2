@@ -2,91 +2,49 @@
 
 ## Prerequisites
 
-- C++17 compiler (GCC 7+, Clang 5+, MSVC 2017+)
-- CMake 3.14+
-- Git
+- **CMake 3.14+**
+- **Native `q_mini_wasm_v2`**: a SYCL-capable toolchain — **Intel oneAPI** (`icx` / `icpx`) with **Ninja** or **Visual Studio + `-T IntelLLVM`**, **AdaptiveCpp**, or on Linux **LLVM `clang++` with `-fsycl`**. Plain **MSVC (`cl`) alone cannot configure** this project.
+- **Go** (for `qminiwasm`): see repository root **[CONTRIBUTING.md](../../CONTRIBUTING.md)**.
 
-## Quick Build
+## Recommended layout
+
+Use a dedicated out-of-source directory (for example **`q_mini_wasm_v2/build_sycl`**) so it is never confused with obsolete MSVC-only caches.
+
+## Linux (Intel oneAPI + Ninja)
 
 ```bash
 git clone https://github.com/kennetholsenatm-gif/q_mini_wasm_v2.git
-cd q_mini_wasm_v2/q_mini_wasm_v2
-mkdir build && cd build
-cmake ..
-cmake --build .
+cd q_mini_wasm_v2
+source /opt/intel/oneapi/setvars.sh
+cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_sycl -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_COMPILER=icpx \
+  -DCMAKE_C_COMPILER=icx \
+  -DBUILD_TESTS=ON
+cmake --build q_mini_wasm_v2/build_sycl -j"$(nproc)"
 ```
 
-## Build Options
+## Windows
+
+Use **`powershell -NoProfile -File .\scripts\build_qminiwasm.ps1`** (Ninja + `icx-cl`, Release) or follow the manual **`icx`** / **`-T IntelLLVM`** steps in **[CONTRIBUTING.md](../../CONTRIBUTING.md)**. Run CMake from an **Intel oneAPI** environment (`setvars.bat`) so the linker resolves Intel libraries.
+
+## CMake options (still toggles)
 
 | Flag | Default | Description |
 |---|---|---|
 | `BUILD_TESTS` | `ON` | Build test executables |
-| `USE_SYCL` | `OFF` | Enable SYCL acceleration |
 | `BUILD_WASM` | `OFF` | Build WebAssembly target |
 | `BUILD_SHARED_LIBS` | `OFF` | Build shared library |
 
-## Running Tests
+**SYCL** is always enabled for native `q_mini_wasm_v2` targets (there is no `USE_SYCL` switch).
+
+## Running tests
 
 ```bash
-cd build
-ctest --output-on-failure
+cd q_mini_wasm_v2/build_sycl && ctest --output-on-failure
 ```
 
-## Platform Notes
+## More reading
 
-### Windows (MSVC)
-
-```powershell
-cmake -G "Visual Studio 17 2022" ..
-cmake --build . --config Release
-```
-
-### Linux (GCC/Clang)
-
-```bash
-cmake -DCMAKE_BUILD_TYPE=Release ..
-cmake --build . -j$(nproc)
-```
-
-### macOS (Clang)
-
-```bash
-cmake -DCMAKE_BUILD_TYPE=Release ..
-cmake --build . -j$(sysctl -n hw.ncpu)
-```
-</content>
-<write_to_file>
-<path>docs/guides/sycl-setup.md</path>
-<content>
-# SYCL Setup Guide
-
-## Intel oneAPI
-
-1. Download Intel oneAPI Base Toolkit from intel.com
-2. Install with default options
-3. Source the environment:
-
-```bash
-source /opt/intel/oneapi/setvars.sh
-```
-
-## Build with SYCL
-
-```bash
-cmake -DUSE_SYCL=ON -DCMAKE_CXX_COMPILER=icpx ..
-cmake --build . -j$(nproc)
-```
-
-## Verify SYCL
-
-```bash
-./q_mini_wasm_v2_tests --gtest_filter="*sycl*"
-```
-
-## Troubleshooting
-
-| Issue | Solution |
-|---|---|
-| `IntelSYCL not found` | Source `setvars.sh` first |
-| GPU not detected | Check `sycl-ls` output |
-| Link errors | Ensure DPC++ runtime installed |
+- **[q_mini_docs/guides/sycl-setup.md](sycl-setup.md)** — Intel environment and verification
+- **[q_mini_docs/TRAINING_THROUGHPUT.md](../TRAINING_THROUGHPUT.md)** — training DLL and throughput

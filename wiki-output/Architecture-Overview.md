@@ -322,7 +322,7 @@ ForwardForwardLearner:
 | Flag | Default | Description |
 |---|---|---|
 | `BUILD_TESTS` | `ON` | Build test executables |
-| `USE_SYCL` | `OFF` | Enable SYCL acceleration |
+| *(native SYCL)* | *(always on)* | Main tree: **icpx/icx** CMake path; see CONTRIBUTING.md |
 | `BUILD_WASM` | `OFF` | Build WebAssembly target |
 | `BUILD_SHARED_LIBS` | `OFF` | Build shared library |
 

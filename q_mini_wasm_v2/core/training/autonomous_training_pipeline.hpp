@@ -9,23 +9,25 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <ostream>
 #include <string>
+#include <unordered_map>
 
 #include "data_synthesizer.hpp"
 #include "../learning/forward_forward.hpp"
 #include "../moe/router.hpp"
-#include "../moe/expert_network.hpp"
+#include "../moe/gf3_layers.hpp"
 #include "../qgnn/betti_extractor.hpp"
 #include "../qgnn/graph_tableau.hpp"
 
 namespace q_mini_wasm_v2::core::training {
 
 /**
- * @brief Ternary input for FF training plus optional int8 pack for SYCL MoE routing.
+ * @brief Ternary input for FF training plus optional TritPack5 for MoE routing.
  *
- * When @ref route_packed_t5 is non-empty, features use @c q::ternary::pack_batch_t5 (same polynomial TritPack5 as @c ternary::TritPack5)
- * for @c MoERouter::route_topk_from_tritpack5 symplectic logits without one-byte-per-trit waste.
+ * When @ref route_packed_t5 is non-empty, @c MoERouter::route_topk_from_tritpack5 reads the wire directly;
+ * @ref trits may stay empty until the row path unpacks once for Forward–Forward.
  */
 struct TernaryRouteInput {
     std::vector<ternary::Trit> trits;
@@ -47,10 +49,16 @@ struct PipelineMetrics {
     uint32_t train_batch_rows_done = 0;
     /** Target contrastive rows for the current micro-batch (0 between batches). */
     uint32_t train_batch_collect_limit = 0;
-    /** Effective per-batch collect limit from TOML (min(batch, micro_batch_cap) vs collect_floor). */
+    /** Effective per-batch collect limit from TOML (min(batch_size, micro_batch_cap)). */
     uint32_t train_collect_limit_effective = 0;
     /** Effective route top-k from TOML (capped by expert count). */
     uint32_t route_topk_effective = 0;
+    /** Resident expert objects currently kept in memory (lazy mode). */
+    uint32_t experts_resident = 0;
+    /** Evicted expert weight blobs currently spilled out of resident memory. */
+    uint32_t experts_spilled = 0;
+    /** Current lazy resident cap used by eviction policy (typically effective top-k). */
+    uint32_t experts_resident_cap = 0;
     /** Batch counter when @ref evaluate_topology last completed (0 = never yet). */
     uint64_t last_betti_eval_batch = 0;
     /** GF(3) expert linear layers: cumulative Hebbian weight-cell update steps (non-zero delta applied). */
@@ -116,120 +124,168 @@ struct PipelineMetrics {
     
     // Continuous mode tracking
     uint32_t loop_count = 0;  // Number of completed loops in continuous mode
+
+    /** Live concurrent process_batch workers (runtime tuning); 0 if not reported. */
+    size_t live_parallel_batches = 0;
+    /** TOML ceiling from InitSession (config.training_parallel_batches). */
+    size_t parallel_batches_ceiling = 0;
 };
 
 /**
- * @brief Configuration for the autonomous training pipeline
+ * @brief Configuration for the autonomous training pipeline (plain aggregate: no inline defaults).
+ * Production runs: host loads TOML and passes Training_InitSession. Bootstrapping/tests: default_pipeline_config().
  */
 struct PipelineConfig {
-    // Data Synthesizer settings (TOML training.acquisition_threads / training.perturbation_threads)
-    size_t acquisition_threads = 4;
-    size_t perturbation_threads = 2;
-    
-    // Forward-Forward settings
-    size_t ff_num_layers = 3;
-    size_t ff_layer_width = 128;
-    uint32_t ff_learning_rate_step = 1;  // GF(3) learning step size (no float)
-    float learning_rate = 0.001f;  // Standard learning rate
-    
-    // MoE settings
-    size_t moe_num_experts = 243;
-    size_t moe_top_k = 3;
-    size_t moe_input_dim = 64;
-    size_t moe_output_dim = 64;
-    size_t moe_hidden_dim = 128;
-    /** Layers inside each expert network (Forward–Forward stack depth). */
-    size_t moe_expert_internal_layers = 2;
-    /** MoE router qutrit width; must match TOML model.routing_qutrits. */
-    size_t routing_qutrits = 16;
-    
-    // Betti/Graph settings
-    size_t graph_initial_nodes = 64;
-    size_t graph_initial_edges = 112;
-    size_t betti_max_qutrits = 243;
-    uint32_t betti_guidance_threshold = 15;  // β₁ threshold for optimization
-    uint32_t shadow_dim = 64;  // Shadow dimension for stabilizer
-    
-    // Training loop settings
-    size_t batch_size = 32;
-    size_t num_epochs = 100;
-    size_t samples_per_epoch = 1000;  // samples to process per epoch
-    /** Upper bound on samples collected per training micro-batch (from TOML; must be > 0 before training runs). */
-    size_t training_micro_batch_cap = 0;
-    /** Minimum micro-batch after adaptive clamp (from TOML; must be > 0 before training runs). */
-    size_t training_collect_floor = 0;
-    /** When true, emit `[TrainingTiming]` lines to stderr. */
-    bool training_timing_to_stderr = false;
-    /** When true, disable OpenMP parallel expert train for a single route. */
-    bool training_serial_experts = false;
-    /** Symplectic routing logits: SYCL vs CPU when built with USE_SYCL (see training.sycl_route_mode in TOML). */
-    moe::SyclRouteMode training_sycl_route_mode = moe::SyclRouteMode::Auto;
-    /** Minimum @c moe_input_dim to use SYCL float/int32/string quantization (0 in DLL = default 128). */
-    size_t sycl_trit_quant_min_moe_dim = 128;
-    /**
-     * 0 = no extra stderr lines; 1 = per micro-batch FF goodness summary; 2 = also first 3 contrastive rows
-     * per expert (see TOML training.goodness_log_level; passed from Training_InitSession).
-     */
-    uint32_t goodness_log_level = 0;
-    size_t topology_evaluation_interval = 10;  // batches between Betti analysis
-    /** Checkpoints taken every checkpoint_interval batches (and on epoch boundaries). */
-    size_t checkpoint_interval = 10;
-    bool enable_prefill_ring_buffer = true;
-    size_t prefill_target_samples = 4096;
-    uint32_t prefill_timeout_ms = 120000;
-    uint32_t prefill_poll_ms = 50;
-    size_t max_acquisition_queue_depth = 98304;
-    size_t max_raw_queue_depth = 98304;
-    size_t max_train_queue_depth = 196608;
-    
-    // Control flags
-    bool enable_betti_guidance = true;
-    bool enable_knowledge_engine = true;
-    bool enable_checkpoints = true;
-    bool enable_wui_streaming = true;
-    bool enable_continuous_mode = false;  // Auto-restart when epoch limit reached
-    bool enable_steane_correction = false;  // Steane error correction
-    bool enable_error_correction = false;   // Alias for steane correction
-    bool enable_flash_cim = false;         // Flash CIM optimization
+    size_t acquisition_threads;
+    size_t perturbation_threads;
 
-    /**
-     * When true (recommended for large moe_num_experts), expert GF3 stacks are created on
-     * first top-k route only; router still scores all expert slots (cheap vs full experts).
-     * When false, every expert is materialized at init (high RAM; only for small expert counts).
-     */
-    bool lazy_moe_experts = true;
+    size_t ff_num_layers;
+    size_t ff_layer_width;
+    uint32_t ff_learning_rate_step;
+    float learning_rate;
 
-    /**
-     * Cap on internal FF layers per expert (0 = use full moe_expert_internal_layers).
-     * Lower values reduce per-expert memory once an expert is materialized.
-     */
-    size_t moe_ff_active_internal_layers = 0;
-    
-    // Data source - if set, load local data instead of external APIs
-    std::string data_path;  // Path to local training data files
-    bool prefer_local_data = true;  // Prefer local data when available.
-    /** Absolute or CWD-relative path to data_sources.toml (host should pass absolute). */
+    size_t moe_num_experts;
+    size_t moe_top_k;
+    size_t moe_input_dim;
+    size_t moe_output_dim;
+    size_t moe_hidden_dim;
+    size_t moe_expert_internal_layers;
+    size_t routing_qutrits;
+
+    size_t graph_initial_nodes;
+    size_t graph_initial_edges;
+    size_t betti_max_qutrits;
+    uint32_t betti_guidance_threshold;
+    uint32_t shadow_dim;
+
+    size_t batch_size;
+    size_t num_epochs;
+    size_t samples_per_epoch;
+    size_t training_micro_batch_cap;
+    /** Legacy TOML field; kept for checkpoint/session ABI. Does not cap row collect size (see micro_batch_cap + batch_size). */
+    size_t training_collect_floor;
+    bool training_timing_to_stderr;
+    moe::SyclRouteMode training_sycl_route_mode;
+    size_t sycl_trit_quant_min_moe_dim;
+    uint32_t goodness_log_level;
+    size_t topology_evaluation_interval;
+    size_t checkpoint_interval;
+    bool enable_prefill_ring_buffer;
+    size_t prefill_target_samples;
+    uint32_t prefill_timeout_ms;
+    uint32_t prefill_poll_ms;
+    size_t max_acquisition_queue_depth;
+    size_t max_raw_queue_depth;
+    size_t max_train_queue_depth;
+
+    bool enable_betti_guidance;
+    bool enable_knowledge_engine;
+    bool enable_checkpoints;
+    bool enable_wui_streaming;
+    bool enable_continuous_mode;
+    bool enable_steane_correction;
+    bool enable_error_correction;
+    bool enable_flash_cim;
+
+    bool lazy_moe_experts;
+
+    size_t moe_ff_active_internal_layers;
+
+    std::string data_path;
+    bool prefer_local_data;
     std::string data_sources_toml_path;
-    /** If true, generate a synthetic negative when a pair is missing. If false, missing negatives fail training. */
-    bool allow_generated_negatives = true;
+    bool allow_generated_negatives;
 
-    /** Max directory corpus lines indexed (offsets); TOML `[training.data_filter].directory_max_lines`. */
-    size_t directory_max_lines = 1'000'000'000ull;
-    /** Max JSONL rows kept in RAM for a single local file; TOML `training.max_jsonl_local_samples`. */
-    size_t max_jsonl_local_samples = 5'000'000ull;
-    /** From `[training.data_filter]` — min/max feature length for directory rows (and JSONL `input` width). */
-    size_t min_text_length = 50;
-    size_t max_text_length = 100'000;
+    size_t directory_max_lines;
+    size_t max_jsonl_local_samples;
+    size_t min_text_length;
+    size_t max_text_length;
 
-    /** Max pending async checkpoint blobs before enqueue blocks (TOML training.checkpoint_async_queue_max). */
-    size_t checkpoint_async_queue_max = 24;
-    /** Empty-queue spin backoff: wait ms = min(base_ms << min(attempts, max_shift), cap_ms). */
-    uint32_t collect_empty_backoff_base_ms = 10;
-    uint32_t collect_empty_backoff_max_shift = 10;
-    uint32_t collect_empty_backoff_cap_ms = 1000;
-    /** WUI/metrics heartbeat while collecting; 0 = update every empty-queue poll iteration. */
-    uint32_t metrics_heartbeat_sec = 2;
+    size_t checkpoint_async_queue_max;
+    uint32_t collect_empty_backoff_base_ms;
+    uint32_t collect_empty_backoff_max_shift;
+    uint32_t collect_empty_backoff_cap_ms;
+    uint32_t metrics_heartbeat_sec;
+
+    bool training_parallel_contrastive_rows;
+    /** Concurrent `process_batch()` workers per training_loop tick (each host thread uses its own SYCL queue). */
+    size_t training_parallel_batches;
+    /**
+     * Hard ceiling on effective concurrent workers (applied after realtime scaler): min(live, cap).
+     * 0 = uncapped (legacy). Non-zero helps iGPU/UMA when training.parallel_batches is large (e.g. 192–512).
+     */
+    size_t training_parallel_batches_runtime_cap;
+    size_t ff_expert_chunk_size;
+    size_t target_routes_per_batch;
+    uint32_t collect_window_ms;
+    /** Do not leave the collect phase on @ref collect_window_ms until at least this many contrastive rows
+     *  are buffered (capped by @ref collect_limit). Prevents tiny "calculator" batches when data is available. */
+    uint32_t collect_min_rows_per_batch;
+    std::string training_checkpoint_data_dir;
+
+    /** SYCL device USM pre-reserve size in GiB before routing-heavy init (0 = disabled). */
+    uint32_t sycl_prereserve_gib;
+    /**
+     * Allocation chunk size (MiB) for each `malloc_device` step while filling @ref sycl_prereserve_gib.
+     * Larger chunks reach the target reservation with fewer SYCL calls (better for filling big UMA budgets).
+     */
+    uint32_t sycl_prereserve_chunk_mib;
+    /** SYCL GPU pick when multiple devices exist: -1 = auto (prefer max compute units), else device list index. */
+    int32_t sycl_gpu_device_index;
+    /** Minimum input×output weight cells before GF(3) layer uses SYCL matmul path (0 = no extra floor). */
+    size_t gf3_sycl_min_weight_cells;
+    /** When true, emit throttled stderr lines for batched GF3 SYCL `parallel_for` grid sizing (`training.gf3_sycl_submit_grid_log`). */
+    bool gf3_sycl_submit_grid_log;
+    /** Host staging budget (MiB) used to cap MoE slots per SYCL multi-slot chunk (see gf3_ff_multislot_host_budget_slots_cap). 0 = pipeline default MiB. */
+    size_t gf3_ff_batched_weight_mib;
+    /** Pack multiple contrastive rows into one SYCL multi-slot FF batch when possible. */
+    bool ff_multi_row_batch;
+    /** When >=2, cap MoE slots per SYCL multi-slot FF chunk. When 0, chunk size is
+     *  min(all slots, gf3_ff_multislot_host_budget_slots_cap(.., gf3_ff_batched_weight_mib)) so large
+     *  training.gf3_ff_batched_weight_mib raises the implicit cap instead of tiny host-staging chunks. */
+    uint32_t ff_multi_row_slots_chunk;
+    /** Extra ceiling on slots per multi-row SYCL FF chunk (0 = off). Applied after host budget and @ref ff_multi_row_slots_chunk. */
+    size_t gf3_ff_multislot_slots_chunk_max;
+    /** When true, apply a modest (5/4) uplift to the MiB-derived slot cap — does not discard the cap (staging is
+     *  tensor-sized, not “fill VRAM”). Use @ref gf3_ff_multislot_slots_chunk_max / @ref ff_multi_row_slots_chunk to hard-cap. */
+    bool gf3_ff_multislot_ignore_host_slot_budget;
+    /** Max layers to process per SYCL multi-slot FF batch (0 = process all active layers). 
+     *  Reduces per-kernel memory pressure while keeping high slot parallelism. 
+     *  Example: 80 layers with gf3_ff_layers_per_batch=4 processes as 20 batches of 4 layers each. */
+    uint32_t gf3_ff_layers_per_batch;
+    /** Lazy MoE: max resident experts in RAM (0 = heuristic from top-k). */
+    size_t lazy_moe_resident_cap;
+
+    /** Prefill: stderr progress log cadence (seconds). */
+    uint32_t prefill_progress_log_interval_sec;
+    /** Prefill: emit stall warning after this many seconds without depth growth. */
+    uint32_t prefill_stall_warn_sec;
+    /** Collect phase: max wall-clock wait for the first contrastive pair (seconds). */
+    uint32_t collect_first_sample_timeout_sec;
+    /** SYCL multi-row collect: sleep between coalesce spins (microseconds). */
+    uint32_t collect_ff_coalesce_sleep_us;
+    /** Training loop: pause polling interval (milliseconds). */
+    uint32_t training_pause_poll_ms;
+    /** Training loop: sleep when no samples after empty `process_batch` (milliseconds). */
+    uint32_t training_idle_retry_ms;
+    /** Log “waiting for samples” every N consecutive empty batches (>=1). */
+    size_t training_empty_batch_log_interval;
+    /** Push metrics on idle cadence every N consecutive empty batches (>=1). */
+    size_t training_empty_batch_metrics_interval;
+    /** Contrastive train queue resync: discard budget slack vs queue depth (see DataSynthesizer). */
+    size_t train_queue_resync_discard_slack;
+
+    /** When true, `start_training` may auto-import the newest compatible checkpoint before the first tick.
+     *  When false, every run starts from InitSession weights/policy only (no silent restore). Not stored in checkpoint blobs. */
+    bool training_auto_resume_from_checkpoint;
 };
+
+/**
+ * Built-in defaults for callers that do not use InitSession (WASM create, unit tests).
+ * Source of truth: config/pipeline_defaults.toml → generated C++ in
+ * autonomous_training_pipeline_defaults.gen.cpp (scripts/gen_pipeline_default_config.py).
+ */
+PipelineConfig default_pipeline_config();
 
 /**
  * @brief Training pipeline states
@@ -264,16 +320,12 @@ enum class PipelineState {
  * 
  * Usage:
  *   AutonomousTrainingPipeline pipeline;
- *   PipelineConfig config;
+ *   PipelineConfig config = default_pipeline_config(); // or load from host/TOML
  *   config.moe_num_experts = 243;
  *   pipeline.initialize(config);
  *   pipeline.start_training();
  *   auto metrics = pipeline.get_metrics();
  */
-namespace detail {
-struct FirstProcessBatchPhaseTraceScope;
-}
-
 class AutonomousTrainingPipeline {
 public:
     AutonomousTrainingPipeline();
@@ -331,9 +383,12 @@ public:
     /**
      * @brief Import model from file
      * @param path Import file path
+     * @param merge_runtime_from When non-null (e.g. auto-resume), copy host/throughput knobs from this
+     *        session config over the checkpoint blob so stale ff_multi_row_slots_chunk / micro_batch_cap
+     *        from older runs do not override current TOML.
      * @return true if import successful
      */
-    bool import_model(const std::string& path);
+    bool import_model(const std::string& path, const PipelineConfig* merge_runtime_from = nullptr);
 
     /** Update paths/epoch budget without rebuilding MoE stacks (used between training runs). */
     void apply_run_overrides(const std::string& data_path, uint32_t num_epochs);
@@ -349,6 +404,19 @@ public:
      * @return true if updated successfully
      */
     bool update_config(const PipelineConfig& config);
+
+    /**
+     * Optional start count consumed once inside initialize(): clamp to [1, ceiling].
+     * Call after Training_InitSession, before Training_StartTraining. 0 = begin at full ceiling.
+     */
+    void set_pending_live_parallel_start(size_t pb) noexcept;
+
+    /** Hot path: clamp pb to [1, parallel_batches_ceiling]. Safe while TRAINING. */
+    bool set_live_parallel_batches(size_t pb) noexcept;
+
+    size_t effective_parallel_batches() const noexcept;
+    size_t live_parallel_batches_value() const noexcept;
+    size_t parallel_batches_ceiling_value() const noexcept;
     
     /**
      * @brief Force immediate topology evaluation
@@ -380,8 +448,6 @@ public:
     void on_metrics_update(std::function<void(const PipelineMetrics&)> callback);
 
 private:
-    friend struct detail::FirstProcessBatchPhaseTraceScope;
-
     // Configuration
     PipelineConfig config_;
     
@@ -389,9 +455,27 @@ private:
     std::unique_ptr<DataSynthesizer> synthesizer_;
     std::unique_ptr<learning::ForwardForwardLearner> ff_learner_;
     std::unique_ptr<moe::MoERouter> router_;
-    std::vector<std::unique_ptr<moe::ExpertNetwork>> experts_;
+    std::vector<std::unique_ptr<moe::GF3MultiLayerExpert>> experts_;
     moe::ExpertNetwork::ExpertConfig expert_template_{};
     mutable std::mutex experts_mutex_;
+    /** Serialize MoE routing when multiple training rows run in parallel (router has per-call diagnostics state). */
+    std::mutex router_route_mutex_;
+    /** One mutex per expert index: concurrent rows may route to the same expert; FF weight updates must not race. */
+    std::vector<std::unique_ptr<std::mutex>> expert_ff_mutexes_;
+    /** Heartbeat / partial timing lines when training rows in parallel. */
+    std::mutex parallel_row_heartbeat_mutex_;
+    /** Evicted lazy experts persisted as serialized GF3 weights (key = expert index). */
+    std::unordered_map<size_t, std::string> evicted_expert_weights_;
+    /** Monotonic touch generation for LRU eviction among resident experts. */
+    std::vector<uint64_t> expert_touch_generation_;
+    /** In-flight usage pins per expert index; pinned experts are never evicted. */
+    std::vector<uint32_t> expert_active_pin_counts_;
+    /** Total eviction candidates skipped because they were inside cooldown window. */
+    std::atomic<uint64_t> expert_eviction_cooldown_skips_total_{0};
+    /** Total resident expert evictions performed by lazy spill policy. */
+    std::atomic<uint64_t> expert_evictions_total_{0};
+    uint64_t expert_touch_clock_{1};
+    size_t expert_resident_count_{0};
     std::unique_ptr<qgnn::BettiExtractor> betti_extractor_;
     std::unique_ptr<qgnn::GraphTableau> graph_tableau_;
     
@@ -410,10 +494,12 @@ private:
     std::atomic<bool> batch_inflight_active_{false};
     std::atomic<uint32_t> batch_inflight_done_{0};
     std::atomic<uint32_t> batch_inflight_target_{0};
+    /** Contrastive rows finished in the current in-flight process_batch (multi-row SYCL counts per chunk). */
+    std::atomic<uint32_t> intrabatch_contrastive_rows_done_{0};
     std::atomic<bool> pipeline_collect_hint_logged_{false};
     std::atomic<uint64_t> last_checkpoint_batch_{0};
     /** First `process_batch()` call only: stderr phase markers; cleared when the call returns (any path). */
-    bool trace_first_process_batch_phases_{true};
+    std::atomic<bool> trace_first_process_batch_phases_{true};
 
     /** Background disk writes for automatic checkpoints (bounded queue; blocks producer if full). */
     std::once_flag checkpoint_writer_once_;
@@ -421,19 +507,26 @@ private:
     std::mutex checkpoint_queue_mutex_;
     std::condition_variable checkpoint_queue_cv_;
     std::condition_variable checkpoint_queue_slots_cv_;
-    std::deque<std::pair<std::string, std::string>> checkpoint_queue_;
+    std::deque<std::string> checkpoint_queue_;
     std::atomic<bool> checkpoint_writer_stop_{false};
 
     // Threading
     std::thread training_thread_;
     mutable std::mutex metrics_mutex_;
     mutable std::mutex config_mutex_;
+
+    /** Runtime concurrent process_batch workers (<= config_.training_parallel_batches ceiling). */
+    mutable std::atomic<size_t> live_parallel_batches_{1};
+    size_t parallel_batches_ceiling_{1};
+    std::atomic<size_t> pending_live_parallel_start_{0};
+    /** Until the first tick trains >0 rows, force parallel_batches=1 (SYCL/device warm-up). First tick caps
+     *  collected contrastive rows so concurrent parallel_batches waves begin quickly (see process_batch). */
     
     // Callbacks
     std::function<void(PipelineState, PipelineState)> state_callback_;
     std::function<void(const PipelineMetrics&)> metrics_callback_;
     std::mutex callback_mutex_;
-    
+
     // Cached metrics
     mutable PipelineMetrics cached_metrics_;
     
@@ -442,7 +535,8 @@ private:
     void training_loop();
     bool initialize_components();
     void shutdown_components();
-    size_t process_batch();
+    /** @param wave_parallel_batches concurrent workers in this training_loop iteration (not live atomic reads). */
+    size_t process_batch(size_t wave_parallel_batches);
     bool evaluate_topology();
     bool optimize_graph_topology();
     void update_metrics();
@@ -452,7 +546,7 @@ private:
     bool serialize_checkpoint_blob(std::ostream& os);
     void ensure_checkpoint_writer_started();
     void checkpoint_writer_loop();
-    void enqueue_checkpoint_job(std::string path, std::string payload);
+    void enqueue_checkpoint_job(std::string path);
     void shutdown_checkpoint_writer();
 
     // Betti guidance
@@ -463,38 +557,84 @@ private:
     TernaryRouteInput extract_ternary_route_input(const TrainingSample& sample);
     std::vector<ternary::Trit> generate_negative_sample(const std::vector<ternary::Trit>& positive);
     
-    std::vector<std::unique_ptr<moe::ExpertNetwork>> create_experts(
-        size_t num_experts, 
-        const moe::ExpertNetwork::ExpertConfig& expert_config
-    );
+    std::vector<std::unique_ptr<moe::GF3MultiLayerExpert>> create_experts(
+        size_t num_experts,
+        const moe::ExpertNetwork::ExpertConfig& expert_config);
 
-    /** Materialize expert at index when lazy_moe_experts; thread-safe. */
-    moe::ExpertNetwork* ensure_expert(size_t expert_idx);
+    /** Materialize GF3 expert at index when lazy_moe_experts; thread-safe. */
+    moe::GF3MultiLayerExpert* ensure_expert(size_t expert_idx, bool pin_for_use = false);
+    /** Release one in-flight pin for an expert index (no-op if already 0). */
+    void release_expert_pin(size_t expert_idx);
+    /** Count experts currently pinned for in-flight use. */
+    uint32_t pinned_expert_count() const;
+
+    /** Aggregated FF output from one contrastive row (merged into batch under lock). */
+    struct RowTrainMerge {
+        int64_t route_ms = 0;
+        int64_t ff_ms = 0;
+        uint32_t neg_prepared_inc = 0;
+        uint32_t neg_missing_inc = 0;
+        bool used_tritpack5_input_route = false;
+        bool router_sycl_path = false;
+        std::vector<size_t> route_expert_idx;
+        std::vector<uint32_t> pos_good;
+        std::vector<uint32_t> neg_good;
+    };
+
+    /** One contrastive row collected for @ref process_batch (positive + optional prepared negative). */
+    struct CollectedContrastiveRow {
+        TrainingSample positive;
+        std::optional<TrainingSample> prepared_negative;
+    };
+
+    /**
+     * Route all rows, pack MoE slots across rows, run one SYCL multi-slot FF batch when possible.
+     * @return true if training ran (merges filled); false to fall back to per-row training (or SYCL off).
+     * @param fatal_message set on hard errors (same as single-row fatal).
+     */
+    bool try_ff_multi_row_slot_batch_(
+        const std::vector<CollectedContrastiveRow>& batch_work,
+        bool kTiming,
+        size_t effective_top_k,
+        size_t wave_parallel_batches,
+        std::vector<RowTrainMerge>& out_merges,
+        int64_t& out_ff_ms_total,
+        std::string& fatal_message);
+
+    /** Calls @ref try_ff_multi_row_slot_batch_; on MSVC wraps SEH and sets @p fatal_message (no silent fallback). */
+    bool try_ff_multi_row_slot_batch_invoke_(
+        const std::vector<CollectedContrastiveRow>& batch_work,
+        bool kTiming,
+        size_t effective_top_k,
+        size_t wave_parallel_batches,
+        std::vector<RowTrainMerge>& out_merges,
+        int64_t& out_ff_ms_total,
+        std::string& fatal_message);
+
+    /**
+     * Route + FF for one contrastive row. Thread-safe vs other rows (per-expert locks, router lock).
+     * @return 0 success (merge filled), 1 skipped (no prepared negative), 2 fatal (fatal_message set).
+     */
+    int train_contrastive_row_impl(
+        size_t row_index,
+        const TrainingSample& positive,
+        const std::optional<TrainingSample>& prepared_negative,
+        bool trace_phases,
+        bool kTiming,
+        unsigned goodness_log_level,
+        size_t effective_top_k,
+        RowTrainMerge& merge,
+        std::string& fatal_message
+    );
+    /** Max resident expert objects in lazy mode (defaults to ~16× effective top_k, not top_k alone). */
+    size_t lazy_resident_expert_cap() const;
+    /** Mark expert as recently used for lazy LRU eviction policy. */
+    void touch_expert_locked(size_t expert_idx);
+    /** Evict one resident lazy expert (except @p protected_idx) to serialized spill map. */
+    bool spill_one_expert_locked(size_t protected_idx);
     
     static std::string state_to_string(PipelineState state);
 };
-
-namespace detail {
-
-/** Clears @c AutonomousTrainingPipeline::trace_first_process_batch_phases_ on scope exit. */
-struct FirstProcessBatchPhaseTraceScope {
-    AutonomousTrainingPipeline* pipe{nullptr};
-    bool had_trace{false};
-
-    FirstProcessBatchPhaseTraceScope(AutonomousTrainingPipeline* p, bool h) noexcept
-        : pipe(p), had_trace(h) {}
-
-    ~FirstProcessBatchPhaseTraceScope() {
-        if (pipe && had_trace) {
-            pipe->trace_first_process_batch_phases_ = false;
-        }
-    }
-
-    FirstProcessBatchPhaseTraceScope(const FirstProcessBatchPhaseTraceScope&) = delete;
-    FirstProcessBatchPhaseTraceScope& operator=(const FirstProcessBatchPhaseTraceScope&) = delete;
-};
-
-} // namespace detail
 
 /**
  * @brief Factory: new pipeline only; caller must initialize(config) then start_training().

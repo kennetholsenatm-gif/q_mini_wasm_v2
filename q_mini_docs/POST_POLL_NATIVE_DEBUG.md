@@ -2,6 +2,8 @@
 
 If prefill completes, `C.Training_StartTraining` returns `0`, and the first Go poll succeeds, the next work runs in the **native** `training_thread_` inside `q_training.dll` (see `AutonomousTrainingPipeline::training_loop` in `q_mini_wasm_v2/core/training/autonomous_training_pipeline.cpp`).
 
+**Helpers:** `scripts/collect_training_crash_artifacts.ps1` (tail the crash log + phase cheat sheet), `scripts/verify_native_training_build.ps1` (exe + DLL beside repo root), `scripts/run_qminiwasm_training_verbose.ps1 -SmokePostPoll` (post-poll smoke TOML + `KMP_DUPLICATE_LIB_OK`). On Windows, `qminiwasm` sets `KMP_DUPLICATE_LIB_OK=TRUE` when unset to reduce duplicate OpenMP-runtime SIGABRT with SYCL/MKL.
+
 ## Confirm builds and crash hooks
 
 On **`Training_InitSession`** you should see:
@@ -31,11 +33,7 @@ These lines are independent of `training.timing_to_stderr` and `training.goodnes
 
 ## Config binary search (no code)
 
-1. **SYCL router off** (CPU path for symplectic routing logits only): set in the active TOML
-
-   `training.sycl_route_mode = "off"`
-
-   or use the checked-in profile  
+1. **Symplectic routing is GPU-mandatory** (`moe_experts >= 8` and **`auto`/`on`**). Fix SYCL init or adjust TOML. Or use the checked-in profile  
    [`config/training_config.smoke_postpoll.toml`](../config/training_config.smoke_postpoll.toml) which also shrinks MoE and microbatch for a smaller first batch.
 
 2. **Point the host at the smoke TOML** (absolute or under `DataDir/config`):
@@ -50,7 +48,7 @@ Use [`config/training_config.smoke_postpoll.toml`](../config/training_config.smo
 
 | Result | Next step |
 |--------|-----------|
-| **Smoke OK, full config crashes** | In your full TOML, set `training.sycl_route_mode = "off"`, reduce `model.moe_experts` / `training.lazy_init_initial_experts`, set `training.serial_expert_train = true`, and re-test. Use **phase markers** to see which sub-step fails. |
+| **Smoke OK, full config crashes** | In your full TOML, reduce `model.moe_experts` / `training.lazy_init_initial_experts`, or bisect with `training_config.smoke_postpoll.toml`. Use **phase markers** to see which sub-step fails. |
 | **Smoke also crashes** | Same **crash log** + (optional) WER dump; confirm **PDB matches** the `q_training.dll` you load. Attach a debugger to the smoke run if the log is only `0xC0000005` without a symbol. |
 
 ## Crash log (hard faults only)

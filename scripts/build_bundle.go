@@ -105,7 +105,8 @@ func collectAssets(projectRoot string) (map[string][]byte, []string, error) {
 
 	// Native runtime assets
 	nativePaths := []string{
-		filepath.Join("q_mini_wasm_v2", "build_final", "Release", "q_mini_wasm_v2_trainer.exe"),
+		filepath.Join("q_mini_wasm_v2", "build_sycl", "Release", "q_mini_wasm_v2_trainer.exe"),
+		filepath.Join("q_mini_wasm_v2", "build_sycl", "q_mini_wasm_v2_trainer.exe"),
 	}
 
 	for _, p := range nativePaths {

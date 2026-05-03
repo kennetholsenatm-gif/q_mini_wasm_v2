@@ -8,12 +8,20 @@
 #
 # Requires: CGO-built qminiwasm.exe + q_training.dll (real training, not stub).
 #
-param([int]$MaxWaitSec = 240)
+# -Config: optional path relative to repo root or absolute (default: config/training_config.proof.toml).
+#
+param(
+    [int]$MaxWaitSec = 240,
+    [string]$Config = "config\training_config.proof.toml"
+)
 
 $ErrorActionPreference = "Stop"
 $dataDir = "C:\q_mini_data"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
+
+# OpenMP in native layers (routing / FF): use all logical processors.
+$env:OMP_NUM_THREADS = [string][Environment]::ProcessorCount
 
 $corpusDir = Join-Path $dataDir "datasets\proof_corpus"
 New-Item -ItemType Directory -Force -Path $corpusDir | Out-Null
@@ -42,7 +50,11 @@ $dsGen = Join-Path $artifacts "data_sources.generated.toml"
 $env:QMINI_DATA_SOURCES_TOML = $dsGen
 # Epochs are sourced from the training TOML (no WUI/CLI epochs override on this path).
 # Progress counters are strict real training counters (no ingestion substitution).
-$env:QMINI_TRAINING_CONFIG = (Join-Path $repoRoot "config\training_config.proof.toml")
+$cfgPath = if ([System.IO.Path]::IsPathRooted($Config)) { $Config } else { Join-Path $repoRoot $Config }
+if (-not (Test-Path -LiteralPath $cfgPath)) {
+    throw "Training config not found: $cfgPath (pass -Config relative to repo root or absolute path)"
+}
+$env:QMINI_TRAINING_CONFIG = (Resolve-Path -LiteralPath $cfgPath).Path
 $env:QMINI_TRAINING_VERBOSE = "1"
 
 function Get-FreeTcpPort {
@@ -62,9 +74,14 @@ $env:QMINI_HTTP_PORT = "$httpPort"
 
 # Single canonical binary at repository root (see config/path_map.toml).
 $exe = Join-Path $repoRoot "qminiwasm.exe"
-$dllSrc = Join-Path $repoRoot "q_mini_wasm_v2\build_final\q_training.dll"
-if (-not (Test-Path -LiteralPath $dllSrc)) {
-    throw "Missing $dllSrc - run: cmake --build q_mini_wasm_v2/build_final --target q_training --config Release"
+$bs = Join-Path $repoRoot "q_mini_wasm_v2\build_sycl"
+$dllSrc = @(
+    (Join-Path $bs "q_training.dll"),
+    (Join-Path $bs "Release\q_training.dll"),
+    (Join-Path $bs "Debug\q_training.dll")
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $dllSrc) {
+    throw "Missing built q_training.dll under $bs — run: cmake --build q_mini_wasm_v2/build_sycl --target q_training_publish"
 }
 # Prefer fresh DLL next to the canonical exe (CGO runtime load order).
 Copy-Item -LiteralPath $dllSrc -Destination (Join-Path $repoRoot "q_training.dll") -Force -ErrorAction SilentlyContinue

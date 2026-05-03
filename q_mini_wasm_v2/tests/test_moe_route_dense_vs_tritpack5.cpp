@@ -49,6 +49,10 @@ bool routes_match(const std::vector<size_t>& a, const std::vector<size_t>& b) {
 } // namespace
 
 int main() {
+#if !defined(USE_SYCL) || !USE_SYCL
+    std::cout << "test_moe_route_dense_vs_tritpack5: skipped (requires USE_SYCL=1; symplectic routing has no CPU logits)\n";
+    return 0;
+#else
     using namespace q_mini_wasm_v2::core::moe;
     using namespace q_mini_wasm_v2::core::ternary;
 
@@ -56,7 +60,7 @@ int main() {
     constexpr size_t R = 12;
     constexpr size_t k = 2;
     ExpertConfig cfg{E, k, R};
-    cfg.sycl_route_mode = SyclRouteMode::Off;
+    cfg.sycl_route_mode = SyclRouteMode::On; // GPU-mandatory symplectic routing when E>=8
     MoERouter router(cfg);
 
     // ASCII-like int32 stream (same shape as directory corpus lines)
@@ -105,4 +109,5 @@ int main() {
 
     std::cout << "test_moe_route_dense_vs_tritpack5: passed\n";
     return 0;
+#endif
 }

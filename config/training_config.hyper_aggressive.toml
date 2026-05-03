@@ -2,7 +2,7 @@
 # HYPER-AGGRESSIVE FRONTIER (stress / throughput tuning)
 # - Queues, prefill, micro_batch_cap, collect_floor, JSONL RAM cap, and thread pools are
 #   explicit TOML (qminiwasm validates presence and positivity only).
-# - SYCL routing logits: "on" (needs q_training built with USE_SYCL=ON to hit GPU;
+# - SYCL routing logits: "on" (needs q_training built with the native SYCL toolchain to hit GPU;
 #   CPU OpenMP still does most FF work — see q_mini_docs/TRAINING_THROUGHPUT.md).
 # - lazy_init_initial_experts = 2048: much higher RAM than default 256; reduce if OOM.
 # - timing_to_stderr = true: expect [TrainingTiming] lines on stderr.
@@ -20,9 +20,14 @@ samples_per_epoch = 1572864
 micro_batch_cap = 4096
 collect_floor = 512
 timing_to_stderr = true
-serial_expert_train = false
 sycl_route_mode = "on"
 sycl_trit_quant_min_moe_dim = 1
+sycl_prereserve_gib = 0
+sycl_gpu_device_index = -1
+gf3_sycl_min_weight_cells = 0
+ff_multi_row_batch = true
+ff_multi_row_slots_chunk = 0
+lazy_moe_resident_cap = 0
 goodness_log_level = 0
 allow_generated_negatives = true
 max_jsonl_local_samples = 1000000000

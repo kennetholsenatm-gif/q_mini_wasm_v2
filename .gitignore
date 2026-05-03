@@ -443,6 +443,8 @@ ipch/
 /ur_loader.dll
 /ur_win_proxy_loader.dll
 /native_runtime/
+/native_runtime/*.dll
+/q_mini_wasm_v2/native_runtime/*.dll
 /cmd/qminiwasm/q_training.dll
 /releases/desktop/extracted-assets/
 /temp/
@@ -452,6 +454,7 @@ ipch/
 /qmini
 /qmini.err
 q_mini_wasm_v2/build_final/
+q_mini_wasm_v2/build_sycl/
 q_mini_wasm_v2/build_clean/
 
 cmd/qminiwasm/qminiwasm.exe

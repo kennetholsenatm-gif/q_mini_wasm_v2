@@ -169,27 +169,28 @@ expert_review = "required"
 build_types = ["Debug", "Release", "RelWithDebInfo"]
 
 [build_workflows.cpp_build.cmake_config.options]
-USE_SYCL = "optional"
+# Native q_mini_wasm_v2 always configures SYCL (Intel icpx / AdaptiveCpp / LLVM -fsycl); no USE_SYCL CMake flag.
+USE_SYCL = "required"
 BUILD_TESTS = "required"
 BUILD_WASM = "optional"
 
 [build_workflows.cpp_build.platforms.windows]
-generator = "Visual Studio 17 2022"
-compiler = "msvc"
+generator = "Ninja"
+compiler = "intel_llvm_icx"
 
 [build_workflows.cpp_build.platforms.linux]
-generator = "Unix Makefiles"
-compiler = "gcc_or_clang"
+generator = "Ninja"
+compiler = "intel_llvm_icpx"
 
 [build_workflows.cpp_build.build_commands.unix]
-configure = "cmake -S q_mini_wasm_v2 -B build -DCMAKE_BUILD_TYPE={build_type} -DBUILD_TESTS=ON"
-build = "cmake --build build --config {build_type} -j$(nproc)"
-test = "ctest --build-config {build_type} --output-on-failure"
+configure = "source /opt/intel/oneapi/setvars.sh && cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_sycl -G Ninja -DCMAKE_BUILD_TYPE={build_type} -DCMAKE_CXX_COMPILER=icpx -DCMAKE_C_COMPILER=icx -DBUILD_TESTS=ON"
+build = "source /opt/intel/oneapi/setvars.sh && cmake --build q_mini_wasm_v2/build_sycl -j$(nproc)"
+test = "source /opt/intel/oneapi/setvars.sh && cd q_mini_wasm_v2/build_sycl && ctest --output-on-failure"
 
 [build_workflows.cpp_build.build_commands.powershell]
-configure = "cmake -S q_mini_wasm_v2 -B build -DCMAKE_BUILD_TYPE={build_type} -DBUILD_TESTS=ON"
-build = "cmake --build build --config {build_type} -j$env:NUMBER_OF_PROCESSORS"
-test = "ctest --build-config {build_type} --output-on-failure"
+configure = "cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_sycl -G Ninja -DCMAKE_BUILD_TYPE={build_type} -DCMAKE_CXX_COMPILER=icx-cl -DCMAKE_CXX_FLAGS=-fsycl -DCMAKE_SHARED_LINKER_FLAGS=-fsycl -DCMAKE_EXE_LINKER_FLAGS=-fsycl -DBUILD_TESTS=ON"
+build = "cmake --build q_mini_wasm_v2/build_sycl -j$env:NUMBER_OF_PROCESSORS"
+test = "cd q_mini_wasm_v2/build_sycl; ctest --output-on-failure"
 
 [build_workflows.go_build]
 modules = ["gateway", "engine"]

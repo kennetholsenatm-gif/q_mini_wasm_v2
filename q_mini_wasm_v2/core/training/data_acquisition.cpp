@@ -222,11 +222,11 @@ std::vector<TrainingSample> DataAcquisitionManager::fetch_batch(size_t batch_siz
     
     lock.unlock();
     
-    // Normalize text payloads if a producer still emits string_view.
+    // Normalize text payloads (owning string payload).
     for (auto& sample : batch) {
-        if (std::holds_alternative<std::string_view>(sample.data)) {
-            auto sv = std::get<std::string_view>(sample.data);
-            std::string processed = preprocess_text(std::string(sv), min_length, max_length);
+        if (std::holds_alternative<std::string>(sample.data)) {
+            const auto& s = std::get<std::string>(sample.data);
+            std::string processed = preprocess_text(s, min_length, max_length);
             if (!processed.empty()) {
                 sample.data = encode_text_payload(processed);
             }

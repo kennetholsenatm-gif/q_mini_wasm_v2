@@ -1,117 +1,11 @@
 package main
 
 /*
-#cgo LDFLAGS: -L${SRCDIR}/../../q_mini_wasm_v2/q_mini_wasm_v2/build_final -L${SRCDIR}/.. -l q_training
-#cgo CFLAGS: -I${SRCDIR}/../../q_mini_wasm_v2/q_mini_wasm_v2/dll/training
-#cgo windows LDFLAGS: -Wl,-rpath,${SRCDIR}/../../q_mini_wasm_v2/q_mini_wasm_v2/build_final -Wl,-rpath,${SRCDIR}/..
-#include <stdint.h>
-#include <stdbool.h>
+#cgo LDFLAGS: -L${SRCDIR}/../../q_mini_wasm_v2/build_sycl -L${SRCDIR}/../.. -l q_training
+#cgo CFLAGS: -I${SRCDIR}/../../q_mini_wasm_v2/dll/training
+#cgo windows LDFLAGS: -Wl,-rpath,${SRCDIR}/../../q_mini_wasm_v2/build_sycl -Wl,-rpath,${SRCDIR}/../..
 #include <stdlib.h>
-
-extern int Training_InitSession(
-    uint64_t* session_id_out,
-    uint32_t num_experts,
-    uint32_t top_k,
-    uint32_t num_layers,
-    uint32_t batch_size,
-    bool lazy_init,
-    bool continuous_mode,
-    uint32_t epochs,
-    double learning_rate,
-    uint32_t checkpoint_interval,
-    uint32_t context_window,
-    uint32_t entanglement_tokens,
-    uint32_t shadow_dim,
-    uint32_t neurons_per_layer,
-    uint32_t routing_qutrits,
-    bool steane_correction,
-    bool flash_cim,
-    uint32_t worker_threads,
-    const char* data_sources_toml_path,
-    uint32_t moe_input_dim,
-    uint32_t moe_output_dim,
-    uint32_t moe_hidden_dim,
-    uint32_t moe_expert_internal_layers,
-    uint32_t moe_ff_active_internal_layers,
-    uint32_t prefill_target_samples,
-    uint32_t prefill_timeout_ms,
-    uint32_t prefill_poll_ms,
-    uint32_t max_acquisition_queue_depth,
-    uint32_t max_raw_queue_depth,
-    uint32_t max_train_queue_depth,
-    uint64_t samples_per_epoch_or_zero,
-    uint32_t training_micro_batch_cap,
-    uint32_t training_collect_floor,
-    bool training_timing_to_stderr,
-    bool training_serial_experts,
-    uint32_t training_sycl_route_mode,
-    uint32_t training_sycl_trit_quant_min_moe_dim,
-    uint32_t training_goodness_log_level,
-    uint32_t training_allow_generated_negatives,
-    uint64_t directory_max_lines,
-    uint64_t max_jsonl_local_samples,
-    uint32_t min_text_length,
-    uint32_t max_text_length,
-    uint32_t acquisition_threads,
-    uint32_t perturbation_threads,
-    uint32_t checkpoint_async_queue_max,
-    uint32_t collect_empty_backoff_base_ms,
-    uint32_t collect_empty_backoff_max_shift,
-    uint32_t collect_empty_backoff_cap_ms,
-    uint32_t metrics_heartbeat_sec
-);
-
-extern int Training_StartTraining(
-    uint64_t session_id,
-    uint32_t epochs,
-    const char* data_path,
-    bool enable_data_accumulation
-);
-
-extern int Training_GetProgress(
-    uint64_t session_id,
-    uint32_t* current_epoch_out,
-    uint32_t* total_epochs_out,
-    double* current_loss_out,
-    uint64_t* samples_processed_out,
-    bool* is_running_out,
-    uint32_t* loop_count_out
-);
-
-extern int Training_GetMetrics(
-    uint64_t session_id,
-    uint32_t* experts_active_out,
-    uint32_t* data_acquired_out,
-    uint32_t* data_perturbed_out,
-    uint32_t* api_failures_out,
-    uint32_t* betti_0_out,
-    uint32_t* betti_1_out,
-    uint32_t* betti_2_out,
-    uint32_t* topic_frontier_size_out,
-    uint32_t* topic_frontier_max_out,
-    uint32_t* topic_frontier_evictions_out,
-    uint32_t* ds_queue_depth_out,
-    uint32_t* ds_raw_queue_depth_out,
-    uint32_t* ds_raw_queue_max_out,
-    uint32_t* ds_train_queue_max_out,
-    uint32_t* ds_acq_queue_depth_out,
-    uint32_t* ds_acq_queue_max_out,
-    uint64_t* ds_blocked_raw_pushes_out,
-    uint64_t* ds_blocked_train_pushes_out,
-    uint64_t* ds_blocked_wait_ms_out,
-    uint64_t* ds_dropped_payloads_out,
-    uint64_t* ds_acq_blocked_pushes_out,
-    uint64_t* ds_acq_blocked_wait_ms_out,
-	uint64_t* samples_total_out,
-	uint64_t* ds_acq_dropped_too_short_out,
-	uint64_t* gf3_hebbian_weight_cell_updates_out,
-	char* pipeline_status_utf8_out,
-	size_t pipeline_status_utf8_cap
-);
-
-extern int Training_StopTraining(uint64_t session_id);
-extern int Training_CleanupSession(uint64_t session_id);
-extern void Training_GetVersion(char* version_out, size_t max_len);
+#include "training_api_cgo.h"
 */
 import "C"
 
@@ -126,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -133,6 +28,16 @@ import (
 	"time"
 	"unsafe"
 )
+
+func init() {
+	// Go + Intel SYCL/MKL/OpenMP in q_training.dll can load multiple OpenMP runtimes on Windows;
+	// duplicate-runtime abort manifests as SIGABRT in q_mini_training_crash.log without a clear C++ catch.
+	if runtime.GOOS == "windows" && strings.TrimSpace(os.Getenv("KMP_DUPLICATE_LIB_OK")) == "" {
+		_ = os.Setenv("KMP_DUPLICATE_LIB_OK", "TRUE")
+	}
+	// Windows: full path + size + mtime of the q_training.dll actually mapped into this process (stderr).
+	logLoadedQTrainingDLLIdentity()
+}
 
 const (
 	Port         = 9090
@@ -210,6 +115,83 @@ func resolveDataSourcesConfigPath() string {
 	return filepath.Join(root, "config", "data_sources.toml")
 }
 
+// EffectiveTrainingParams holds computed training parameters derived from config values.
+type EffectiveTrainingParams struct {
+	EffectiveTopK                      uint32
+	EffectiveCollectLimit              uint32
+	EffectiveTargetRoutesPerBatch      uint32
+	EffectiveCollectMinRowsPerBatch    uint32
+	EffectiveLazyInitInitialExperts    uint32
+	EffectiveMoeFFActiveInternalLayers uint32
+}
+
+// resolveEffectiveTrainingParams derives effective training parameters from configuration.
+// It computes values based on parent config settings when explicit overrides are not present.
+func resolveEffectiveTrainingParams(cfg *Config) EffectiveTrainingParams {
+	batchSize := uint32(cfg.GetInt("training.batch_size"))
+	microBatchCap := uint32(cfg.GetInt("training.micro_batch_cap"))
+	collectFloor := uint32(cfg.GetInt("training.collect_floor"))
+	parallelBatches := uint32(cfg.GetInt("training.parallel_batches"))
+	_ = uint32(cfg.GetInt("model.moe_experts")) // reserved for future use
+	moeTopK := uint32(cfg.GetInt("model.moe_top_k"))
+	expertInternalLayers := uint32(cfg.GetInt("model.expert_internal_layers"))
+	lazyInit := cfg.GetBool("features.lazy_init")
+
+	// Effective collect limit is min(batch_size, micro_batch_cap, collect_floor) with sensible defaults
+	collectLimit := batchSize
+	if microBatchCap > 0 && microBatchCap < collectLimit {
+		collectLimit = microBatchCap
+	}
+	if collectFloor > 0 && collectFloor < collectLimit {
+		collectLimit = collectFloor
+	}
+
+	// Default target_routes_per_batch = batch_size * moe_top_k * parallel_batches
+	targetRoutes := batchSize * moeTopK * parallelBatches
+	if targetRoutes == 0 {
+		targetRoutes = 131072 // default fallback
+	}
+
+	// Check for explicit override
+	if cfg.IsSet("training.target_routes_per_batch") {
+		targetRoutes = uint32(cfg.GetInt("training.target_routes_per_batch"))
+	}
+
+	// Default collect_min_rows_per_batch = batch_size
+	collectMinRows := batchSize
+	if cfg.IsSet("training.collect_min_rows_per_batch") {
+		collectMinRows = uint32(cfg.GetInt("training.collect_min_rows_per_batch"))
+	}
+
+	// Default lazy_init_initial_experts = moe_top_k when lazy_init is enabled
+	lazyInitInitial := uint32(0)
+	if lazyInit {
+		lazyInitInitial = moeTopK
+	}
+	if cfg.IsSet("training.lazy_init_initial_experts") {
+		v := uint32(cfg.GetInt("training.lazy_init_initial_experts"))
+		// 0 = derive when lazy_init (keep moe_top_k default above); explicit positive overrides.
+		if v != 0 {
+			lazyInitInitial = v
+		}
+	}
+
+	// moe_ff_active_internal_layers defaults to expert_internal_layers
+	ffActiveInternal := expertInternalLayers
+	if cfg.IsSet("model.moe_ff_active_internal_layers") {
+		ffActiveInternal = uint32(cfg.GetInt("model.moe_ff_active_internal_layers"))
+	}
+
+	return EffectiveTrainingParams{
+		EffectiveTopK:                      moeTopK,
+		EffectiveCollectLimit:              collectLimit,
+		EffectiveTargetRoutesPerBatch:      targetRoutes,
+		EffectiveCollectMinRowsPerBatch:    collectMinRows,
+		EffectiveLazyInitInitialExperts:    lazyInitInitial,
+		EffectiveMoeFFActiveInternalLayers: ffActiveInternal,
+	}
+}
+
 // countTxtLikeInDir counts non-directory .txt / .jsonl files (same rules as acquisition status).
 func countTxtLikeInDir(dir string) int {
 	entries, err := os.ReadDir(dir)
@@ -243,7 +225,7 @@ var (
 	trainingState = &TrainingState{
 		IsRunning:    false,
 		CurrentEpoch: 0,
-		TotalEpochs:  100,
+		TotalEpochs:  0, // set by wui_init_training_pipeline from TOML; metrics use active TOML when 0 / idle
 		Loss:         0.0,
 		StartTime:    time.Time{},
 		Phase:        phaseUnconfigured,
@@ -281,55 +263,147 @@ type TrainingState struct {
 	// Native q_training.dll loads on wui_start_ff_training to avoid crashing the HTTP handler mid-request.
 	PipelineConfigured bool `json:"pipeline_configured"`
 	// Phase is the Go-side process tracker (independent of is_running during long native CGO init).
-	Phase                string    `json:"phase"`
-	PhaseStartedAt       time.Time `json:"-"`
-	LastDLLPollAt        time.Time `json:"-"`
-	DSQueueDepth         uint32    `json:"ds_queue_depth"`
-	DSRawQueueDepth      uint32    `json:"ds_raw_queue_depth"`
-	DSRawQueueMax        uint32    `json:"ds_raw_queue_max"`
-	DSTrainQueueMax      uint32    `json:"ds_train_queue_max"`
-	DSAcqQueueDepth      uint32    `json:"ds_acq_queue_depth"`
-	DSAcqQueueMax        uint32    `json:"ds_acq_queue_max"`
-	DSBlockedRawPushes   uint64    `json:"ds_blocked_raw_pushes"`
-	DSBlockedTrainPushes uint64    `json:"ds_blocked_train_pushes"`
-	DSBlockedWaitMs      uint64    `json:"ds_blocked_wait_ms"`
-	DSDroppedPayloads    uint64    `json:"ds_dropped_payloads"`
-	DSAcqBlockedPushes   uint64    `json:"ds_acq_blocked_pushes"`
-	DSAcqBlockedWaitMs   uint64    `json:"ds_acq_blocked_wait_ms"`
-	DSAcqDroppedTooShort uint64    `json:"ds_acq_dropped_too_short"`
-	GF3HebbianWeightCellUpdates uint64 `json:"gf3_hebbian_weight_cell_updates"`
-	DSDataAcquired       uint32    `json:"ds_data_acquired"`
-	DSDataPerturbed      uint32    `json:"ds_data_perturbed"`
-	DSAPIFailures        uint32    `json:"ds_api_failures"`
-	DSBetti0             uint32    `json:"ds_betti_0"`
-	DSBetti1             uint32    `json:"ds_betti_1"`
-	DSBetti2             uint32    `json:"ds_betti_2"`
-	DSTopicFrontierSize  uint32    `json:"ds_topic_frontier_size"`
-	DSTopicFrontierMax   uint32    `json:"ds_topic_frontier_max"`
-	DSTopicFrontierEvict uint32    `json:"ds_topic_frontier_evictions"`
-	PrefillTargetSamples uint32    `json:"prefill_target_samples"`
-	BufferProfile        string    `json:"buffer_profile"`
-	PrefillTimeoutMs     uint32    `json:"prefill_timeout_ms"`
-	PrefillPollMs        uint32    `json:"prefill_poll_ms"`
-	DSAcqQueueCap        uint32    `json:"ds_acq_queue_cap"`
-	DSRawQueueCap        uint32    `json:"ds_raw_queue_cap"`
-	DSTrainQueueCap      uint32    `json:"ds_train_queue_cap"`
+	Phase                       string    `json:"phase"`
+	PhaseStartedAt              time.Time `json:"-"`
+	LastDLLPollAt               time.Time `json:"-"`
+	DSQueueDepth                uint32    `json:"ds_queue_depth"`
+	DSRawQueueDepth             uint32    `json:"ds_raw_queue_depth"`
+	DSRawQueueMax               uint32    `json:"ds_raw_queue_max"`
+	DSTrainQueueMax             uint32    `json:"ds_train_queue_max"`
+	DSAcqQueueDepth             uint32    `json:"ds_acq_queue_depth"`
+	DSAcqQueueMax               uint32    `json:"ds_acq_queue_max"`
+	DSBlockedRawPushes          uint64    `json:"ds_blocked_raw_pushes"`
+	DSBlockedTrainPushes        uint64    `json:"ds_blocked_train_pushes"`
+	DSBlockedWaitMs             uint64    `json:"ds_blocked_wait_ms"`
+	DSDroppedPayloads           uint64    `json:"ds_dropped_payloads"`
+	DSAcqBlockedPushes          uint64    `json:"ds_acq_blocked_pushes"`
+	DSAcqBlockedWaitMs          uint64    `json:"ds_acq_blocked_wait_ms"`
+	DSAcqDroppedTooShort        uint64    `json:"ds_acq_dropped_too_short"`
+	GF3HebbianWeightCellUpdates uint64    `json:"gf3_hebbian_weight_cell_updates"`
+	DSDataAcquired              uint32    `json:"ds_data_acquired"`
+	DSDataPerturbed             uint32    `json:"ds_data_perturbed"`
+	DSAPIFailures               uint32    `json:"ds_api_failures"`
+	DSBetti0                    uint32    `json:"ds_betti_0"`
+	DSBetti1                    uint32    `json:"ds_betti_1"`
+	DSBetti2                    uint32    `json:"ds_betti_2"`
+	DSTopicFrontierSize         uint32    `json:"ds_topic_frontier_size"`
+	DSTopicFrontierMax          uint32    `json:"ds_topic_frontier_max"`
+	DSTopicFrontierEvict        uint32    `json:"ds_topic_frontier_evictions"`
+	PrefillTargetSamples        uint32    `json:"prefill_target_samples"`
+	BufferProfile               string    `json:"buffer_profile"`
+	PrefillTimeoutMs            uint32    `json:"prefill_timeout_ms"`
+	PrefillPollMs               uint32    `json:"prefill_poll_ms"`
+	DSAcqQueueCap               uint32    `json:"ds_acq_queue_cap"`
+	DSRawQueueCap               uint32    `json:"ds_raw_queue_cap"`
+	DSTrainQueueCap             uint32    `json:"ds_train_queue_cap"`
 	// Native AutonomousTrainingPipeline::get_metrics status_message (batch_inflight, queues, …).
 	PipelineStatusText string `json:"pipeline_status"`
+	LiveParallelBatches    uint32 `json:"live_parallel_batches"`
+	ParallelBatchesCeiling uint32 `json:"parallel_batches_ceiling"`
 }
 
 type BufferTuning struct {
-	Profile            string
-	PrefillTarget      int
-	PrefillTimeoutMs   int
-	PrefillPollMs      int
-	AcqQueueCap         int
-	RawQueueCap         int
-	TrainQueueCap       int
-	DirectoryMaxLines   uint64
+	Profile              string
+	PrefillTarget        int
+	PrefillTimeoutMs     int
+	PrefillPollMs        int
+	AcqQueueCap          int
+	RawQueueCap          int
+	TrainQueueCap        int
+	DirectoryMaxLines    uint64
 	MaxJsonlLocalSamples uint64
-	MinTextLength       int
-	MaxTextLength       int
+	MinTextLength        int
+	MaxTextLength        int
+}
+
+// probeSyclDeviceVRAM queries SYCL global_mem_size for training.sycl_gpu_device_index resolution rules.
+// Returns code 0 on success; non-zero leaves globalMem==0. Best-effort for resource autoscale (ignore failures).
+func probeSyclDeviceVRAM(gpuIdx int32) (globalMem uint64, isGPU bool, devName string, code int) {
+	var gmem C.uint64_t
+	var isg C.uint32_t
+	var nameBuf [512]byte
+	var errBuf [512]byte
+	rc := int(C.Training_ProbeSyclDevice(
+		C.int32_t(gpuIdx),
+		&gmem,
+		&isg,
+		(*C.char)(unsafe.Pointer(&nameBuf[0])),
+		C.size_t(len(nameBuf)),
+		(*C.char)(unsafe.Pointer(&errBuf[0])),
+		C.size_t(len(errBuf)),
+	))
+	if rc != 0 {
+		return 0, false, "", rc
+	}
+	n := 0
+	for n < len(nameBuf) && nameBuf[n] != 0 {
+		n++
+	}
+	return uint64(gmem), isg != 0, string(nameBuf[:n]), 0
+}
+
+func trainingDLLSetPendingLiveParallelStart(sid uint64, pb uint32) int {
+	return int(C.Training_SetPendingLiveParallelStart(C.uint64_t(sid), C.uint32_t(pb)))
+}
+
+func trainingDLLSetLiveParallelBatches(sid uint64, pb uint32) int {
+	return int(C.Training_SetLiveParallelBatches(C.uint64_t(sid), C.uint32_t(pb)))
+}
+
+func trainingDLLGetLiveParallelBatches(sid uint64) (live, ceiling uint32, ok bool) {
+	var l, c C.uint32_t
+	if int(C.Training_GetLiveParallelBatches(C.uint64_t(sid), &l, &c)) != 0 {
+		return 0, 0, false
+	}
+	return uint32(l), uint32(c), true
+}
+
+func trainingDLLFetchBlockedAndRawQueues(sid uint64) (blockedRaw, blockedTrain uint64, rawDepth, rawMax uint32, ok bool) {
+	var expertsActive, dataAcquired, dataPerturbed, apiFailures C.uint32_t
+	var betti0, betti1, betti2 C.uint32_t
+	var topicFrontierSize, topicFrontierMax, topicFrontierEvict C.uint32_t
+	var samplesTotalNative C.uint64_t
+	var dsQueueDepth, dsRawQueueDepth, dsRawQueueMax, dsTrainQueueMax C.uint32_t
+	var dsAcqQueueDepth, dsAcqQueueMax C.uint32_t
+	var dsBlockedRawPushes, dsBlockedTrainPushes, dsBlockedWaitMs C.uint64_t
+	var dsDroppedPayloads, dsAcqBlockedPushes, dsAcqBlockedWaitMs C.uint64_t
+	var dsAcqDroppedTooShort C.uint64_t
+	var gf3HebbianWeightCellUpdates C.uint64_t
+	var statusBuf [512]byte
+	res := C.Training_GetMetrics(
+		C.uint64_t(sid),
+		&expertsActive,
+		&dataAcquired,
+		&dataPerturbed,
+		&apiFailures,
+		&betti0,
+		&betti1,
+		&betti2,
+		&topicFrontierSize,
+		&topicFrontierMax,
+		&topicFrontierEvict,
+		&dsQueueDepth,
+		&dsRawQueueDepth,
+		&dsRawQueueMax,
+		&dsTrainQueueMax,
+		&dsAcqQueueDepth,
+		&dsAcqQueueMax,
+		&dsBlockedRawPushes,
+		&dsBlockedTrainPushes,
+		&dsBlockedWaitMs,
+		&dsDroppedPayloads,
+		&dsAcqBlockedPushes,
+		&dsAcqBlockedWaitMs,
+		&samplesTotalNative,
+		&dsAcqDroppedTooShort,
+		&gf3HebbianWeightCellUpdates,
+		(*C.char)(unsafe.Pointer(&statusBuf[0])),
+		C.size_t(len(statusBuf)),
+	)
+	if res != 0 {
+		return 0, 0, 0, 0, false
+	}
+	return uint64(dsBlockedRawPushes), uint64(dsBlockedTrainPushes), uint32(dsRawQueueDepth), uint32(dsRawQueueMax), true
 }
 
 // getBufferTuning reads explicit [training] queue / prefill fields. Caller must run validateTrainingConfig first.
@@ -360,7 +434,7 @@ func copyTrainingState() TrainingState {
 	return *trainingState
 }
 
-func maybeLogTrainingMetricsServer(s TrainingState) {
+func maybeLogTrainingMetricsServer(s TrainingState, displayTotalEpochs int) {
 	phaseAge := 0.0
 	if !s.PhaseStartedAt.IsZero() {
 		phaseAge = time.Since(s.PhaseStartedAt).Seconds()
@@ -369,7 +443,7 @@ func maybeLogTrainingMetricsServer(s TrainingState) {
 	if !s.LastDLLPollAt.IsZero() {
 		lastPoll = fmt.Sprintf("%.0fs_ago", time.Since(s.LastDLLPollAt).Seconds())
 	}
-	sig := fmt.Sprintf("%s|%v|%d|%d|%d|%d", s.Phase, s.IsRunning, s.CurrentEpoch, s.Samples, s.SessionID, s.LoopCount)
+	sig := fmt.Sprintf("%s|%v|%d|%d|%d|%d|%d|%d|%v", s.Phase, s.IsRunning, s.CurrentEpoch, displayTotalEpochs, s.Samples, s.SamplesTotal, s.SessionID, s.LoopCount, s.PipelineConfigured)
 	metricsServerLogMu.Lock()
 	defer metricsServerLogMu.Unlock()
 	now := time.Now()
@@ -378,8 +452,12 @@ func maybeLogTrainingMetricsServer(s TrainingState) {
 	}
 	lastMetricsServerSig = sig
 	lastMetricsServerAt = now
-	fmt.Printf("[MCP] wui_get_training_metrics: phase=%s (%.0fs in phase) running=%v epoch=%d/%d samples=%d session=%d last_dll_poll=%s\n",
-		s.Phase, phaseAge, s.IsRunning, s.CurrentEpoch, s.TotalEpochs, s.Samples, s.SessionID, lastPoll)
+	idleHint := ""
+	if !s.PipelineConfigured && s.SessionID == 0 {
+		idleHint = " [idle: no pipeline session — use WUI/MCP wui_init_training_pipeline then wui_start_ff_training; last_dll_poll stays never until native session starts]"
+	}
+	fmt.Printf("[MCP] wui_get_training_metrics: phase=%s (%.0fs in phase) running=%v epoch=%d/%d samples=%d samples_total=%d session=%d pipeline_configured=%v last_dll_poll=%s%s\n",
+		s.Phase, phaseAge, s.IsRunning, s.CurrentEpoch, displayTotalEpochs, s.Samples, s.SamplesTotal, s.SessionID, s.PipelineConfigured, lastPoll, idleHint)
 }
 
 func (ts *TrainingState) Reset() {
@@ -425,6 +503,8 @@ func (ts *TrainingState) Reset() {
 	ts.DSRawQueueCap = 0
 	ts.DSTrainQueueCap = 0
 	ts.PipelineStatusText = ""
+	ts.LiveParallelBatches = 0
+	ts.ParallelBatchesCeiling = 0
 }
 
 func (ts *TrainingState) Start(epochs int, lazyInit bool, targetExperts int, initMsg string) {
@@ -516,22 +596,32 @@ func main() {
 	cfgPath := resolveTrainingConfigPath()
 	fmt.Printf("[Config] Active training TOML: %s\n", cfgPath)
 	log.Printf("[Config] Active training TOML: %s", cfgPath)
-	cfg, err := loadAndValidateTrainingConfig()
+	cfg, err := loadTrainingConfig()
 	if err != nil {
-		log.Fatalf("training TOML: %v", err)
+		fmt.Printf("[Config] WARNING: Failed to load training TOML: %v\n", err)
+		fmt.Println("[Config] Server will start, but training will be unavailable until config is fixed.")
+		log.Printf("[Config] WARNING: training TOML load failed: %v. Training unavailable.", err)
+	} else {
+		if err := validateTrainingConfig(cfg); err != nil {
+			fmt.Printf("[Config] WARNING: Invalid training TOML: %v\n", err)
+			fmt.Println("[Config] Server will start, but training will be unavailable until config is fixed.")
+			log.Printf("[Config] WARNING: training TOML validation failed: %v. Training unavailable.", err)
+			cfg = nil
+		} else {
+			fmt.Printf("[Config] Validated training TOML: training.batch_size=%d model.moe_top_k=%d features.steane_correction=%v training.epochs=%d\n",
+				cfg.GetInt("training.batch_size"),
+				cfg.GetInt("model.moe_top_k"),
+				cfg.GetBool("features.steane_correction"),
+				cfg.GetInt("training.epochs"),
+			)
+			log.Printf("[Config] Validated training TOML: batch_size=%d moe_top_k=%d steane=%v epochs=%d",
+				cfg.GetInt("training.batch_size"),
+				cfg.GetInt("model.moe_top_k"),
+				cfg.GetBool("features.steane_correction"),
+				cfg.GetInt("training.epochs"),
+			)
+		}
 	}
-	fmt.Printf("[Config] Validated training TOML: training.batch_size=%d model.moe_top_k=%d features.steane_correction=%v training.epochs=%d\n",
-		cfg.GetInt("training.batch_size"),
-		cfg.GetInt("model.moe_top_k"),
-		cfg.GetBool("features.steane_correction"),
-		cfg.GetInt("training.epochs"),
-	)
-	log.Printf("[Config] Validated training TOML: batch_size=%d moe_top_k=%d steane=%v epochs=%d",
-		cfg.GetInt("training.batch_size"),
-		cfg.GetInt("model.moe_top_k"),
-		cfg.GetBool("features.steane_correction"),
-		cfg.GetInt("training.epochs"),
-	)
 
 	// Resolve WUI path. Canonical layout: repo_root/qminiwasm.exe + repo_root/<wui_dir>/
 	assetPath := ""
@@ -1132,7 +1222,18 @@ func handleGetTrainingMetrics() interface{} {
 	}
 
 	s := copyTrainingState()
-	maybeLogTrainingMetricsServer(s)
+	displayTotalEpochs := s.TotalEpochs
+	if displayTotalEpochs <= 0 || (!s.PipelineConfigured && s.SessionID == 0) {
+		if cfg, err := loadAndValidateTrainingConfig(); err == nil {
+			if e := cfg.GetInt("training.epochs"); e > 0 {
+				displayTotalEpochs = e
+			}
+		}
+	}
+	if displayTotalEpochs <= 0 {
+		displayTotalEpochs = 100
+	}
+	maybeLogTrainingMetricsServer(s, displayTotalEpochs)
 
 	activeExperts := 0
 	if s.IsRunning {
@@ -1160,30 +1261,32 @@ func handleGetTrainingMetrics() interface{} {
 	}
 
 	return map[string]interface{}{
-		"training_config_path":          resolveTrainingConfigPath(),
-		"data_root":                     qminiDataRoot(),
-		"data_sources_config_path":      resolveDataSourcesConfigPath(),
-		"epoch":                         s.CurrentEpoch,
-		"total_epochs":                  s.TotalEpochs,
-		"loss":                          s.Loss,
-		"is_running":                    s.IsRunning,
-		"samples":                       s.Samples,
-		"samples_epoch":                 s.Samples,
-		"samples_total":                 s.SamplesTotal,
+		"training_config_path":            resolveTrainingConfigPath(),
+		"data_root":                       qminiDataRoot(),
+		"data_sources_config_path":        resolveDataSourcesConfigPath(),
+		"epoch":                           s.CurrentEpoch,
+		"total_epochs":                    displayTotalEpochs,
+		"loss":                            s.Loss,
+		"is_running":                      s.IsRunning,
+		"samples":                         s.Samples,
+		"samples_epoch":                   s.Samples,
+		"samples_total":                   s.SamplesTotal,
 		"gf3_hebbian_weight_cell_updates": s.GF3HebbianWeightCellUpdates,
-		"session_id":                    s.SessionID,
-		"phase":                         s.Phase,
-		"phase_elapsed_seconds":         phaseElapsed,
-		"native_launch_in_progress":     nativeLaunch,
-		"recommended_poll_interval_sec": recommendedPoll,
-		"last_dll_poll_age_seconds":     lastDLLAge,
-		"learning_rate":                 0.001,
-		"history":                       metricsHistory,
-		"init_message":                  s.InitMessage,
-		"pipeline_status":               s.PipelineStatusText,
-		"lazy_init":                     s.LazyInit,
-		"pipeline_configured":           s.PipelineConfigured,
-		"buffer_profile":                s.BufferProfile,
+		"session_id":                      s.SessionID,
+		"phase":                           s.Phase,
+		"phase_elapsed_seconds":           phaseElapsed,
+		"native_launch_in_progress":       nativeLaunch,
+		"recommended_poll_interval_sec":   recommendedPoll,
+		"last_dll_poll_age_seconds":       lastDLLAge,
+		"learning_rate":                   0.001,
+		"history":                         metricsHistory,
+		"init_message":                    s.InitMessage,
+		"pipeline_status":                 s.PipelineStatusText,
+		"live_parallel_batches":           s.LiveParallelBatches,
+		"parallel_batches_ceiling":        s.ParallelBatchesCeiling,
+		"lazy_init":                       s.LazyInit,
+		"pipeline_configured":             s.PipelineConfigured,
+		"buffer_profile":                  s.BufferProfile,
 		"ingestion": map[string]interface{}{
 			"train_queue_depth":        s.DSQueueDepth,
 			"raw_queue_depth":          s.DSRawQueueDepth,
@@ -1293,6 +1396,11 @@ func handleInitTrainingPipeline(params map[string]interface{}) (interface{}, err
 		return nil, fmt.Errorf("training.batch_size not set in config")
 	}
 	buffer := getBufferTuning(config)
+	rtScaled, _, _, resourceAutoscaleLog := applyResourceAutoscale(config, buffer)
+	if resourceAutoscaleLog != "" {
+		fmt.Println(resourceAutoscaleLog)
+	}
+	rtBuf := rtScaled.Buffer
 
 	numLayers := config.GetInt("model.num_layers")
 	if numLayers == 0 {
@@ -1313,10 +1421,10 @@ func handleInitTrainingPipeline(params map[string]interface{}) (interface{}, err
 		return nil, fmt.Errorf("model.moe_top_k not set in config")
 	}
 
-	lazyInitInitial := config.GetInt("training.lazy_init_initial_experts")
+	eff := resolveEffectiveTrainingParams(config)
 	initialExperts := targetExperts
 	if lazyInit {
-		initialExperts = lazyInitInitial
+		initialExperts = int(eff.EffectiveLazyInitInitialExperts)
 	}
 
 	// Go-only validation: native DLL loads on Start so this handler cannot crash the HTTP server.
@@ -1350,13 +1458,13 @@ func handleInitTrainingPipeline(params map[string]interface{}) (interface{}, err
 	trainingState.LazyInit = lazyInit
 	trainingState.TargetExperts = targetExperts
 	trainingState.CurrentExperts = initialExperts
-	trainingState.PrefillTargetSamples = uint32(buffer.PrefillTarget)
-	trainingState.BufferProfile = buffer.Profile
-	trainingState.PrefillTimeoutMs = uint32(buffer.PrefillTimeoutMs)
-	trainingState.PrefillPollMs = uint32(buffer.PrefillPollMs)
-	trainingState.DSAcqQueueCap = uint32(buffer.AcqQueueCap)
-	trainingState.DSRawQueueCap = uint32(buffer.RawQueueCap)
-	trainingState.DSTrainQueueCap = uint32(buffer.TrainQueueCap)
+	trainingState.PrefillTargetSamples = uint32(rtBuf.PrefillTarget)
+	trainingState.BufferProfile = rtBuf.Profile
+	trainingState.PrefillTimeoutMs = uint32(rtBuf.PrefillTimeoutMs)
+	trainingState.PrefillPollMs = uint32(rtBuf.PrefillPollMs)
+	trainingState.DSAcqQueueCap = uint32(rtBuf.AcqQueueCap)
+	trainingState.DSRawQueueCap = uint32(rtBuf.RawQueueCap)
+	trainingState.DSTrainQueueCap = uint32(rtBuf.TrainQueueCap)
 	trainingState.PipelineConfigured = true
 	trainingState.InitMessage = initMsg
 	trainingState.Phase = phaseReady
@@ -1423,6 +1531,11 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 		return nil, fmt.Errorf("training.batch_size not set in config")
 	}
 	buffer := getBufferTuning(config)
+	rtScaled, _, _, resourceAutoscaleLog := applyResourceAutoscale(config, buffer)
+	if resourceAutoscaleLog != "" {
+		fmt.Println(resourceAutoscaleLog)
+	}
+	buf := rtScaled.Buffer
 	numLayers := config.GetInt("model.num_layers")
 	if numLayers == 0 {
 		return nil, fmt.Errorf("model.num_layers not set in config")
@@ -1459,7 +1572,6 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	microBatchCap := config.GetInt("training.micro_batch_cap")
 	collectFloor := config.GetInt("training.collect_floor")
 	timingToStderr := config.GetBool("training.timing_to_stderr")
-	serialExpertTrain := config.GetBool("training.serial_expert_train")
 	syclRouteModeStr := strings.ToLower(strings.TrimSpace(config.GetString("training.sycl_route_mode")))
 	var syclRouteModeCode uint32
 	switch syclRouteModeStr {
@@ -1486,13 +1598,13 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 		goSessionID = oldSID
 		fmt.Printf("[Training] Reusing native session %d (MoE weights kept). Pass force_new_native_session=true to destroy and re-InitSession.\n", goSessionID)
 		trainingStateMu.Lock()
-		trainingState.PrefillTargetSamples = uint32(buffer.PrefillTarget)
-		trainingState.BufferProfile = buffer.Profile
-		trainingState.PrefillTimeoutMs = uint32(buffer.PrefillTimeoutMs)
-		trainingState.PrefillPollMs = uint32(buffer.PrefillPollMs)
-		trainingState.DSAcqQueueCap = uint32(buffer.AcqQueueCap)
-		trainingState.DSRawQueueCap = uint32(buffer.RawQueueCap)
-		trainingState.DSTrainQueueCap = uint32(buffer.TrainQueueCap)
+		trainingState.PrefillTargetSamples = uint32(buf.PrefillTarget)
+		trainingState.BufferProfile = buf.Profile
+		trainingState.PrefillTimeoutMs = uint32(buf.PrefillTimeoutMs)
+		trainingState.PrefillPollMs = uint32(buf.PrefillPollMs)
+		trainingState.DSAcqQueueCap = uint32(buf.AcqQueueCap)
+		trainingState.DSRawQueueCap = uint32(buf.RawQueueCap)
+		trainingState.DSTrainQueueCap = uint32(buf.TrainQueueCap)
 		trainingStateMu.Unlock()
 	} else {
 		if oldSID != 0 {
@@ -1507,26 +1619,33 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 		trainingState.Phase = phaseNativeSessionInit
 		trainingState.PhaseStartedAt = time.Now()
 		trainingState.InitMessage = "Native: Training_InitSession (creating session)…"
-		trainingState.PrefillTargetSamples = uint32(buffer.PrefillTarget)
-		trainingState.BufferProfile = buffer.Profile
-		trainingState.PrefillTimeoutMs = uint32(buffer.PrefillTimeoutMs)
-		trainingState.PrefillPollMs = uint32(buffer.PrefillPollMs)
-		trainingState.DSAcqQueueCap = uint32(buffer.AcqQueueCap)
-		trainingState.DSRawQueueCap = uint32(buffer.RawQueueCap)
-		trainingState.DSTrainQueueCap = uint32(buffer.TrainQueueCap)
+		trainingState.PrefillTargetSamples = uint32(buf.PrefillTarget)
+		trainingState.BufferProfile = buf.Profile
+		trainingState.PrefillTimeoutMs = uint32(buf.PrefillTimeoutMs)
+		trainingState.PrefillPollMs = uint32(buf.PrefillPollMs)
+		trainingState.DSAcqQueueCap = uint32(buf.AcqQueueCap)
+		trainingState.DSRawQueueCap = uint32(buf.RawQueueCap)
+		trainingState.DSTrainQueueCap = uint32(buf.TrainQueueCap)
 		trainingStateMu.Unlock()
 
 		var sessionID C.uint64_t
 		dataSourcesPath := resolveDataSourcesConfigPath()
 		dsToml := C.CString(dataSourcesPath)
 		defer C.free(unsafe.Pointer(dsToml))
+		cpDir := C.CString(qminiDataRoot())
+		defer C.free(unsafe.Pointer(cpDir))
 
 		allowGenNegU32 := C.uint32_t(0)
 		if allowGeneratedNegatives {
 			allowGenNegU32 = 1
 		}
 		fmt.Printf("[Training] InitSession corpus (Go→DLL): directory_max_lines=%d max_jsonl_local_samples=%d min_text_length=%d max_text_length=%d allow_generated_negatives=%d\n",
-			buffer.DirectoryMaxLines, buffer.MaxJsonlLocalSamples, buffer.MinTextLength, buffer.MaxTextLength, allowGenNegU32)
+			buf.DirectoryMaxLines, buf.MaxJsonlLocalSamples, buf.MinTextLength, buf.MaxTextLength, allowGenNegU32)
+
+		parallelBatchesRuntimeCap := uint32(96)
+		if config.IsSet("training.parallel_batches_runtime_cap") {
+			parallelBatchesRuntimeCap = uint32(config.GetInt("training.parallel_batches_runtime_cap"))
+		}
 
 		initRes := C.Training_InitSession(
 			&sessionID,
@@ -1553,32 +1672,52 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 			C.uint32_t(moeHidden),
 			C.uint32_t(expertInternal),
 			C.uint32_t(ffActiveInternal),
-			C.uint32_t(buffer.PrefillTarget),
-			C.uint32_t(buffer.PrefillTimeoutMs),
-			C.uint32_t(buffer.PrefillPollMs),
-			C.uint32_t(buffer.AcqQueueCap),
-			C.uint32_t(buffer.RawQueueCap),
-			C.uint32_t(buffer.TrainQueueCap),
+			C.uint32_t(buf.PrefillTarget),
+			C.uint32_t(buf.PrefillTimeoutMs),
+			C.uint32_t(buf.PrefillPollMs),
+			C.uint32_t(buf.AcqQueueCap),
+			C.uint32_t(buf.RawQueueCap),
+			C.uint32_t(buf.TrainQueueCap),
 			C.uint64_t(samplesPerEpoch),
 			C.uint32_t(microBatchCap),
 			C.uint32_t(collectFloor),
 			C.bool(timingToStderr),
-			C.bool(serialExpertTrain),
 			C.uint32_t(syclRouteModeCode),
 			C.uint32_t(syclTritQuantMinMoeDim),
 			C.uint32_t(goodnessLogLevel),
 			allowGenNegU32,
-			C.uint64_t(buffer.DirectoryMaxLines),
-			C.uint64_t(buffer.MaxJsonlLocalSamples),
-			C.uint32_t(uint32(buffer.MinTextLength)),
-			C.uint32_t(uint32(buffer.MaxTextLength)),
-			C.uint32_t(uint32(config.GetInt("training.acquisition_threads"))),
-			C.uint32_t(uint32(config.GetInt("training.perturbation_threads"))),
-			C.uint32_t(uint32(config.GetInt("training.checkpoint_async_queue_max"))),
+			C.uint64_t(buf.DirectoryMaxLines),
+			C.uint64_t(buf.MaxJsonlLocalSamples),
+			C.uint32_t(uint32(buf.MinTextLength)),
+			C.uint32_t(uint32(buf.MaxTextLength)),
+			C.uint32_t(uint32(rtScaled.AcquisitionThreads)),
+			C.uint32_t(uint32(rtScaled.PerturbationThreads)),
+			C.uint32_t(uint32(rtScaled.CheckpointAsyncQueueMax)),
 			C.uint32_t(uint32(config.GetInt("training.collect_empty_backoff_base_ms"))),
 			C.uint32_t(uint32(config.GetInt("training.collect_empty_backoff_max_shift"))),
 			C.uint32_t(uint32(config.GetInt("training.collect_empty_backoff_cap_ms"))),
 			C.uint32_t(uint32(config.GetInt("training.metrics_heartbeat_sec"))),
+			C.uint32_t(config.trainingUint01("training.parallel_contrastive_rows", 1)),
+			C.uint32_t(uint32(rtScaled.ParallelBatches)),
+			C.uint32_t(uint32(config.GetInt("training.ff_expert_chunk_size"))),
+			C.uint32_t(uint32(rtScaled.TargetRoutesPerBatch)),
+			C.uint32_t(uint32(config.GetInt("training.collect_window_ms"))),
+			C.uint32_t(uint32(config.GetInt("training.collect_min_rows_per_batch"))),
+			C.uint32_t(uint32(config.GetInt("training.sycl_prereserve_gib"))),
+			C.uint32_t(uint32(config.GetInt("training.sycl_prereserve_chunk_mib"))),
+			C.int32_t(int32(config.GetInt("training.sycl_gpu_device_index"))),
+			C.uint64_t(config.GetInt("training.gf3_sycl_min_weight_cells")),
+			C.uint32_t(config.GetInt("training.gf3_sycl_submit_grid_log")),
+			C.uint64_t(rtScaled.Gf3FFBatchedWeightMib),
+			C.uint32_t(config.trainingUint01("training.ff_multi_row_batch", 1)),
+			C.uint32_t(config.GetInt("training.ff_multi_row_slots_chunk")),
+			C.uint32_t(config.GetInt("training.gf3_ff_layers_per_batch")),
+			C.uint64_t(config.GetInt("training.lazy_moe_resident_cap")),
+			cpDir, // training_checkpoint_data_dir_utf8
+			C.uint64_t(config.GetInt("training.gf3_ff_multislot_slots_chunk_max")),
+			C.uint32_t(config.GetInt("training.gf3_ff_multislot_ignore_host_slot_budget")),
+			C.uint32_t(config.GetInt("training.auto_resume_from_checkpoint")),
+			C.uint32_t(parallelBatchesRuntimeCap),
 		)
 		if initRes != 0 {
 			trainingStateMu.Lock()
@@ -1586,8 +1725,12 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 			trainingState.PhaseStartedAt = time.Now()
 			trainingState.InitMessage = fmt.Sprintf("Training_InitSession failed (%d). Pipeline still configured; fix DLL/config and retry.", initRes)
 			trainingStateMu.Unlock()
-			return nil, fmt.Errorf("Training_InitSession failed with code %d (check q_training.dll matches Go; codes -5 samples_per_epoch, -6 micro/collect floor, -7 MoE dims, -8 worker_threads, -9 prefill/queue limits, -11 sycl_route_mode, -12 sycl_trit_quant_min_moe_dim, -13 local corpus limits, -14 acquisition/perturbation/checkpoint_async_queue_max)", initRes)
+			_ = os.Stdout.Sync()
+			_ = os.Stderr.Sync()
+			return nil, fmt.Errorf("Training_InitSession failed with code %d (check q_training.dll matches Go; codes -5 samples_per_epoch, -6 micro/collect floor, -7 MoE dims, -8 worker_threads, -9 prefill/queue limits, -11 sycl_route_mode, -12 sycl_trit_quant_min_moe_dim, -13 local corpus limits, -14 acquisition/perturbation/checkpoint_async_queue_max, -21 stale qminiwasm vs q_training.dll ABI — rebuild both from the same commit)", initRes)
 		}
+		_ = os.Stdout.Sync()
+		_ = os.Stderr.Sync()
 
 		goSessionID = uint64(sessionID)
 		trainingStateMu.Lock()
@@ -1626,6 +1769,32 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	}
 	fmt.Printf("[Training] Starting with data path: %s (%d files)\n", dataPathStr, dataFileCount)
 	fmt.Printf("[Training] About to call C.Training_StartTraining...\n")
+	_ = os.Stdout.Sync()
+	_ = os.Stderr.Sync()
+
+	if config.GetBoolDefault("training.realtime_live_parallel_scale", false) {
+		ceiling := uint32(rtScaled.ParallelBatches)
+		frac := config.GetFloat("training.realtime_live_start_fraction")
+		// Missing key yields 0 from GetFloat — previously defaulted to 0.75 and never launched at full
+		// parallel_batches ceiling (major GPU under-utilization on iGPU/UMA hosts).
+		if !config.IsSet("training.realtime_live_start_fraction") || frac <= 0 || frac > 1 {
+			frac = 1.0
+		}
+		startPB := int(math.Round(float64(ceiling) * frac))
+		if startPB < 1 {
+			startPB = 1
+		}
+		if uint32(startPB) > ceiling {
+			startPB = int(ceiling)
+		}
+		rc := trainingDLLSetPendingLiveParallelStart(goSessionID, uint32(startPB))
+		if rc != 0 {
+			fmt.Printf("[Training] WARN: Training_SetPendingLiveParallelStart failed (%d)\n", rc)
+		} else {
+			fmt.Printf("[Training] realtime_live_parallel: pending start parallel_batches=%d (ceiling=%d fraction=%.2f)\n",
+				startPB, ceiling, frac)
+		}
+	}
 
 	trainingStateMu.Lock()
 	trainingState.Phase = phaseNativePipelineInit
@@ -1641,6 +1810,8 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	)
 
 	fmt.Printf("[Training] C.Training_StartTraining returned: %d\n", result)
+	_ = os.Stdout.Sync()
+	_ = os.Stderr.Sync()
 
 	if result != 0 {
 		_ = C.Training_CleanupSession(C.uint64_t(goSessionID))
@@ -1681,6 +1852,13 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 		pollTrainingProgress()
 	}()
 
+	if config.GetBoolDefault("training.realtime_live_parallel_scale", false) {
+		sid := outSID
+		ceil := uint32(rtScaled.ParallelBatches)
+		cfgCopy := config
+		go runRealtimeLiveParallelScaler(sid, ceil, cfgCopy)
+	}
+
 	if initialExperts <= 0 {
 		return nil, fmt.Errorf("pipeline CurrentExperts is unset; call wui_init_training_pipeline before start")
 	}
@@ -1689,16 +1867,16 @@ func handleStartTraining(params map[string]interface{}) (interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"started":                    true,
-		"epochs":                     epochs,
-		"lazy_init":                  lazyInit,
-		"session_id":                 outSID,
-		"native_session_reused":      reuseNative,
-		"force_new_native_session":   forceNewNativeSession,
-		"message":                    initMsg,
-		"phase":                        phaseTraining,
-		"initial_experts":              initialExperts,
-		"target_experts":               tgt,
+		"started":                  true,
+		"epochs":                   epochs,
+		"lazy_init":                lazyInit,
+		"session_id":               outSID,
+		"native_session_reused":    reuseNative,
+		"force_new_native_session": forceNewNativeSession,
+		"message":                  initMsg,
+		"phase":                    phaseTraining,
+		"initial_experts":          initialExperts,
+		"target_experts":           tgt,
 	}, nil
 }
 
@@ -1717,6 +1895,7 @@ func refreshTrainingProgressFromDLL() {
 	var samplesProcessed C.uint64_t
 	var isRunning C.bool
 	var loopCount C.uint32_t
+	var statusBuf [512]byte
 	res := C.Training_GetProgress(
 		C.uint64_t(sid),
 		&currentEpoch,
@@ -1736,7 +1915,6 @@ func refreshTrainingProgressFromDLL() {
 	var dsDroppedPayloads, dsAcqBlockedPushes, dsAcqBlockedWaitMs C.uint64_t
 	var dsAcqDroppedTooShort C.uint64_t
 	var gf3HebbianWeightCellUpdates C.uint64_t
-	statusBuf := make([]byte, 512)
 	metricsRes := C.Training_GetMetrics(
 		C.uint64_t(sid),
 		&expertsActive,
@@ -1811,6 +1989,11 @@ func refreshTrainingProgressFromDLL() {
 		trainingState.DSAcqDroppedTooShort = uint64(dsAcqDroppedTooShort)
 		trainingState.GF3HebbianWeightCellUpdates = uint64(gf3HebbianWeightCellUpdates)
 		trainingState.PipelineStatusText = nativeStatus
+		var livePB, ceilPB C.uint32_t
+		if int(C.Training_GetLiveParallelBatches(C.uint64_t(sid), &livePB, &ceilPB)) == 0 {
+			trainingState.LiveParallelBatches = uint32(livePB)
+			trainingState.ParallelBatchesCeiling = uint32(ceilPB)
+		}
 	}
 }
 
@@ -1851,6 +2034,7 @@ func pollTrainingProgress() {
 		var samplesProcessed C.uint64_t
 		var isRunning C.bool
 		var loopCount C.uint32_t
+		var statusBuf [512]byte
 
 		if verbose && (pollCount == 1 || pollCount%60 == 0) {
 			fmt.Printf("[pollTrainingProgress] Poll %d: Training_GetProgress(session=%d)…\n", pollCount, sid)
@@ -1874,7 +2058,6 @@ func pollTrainingProgress() {
 		var dsDroppedPayloads, dsAcqBlockedPushes, dsAcqBlockedWaitMs C.uint64_t
 		var dsAcqDroppedTooShort C.uint64_t
 		var gf3HebbianWeightCellUpdates C.uint64_t
-		statusBuf := make([]byte, 512)
 		metricsRes := C.Training_GetMetrics(
 			C.uint64_t(sid),
 			&expertsActive,
@@ -2281,7 +2464,7 @@ func appendLocalDatasetSources(sources []map[string]interface{}) []map[string]in
 }
 
 func handleListDataSources() interface{} {
-		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return map[string]interface{}{
@@ -2490,7 +2673,7 @@ func handleAddDataSource(params map[string]interface{}) (interface{}, error) {
 	}
 
 	// Append to data_sources.toml
-		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 
 	var entry strings.Builder
 	entry.WriteString("\n[[source]]\n")
@@ -2535,7 +2718,7 @@ func handleUpdateDataSource(params map[string]interface{}) (interface{}, error) 
 	}
 
 	// Read and modify data_sources.toml
-		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data_sources.toml: %w", err)
@@ -2704,13 +2887,13 @@ func handleGetBufferProfile() (interface{}, error) {
 	return map[string]interface{}{
 		"profile": profile,
 		"effective": map[string]interface{}{
-			"prefill_target_samples":         t.PrefillTarget,
-			"prefill_timeout_ms":           t.PrefillTimeoutMs,
-			"prefill_poll_ms":              t.PrefillPollMs,
-			"acq_queue_cap":                t.AcqQueueCap,
-			"raw_queue_cap":                t.RawQueueCap,
-			"train_queue_cap":              t.TrainQueueCap,
-			"directory_max_lines":    t.DirectoryMaxLines,
+			"prefill_target_samples":  t.PrefillTarget,
+			"prefill_timeout_ms":      t.PrefillTimeoutMs,
+			"prefill_poll_ms":         t.PrefillPollMs,
+			"acq_queue_cap":           t.AcqQueueCap,
+			"raw_queue_cap":           t.RawQueueCap,
+			"train_queue_cap":         t.TrainQueueCap,
+			"directory_max_lines":     t.DirectoryMaxLines,
 			"max_jsonl_local_samples": t.MaxJsonlLocalSamples,
 			"min_text_length":         t.MinTextLength,
 			"max_text_length":         t.MaxTextLength,
@@ -2744,13 +2927,13 @@ func handleSetBufferProfile(params map[string]interface{}) (interface{}, error) 
 		"path":                  path,
 		"applies_on_next_start": true,
 		"effective": map[string]interface{}{
-			"prefill_target_samples":         t.PrefillTarget,
-			"prefill_timeout_ms":           t.PrefillTimeoutMs,
-			"prefill_poll_ms":              t.PrefillPollMs,
-			"acq_queue_cap":                t.AcqQueueCap,
-			"raw_queue_cap":                t.RawQueueCap,
-			"train_queue_cap":              t.TrainQueueCap,
-			"directory_max_lines":    t.DirectoryMaxLines,
+			"prefill_target_samples":  t.PrefillTarget,
+			"prefill_timeout_ms":      t.PrefillTimeoutMs,
+			"prefill_poll_ms":         t.PrefillPollMs,
+			"acq_queue_cap":           t.AcqQueueCap,
+			"raw_queue_cap":           t.RawQueueCap,
+			"train_queue_cap":         t.TrainQueueCap,
+			"directory_max_lines":     t.DirectoryMaxLines,
 			"max_jsonl_local_samples": t.MaxJsonlLocalSamples,
 			"min_text_length":         t.MinTextLength,
 			"max_text_length":         t.MaxTextLength,
@@ -2786,7 +2969,7 @@ func handleSaveAPIKeys(params map[string]interface{}) (interface{}, error) {
 }
 
 func handleGetDataSources() interface{} {
-		sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
+	sourcesPath := filepath.Join(qminiDataRoot(), "config", "data_sources.toml")
 	data, err := os.ReadFile(sourcesPath)
 	if err != nil {
 		return map[string]interface{}{
@@ -2957,6 +3140,8 @@ func validateUint64InRange(name string, v, lo, hi uint64) error {
 	return nil
 }
 
+// validateTrainingConfig enforces keys required by qminiwasm / WUI. Several integers allow 0 as
+// “derive” or “no extra cap”; see q_mini_docs/TRAINING_CONFIG_ZERO.md.
 func validateTrainingConfig(c *Config) error {
 	required := []string{
 		"paths.dataset_dir",
@@ -2969,7 +3154,6 @@ func validateTrainingConfig(c *Config) error {
 		"training.micro_batch_cap",
 		"training.collect_floor",
 		"training.timing_to_stderr",
-		"training.serial_expert_train",
 		"training.sycl_route_mode",
 		"training.sycl_trit_quant_min_moe_dim",
 		"training.goodness_log_level",
@@ -3032,10 +3216,11 @@ func validateTrainingConfig(c *Config) error {
 	if c.GetUint64("training.samples_per_epoch") < 1 {
 		return fmt.Errorf("training.samples_per_epoch must be >= 1")
 	}
-	if err := validateIntInRange("training.micro_batch_cap", c.GetInt("training.micro_batch_cap"), 1, math.MaxInt); err != nil {
+	// 0 = native derives full batch / no extra floor (see training_micro_batch_cap_for, TRAINING_THROUGHPUT.md).
+	if err := validateIntInRange("training.micro_batch_cap", c.GetInt("training.micro_batch_cap"), 0, math.MaxInt); err != nil {
 		return err
 	}
-	if err := validateIntInRange("training.collect_floor", c.GetInt("training.collect_floor"), 1, math.MaxInt); err != nil {
+	if err := validateIntInRange("training.collect_floor", c.GetInt("training.collect_floor"), 0, math.MaxInt); err != nil {
 		return err
 	}
 	if err := validateIntInRange("training.epochs", c.GetInt("training.epochs"), 1, math.MaxInt); err != nil {
@@ -3059,7 +3244,8 @@ func validateTrainingConfig(c *Config) error {
 	default:
 		return fmt.Errorf(`training.sycl_route_mode must be "auto", "on", or "off" (got %q)`, c.GetString("training.sycl_route_mode"))
 	}
-	if err := validateIntInRange("training.prefill_target_samples", c.GetInt("training.prefill_target_samples"), 1, math.MaxInt); err != nil {
+	// 0 = minimal prefill: native treats as 1 contrastive pair before training_loop (see prefill wait in AutonomousTrainingPipeline).
+	if err := validateIntInRange("training.prefill_target_samples", c.GetInt("training.prefill_target_samples"), 0, math.MaxInt); err != nil {
 		return err
 	}
 	if err := validateIntInRange("training.prefill_timeout_ms", c.GetInt("training.prefill_timeout_ms"), 1, math.MaxInt); err != nil {
@@ -3098,6 +3284,12 @@ func validateTrainingConfig(c *Config) error {
 	if err := validateIntInRange("training.metrics_heartbeat_sec", c.GetInt("training.metrics_heartbeat_sec"), 0, math.MaxInt); err != nil {
 		return err
 	}
+	// Optional: 0 = uncapped; native clamps effective parallel waves to min(live, cap). Omitted → InitSession default 96.
+	if c.IsSet("training.parallel_batches_runtime_cap") {
+		if err := validateIntInRange("training.parallel_batches_runtime_cap", c.GetInt("training.parallel_batches_runtime_cap"), 0, 65536); err != nil {
+			return err
+		}
+	}
 	if err := validateUint64InRange("training.max_jsonl_local_samples", c.GetUint64("training.max_jsonl_local_samples"), 1, math.MaxUint64); err != nil {
 		return err
 	}
@@ -3128,10 +3320,12 @@ func validateTrainingConfig(c *Config) error {
 	expertN := c.GetInt("model.moe_experts")
 	lazyInit := c.GetBool("features.lazy_init")
 	lazyInitial := c.GetInt("training.lazy_init_initial_experts")
-	if err := validateIntInRange("training.lazy_init_initial_experts", lazyInitial, 1, expertN); err != nil {
-		return err
-	}
-	if !lazyInit && lazyInitial != expertN {
+	if lazyInit {
+		// 0 = derive to model.moe_top_k (resolveEffectiveTrainingParams); native InitSession gets computed effective_* from Start path.
+		if err := validateIntInRange("training.lazy_init_initial_experts", lazyInitial, 0, expertN); err != nil {
+			return err
+		}
+	} else if lazyInitial != expertN {
 		return fmt.Errorf("when features.lazy_init is false, training.lazy_init_initial_experts must equal model.moe_experts (got %d vs %d)", lazyInitial, expertN)
 	}
 
@@ -3164,13 +3358,40 @@ func validateTrainingConfig(c *Config) error {
 	return nil
 }
 
+// Caches successful parse+validate to avoid re-reading and re-printing [Config] on every
+// wui_get_training_metrics / handler that only needs the same TOML (hot path for MCP polling).
+var validatedTrainingCfgCache struct {
+	mu   sync.Mutex
+	path string
+	mod  time.Time
+	cfg  *Config
+}
+
 func loadAndValidateTrainingConfig() (*Config, error) {
+	path := resolveTrainingConfigPath()
+	fi, statErr := os.Stat(path)
+	if statErr == nil {
+		validatedTrainingCfgCache.mu.Lock()
+		if validatedTrainingCfgCache.cfg != nil && validatedTrainingCfgCache.path == path && validatedTrainingCfgCache.mod.Equal(fi.ModTime()) {
+			c := validatedTrainingCfgCache.cfg
+			validatedTrainingCfgCache.mu.Unlock()
+			return c, nil
+		}
+		validatedTrainingCfgCache.mu.Unlock()
+	}
 	cfg, err := loadTrainingConfig()
 	if err != nil {
 		return nil, err
 	}
 	if err := validateTrainingConfig(cfg); err != nil {
-		return nil, fmt.Errorf("%s: %w", resolveTrainingConfigPath(), err)
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if fi2, err2 := os.Stat(path); err2 == nil {
+		validatedTrainingCfgCache.mu.Lock()
+		validatedTrainingCfgCache.path = path
+		validatedTrainingCfgCache.mod = fi2.ModTime()
+		validatedTrainingCfgCache.cfg = cfg
+		validatedTrainingCfgCache.mu.Unlock()
 	}
 	return cfg, nil
 }
@@ -3203,6 +3424,35 @@ func (c *Config) GetBoolDefault(key string, defaultValue bool) bool {
 		}
 	}
 	return defaultValue
+}
+
+// trainingUint01 returns 0/1 for native Training_InitSession flags. TOML often uses booleans
+// (e.g. parallel_contrastive_rows = true); GetInt yields 0 for bool-typed values and for omitted keys,
+// which silently disabled SYCL multi-row batching and OpenMP row parallelism. Unset keys use defaultVal.
+func (c *Config) trainingUint01(key string, defaultVal uint32) uint32 {
+	if !c.IsSet(key) {
+		return defaultVal
+	}
+	if c.GetBool(key) {
+		return 1
+	}
+	if c.GetInt(key) != 0 {
+		return 1
+	}
+	return 0
+}
+
+// IsSet reports whether the key was explicitly present in the loaded TOML config.
+func (c *Config) IsSet(key string) bool {
+	section, k, ok := c.splitSectionKey(key)
+	if !ok {
+		return false
+	}
+	if sec, ok := c.present[section]; ok {
+		_, exists := sec[k]
+		return exists
+	}
+	return false
 }
 
 func (c *Config) GetInt(key string) int {
@@ -3334,4 +3584,3 @@ func (c *Config) GetString(key string) string {
 	}
 	return ""
 }
-

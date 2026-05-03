@@ -79,7 +79,7 @@ go build -o ../qminiwasm.exe ./cmd/wui-cli-bridge
 
 ### Build Trainer (if missing)
 ```bash
-cmake --build q_mini_wasm_v2/build_final --target q_mini_wasm_v2_trainer
+cmake --build q_mini_wasm_v2/build_sycl --target q_mini_wasm_v2_trainer
 ```
 
 ### Run Everything (The Only Command You Need)

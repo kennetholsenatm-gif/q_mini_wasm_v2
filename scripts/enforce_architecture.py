@@ -40,6 +40,7 @@ EXCLUDE_DIRS = {
     "build",
     "build_clean",
     "build_final",
+    "build_sycl",
     "reports",
     "datasets",
 }

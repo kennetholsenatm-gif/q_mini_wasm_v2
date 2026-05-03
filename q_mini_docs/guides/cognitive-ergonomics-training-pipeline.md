@@ -229,11 +229,11 @@ Think of the training pipeline as a **knowledge refinery** that transforms raw i
         YES│                       │NO / Not needed
            ▼                       ▼
    ┌───────────────┐      ┌────────────────┐
-   │ Build with    │      │ CPU fallback   │
-   │ USE_SYCL=ON   │      │ (default)      │
-   │ Link SYCL     │      │                │
-   │ runtime       │      │ Single-thread  │
-   │               │      │ or OpenMP      │
+   │ Native CMake  │      │ CMake FATAL    │
+   │ finds SYCL    │      │ if no icpx /   │
+   │ (icpx/icx)    │      │ AdaptiveCpp    │
+   │ Link SYCL     │      │ (no CPU-only   │
+   │ runtime       │      │ native build)  │
    └───────┬───────┘      └───────┬────────┘
            │                      │
            └──────────┬───────────┘
@@ -290,7 +290,7 @@ Think of the training pipeline as a **knowledge refinery** that transforms raw i
 │                          ▼                                      │
 │  Layer 2: System Errors (graceful degradation)                  │
 │  ┌────────────────────────────────────────────────────────┐   │
-│  │ SYCL init failed → CPU fallback → Continue             │   │
+│  │ SYCL init failed → Stop / fix GPU (no CPU substitute)  │   │
 │  │ Memory full → Checkpoint → Clear buffers → Continue      │   │
 │  │ Thread crash → Restart worker → Log → Continue           │   │
 │  └────────────────────────────────────────────────────────┘   │

@@ -31,14 +31,26 @@ jobs:
             echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Install Intel oneAPI DPC++ (SYCL required)
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | sudo gpg --yes --dearmor --output /usr/share/keyrings/oneapi-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y ninja-build intel-oneapi-compiler-dpcpp-cpp
+        shell: bash
+
       - name: Build native
         run: |
+          source /opt/intel/oneapi/setvars.sh
           cmake -S q_mini_wasm_v2 -B build \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTS=OFF \
-            -DUSE_SYCL=OFF
-          cmake --build build --config Release -j$(nproc)
+            -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_C_COMPILER=icx \
+            -DBUILD_TESTS=OFF
+          cmake --build build -j$(nproc)
           tar -czf q_mini_wasm_v2-linux-x86_64.tar.gz -C build .
+        shell: bash
 
       - name: Generate SBOM
         run: |

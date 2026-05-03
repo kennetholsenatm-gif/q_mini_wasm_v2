@@ -166,7 +166,7 @@
 - **Location:** `q_mini_wasm_v2/dll/wasm_bridge/wasm_api.cpp`
 - **Status:** ✅ Fixed placeholder kernels to use actual CPU fallback implementations
 - **Changes:**
-  - Clifford gate dispatch now calls `cpu_fallback::tableau_apply_*` functions
+  - Clifford gate dispatch may call `wasm_host_reference::tableau_apply_*` on the WASM bridge host path
   - Added missing `tableau_apply_csum` to CPU fallback namespace
   - GF(3) batch operations now use `gf3_multiply_batch` and `gf3_add_batch`
   - Removed placeholder comments, added proper operation execution

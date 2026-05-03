@@ -40,7 +40,7 @@ using Trit = int8_t;  // {-1, 0, +1}
 
 // API response types (C++17 variant) - Fixed-point versions added
 using ApiPayload = std::variant<
-    std::string_view,                    // Raw JSON/text
+    std::string,                         // Raw JSON/text (owning; safe across queues/threads)
     std::vector<float>,                  // Numeric vector (legacy - use fixed below)
     std::vector<std::vector<float>>,     // Matrix data (legacy - use fixed below)
     std::vector<int32_t>,                // Fixed-point numeric vector (scale 1000)
@@ -54,8 +54,8 @@ using ApiPayload = std::variant<
 struct TrainingSample {
     ApiPayload data;
     Trit label;                          // +1 (positive), -1 (negative), 0 (unknown)
-    std::string_view source_api;         // "wolfram", "pubchem", "oeis", etc.
-    std::string_view domain;             // "math", "chemistry", "biology", "physics"
+    std::string source_api;              // "wolfram", "pubchem", "oeis", etc.
+    std::string domain;                  // "math", "chemistry", "biology", "physics"
     
     int8_t is_positive() const { return label == 1 ? 1 : 0; }
     int8_t is_negative() const { return label == -1 ? 1 : 0; }
@@ -494,9 +494,14 @@ public:
     void start(size_t acquisition_threads = 4, 
                size_t perturbation_threads = 2);
     void set_queue_limits(size_t raw_queue_max, size_t train_queue_max, size_t acquisition_queue_max) {
-        max_raw_queue_depth_ = std::max<size_t>(size_t{64}, raw_queue_max);
-        max_train_queue_depth_ = std::max<size_t>(size_t{128}, train_queue_max);
-        max_acquisition_queue_depth_ = std::max<size_t>(size_t{64}, acquisition_queue_max);
+        max_raw_queue_depth_ = std::max<size_t>(size_t{1}, raw_queue_max);
+        max_train_queue_depth_ = std::max<size_t>(size_t{1}, train_queue_max);
+        max_acquisition_queue_depth_ = std::max<size_t>(size_t{1}, acquisition_queue_max);
+    }
+
+    /** Slack used when realigning pos/neg pairs in @ref try_pop_contrastive_pair (from PipelineConfig). */
+    void set_contrastive_resync_discard_slack(size_t slack) noexcept {
+        contrastive_resync_discard_slack_ = std::max<size_t>(size_t{1}, slack);
     }
 
     /** From TOML — applied before `load_local_data` / directory indexing (see PipelineConfig fields). */
@@ -560,6 +565,8 @@ private:
     
     // Perturbation thread function
     void perturbation_worker();
+    // Local corpus contrastive pre-generation worker (pos/neg queued ahead of training).
+    void local_contrastive_worker();
     
     // Autonomous topic discovery - extract new topics from API responses
     std::vector<std::string> extract_topics_from_response(const ApiPayload& response, 
@@ -571,6 +578,8 @@ private:
     // Config-based data acquisition (preferred)
     std::unique_ptr<DataAcquisitionManager> acquisition_mgr_;
     bool use_config_sources_ = false;
+    /** Config/web `fetch_batch` size; set from acquisition_threads in start(). */
+    size_t config_acquisition_fetch_batch_ = 10;
     
     // Thread pools
     std::unique_ptr<ThreadPool> acquisition_pool_;
@@ -579,6 +588,7 @@ private:
     // Queues
     std::queue<ApiPayload> raw_queue_;      // From APIs
     std::deque<TrainingSample> train_queue_; // Contrastive pairs (pos then neg from perturbation_worker)
+    size_t contrastive_resync_discard_slack_ = 1;
     mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
     std::condition_variable queue_not_full_cv_;

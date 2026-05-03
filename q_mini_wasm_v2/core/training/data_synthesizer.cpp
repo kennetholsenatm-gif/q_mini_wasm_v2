@@ -16,6 +16,35 @@
 #include <deque>
 #include <array>
 #include <string_view>
+#if defined(_WIN32)
+#include <stdlib.h> // _dupenv_s, free
+#endif
+
+namespace {
+
+std::optional<std::string> getenv_portable(const char* name) {
+#if defined(_WIN32)
+    char* buf = nullptr;
+    size_t n = 0;
+    if (_dupenv_s(&buf, &n, name) != 0) {
+        return std::nullopt;
+    }
+    if (!buf) {
+        return std::nullopt;
+    }
+    std::string out(buf);
+    free(buf);
+    return out;
+#else
+    const char* v = std::getenv(name);
+    if (!v) {
+        return std::nullopt;
+    }
+    return std::string(v);
+#endif
+}
+
+} // namespace
 
 // HTTP client support - requires libcurl or similar
 // For production: link with -lcurl
@@ -338,10 +367,8 @@ std::vector<int32_t> parse_json_array_fixed(const std::string& json) {
 // ============================================================================
 
 WolframClient::WolframClient() {
-    // Load API key from environment if available
-    const char* env_key = std::getenv("WOLFRAM_API_KEY");
-    if (env_key) {
-        api_key_ = env_key;
+    if (auto key = getenv_portable("WOLFRAM_API_KEY")) {
+        api_key_ = std::move(*key);
     }
 }
 
@@ -851,10 +878,8 @@ ApiPayload PdbClient::perturb_coordinates(const ApiPayload& positive) {
 // ============================================================================
 
 GitHubClient::GitHubClient() {
-    // Load optional API key from environment for higher rate limits
-    const char* env_key = std::getenv("GITHUB_API_KEY");
-    if (env_key) {
-        api_key_ = env_key;
+    if (auto key = getenv_portable("GITHUB_API_KEY")) {
+        api_key_ = std::move(*key);
     }
 }
 
@@ -1087,6 +1112,31 @@ TrainingSample corrupt_directory_negative_from_positive(TrainingSample pos, size
     return pos;
 }
 
+TrainingSample corrupt_generic_negative_from_positive(TrainingSample pos, size_t seed_hint) {
+    pos.label = static_cast<Trit>(-1);
+    if (!std::holds_alternative<std::vector<int32_t>>(pos.data)) {
+        return pos;
+    }
+    auto& vec = std::get<std::vector<int32_t>>(pos.data);
+    if (vec.empty()) {
+        return pos;
+    }
+    std::array<uint32_t, 4> seeds{
+        1337u,
+        static_cast<uint32_t>(seed_hint),
+        static_cast<uint32_t>(seed_hint >> 32),
+        0x5A5A5A5Au,
+    };
+    std::seed_seq seq(seeds.begin(), seeds.end());
+    std::mt19937 rng(seq);
+    std::uniform_int_distribution<size_t> pos_dist(0, vec.size() - 1);
+    std::uniform_int_distribution<int> val_dist(-1000, 1000);
+    for (int j = 0; j < 3 && j < static_cast<int>(vec.size()); ++j) {
+        vec[pos_dist(rng)] = val_dist(rng);
+    }
+    return pos;
+}
+
 } // namespace
 
 DataSynthesizer::DataSynthesizer() = default;
@@ -1288,6 +1338,106 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
         corpus_file_is_jsonl_.push_back(p.extension() == ".jsonl" ? uint8_t{1} : uint8_t{0});
     }
 
+    auto file_size_or_zero = [](const std::string& p) -> uint64_t {
+        std::error_code ec_sz;
+        const auto sz = std::filesystem::file_size(p, ec_sz);
+        return ec_sz ? 0ull : static_cast<uint64_t>(sz);
+    };
+    auto file_mtime_ticks = [](const std::string& p) -> int64_t {
+        std::error_code ec_tm;
+        const auto t = std::filesystem::last_write_time(p, ec_tm);
+        if (ec_tm) {
+            return 0;
+        }
+        return static_cast<int64_t>(t.time_since_epoch().count());
+    };
+
+    const std::string cache_path =
+        (std::filesystem::path(dir_path) / ".qmini_line_index_v1.bin").string();
+    {
+        std::ifstream cache_in(cache_path, std::ios::binary);
+        if (cache_in) {
+            auto rd_u32 = [&](uint32_t& v) -> bool {
+                cache_in.read(reinterpret_cast<char*>(&v), sizeof(v));
+                return static_cast<bool>(cache_in);
+            };
+            auto rd_u64 = [&](uint64_t& v) -> bool {
+                cache_in.read(reinterpret_cast<char*>(&v), sizeof(v));
+                return static_cast<bool>(cache_in);
+            };
+            auto rd_i64 = [&](int64_t& v) -> bool {
+                cache_in.read(reinterpret_cast<char*>(&v), sizeof(v));
+                return static_cast<bool>(cache_in);
+            };
+
+            uint32_t magic = 0;
+            uint32_t version = 0;
+            uint64_t cap_cached = 0;
+            uint64_t min_cached = 0;
+            uint64_t max_cached = 0;
+            uint64_t files_cached = 0;
+            if (rd_u32(magic) && rd_u32(version) && rd_u64(cap_cached) && rd_u64(min_cached) && rd_u64(max_cached) &&
+                rd_u64(files_cached) && magic == 0x51494458u && version == 1u &&
+                cap_cached == static_cast<uint64_t>(directory_max_lines_) &&
+                min_cached == static_cast<uint64_t>(min_text_length_) &&
+                max_cached == static_cast<uint64_t>(max_text_length_) &&
+                files_cached == static_cast<uint64_t>(corpus_file_paths_.size())) {
+                bool meta_ok = true;
+                for (size_t i = 0; i < corpus_file_paths_.size(); ++i) {
+                    uint64_t plen = 0;
+                    if (!rd_u64(plen) || plen > 65535ull) {
+                        meta_ok = false;
+                        break;
+                    }
+                    std::string p;
+                    p.resize(static_cast<size_t>(plen));
+                    if (plen > 0) {
+                        cache_in.read(p.data(), static_cast<std::streamsize>(plen));
+                    }
+                    uint64_t sz = 0;
+                    int64_t mt = 0;
+                    if (!cache_in || !rd_u64(sz) || !rd_i64(mt)) {
+                        meta_ok = false;
+                        break;
+                    }
+                    if (p != corpus_file_paths_[i] || sz != file_size_or_zero(corpus_file_paths_[i]) ||
+                        mt != file_mtime_ticks(corpus_file_paths_[i])) {
+                        meta_ok = false;
+                        break;
+                    }
+                }
+                if (meta_ok) {
+                    uint64_t refs = 0;
+                    if (rd_u64(refs) && refs <= directory_max_lines_) {
+                        corpus_line_index_.clear();
+                        corpus_line_index_.reserve(static_cast<size_t>(refs));
+                        bool refs_ok = true;
+                        for (uint64_t r = 0; r < refs; ++r) {
+                            CorpusLineRef ref{};
+                            cache_in.read(reinterpret_cast<char*>(&ref.file_index), sizeof(ref.file_index));
+                            cache_in.read(reinterpret_cast<char*>(&ref.byte_offset), sizeof(ref.byte_offset));
+                            if (!cache_in || ref.file_index >= corpus_file_paths_.size()) {
+                                refs_ok = false;
+                                break;
+                            }
+                            corpus_line_index_.push_back(ref);
+                        }
+                        if (refs_ok && !corpus_line_index_.empty()) {
+                            data_path_ = dir_path;
+                            has_local_data_ = true;
+                            local_directory_indexed_ = true;
+                            std::cout << "[DataSynthesizer] Loaded directory index cache: "
+                                      << corpus_line_index_.size() << " lines from " << cache_path << std::endl;
+                            std::cout << "[DataSynthesizer] Local contrastive pairs are pre-generated in background workers."
+                                      << std::endl;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     const size_t accepted_files = sorted_paths.size();
     size_t unreadable_files = 0;
     size_t processed_files = 0;
@@ -1367,8 +1517,41 @@ bool DataSynthesizer::load_from_directory(const std::string& dir_path) {
               << ", accepted_files=" << accepted_files
               << ", skipped_extension_files=" << skipped_extension_files
               << ", unreadable_files=" << unreadable_files << ")" << std::endl;
-    std::cout << "[DataSynthesizer] Negatives are generated on read (same schedule as prior pos-block + neg-block)."
+    std::cout << "[DataSynthesizer] Local contrastive pairs are pre-generated in background workers."
               << std::endl;
+
+    {
+        std::ofstream cache_out(cache_path, std::ios::binary | std::ios::trunc);
+        if (cache_out) {
+            auto wr_u32 = [&](uint32_t v) { cache_out.write(reinterpret_cast<const char*>(&v), sizeof(v)); };
+            auto wr_u64 = [&](uint64_t v) { cache_out.write(reinterpret_cast<const char*>(&v), sizeof(v)); };
+            auto wr_i64 = [&](int64_t v) { cache_out.write(reinterpret_cast<const char*>(&v), sizeof(v)); };
+
+            wr_u32(0x51494458u); // "QIDX"
+            wr_u32(1u);
+            wr_u64(static_cast<uint64_t>(directory_max_lines_));
+            wr_u64(static_cast<uint64_t>(min_text_length_));
+            wr_u64(static_cast<uint64_t>(max_text_length_));
+            wr_u64(static_cast<uint64_t>(corpus_file_paths_.size()));
+            for (const auto& p : corpus_file_paths_) {
+                wr_u64(static_cast<uint64_t>(p.size()));
+                if (!p.empty()) {
+                    cache_out.write(p.data(), static_cast<std::streamsize>(p.size()));
+                }
+                wr_u64(file_size_or_zero(p));
+                wr_i64(file_mtime_ticks(p));
+            }
+            wr_u64(static_cast<uint64_t>(corpus_line_index_.size()));
+            for (const auto& ref : corpus_line_index_) {
+                cache_out.write(reinterpret_cast<const char*>(&ref.file_index), sizeof(ref.file_index));
+                cache_out.write(reinterpret_cast<const char*>(&ref.byte_offset), sizeof(ref.byte_offset));
+            }
+            if (cache_out) {
+                std::cout << "[DataSynthesizer] Wrote directory index cache: "
+                          << corpus_line_index_.size() << " lines to " << cache_path << std::endl;
+            }
+        }
+    }
     return true;
 }
 
@@ -1479,6 +1662,11 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
     if (running_) return;
     running_ = true;
 
+    const size_t acq_n = std::max<size_t>(size_t{1}, acquisition_threads);
+    // Larger batches when many acquisition workers drain DataAcquisitionManager into raw_queue_.
+    config_acquisition_fetch_batch_ =
+        std::min<size_t>(256, std::max<size_t>(size_t{10}, acq_n * 4));
+
     const bool hybrid = has_local_data_ && use_config_sources_ && acquisition_mgr_;
 
     size_t local_draw_pool = 0;
@@ -1501,14 +1689,24 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
             std::cout << "[DataSynthesizer] Continuing local-only (web/config start failed)" << std::endl;
             return;
         }
-        acquisition_pool_ = std::make_unique<ThreadPool>(1);
-        acquisition_pool_->enqueue([this] {
-            config_acquisition_worker();
-        });
-        perturbation_pool_ = std::make_unique<ThreadPool>(perturbation_threads);
+        std::cout << "[DataSynthesizer] Hybrid: config_acquisition_worker threads=" << acq_n
+                  << " fetch_batch=" << config_acquisition_fetch_batch_ << std::endl;
+        acquisition_pool_ = std::make_unique<ThreadPool>(acq_n);
+        for (size_t i = 0; i < acq_n; ++i) {
+            acquisition_pool_->enqueue([this] {
+                config_acquisition_worker();
+            });
+        }
+        const size_t local_pair_workers = std::max<size_t>(size_t{2}, perturbation_threads);
+        perturbation_pool_ = std::make_unique<ThreadPool>(perturbation_threads + local_pair_workers);
         for (size_t i = 0; i < perturbation_threads; ++i) {
             perturbation_pool_->enqueue([this] {
                 perturbation_worker();
+            });
+        }
+        for (size_t i = 0; i < local_pair_workers; ++i) {
+            perturbation_pool_->enqueue([this] {
+                local_contrastive_worker();
             });
         }
         return;
@@ -1518,6 +1716,12 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
     if (has_local_data_) {
         std::cout << "[DataSynthesizer] Using local data from: " << data_path_ << std::endl;
         std::cout << "[DataSynthesizer] Samples available: " << local_draw_pool << std::endl;
+        perturbation_pool_ = std::make_unique<ThreadPool>((std::max)(size_t{1}, perturbation_threads));
+        for (size_t i = 0; i < (std::max)(size_t{1}, perturbation_threads); ++i) {
+            perturbation_pool_->enqueue([this] {
+                local_contrastive_worker();
+            });
+        }
         return;
     }
 
@@ -1533,12 +1737,16 @@ void DataSynthesizer::start(size_t acquisition_threads, size_t perturbation_thre
         }
         
         std::cout << "[DataSynthesizer] DataAcquisitionManager started" << std::endl;
-        
-        // Start a thread to fetch from acquisition manager and feed to train_queue_
-        acquisition_pool_ = std::make_unique<ThreadPool>(1);
-        acquisition_pool_->enqueue([this] {
-            config_acquisition_worker();
-        });
+        std::cout << "[DataSynthesizer] config_acquisition_worker threads=" << acq_n
+                  << " fetch_batch=" << config_acquisition_fetch_batch_ << std::endl;
+
+        // Drain acquisition_mgr_ into raw_queue_ with training.acquisition_threads parallel fetchers.
+        acquisition_pool_ = std::make_unique<ThreadPool>(acq_n);
+        for (size_t i = 0; i < acq_n; ++i) {
+            acquisition_pool_->enqueue([this] {
+                config_acquisition_worker();
+            });
+        }
         
         // Start perturbation workers
         perturbation_pool_ = std::make_unique<ThreadPool>(perturbation_threads);
@@ -1759,12 +1967,8 @@ std::optional<TrainingSample> DataSynthesizer::try_draw_local_training_sample() 
 bool DataSynthesizer::try_pop_contrastive_pair(TrainingSample& pos_out, TrainingSample& neg_out) {
     std::lock_guard<std::mutex> lk(queue_mutex_);
     const size_t initial_depth = train_queue_.size();
-    // Cap work per call so a pathological queue cannot hold queue_mutex for hundreds of ms
-    // while acquisition/perturbation threads need it. Alignment continues across batch rows.
-    constexpr size_t kMaxResyncPopsPerCall = 4096;
-    const size_t discard_budget = (std::min)(
-        (std::max)(initial_depth + size_t{64}, size_t{64}),
-        kMaxResyncPopsPerCall);
+    const size_t slack = contrastive_resync_discard_slack_;
+    const size_t discard_budget = std::max<size_t>(initial_depth + slack, slack);
     size_t discarded = 0;
     while (train_queue_.size() >= 2u) {
         if (train_queue_[0].is_positive() && train_queue_[1].is_negative()) {
@@ -1819,30 +2023,56 @@ void DataSynthesizer::config_acquisition_worker() {
     // and feed into raw_queue_ for perturbation_worker
     uint32_t empty_batch_streak = 0;
     bool logged_relaxed_min_text = false;
-    constexpr uint32_t kRelaxMinTextAfterEmptyBatches = 40; // ~4s at 100ms idle sleep
-    constexpr size_t kDefaultMinTextLen = 50;
+    constexpr uint32_t kRelaxMinTextAfterEmptyBatches = 40;
+    uint32_t idle_sleep_ms = 8;
+    constexpr uint32_t kIdleSleepCapMs = 400;
+    static std::atomic<int64_t> s_next_relaxed_log_ms{0};
 
     while (running_) {
         if (!acquisition_mgr_) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(idle_sleep_ms));
+            idle_sleep_ms = (std::min)(kIdleSleepCapMs, idle_sleep_ms * 2);
             continue;
         }
 
-        size_t min_text = kDefaultMinTextLen;
+        const size_t configured_min_text = (std::max)(size_t{1}, min_text_length_);
+        size_t min_text = configured_min_text;
         if (empty_batch_streak >= kRelaxMinTextAfterEmptyBatches) {
             min_text = 1;
             if (!logged_relaxed_min_text) {
-                logged_relaxed_min_text = true;
-                std::cerr << "[DataSynthesizer] config_acquisition_worker: min_text relaxed to 1 after "
-                          << empty_batch_streak << " empty acquisition batches (tiny-corpus / prefill target not met)\n";
+                const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch())
+                                           .count();
+                int64_t allow_after = s_next_relaxed_log_ms.load(std::memory_order_relaxed);
+                if (now_ms >= allow_after &&
+                    s_next_relaxed_log_ms.compare_exchange_strong(
+                        allow_after, now_ms + 15000, std::memory_order_relaxed)) {
+                    logged_relaxed_min_text = true;
+                    size_t train_q = 0;
+                    size_t raw_q = 0;
+                    {
+                        std::lock_guard<std::mutex> qlock(queue_mutex_);
+                        train_q = train_queue_.size();
+                        raw_q = raw_queue_.size();
+                    }
+                    const auto aq = acquisition_mgr_->get_queue_stats();
+                    std::cerr << "[DataSynthesizer] config_acquisition_worker: min_text relaxed "
+                              << configured_min_text << "->1 after " << empty_batch_streak
+                              << " empty acquisition batches (config/web source dry spell)"
+                              << " local_data=" << (has_local_data_ ? 1 : 0)
+                              << " q(train/raw/acq)=" << train_q << "/" << raw_q << "/" << aq.queue_depth
+                              << " (throttled log; local prefill/training may still progress)" << std::endl;
+                }
             }
         }
 
-        auto samples = acquisition_mgr_->fetch_batch(10, min_text, 100000);
+        auto samples =
+            acquisition_mgr_->fetch_batch(config_acquisition_fetch_batch_, min_text, 100000);
 
         if (!samples.empty()) {
             empty_batch_streak = 0;
             logged_relaxed_min_text = false;
+            idle_sleep_ms = 8;
             // Convert TrainingSample payloads to a trainable fixed-point vector payload.
             for (auto& sample : samples) {
                 std::vector<int32_t> converted;
@@ -1852,7 +2082,7 @@ void DataSynthesizer::config_acquisition_worker() {
                     if constexpr (std::is_same_v<T, std::vector<int32_t>>) {
                         converted = arg;
                         accepted = true;
-                    } else if constexpr (std::is_same_v<T, std::string_view>) {
+                    } else if constexpr (std::is_same_v<T, std::string>) {
                         converted.reserve(arg.size());
                         for (unsigned char ch : arg) {
                             converted.push_back(static_cast<int32_t>(ch));
@@ -1891,7 +2121,7 @@ void DataSynthesizer::config_acquisition_worker() {
                 if (!accepted) {
                     std::lock_guard<std::mutex> stats_lock(stats_mutex_);
                     stats_.dropped_payloads++;
-                    if (std::holds_alternative<std::string_view>(sample.data)) {
+                    if (std::holds_alternative<std::string>(sample.data)) {
                         stats_.dropped_payload_string_view++;
                     } else {
                         stats_.dropped_payload_other++;
@@ -1906,7 +2136,7 @@ void DataSynthesizer::config_acquisition_worker() {
                         std::lock_guard<std::mutex> stats_lock(stats_mutex_);
                         stats_.blocked_raw_pushes++;
                     }
-                    queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(200));
+                    queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(10));
                     const auto waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - ws).count());
                     std::lock_guard<std::mutex> stats_lock(stats_mutex_);
@@ -1925,7 +2155,8 @@ void DataSynthesizer::config_acquisition_worker() {
             }
         } else {
             ++empty_batch_streak;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(idle_sleep_ms));
+            idle_sleep_ms = (std::min)(kIdleSleepCapMs, idle_sleep_ms * 2);
         }
     }
 }
@@ -2215,7 +2446,7 @@ void DataSynthesizer::acquisition_worker(ApiClient* client) {
                         std::lock_guard<std::mutex> stats_lock(stats_mutex_);
                         stats_.blocked_raw_pushes++;
                     }
-                    queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(200));
+                    queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(10));
                     const auto waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - ws).count());
                     std::lock_guard<std::mutex> stats_lock(stats_mutex_);
@@ -2271,8 +2502,8 @@ std::vector<std::string> DataSynthesizer::extract_topics_from_response(
     std::string content;
     std::visit([&content](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, std::string_view>) {
-            content = std::string(arg);
+        if constexpr (std::is_same_v<T, std::string>) {
+            content = arg;
         }
     }, response);
     
@@ -2346,7 +2577,7 @@ void DataSynthesizer::perturbation_worker() {
         }
         
         // Generate contrastive pairs
-        std::string_view domain;
+        std::string domain;
         switch (client_type) {
             case 0: domain = "math"; break;
             case 1: domain = "chemistry"; break;
@@ -2412,7 +2643,7 @@ void DataSynthesizer::perturbation_worker() {
                     std::lock_guard<std::mutex> stats_lock(stats_mutex_);
                     stats_.blocked_train_pushes++;
                 }
-                queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(200));
+                queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(10));
                 const auto waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - ws).count());
                 std::lock_guard<std::mutex> stats_lock(stats_mutex_);
@@ -2429,6 +2660,79 @@ void DataSynthesizer::perturbation_worker() {
             }
         }
         queue_cv_.notify_one();
+    }
+}
+
+void DataSynthesizer::local_contrastive_worker() {
+    while (running_) {
+        std::optional<TrainingSample> pos;
+        std::optional<TrainingSample> neg;
+        size_t seed_hint = 0;
+        {
+            std::lock_guard<std::mutex> lk(local_data_mutex_);
+            if (!has_local_data_) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                continue;
+            }
+            if (local_directory_indexed_) {
+                const size_t n = corpus_line_index_.size();
+                if (n == 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    continue;
+                }
+                const size_t line_idx = local_sample_index_++ % n;
+                const CorpusLineRef& ref = corpus_line_index_[line_idx];
+                pos = read_corpus_line_positive(ref);
+                if (pos) {
+                    seed_hint = line_idx;
+                    neg = corrupt_directory_negative_from_positive(*pos, line_idx);
+                }
+            } else if (!local_samples_.empty()) {
+                const size_t n = local_samples_.size();
+                for (size_t attempt = 0; attempt < n; ++attempt) {
+                    const size_t idx = local_sample_index_++ % n;
+                    const auto& s = local_samples_[idx];
+                    if (s.label == static_cast<Trit>(1)) {
+                        pos = s;
+                        seed_hint = idx;
+                        neg = corrupt_generic_negative_from_positive(*pos, idx);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!pos || !neg) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            continue;
+        }
+
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            while (running_ && train_queue_.size() + 2 > max_train_queue_depth_) {
+                auto ws = std::chrono::steady_clock::now();
+                {
+                    std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                    stats_.blocked_train_pushes++;
+                }
+                queue_not_full_cv_.wait_for(lock, std::chrono::milliseconds(10));
+                const auto waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - ws).count());
+                std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                stats_.blocked_wait_ms += waited;
+            }
+            if (!running_) {
+                break;
+            }
+            train_queue_.push_back(std::move(*pos));
+            train_queue_.push_back(std::move(*neg));
+            {
+                std::lock_guard<std::mutex> stats_lock(stats_mutex_);
+                stats_.total_perturbed += 2;
+            }
+        }
+        queue_cv_.notify_one();
+        (void)seed_hint;
     }
 }
 

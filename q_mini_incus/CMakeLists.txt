@@ -4,6 +4,18 @@ project(q_mini_incus VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Same policy as ../q_mini_wasm_v2: SYCL is mandatory. `USE_SYCL` is not a CMake cache option (compile-only define).
+if(DEFINED CACHE{USE_SYCL})
+    unset(USE_SYCL CACHE)
+endif()
+
+# Intel SYCL (required for tableau_kernels device code — same toolchain as parent tree)
+set(_QMINI_INCUS_INTEL_SYCL_SHIM "${CMAKE_CURRENT_SOURCE_DIR}/../q_mini_wasm_v2/cmake/IntelSYCLConfig.cmake")
+if(EXISTS "${_QMINI_INCUS_INTEL_SYCL_SHIM}")
+    set(IntelSYCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../q_mini_wasm_v2/cmake" CACHE PATH "q_mini_incus IntelSYCL shim" FORCE)
+endif()
+find_package(IntelSYCL REQUIRED)
+
 # ============================================================================
 # Build Options
 # ============================================================================
@@ -12,7 +24,6 @@ option(BUILD_INCUS_INFERENCE "Build inference container target" ON)
 option(BUILD_INCUS_TRAINING "Build training container target" ON)
 option(BUILD_INCUS_WUI "Build WUI container target" ON)
 option(BUILD_INCUS_AGENTS "Build agent container target" ON)
-option(USE_SYCL "Enable SYCL acceleration" OFF)
 option(BUILD_SINGLE_CONTAINER "Build unified single-container image" OFF)
 
 # ============================================================================
@@ -97,13 +108,19 @@ target_include_directories(q_mini_incus_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../q_mini_wasm_v2
 )
 
-# SYCL support
-if(USE_SYCL)
-    target_sources(q_mini_incus_core PRIVATE
-        ../q_mini_wasm_v2/sycl/tableau_kernels.hpp
-        ../q_mini_wasm_v2/sycl/tableau_kernels.cpp
+# SYCL device code (always — no CPU-only incus core)
+target_sources(q_mini_incus_core PRIVATE
+    ../q_mini_wasm_v2/sycl/tableau_kernels.hpp
+    ../q_mini_wasm_v2/sycl/tableau_kernels.cpp
+)
+target_compile_definitions(q_mini_incus_core PRIVATE USE_SYCL=1)
+if(TARGET IntelSYCL::SYCL_CXX)
+    target_link_libraries(q_mini_incus_core PUBLIC IntelSYCL::SYCL_CXX)
+endif()
+if(WIN32)
+    target_compile_options(q_mini_incus_core PRIVATE
+        $<$<CXX_COMPILER_ID:IntelLLVM>:-fsycl-targets=spir64_x86_64>
     )
-    target_compile_definitions(q_mini_incus_core PRIVATE USE_SYCL=1)
 endif()
 
 # ============================================================================

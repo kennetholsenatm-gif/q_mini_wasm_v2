@@ -1,10 +1,13 @@
 #include <iostream>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "../core/ternary/trit.hpp"
 #include "../core/stabilizer/tableau.hpp"
 #include "../core/moe/router.hpp"
+#include "../core/moe/gf3_ff_size_checks.hpp"
 #include "../core/learning/forward_forward.hpp"
 #include "../runtime/orchestrator.hpp"
 
@@ -126,6 +129,20 @@ void test_forward_forward() {
     std::cout << "  Forward-Forward learning: PASSED" << std::endl;
 }
 
+void test_gf3_ff_size_checks() {
+    std::cout << "Testing gf3_ff size overflow helpers..." << std::endl;
+    using namespace core::moe;
+    size_t p = 0;
+    assert(!gf3_ff_mul_overflow_size(0, 100, &p) && p == 0);
+    assert(!gf3_ff_mul_overflow_size(10, 20, &p) && p == 200);
+    assert(gf3_ff_mul_overflow_size(SIZE_MAX, 2, &p));
+    assert(gf3_ff_mul_overflow_size(2, SIZE_MAX, &p));
+    size_t cells = 0;
+    assert(!gf3_ff_mat_cells_overflow_size(1024, 1024, &cells) && cells == 1024u * 1024u);
+    assert(gf3_ff_mat_cells_overflow_size(SIZE_MAX, 2, &cells));
+    std::cout << "  gf3_ff size checks: PASSED" << std::endl;
+}
+
 void test_runtime_orchestrator() {
     std::cout << "Testing Runtime Orchestrator..." << std::endl;
     
@@ -161,6 +178,7 @@ int main() {
         test_stabilizer_tableau();
         test_moe_router();
         test_forward_forward();
+        test_gf3_ff_size_checks();
         test_runtime_orchestrator();
         
         std::cout << std::endl;

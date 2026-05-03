@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(q_mini_wasm_v2 VERSION 1.0.0 LANGUAGES CXX)
 
+# Parent of this CMake tree = repository root (publish q_training.dll next to qminiwasm.exe).
+get_filename_component(QMINI_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -38,9 +41,12 @@ set_target_properties(q_mini_wasm_v2_agents PROPERTIES
 # Runtime Orchestrator Operations
 # ============================================================================
 
-# Default ON: native DLLs should prefer GPU-capable SYCL builds when Intel oneAPI / AdaptiveCpp is installed.
-# Without a toolkit CMake emits a warning and falls back (no USE_SYCL define); install oneAPI Base/HPC Toolkit for GPU routing kernels.
-option(USE_SYCL "Enable SYCL (Intel oneAPI / AdaptiveCpp) device acceleration where kernels exist" ON)
+# Native q_mini_wasm_v2 always builds with SYCL device code. `USE_SYCL` is not a CMake option — only a C/C++
+# compile definition (USE_SYCL=1 on targets). Strip any legacy/stale CMake cache entry or ignored -DUSE_SYCL=...
+# so cmake-gui and half-enabled trees never persist a fake OFF switch.
+if(DEFINED CACHE{USE_SYCL})
+    unset(USE_SYCL CACHE)
+endif()
 option(QMINI_TRAINING_OPENMP "OpenMP: parallel GF3 layer loops + multi-expert routes (MSVC /openmp or libgomp)" ON)
 option(BUILD_TESTS "Build test suite" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
@@ -50,6 +56,24 @@ option(BUILD_DLL "Build DLL with C API" ON)
 # ============================================================================
 # Source Files
 # ============================================================================
+
+# PipelineConfig::default_pipeline_config() — generated from repo-root config/pipeline_defaults.toml
+set(QMINI_PIPELINE_DEFAULTS_GEN "${CMAKE_CURRENT_SOURCE_DIR}/core/training/autonomous_training_pipeline_defaults.gen.cpp")
+find_package(Python3 QUIET COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_custom_command(
+        OUTPUT ${QMINI_PIPELINE_DEFAULTS_GEN}
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/gen_pipeline_default_config.py"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/../config/pipeline_defaults.toml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/gen_pipeline_default_config.py"
+        COMMENT "Generate default_pipeline_config() from config/pipeline_defaults.toml"
+        VERBATIM
+    )
+else()
+    message(STATUS "Python3 not found: using committed autonomous_training_pipeline_defaults.gen.cpp (run generator after editing TOML)")
+endif()
 
 set(CORE_SOURCES
     core/ternary/trit.hpp
@@ -81,6 +105,7 @@ set(CORE_SOURCES
     core/moe/router.cpp
     core/moe/router_checkpoint_io.cpp
     core/moe/gf3_layers.hpp
+    core/moe/gf3_ff_size_checks.hpp
     core/moe/gf3_layers.cpp
     sycl/gf3_layers_sycl.hpp
     sycl/gf3_layers_sycl.cpp
@@ -119,6 +144,9 @@ set(CORE_SOURCES
     core/persistence/tlwl_checkpoint.cpp
     core/training/autonomous_training_pipeline.hpp
     core/training/autonomous_training_pipeline.cpp
+    core/training/crash_breadcrumb.hpp
+    core/training/crash_breadcrumb.cpp
+    core/training/autonomous_training_pipeline_defaults.gen.cpp
     # core/inference/geometric_context.hpp  # TODO: Fix std::min and extract_context_vector
     # core/inference/geometric_context.cpp
     # core/inference/householder_synthesizer.hpp  # TODO: Fix compute_reflection_error
@@ -167,8 +195,14 @@ target_include_directories(q_mini_wasm_v2_core PUBLIC
 
 if(QMINI_TRAINING_OPENMP)
     if(MSVC)
-        target_compile_options(q_mini_wasm_v2_core PRIVATE /openmp)
-        message(STATUS "OpenMP: enabled for q_mini_wasm_v2_core (/openmp)")
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+            # Intel icx/icx-cl: /Qiopenmp is the supported OpenMP path; keep C++ exceptions enabled (/EHsc).
+            target_compile_options(q_mini_wasm_v2_core PRIVATE /Qiopenmp /EHsc)
+            message(STATUS "OpenMP: enabled for q_mini_wasm_v2_core (/Qiopenmp + /EHsc, IntelLLVM)")
+        else()
+            target_compile_options(q_mini_wasm_v2_core PRIVATE /openmp)
+            message(STATUS "OpenMP: enabled for q_mini_wasm_v2_core (/openmp)")
+        endif()
     else()
         find_package(OpenMP COMPONENTS CXX)
         if(OpenMP_CXX_FOUND)
@@ -228,16 +262,30 @@ endif()
 option(USE_LIBCURL "Enable libcurl for Data Synthesizer HTTP requests" ON)
 
 if(USE_LIBCURL)
-    # Try vcpkg first if available
+    # MSVC + libcurl: use vcpkg's x64-windows triplet (include/curl/curl.h, lib/libcurl.lib).
+    # winget's "cURL" package is the MinGW portable CLI zip — it does not provide this layout; use vcpkg:
+    #   git clone https://github.com/microsoft/vcpkg C:\vcpkg
+    #   C:\vcpkg\bootstrap-vcpkg.bat
+    #   C:\vcpkg\vcpkg install curl:x64-windows
+    #   setx VCPKG_ROOT C:\vcpkg
+    set(_vcpkg_roots "")
     if(DEFINED ENV{VCPKG_ROOT})
-        set(VCPKG_CURL_ROOT "$ENV{VCPKG_ROOT}/installed/x64-windows")
-        if(EXISTS "${VCPKG_CURL_ROOT}/include/curl/curl.h")
-            set(CURL_FOUND TRUE)
-            set(CURL_INCLUDE_DIR "${VCPKG_CURL_ROOT}/include")
-            set(CURL_LIBRARY "${VCPKG_CURL_ROOT}/lib/libcurl.lib")
-            message(STATUS "Data Synthesizer: Found libcurl via vcpkg at ${VCPKG_CURL_ROOT}")
-        endif()
+        list(APPEND _vcpkg_roots "$ENV{VCPKG_ROOT}")
     endif()
+    list(APPEND _vcpkg_roots "C:/vcpkg" "C:/tools/vcpkg" "C:/src/vcpkg")
+    foreach(_vr IN LISTS _vcpkg_roots)
+        if(NOT CURL_FOUND AND _vr)
+            file(TO_CMAKE_PATH "${_vr}" _vr_norm)
+            set(_try "${_vr_norm}/installed/x64-windows")
+            if(EXISTS "${_try}/include/curl/curl.h")
+                set(CURL_FOUND TRUE)
+                set(CURL_INCLUDE_DIR "${_try}/include")
+                set(CURL_LIBRARY "${_try}/lib/libcurl.lib")
+                message(STATUS "Data Synthesizer: Found libcurl via vcpkg at ${_try}")
+                break()
+            endif()
+        endif()
+    endforeach()
     
     # Fallback to find_package
     if(NOT CURL_FOUND)
@@ -381,11 +429,24 @@ if(BUILD_DLL)
     add_library(q_training SHARED
         dll/training/training_api.hpp
         dll/training/training_api.cpp
+        dll/training/gf3_negative_probe_sycl.hpp
+        dll/training/gf3_negative_probe_sycl.cpp
+        dll/training/q_training_link_tableau_kernels.cpp
+        dll/training/q_training_link_gf3_layers_sycl.cpp
     )
     
     target_link_libraries(q_training PRIVATE
         q_mini_wasm_v2_core
     )
+    # Windows + SYCL: without this, the linker may drop device-code COMDATs from the static core .lib when
+    # building q_training.dll, causing "No kernel named ..." at runtime for kernels only referenced via JIT.
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+        target_link_options(q_training PRIVATE
+            "/WHOLEARCHIVE:$<TARGET_FILE:q_mini_wasm_v2_core>"
+            # tableau_kernels.cpp is also compiled into q_training_link_tableau_kernels.cpp so the
+            # final DLL link registers device code; allow duplicate COMDATs vs the archive pull.
+            "/FORCE:MULTIPLE")
+    endif()
     
     target_include_directories(q_training PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/dll
@@ -393,9 +454,11 @@ if(BUILD_DLL)
     
     target_compile_definitions(q_training PRIVATE
         TRAINING_API_EXPORTS
+        QMINI_Q_TRAINING_DLL=1
     )
     if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
-        target_compile_options(q_training PRIVATE /U_CONTAINER_DEBUG_LEVEL)
+        # icx-cl defaults can drop /EHsc on some TU graphs; training_api uses try/catch.
+        target_compile_options(q_training PRIVATE /EHsc /U_CONTAINER_DEBUG_LEVEL)
     endif()
     
     set_target_properties(q_training PROPERTIES
@@ -403,14 +466,26 @@ if(BUILD_DLL)
         PREFIX ""
     )
 
-    # Windows/Go: best-effort copy next to qminiwasm.exe (fails quietly if DLL is locked).
+    # Windows/Go: copy next to qminiwasm.exe when q_training relinks. (CMake skips POST_BUILD when the
+    # target is up-to-date; use target q_training_publish to force copy without a no-op link.)
     add_custom_command(TARGET q_training POST_BUILD
         COMMAND ${CMAKE_COMMAND}
             -DSRC=$<TARGET_FILE:q_training>
-            -DDST_PRIMARY=${CMAKE_SOURCE_DIR}/../q_training.dll
-            -DDST_ALT=${CMAKE_SOURCE_DIR}/../native_runtime/q_training.dll
+            -DDST_PRIMARY=${QMINI_REPO_ROOT}/q_training.dll
+            -DDST_ALT=${QMINI_REPO_ROOT}/native_runtime/q_training.dll
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/post_copy_training_dll.cmake"
         COMMENT "q_training: copy DLL to repo root and native_runtime (path_map.toml)"
+    )
+
+    add_custom_target(q_training_publish
+        COMMAND ${CMAKE_COMMAND}
+            -DSRC=$<TARGET_FILE:q_training>
+            -DDST_PRIMARY=${QMINI_REPO_ROOT}/q_training.dll
+            -DDST_ALT=${QMINI_REPO_ROOT}/native_runtime/q_training.dll
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/post_copy_training_dll.cmake"
+        DEPENDS q_training
+        COMMENT "Publish q_training.dll to repo root + native_runtime/ (build this to copy even when q_training is up-to-date)"
+        VERBATIM
     )
 
     # libcurl is linked via vcpkg import libs; Windows resolves dependents from the loaded DLL's
@@ -420,8 +495,8 @@ if(BUILD_DLL)
             COMMAND ${CMAKE_COMMAND}
                 "-DVCPKG_ROOT=$ENV{VCPKG_ROOT}"
                 -DCONFIG=$<CONFIG>
-                -DDST_PRIMARY_DIR=${CMAKE_SOURCE_DIR}/..
-                -DDST_ALT_DIR=${CMAKE_SOURCE_DIR}/../native_runtime
+                -DDST_PRIMARY_DIR=${QMINI_REPO_ROOT}
+                -DDST_ALT_DIR=${QMINI_REPO_ROOT}/native_runtime
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/post_copy_vcpkg_curl_runtime_dlls.cmake"
             COMMENT "q_training: copy vcpkg libcurl runtime DLLs beside published q_training.dll"
         )
@@ -452,50 +527,77 @@ if(BUILD_DLL)
 endif()
 
 # ============================================================================
-# SYCL Configuration (XPU Compatible)
+# SYCL Configuration (XPU Compatible) — mandatory for this CMake project
 # ============================================================================
 
-if(USE_SYCL)
-    # Try multiple SYCL implementations for XPU compatibility
-    find_package(IntelSYCL QUIET)
-    set(QMINI_LLVM_SYCL_FOUND FALSE)
-    
-    if(NOT IntelSYCL_FOUND)
-        # Fallback: Check for AdaptiveCpp (formerly hipSYCL)
-        find_package(AdaptiveCpp QUIET)
+# Avoid "half-enabled" SYCL on Windows: cl.exe ignores -fsycl and then SYCL headers fail late.
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    message(FATAL_ERROR
+        "q_mini_wasm_v2 requires a SYCL-capable C++ compiler on Windows. MSVC (cl.exe) cannot compile SYCL kernels.\n"
+        "  Use Ninja + icx:  cmake -G Ninja -DCMAKE_CXX_COMPILER=\"<oneAPI>/compiler/latest/bin/icx.exe\" ...\n"
+        "  Or Visual Studio + Intel toolset:  cmake -G \"Visual Studio 17 2022\" -A x64 -T IntelLLVM ...\n"
+        "Run cmake from an Intel oneAPI command prompt (or after setvars.bat) so the linker finds Intel libraries. See CONTRIBUTING.md.")
+endif()
+
+# Help CMake locate oneAPI before package discovery (single prepend; avoid a second find_package that can
+# re-load Intel's broken IntelSYCLConfig and drop IntelSYCL::SYCL_CXX from the cache).
+if(DEFINED ENV{ONEAPI_ROOT})
+    # Append (not prepend): avoid Intel's shipped IntelSYCLConfig.cmake winning the search over IntelSYCL_DIR.
+    list(APPEND CMAKE_PREFIX_PATH "$ENV{ONEAPI_ROOT}/compiler/latest/lib/cmake")
+    list(APPEND CMAKE_PREFIX_PATH "$ENV{ONEAPI_ROOT}/lib/cmake")
+endif()
+
+# Intel's shipped IntelSYCLConfig.cmake can fail configure when the SYCL feature-test leaves test_output empty
+# (unquoted ${test_output} → SYCL_FEATURE_TEST_EXTRACT with no args). Prefer the q_mini shim for icx-family compilers.
+set(_QMINI_INTEL_SYCL_SHIM "${CMAKE_CURRENT_SOURCE_DIR}/cmake/IntelSYCLConfig.cmake")
+if(EXISTS "${_QMINI_INTEL_SYCL_SHIM}")
+    get_filename_component(_qmini_cxx_basename "${CMAKE_CXX_COMPILER}" NAME_WE)
+    string(TOLOWER "${_qmini_cxx_basename}" _qmini_cxx_basename_lc)
+    set(_qmini_use_intel_sycl_shim FALSE)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
+        set(_qmini_use_intel_sycl_shim TRUE)
+    elseif(_qmini_cxx_basename_lc MATCHES "^(icx|icpx|dpcpp|icx-cl)$")
+        set(_qmini_use_intel_sycl_shim TRUE)
+    elseif(CMAKE_CXX_COMPILER MATCHES "[Oo]ne[Aa][Pp][Ii]|[Ii]ntel|oneapi")
+        set(_qmini_use_intel_sycl_shim TRUE)
     endif()
-    
-    if(NOT IntelSYCL_FOUND AND NOT AdaptiveCpp_FOUND)
-        # Fallback: Check oneAPI location and retry package discovery.
-        if(DEFINED ENV{ONEAPI_ROOT})
-            message(STATUS "Using oneAPI hints from ONEAPI_ROOT")
-            list(APPEND CMAKE_PREFIX_PATH "$ENV{ONEAPI_ROOT}/compiler/latest/lib/cmake")
-            list(APPEND CMAKE_PREFIX_PATH "$ENV{ONEAPI_ROOT}/lib/cmake")
-            find_package(IntelSYCL QUIET)
+    if(_qmini_use_intel_sycl_shim)
+        # CACHE FORCE so a stale IntelSYCL_DIR from an older configure cannot skip the shim.
+        set(IntelSYCL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "q_mini_wasm_v2 IntelSYCL CMake shim" FORCE)
+        message(STATUS "q_mini_wasm_v2: IntelSYCL_DIR -> bundled IntelSYCLConfig.cmake shim (icx-family CXX)")
+    endif()
+endif()
+
+# Try multiple SYCL implementations for XPU compatibility
+find_package(IntelSYCL QUIET)
+set(QMINI_LLVM_SYCL_FOUND FALSE)
+
+if(NOT IntelSYCL_FOUND)
+    # Fallback: Check for AdaptiveCpp (formerly hipSYCL)
+    find_package(AdaptiveCpp QUIET)
+endif()
+
+# Final fallback: clang++ with built-in -fsycl support (LLVM SYCL toolchain).
+if(NOT IntelSYCL_FOUND AND NOT AdaptiveCpp_FOUND AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT WIN32)
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} --help
+        OUTPUT_VARIABLE QMINI_CLANG_HELP
+        ERROR_QUIET
+        RESULT_VARIABLE QMINI_CLANG_HELP_RC
+    )
+    if(QMINI_CLANG_HELP_RC EQUAL 0)
+        string(FIND "${QMINI_CLANG_HELP}" "-fsycl" QMINI_CLANG_FSYCL_POS)
+        if(NOT QMINI_CLANG_FSYCL_POS EQUAL -1)
+            set(QMINI_LLVM_SYCL_FOUND TRUE)
+            message(STATUS "SYCL: Using clang++ -fsycl fallback")
         endif()
     endif()
-    
-    # Final fallback: clang++ with built-in -fsycl support (LLVM SYCL toolchain).
-    if(NOT IntelSYCL_FOUND AND NOT AdaptiveCpp_FOUND AND CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT WIN32)
-        execute_process(
-            COMMAND ${CMAKE_CXX_COMPILER} --help
-            OUTPUT_VARIABLE QMINI_CLANG_HELP
-            ERROR_QUIET
-            RESULT_VARIABLE QMINI_CLANG_HELP_RC
-        )
-        if(QMINI_CLANG_HELP_RC EQUAL 0)
-            string(FIND "${QMINI_CLANG_HELP}" "-fsycl" QMINI_CLANG_FSYCL_POS)
-            if(NOT QMINI_CLANG_FSYCL_POS EQUAL -1)
-                set(QMINI_LLVM_SYCL_FOUND TRUE)
-                message(STATUS "SYCL: Using clang++ -fsycl fallback")
-            endif()
-        endif()
-    endif()
-    
-    if(IntelSYCL_FOUND OR AdaptiveCpp_FOUND OR QMINI_LLVM_SYCL_FOUND)
-        target_compile_definitions(q_mini_wasm_v2_core PUBLIC USE_SYCL=1)
-        
-        if(IntelSYCL_FOUND)
+endif()
+
+if(IntelSYCL_FOUND OR AdaptiveCpp_FOUND OR QMINI_LLVM_SYCL_FOUND)
+    target_compile_definitions(q_mini_wasm_v2_core PUBLIC USE_SYCL=1)
+
+    if(IntelSYCL_FOUND)
             if(TARGET IntelSYCL::SYCL_CXX)
                 target_link_libraries(q_mini_wasm_v2_core PUBLIC IntelSYCL::SYCL_CXX)
                 message(STATUS "SYCL: Using IntelSYCL::SYCL_CXX target")
@@ -531,10 +633,19 @@ if(USE_SYCL)
             core/qgnn/message_passing_sycl.cpp
         )
         
-        # XPU-specific optimizations
-        target_compile_options(q_mini_wasm_v2_core PRIVATE
-            $<$<CXX_COMPILER_ID:Intel>:-fsycl-targets=spir64_x86_64,native>
-        )
+        # XPU-specific optimizations (Intel classic + IntelLLVM / oneAPI icx).
+        # Windows icx/icx-cl rejects `native` in -fsycl-targets (Linux JIT host only); use SPIR-V offload only.
+        if(WIN32)
+            target_compile_options(q_mini_wasm_v2_core PRIVATE
+                $<$<CXX_COMPILER_ID:Intel>:-fsycl-targets=spir64_x86_64>
+                $<$<CXX_COMPILER_ID:IntelLLVM>:-fsycl-targets=spir64_x86_64>
+            )
+        else()
+            target_compile_options(q_mini_wasm_v2_core PRIVATE
+                $<$<CXX_COMPILER_ID:Intel>:-fsycl-targets=spir64_x86_64,native>
+                $<$<CXX_COMPILER_ID:IntelLLVM>:-fsycl-targets=spir64_x86_64,native>
+            )
+        endif()
         
         message(STATUS "SYCL acceleration enabled for XPU")
 
@@ -569,13 +680,10 @@ if(USE_SYCL)
                 endif()
             endif()
         endforeach()
-    else()
-        if(WIN32)
-            message(STATUS "SYCL note: On Windows, install Intel oneAPI DPC++ or AdaptiveCpp for stable SYCL builds.")
-        endif()
-        message(WARNING "SYCL requested but no SYCL implementation found. Install Intel oneAPI or AdaptiveCpp.")
-        message(STATUS "Continuing without SYCL acceleration")
-    endif()
+else()
+    message(FATAL_ERROR
+        "No working SYCL toolchain found for q_mini_wasm_v2 (Intel oneAPI icx/icpx via bundled CMake shim, AdaptiveCpp, or LLVM clang -fsycl on Linux). "
+        "Install Intel oneAPI DPC++ or AdaptiveCpp, set CMAKE_CXX_COMPILER to icx/icpx, source setvars.sh on Linux, then reconfigure in a fresh build directory.")
 endif()
 
 # Every SHARED DLL that loads q_mini_wasm_v2_core: SYCL probe + tiny parallel_for on attach (USE_SYCL builds).
@@ -640,6 +748,19 @@ if(BUILD_TESTS)
     endif()
     
     enable_testing()
+    find_program(QMINI_PYTHON_EXE NAMES python3 python)
+    if(QMINI_PYTHON_EXE)
+        add_test(
+            NAME qmini_policy_no_sycl_route_off
+            COMMAND ${QMINI_PYTHON_EXE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check_no_sycl_route_off.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/..")
+        add_test(
+            NAME qmini_policy_no_throughput_hidden_caps
+            COMMAND ${QMINI_PYTHON_EXE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check_no_throughput_hidden_caps.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/..")
+    endif()
     add_test(NAME q_mini_wasm_v2_tests COMMAND q_mini_wasm_v2_tests)
     add_test(NAME q_mini_wasm_v2_network_test COMMAND q_mini_wasm_v2_network_test)
     add_test(NAME q_mini_wasm_v2_remediation_test COMMAND q_mini_wasm_v2_remediation_test)

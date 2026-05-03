@@ -4,6 +4,12 @@
 #define NOMINMAX  // Disable Windows min/max macros
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#if defined(_MSC_VER)
+#include <stdlib.h> // _set_abort_behavior
+#if defined(_DEBUG)
+#include <crtdbg.h>
+#endif
+#endif
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -17,7 +23,9 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <cstdlib>
+#include <csignal>
 #include <exception>
 
 #ifdef TRAINING_API_EXPORTS
@@ -28,8 +36,22 @@
 
 // Include the REAL pipeline
 #include "core/training/autonomous_training_pipeline.hpp"
+#include "core/training/crash_breadcrumb.hpp"
 #include "core/training/data_synthesizer.hpp"
 #include "../common/sycl_dll_bootstrap.hpp"
+#include "core/moe/router.hpp"
+#include "core/moe/gf3_layers.hpp"
+#if defined(USE_SYCL) && USE_SYCL
+#include "core/moe/gf3_sycl_probe.hpp"
+#include "core/ternary/packing.hpp"
+#include "sycl/gf3_layers_sycl.hpp"
+#include "sycl/tableau_kernels.hpp"
+#include "training/gf3_negative_probe_sycl.hpp"
+#endif
+
+#if !defined(USE_SYCL) || !USE_SYCL
+#error "q_training.dll must be built with SYCL (USE_SYCL=1). Non-SYCL training DLL builds are not supported."
+#endif
 
 using namespace q_mini_wasm_v2::core::training;
 
@@ -37,67 +59,235 @@ using namespace q_mini_wasm_v2::core::training;
 namespace {
 
 std::once_flag g_crash_hooks_installed;
-std::terminate_handler g_prev_terminate = nullptr;
+static LPTOP_LEVEL_EXCEPTION_FILTER g_prev_unhandled = nullptr;
 
-static void append_training_crash_log(const char* prefix, const char* detail) noexcept {
+static void format_crash_timestamp(char (&out)[40]) noexcept {
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    sprintf_s(out, "%04u-%02u-%02uT%02u:%02u:%02u.%03u",
+              static_cast<unsigned>(st.wYear), static_cast<unsigned>(st.wMonth),
+              static_cast<unsigned>(st.wDay), static_cast<unsigned>(st.wHour),
+              static_cast<unsigned>(st.wMinute), static_cast<unsigned>(st.wSecond),
+              static_cast<unsigned>(st.wMilliseconds));
+}
+
+/** Append hex return addresses to @p line (NUL-terminated). */
+static void append_hex_stack_to_line(char* line, size_t line_cap, unsigned frames_to_skip) noexcept {
+    constexpr unsigned kMax = 48;
+    void* frames[kMax]{};
+    const USHORT got =
+        CaptureStackBackTrace(frames_to_skip, kMax, frames, nullptr);
+    if (got == 0) {
+        return;
+    }
+    size_t off = strlen(line);
+    if (off + 8 >= line_cap) {
+        return;
+    }
+    int w = sprintf_s(line + off, line_cap - off, " stack=");
+    if (w <= 0) {
+        return;
+    }
+    off += static_cast<size_t>(w);
+    for (USHORT i = 0; i < got && off + 24 < line_cap; ++i) {
+        w = sprintf_s(line + off, line_cap - off, i ? "<=%p" : "%p", frames[i]);
+        if (w <= 0) {
+            break;
+        }
+        off += static_cast<size_t>(w);
+    }
+}
+
+static void write_crash_line_to_disk_and_stderr(const char* line) noexcept {
     char localappdata[MAX_PATH]{};
     const DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", localappdata, MAX_PATH);
-    if (n == 0 || n >= MAX_PATH) {
-        return;
+    if (n > 0 && n < MAX_PATH) {
+        char path[MAX_PATH + 64]{};
+        sprintf_s(path, "%s\\q_mini_training_crash.log", localappdata);
+        FILE* f = nullptr;
+        if (fopen_s(&f, path, "a") == 0 && f) {
+            fprintf(f, "%s\n", line);
+            fflush(f);
+            fclose(f);
+        }
     }
-    char path[MAX_PATH + 48]{};
-    sprintf_s(path, "%s\\q_mini_training_crash.log", localappdata);
-    FILE* f = nullptr;
-    if (fopen_s(&f, path, "a") != 0 || !f) {
-        return;
+    char tmpdir[MAX_PATH]{};
+    const DWORD t = GetTempPathA(MAX_PATH, tmpdir);
+    if (t > 0 && t < MAX_PATH) {
+        char path2[MAX_PATH + 64]{};
+        sprintf_s(path2, "%sq_mini_training_crash.log", tmpdir);
+        FILE* f2 = nullptr;
+        if (fopen_s(&f2, path2, "a") == 0 && f2) {
+            fprintf(f2, "%s\n", line);
+            fflush(f2);
+            fclose(f2);
+        }
     }
-    fprintf(f, "%s %s\n", prefix, detail ? detail : "");
-    fclose(f);
-    fprintf(stderr, "%s %s\nSee %%LOCALAPPDATA%%\\q_mini_training_crash.log\n", prefix,
-            detail ? detail : "");
+    fprintf(stderr, "%s\n(q_training crash log: %%LOCALAPPDATA%% and %%TEMP%%\\q_mini_training_crash.log)\n", line);
     fflush(stderr);
 }
 
-static LONG WINAPI qmini_vectored_exception(EXCEPTION_POINTERS* ep) {
+static void append_training_crash_log_stack(const char* prefix, const char* detail, bool with_stack,
+                                           unsigned stack_skip) noexcept {
+    char line[3600]{};
+    char ts[40]{};
+    format_crash_timestamp(ts);
+    sprintf_s(line, sizeof(line), "[%s] pid=%lu tid=%lu %s %s", ts,
+              static_cast<unsigned long>(GetCurrentProcessId()),
+              static_cast<unsigned long>(GetCurrentThreadId()), prefix, detail ? detail : "");
+    qmini_training_breadcrumb_tail(line, sizeof(line));
+    if (with_stack) {
+        append_hex_stack_to_line(line, sizeof(line), stack_skip);
+    }
+    write_crash_line_to_disk_and_stderr(line);
+}
+
+static void append_training_crash_log(const char* prefix, const char* detail) noexcept {
+    append_training_crash_log_stack(prefix, detail, false, 0);
+}
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+static int __cdecl qmini_crt_report_hook(int /*reportType*/, char* message, int* /*returnValue*/) {
+    if (message && message[0]) {
+        append_training_crash_log("[q_training.dll] CRT dbg report:", message);
+    }
+    return FALSE; // let CRT continue (dialog may still appear in Debug)
+}
+#endif
+
+static void append_rip_module_tail(const void* rip, char* tail, size_t tail_cap) noexcept {
+    if (!tail || tail_cap < 24 || !rip) {
+        if (tail && tail_cap) {
+            tail[0] = '\0';
+        }
+        return;
+    }
+    HMODULE hm = nullptr;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                             reinterpret_cast<LPCSTR>(rip), &hm) ||
+        !hm) {
+        sprintf_s(tail, tail_cap, " rip_module=?");
+        return;
+    }
+    char path[MAX_PATH]{};
+    (void)GetModuleFileNameA(hm, path, MAX_PATH);
+    const char* base = path;
+    for (const char* p = path; *p; ++p) {
+        if (*p == '\\' || *p == '/') {
+            base = p + 1;
+        }
+    }
+    const unsigned long long off = static_cast<unsigned long long>(
+        reinterpret_cast<uintptr_t>(rip) - reinterpret_cast<uintptr_t>(hm));
+    sprintf_s(tail, tail_cap, " rip_module=%s+0x%llX", base, off);
+}
+
+/** Log access violations / hard faults (not MSVC C++ throws). */
+static void log_hard_seh_from_ep(const EXCEPTION_POINTERS* ep, const char* tag, unsigned stack_skip) noexcept {
     if (!ep || !ep->ExceptionRecord) {
-        return EXCEPTION_CONTINUE_SEARCH;
+        return;
     }
     const DWORD code = ep->ExceptionRecord->ExceptionCode;
     if (code == EXCEPTION_BREAKPOINT || code == 0x40010006) {
-        return EXCEPTION_CONTINUE_SEARCH;
+        return;
     }
     // MSVC C++ throw / catch uses 0xE06D7363 ("msc"); log = one line per throw (huge spam, not a hard fault).
     if (code == 0xE06D7363) {
-        return EXCEPTION_CONTINUE_SEARCH;
+        return;
     }
-    char detail[320]{};
-    sprintf_s(detail, "vectored SEH code=0x%08lX rip=%p",
-              static_cast<unsigned long>(code),
-              ep->ExceptionRecord->ExceptionAddress);
-    append_training_crash_log("[q_training.dll]", detail);
+    char modtail[200]{};
+    append_rip_module_tail(ep->ExceptionRecord->ExceptionAddress, modtail, sizeof(modtail));
+    char detail[512]{};
+    sprintf_s(detail, sizeof(detail), "%s code=0x%08lX rip=%p%s", tag ? tag : "SEH",
+              static_cast<unsigned long>(code), ep->ExceptionRecord->ExceptionAddress, modtail);
+    append_training_crash_log_stack("[q_training.dll]", detail, true, stack_skip);
+}
+
+static LONG WINAPI qmini_vectored_exception(EXCEPTION_POINTERS* ep) {
+    log_hard_seh_from_ep(ep, "vectored SEH", 2u);
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-static void qmini_on_terminate() noexcept {
-    append_training_crash_log("[q_training.dll]", "std::terminate() uncaught exception");
-    if (g_prev_terminate && g_prev_terminate != qmini_on_terminate) {
-        g_prev_terminate();
+static LONG WINAPI qmini_unhandled_exception(EXCEPTION_POINTERS* ep) {
+    // Last chance after other handlers; chains to prior filter (e.g. debugger / WER).
+    log_hard_seh_from_ep(ep, "UNHANDLED SEH (last chance)", 2u);
+    if (g_prev_unhandled) {
+        return g_prev_unhandled(ep);
     }
-    std::abort();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void qmini_on_sigabrt(int sig) noexcept {
+    (void)sig;
+    append_training_crash_log_stack("[q_training.dll]", "SIGABRT (abort/assertCRT)", true, 3u);
+    std::_Exit(3);
+}
+
+static void qmini_on_terminate() noexcept {
+    // Last-resort: log why terminate ran, then exit without MSVC debug "abort() has been called" dialog.
+    try {
+        if (std::current_exception()) {
+            try {
+                std::rethrow_exception(std::current_exception());
+            } catch (const std::exception& ex) {
+                append_training_crash_log_stack("[q_training.dll] terminate:", ex.what(), true, 3u);
+            } catch (...) {
+                append_training_crash_log_stack("[q_training.dll] terminate:", "non-std exception", true,
+                                                 3u);
+            }
+        } else {
+            append_training_crash_log_stack("[q_training.dll]", "std::terminate() (no active exception)",
+                                           true, 3u);
+        }
+    } catch (...) {
+        append_training_crash_log_stack("[q_training.dll]", "std::terminate() logging failed", true, 3u);
+    }
+    std::_Exit(3);
 }
 
 static void install_training_crash_hooks() {
     std::call_once(g_crash_hooks_installed, [] {
+#if defined(_MSC_VER)
+        // Reduce CRT "abort() has been called" UI noise when third-party code calls abort().
+        (void)_set_abort_behavior(0u, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+#if defined(_MSC_VER) && defined(_DEBUG)
+        (void)_CrtSetReportHook(qmini_crt_report_hook);
+#endif
+        (void)std::signal(SIGABRT, qmini_on_sigabrt);
         AddVectoredExceptionHandler(1, qmini_vectored_exception);
-        g_prev_terminate = std::set_terminate(qmini_on_terminate);
-        fprintf(stderr,
-                "[q_training.dll] crash hooks: MSVC C++ exception code 0xE06D7363 is not logged "
-                "(useful hard faults still go to %%LOCALAPPDATA%%\\q_mini_training_crash.log)\n");
+        g_prev_unhandled = SetUnhandledExceptionFilter(qmini_unhandled_exception);
+        (void)std::set_terminate(qmini_on_terminate);
+        char exe[MAX_PATH]{};
+        char boot[464]{};
+        if (GetModuleFileNameA(nullptr, exe, MAX_PATH) > 0) {
+            sprintf_s(boot,
+                      "crash hooks installed host=\"%s\" (log lines: wall time, pid, tid; stacks on SIGABRT/"
+                      "terminate/SEH; MSVC throw 0xE06D7363 not logged)",
+                      exe);
+        } else {
+            strcpy_s(boot,
+                     "crash hooks installed (log lines: wall time, pid, tid; stacks on fatal hooks)");
+        }
+        append_training_crash_log("[q_training.dll]", boot);
     });
 }
 
 } // namespace
+
+#if defined(QMINI_Q_TRAINING_DLL)
+/** Called from dll/common/sycl_dll_bootstrap.cpp DllMain(DLL_PROCESS_ATTACH) — earliest hook point. */
+extern "C" void qmini_q_training_install_hooks_on_attach(void) {
+    install_training_crash_hooks();
+}
 #endif
+
+#endif // _WIN32
+
+namespace {
+/** C++ exception crossed the exported C API; host should treat as fatal pipeline fault. */
+constexpr int kTrainingApiNativeFault = -100;
+} // namespace
 
 extern "C" {
 
@@ -120,7 +310,7 @@ struct TrainingSession {
     std::mutex metrics_mutex;
     
     /** Full config from host/TOML; data_path and num_epochs applied at start. */
-    PipelineConfig stored_config;
+    PipelineConfig stored_config = default_pipeline_config();
 
     /** After first successful initialize() or import, StartTraining skips full re-init to preserve weights. */
     bool pipeline_materialized = false;
@@ -146,6 +336,8 @@ uint64_t g_next_session_id = 1;
 
 static double loss_proxy_from_metrics(const PipelineMetrics& metrics) {
     // ff_* may be refreshed mid–micro-batch (running averages); ff_total_train_calls only increments when a batch completes.
+    // NOTE: ff_goodness_delta≈0 ⇒ this returns ~100.0 — that is *not* "perfect learning"; it usually means no pos/neg
+    // contrast on the last FF averages (degenerate / collapsed discrimination). Prefer raw ff_goodness_delta in logs.
     const bool has_ff_signal = (metrics.ff_total_train_calls > 0) || (metrics.ff_route_steps_current_batch > 0) ||
                                (metrics.train_batch_rows_done > 0) || (metrics.ff_positive_goodness > 0) ||
                                (metrics.ff_negative_goodness > 0) || (metrics.ff_goodness_delta != 0);
@@ -167,12 +359,15 @@ static void on_pipeline_metrics(TrainingSession* session, const PipelineMetrics&
     const double loss = loss_proxy_from_metrics(metrics);
     const uint64_t train_epoch_rows = metrics.samples_processed;
     const uint64_t train_total_rows = metrics.samples_processed_total;
+    const int degenerate_ff =
+        (metrics.ff_route_steps_current_batch > 0u && metrics.ff_goodness_delta == 0) ? 1 : 0;
     printf("[Pipeline] Epoch %llu: goodness_proxy=%.4f, "
            "train_samples_epoch=%llu train_samples_total=%llu "
            "train_rows_in_batch=%u/%u ff_routes_in_batch=%llu "
            "collect_effective=%u route_topk=%u "
            "ds_items=%zu queue_hint=%zu prefill_tgt=%zu, "
            "ff_total_train_calls=%llu current_batch=%llu last_betti_eval_batch=%llu, "
+           "ff_delta=%d ff_pos_avg=%u ff_neg_avg=%u ff_degenerate=%d, "
            "route_t5=%d router_sycl=%d betti=[%u,%u,%u], graph=%s\n",
            static_cast<unsigned long long>(metrics.current_epoch), loss,
            static_cast<unsigned long long>(train_epoch_rows),
@@ -188,6 +383,10 @@ static void on_pipeline_metrics(TrainingSession* session, const PipelineMetrics&
            static_cast<unsigned long long>(metrics.ff_total_train_calls),
            static_cast<unsigned long long>(metrics.current_batch),
            static_cast<unsigned long long>(metrics.last_betti_eval_batch),
+           static_cast<int>(metrics.ff_goodness_delta),
+           static_cast<unsigned>(metrics.ff_positive_goodness),
+           static_cast<unsigned>(metrics.ff_negative_goodness),
+           degenerate_ff,
            metrics.used_tritpack5_input_route ? 1 : 0,
            metrics.router_sycl_path_used ? 1 : 0,
            metrics.betti_beta_0, metrics.betti_beta_1, metrics.betti_beta_2,
@@ -233,7 +432,6 @@ TRAINING_API int Training_InitSession(
     uint32_t training_micro_batch_cap,
     uint32_t training_collect_floor,
     bool training_timing_to_stderr,
-    bool training_serial_experts,
     uint32_t training_sycl_route_mode,
     uint32_t training_sycl_trit_quant_min_moe_dim,
     uint32_t training_goodness_log_level,
@@ -248,8 +446,33 @@ TRAINING_API int Training_InitSession(
     uint32_t collect_empty_backoff_base_ms,
     uint32_t collect_empty_backoff_max_shift,
     uint32_t collect_empty_backoff_cap_ms,
-    uint32_t metrics_heartbeat_sec
+    uint32_t metrics_heartbeat_sec,
+    uint32_t training_parallel_contrastive_rows,
+    uint32_t training_parallel_batches,
+    uint32_t ff_expert_chunk_size,
+    uint32_t target_routes_per_batch,
+    uint32_t collect_window_ms,
+    uint32_t collect_min_rows_per_batch,
+    uint32_t training_sycl_prereserve_gib,
+    uint32_t training_sycl_prereserve_chunk_mib,
+    int32_t training_sycl_gpu_device_index,
+    uint64_t training_gf3_sycl_min_weight_cells,
+    uint32_t training_gf3_sycl_submit_grid_log,
+    uint64_t training_gf3_ff_batched_weight_mib,
+    uint32_t training_ff_multi_row_batch,
+    uint32_t training_ff_multi_row_slots_chunk,
+    uint32_t training_gf3_ff_layers_per_batch,
+    uint64_t training_lazy_moe_resident_cap,
+    const char* training_checkpoint_data_dir_utf8,
+    uint64_t training_gf3_ff_multislot_slots_chunk_max,
+    uint32_t training_gf3_ff_multislot_ignore_host_slot_budget,
+    uint32_t training_auto_resume_from_checkpoint,
+    uint32_t training_parallel_batches_runtime_cap
 ) {
+    if (!session_id_out) {
+        printf("[Training] ERROR: Training_InitSession session_id_out is null\n");
+        return -1;
+    }
 #if defined(_WIN32)
     install_training_crash_hooks();
     printf("[Training] crash_hooks_installed=1: MSVC C++ SEH 0xE06D7363 is filtered "
@@ -258,7 +481,8 @@ TRAINING_API int Training_InitSession(
     q_mini_wasm_v2::dll::common::qmini_dll_touch_sycl_device_once();
     (void)context_window;
     (void)entanglement_tokens;
-    
+
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
     
     printf("[Training] Training_InitSession: staging AutonomousTrainingPipeline (init deferred to StartTraining)\n");
@@ -283,15 +507,13 @@ TRAINING_API int Training_InitSession(
     session->batch_size = batch_size;
     session->lazy_init = lazy_init;
     session->continuous_mode = continuous_mode;
-    
-    try {
+
         if (samples_per_epoch_or_zero == 0ull) {
             printf("[Training] ERROR: samples_per_epoch must be >= 1 (set training.samples_per_epoch in TOML)\n");
             return -5;
         }
         if (training_micro_batch_cap == 0u || training_collect_floor == 0u) {
-            printf("[Training] ERROR: training.micro_batch_cap and training.collect_floor must be >= 1\n");
-            return -6;
+            printf("[Training] WARN: training.micro_batch_cap/collect_floor received 0; using permissive auto values\n");
         }
         if (num_experts == 0u || top_k == 0u || num_layers == 0u || batch_size == 0u ||
             routing_qutrits == 0u || moe_input_dim == 0u || moe_output_dim == 0u || moe_hidden_dim == 0u ||
@@ -307,9 +529,10 @@ TRAINING_API int Training_InitSession(
             printf("[Training] ERROR: features.worker_threads must be >= 1\n");
             return -8;
         }
-        if (prefill_target_samples < 1u || prefill_timeout_ms < 1u || prefill_poll_ms < 1u ||
-            max_acquisition_queue_depth < 1u || max_raw_queue_depth < 1u || max_train_queue_depth < 1u) {
-            printf("[Training] ERROR: prefill/queue limits invalid (all must be >= 1)\n");
+        // prefill_target_samples==0: native wait uses max(1,0) => exit prefill on first pair (fast start).
+        if (prefill_timeout_ms < 1u || prefill_poll_ms < 1u || max_acquisition_queue_depth < 1u ||
+            max_raw_queue_depth < 1u || max_train_queue_depth < 1u) {
+            printf("[Training] ERROR: prefill timeout/poll/queue limits invalid (must be >= 1)\n");
             return -9;
         }
         if (acquisition_threads < 1u || perturbation_threads < 1u || checkpoint_async_queue_max < 1u) {
@@ -317,14 +540,137 @@ TRAINING_API int Training_InitSession(
                    "training.checkpoint_async_queue_max must be >= 1\n");
             return -14;
         }
-        if (training_sycl_route_mode > 2u) {
-            printf("[Training] ERROR: training.sycl_route_mode must be 0(auto),1(on),2(off)\n");
+        // Host must pass 0/1. If values are >1, treat as ABI drift (stale q_training.dll vs qminiwasm) or host bug:
+        // interpret as boolean (nonzero=true) after warning instead of failing training.
+        if (training_parallel_contrastive_rows > 1u) {
+            printf("[Training] WARN: training.parallel_contrastive_rows raw=%u (expected 0/1); nonzero treated as "
+                   "enabled — rebuild q_training.dll from the same commit as qminiwasm if this is unexpected\n",
+                   training_parallel_contrastive_rows);
+        }
+        if (training_parallel_batches < 1u) {
+            printf("[Training] ERROR: training.parallel_batches must be >= 1\n");
+            return -20;
+        }
+        if (training_parallel_batches_runtime_cap > 65536u) {
+            printf("[Training] ERROR: training.parallel_batches_runtime_cap must be <= 65536 (0 = uncapped)\n");
+            return -20;
+        }
+        if (target_routes_per_batch < 1u) {
+            printf("[Training] WARN: training.target_routes_per_batch is 0; pipeline will auto-pick route budget\n");
+        }
+        if (collect_window_ms < 1u) {
+            printf("[Training] WARN: training.collect_window_ms is 0; forcing minimal 1ms window\n");
+        }
+        if (training_sycl_route_mode > 1u) {
+            printf("[Training] ERROR: training.sycl_route_mode must be 0(auto) or 1(on)\n");
             return -11;
         }
         if (training_sycl_trit_quant_min_moe_dim == 0u) {
             printf("[Training] ERROR: training.sycl_trit_quant_min_moe_dim must be >= 1\n");
             return -12;
         }
+        if (training_sycl_gpu_device_index < -1) {
+            printf("[Training] ERROR: training.sycl_gpu_device_index must be >= -1 (use -1 for auto GPU pick)\n");
+            return -20;
+        }
+        if (training_ff_multi_row_slots_chunk == 1u) {
+            printf("[Training] ERROR: training.ff_multi_row_slots_chunk must be 0 (default) or >= 2\n");
+            return -20;
+        }
+        if (training_gf3_ff_layers_per_batch == 1u) {
+            printf("[Training] WARN: training.gf3_ff_layers_per_batch=1 is inefficient; use 0 (all layers) or >= 2\n");
+        }
+        if (training_auto_resume_from_checkpoint > 1u) {
+            printf("[Training] WARN: training.auto_resume_from_checkpoint raw=%u (expected 0/1); nonzero treated as "
+                   "enabled\n",
+                   static_cast<unsigned>(training_auto_resume_from_checkpoint));
+        }
+        if (training_gf3_sycl_submit_grid_log > 1u) {
+            printf("[Training] WARN: training.gf3_sycl_submit_grid_log raw=%u (expected 0/1); nonzero treated as "
+                   "enabled\n",
+                   static_cast<unsigned>(training_gf3_sycl_submit_grid_log));
+        }
+        // 0/1 only. Values like 8192 almost always mean qminiwasm.exe ↔ q_training.dll Training_InitSession ABI drift
+        // (e.g. stale host after removing a parameter). Do not train with garbage scalars.
+        if (training_gf3_ff_multislot_ignore_host_slot_budget > 1u) {
+            printf(
+                "[Training] ERROR: training.gf3_ff_multislot_ignore_host_slot_budget=%u (must be 0 or 1). "
+                "This usually means qminiwasm.exe was not rebuilt against the same Training_InitSession signature as "
+                "q_training.dll — rebuild both from the same commit (see also gf3_sycl_min_weight_cells sanity).\n",
+                static_cast<unsigned>(training_gf3_ff_multislot_ignore_host_slot_budget));
+            return -21;
+        }
+        constexpr std::uint64_t kAbsurdWeightCells = 1'000'000'000'000ull; // 1e12 — real configs are far smaller
+        if (training_gf3_sycl_min_weight_cells > kAbsurdWeightCells) {
+            printf(
+                "[Training] ERROR: training.gf3_sycl_min_weight_cells=%llu is out of range (sanity cap=%llu). "
+                "Typical cause: Go host ↔ DLL ABI mismatch — rebuild qminiwasm.exe from the same tree as "
+                "q_training.dll.\n",
+                static_cast<unsigned long long>(training_gf3_sycl_min_weight_cells),
+                static_cast<unsigned long long>(kAbsurdWeightCells));
+            return -21;
+        }
+        constexpr std::uint64_t kAbsurdMultislotMax = 1'000'000'000'000ull;
+        if (training_gf3_ff_multislot_slots_chunk_max > kAbsurdMultislotMax) {
+            printf(
+                "[Training] ERROR: training.gf3_ff_multislot_slots_chunk_max=%llu out of range (cap=%llu). "
+                "Rebuild qminiwasm.exe to match q_training.dll InitSession ABI.\n",
+                static_cast<unsigned long long>(training_gf3_ff_multislot_slots_chunk_max),
+                static_cast<unsigned long long>(kAbsurdMultislotMax));
+            return -21;
+        }
+        if (training_gf3_ff_multislot_ignore_host_slot_budget != 0u &&
+            training_gf3_ff_multislot_slots_chunk_max == 0ull) {
+            printf("[Training] WARN: training.gf3_ff_multislot_ignore_host_slot_budget=1 with "
+                   "training.gf3_ff_multislot_slots_chunk_max=0: chunks use 5/4× the MiB-derived slot cap; set "
+                   "gf3_ff_multislot_slots_chunk_max or ff_multi_row_slots_chunk to hard-cap slots per SYCL wave.\n");
+        }
+#if defined(USE_SYCL) && USE_SYCL
+        // SYCL training builds: throughput knobs are mandatory — no disabled multi-row FF,
+        // no disabled parallel contrastive rows (validated here so misconfigured TOML fails fast).
+        if (training_ff_multi_row_batch == 0u) {
+            printf("[Training] ERROR: training.ff_multi_row_batch must be true (1) — SYCL GF3 FF uses batched "
+                   "multi-row kernels only\n");
+            return -22;
+        }
+        if (training_parallel_contrastive_rows == 0u) {
+            printf("[Training] ERROR: training.parallel_contrastive_rows must be true (1) — SYCL builds require "
+                   "parallel contrastive rows\n");
+            return -22;
+        }
+        q_mini_wasm_v2::sycl_kernels::gf3_sycl_apply_runtime_host_config(
+            training_sycl_gpu_device_index,
+            training_gf3_sycl_min_weight_cells,
+            training_gf3_sycl_submit_grid_log != 0u);
+        q_mini_wasm_v2::core::moe::gf3_ff_set_layers_per_batch(training_gf3_ff_layers_per_batch);
+#endif
+        {
+            const auto route_policy_mode =
+                static_cast<q_mini_wasm_v2::core::moe::SyclRouteMode>(training_sycl_route_mode);
+            const size_t route_experts = static_cast<size_t>(num_experts);
+            if (q_mini_wasm_v2::core::moe::routing_sycl_failure_must_abort(route_policy_mode, route_experts)) {
+                char sycl_gpu_err[640]{};
+                if (!q_mini_wasm_v2::core::moe::gf3_sycl_gpu_queue_available(sycl_gpu_err, sizeof(sycl_gpu_err))) {
+                    printf("[Training] ERROR: no usable SYCL GPU queue while TOML requires SYCL routing: %s\n",
+                           sycl_gpu_err[0] ? sycl_gpu_err : "(no detail)");
+                    return -18;
+                }
+            }
+        }
+#if defined(USE_SYCL) && USE_SYCL
+        if (moe_input_dim > 0u) {
+            const size_t probe_n = static_cast<size_t>(moe_input_dim);
+            std::vector<int8_t> pos_lanes(probe_n, static_cast<int8_t>(1));
+            std::vector<uint8_t> pos_packed;
+            q::ternary::pack_batch_t5(pos_lanes, pos_packed);
+            std::vector<uint8_t> neg_out;
+            if (!q_mini_wasm_v2::training_dll::gf3_training_negative_probe_sycl(pos_packed, probe_n, 42u, neg_out) ||
+                neg_out.size() != pos_packed.size()) {
+                printf("[Training] ERROR: SYCL contrastive-negative probe failed (GPU-mandatory; fix SYCL/GPU)\n");
+                return -19;
+            }
+        }
+#endif
         if (directory_max_lines == 0ull || max_jsonl_local_samples == 0ull || min_text_length == 0u ||
             max_text_length < 1u || min_text_length > max_text_length) {
             printf("[Training] ERROR: local corpus limits invalid (directory_max_lines>=1, max_jsonl>=1, "
@@ -339,9 +685,36 @@ TRAINING_API int Training_InitSession(
             return -13;
         }
 
-        PipelineConfig cfg;
+        const uint32_t effective_top_k = std::min(std::max(1u, top_k), std::max(1u, num_experts));
+        const uint32_t effective_micro_batch_cap = (training_micro_batch_cap == 0u) ? std::max(1u, batch_size) : training_micro_batch_cap;
+        const uint32_t effective_collect_limit =
+            std::max(1u, std::min(std::max(1u, effective_micro_batch_cap), std::max(1u, batch_size)));
+        const uint32_t bounded_collect_limit = effective_collect_limit;
+        uint64_t derived_routes_u64 =
+            static_cast<uint64_t>(bounded_collect_limit) * static_cast<uint64_t>(effective_top_k);
+        if (derived_routes_u64 == 0ull) {
+            derived_routes_u64 = 1ull;
+        }
+        const size_t effective_target_routes_per_batch =
+            static_cast<size_t>((target_routes_per_batch == 0u) ? derived_routes_u64 : static_cast<uint64_t>(target_routes_per_batch));
+        const uint32_t effective_collect_min_rows =
+            static_cast<uint32_t>(std::max<uint64_t>(
+                1ull,
+                std::min<uint64_t>(
+                    static_cast<uint64_t>(bounded_collect_limit),
+                    (collect_min_rows_per_batch == 0u)
+                        ? static_cast<uint64_t>(bounded_collect_limit)
+                        : static_cast<uint64_t>(collect_min_rows_per_batch))));
+        const size_t effective_ff_active_internal_layers =
+            static_cast<size_t>(std::max<uint32_t>(
+                1u,
+                std::min<uint32_t>(
+                    moe_expert_internal_layers,
+                    (moe_ff_active_internal_layers == 0u) ? moe_expert_internal_layers : moe_ff_active_internal_layers)));
+
+        PipelineConfig cfg = default_pipeline_config();
         cfg.moe_num_experts = num_experts;
-        cfg.moe_top_k = top_k;
+        cfg.moe_top_k = effective_top_k;
         cfg.ff_num_layers = num_layers;
         cfg.batch_size = batch_size;
         cfg.num_epochs = epochs;
@@ -358,7 +731,7 @@ TRAINING_API int Training_InitSession(
         cfg.moe_output_dim = moe_output_dim;
         cfg.moe_hidden_dim = moe_hidden_dim;
         cfg.moe_expert_internal_layers = moe_expert_internal_layers;
-        cfg.moe_ff_active_internal_layers = static_cast<size_t>(moe_ff_active_internal_layers);
+        cfg.moe_ff_active_internal_layers = effective_ff_active_internal_layers;
         cfg.ff_learning_rate_step = std::max(1u, static_cast<uint32_t>(std::llround(std::max(1.0, learning_rate))));
         
         cfg.acquisition_threads = static_cast<size_t>(acquisition_threads);
@@ -368,6 +741,41 @@ TRAINING_API int Training_InitSession(
         cfg.collect_empty_backoff_max_shift = collect_empty_backoff_max_shift;
         cfg.collect_empty_backoff_cap_ms = collect_empty_backoff_cap_ms;
         cfg.metrics_heartbeat_sec = metrics_heartbeat_sec;
+        cfg.training_parallel_contrastive_rows = (training_parallel_contrastive_rows != 0u);
+        cfg.training_parallel_batches = static_cast<size_t>(training_parallel_batches);
+        cfg.training_parallel_batches_runtime_cap = static_cast<size_t>(training_parallel_batches_runtime_cap);
+        cfg.ff_expert_chunk_size = static_cast<size_t>(ff_expert_chunk_size);
+        cfg.target_routes_per_batch = effective_target_routes_per_batch;
+        cfg.collect_window_ms = collect_window_ms;
+        cfg.collect_min_rows_per_batch = effective_collect_min_rows;
+        cfg.training_checkpoint_data_dir =
+            (training_checkpoint_data_dir_utf8 && training_checkpoint_data_dir_utf8[0] != '\0')
+                ? std::string(training_checkpoint_data_dir_utf8)
+                : std::string{};
+        cfg.sycl_prereserve_gib = training_sycl_prereserve_gib;
+        cfg.sycl_prereserve_chunk_mib =
+            (training_sycl_prereserve_chunk_mib == 0u)
+                ? q_mini_wasm_v2::core::training::default_pipeline_config().sycl_prereserve_chunk_mib
+                : training_sycl_prereserve_chunk_mib;
+        cfg.sycl_gpu_device_index = training_sycl_gpu_device_index;
+        cfg.gf3_sycl_min_weight_cells = static_cast<size_t>(std::min<uint64_t>(
+            training_gf3_sycl_min_weight_cells,
+            static_cast<uint64_t>(std::numeric_limits<size_t>::max())));
+        cfg.gf3_sycl_submit_grid_log = (training_gf3_sycl_submit_grid_log != 0u);
+        cfg.gf3_ff_batched_weight_mib = static_cast<size_t>(std::min<uint64_t>(
+            training_gf3_ff_batched_weight_mib,
+            static_cast<uint64_t>(std::numeric_limits<size_t>::max())));
+        cfg.ff_multi_row_batch = (training_ff_multi_row_batch != 0u);
+        cfg.ff_multi_row_slots_chunk = training_ff_multi_row_slots_chunk;
+        cfg.gf3_ff_layers_per_batch = training_gf3_ff_layers_per_batch;
+        cfg.gf3_ff_multislot_slots_chunk_max = static_cast<size_t>(std::min<uint64_t>(
+            training_gf3_ff_multislot_slots_chunk_max,
+            static_cast<uint64_t>(std::numeric_limits<size_t>::max())));
+        cfg.gf3_ff_multislot_ignore_host_slot_budget = (training_gf3_ff_multislot_ignore_host_slot_budget != 0u);
+        cfg.lazy_moe_resident_cap = static_cast<size_t>(std::min<uint64_t>(
+            training_lazy_moe_resident_cap,
+            static_cast<uint64_t>(std::numeric_limits<size_t>::max())));
+        cfg.training_auto_resume_from_checkpoint = (training_auto_resume_from_checkpoint != 0u);
         printf("[Training]   features.worker_threads=%u (OMP hint) acquisition_threads=%zu perturbation_threads=%zu "
                "checkpoint_async_queue_max=%zu collect_empty_backoff(base/max_shift/cap_ms)=%u/%u/%u "
                "metrics_heartbeat_sec=%u\n",
@@ -379,12 +787,39 @@ TRAINING_API int Training_InitSession(
                static_cast<unsigned>(cfg.collect_empty_backoff_max_shift),
                static_cast<unsigned>(cfg.collect_empty_backoff_cap_ms),
                static_cast<unsigned>(cfg.metrics_heartbeat_sec));
+        printf("[Training]   parallel_contrastive_rows=%d parallel_batches=%zu parallel_batches_runtime_cap=%zu "
+               "ff_expert_chunk_size=%zu target_routes_per_batch=%zu "
+               "collect_window_ms=%u collect_min_rows_per_batch=%u auto_resume_checkpoint=%d "
+               "checkpoint_data_dir=%s\n",
+               cfg.training_parallel_contrastive_rows ? 1 : 0,
+               cfg.training_parallel_batches,
+               cfg.training_parallel_batches_runtime_cap,
+               cfg.ff_expert_chunk_size,
+               cfg.target_routes_per_batch,
+               static_cast<unsigned>(cfg.collect_window_ms),
+               static_cast<unsigned>(cfg.collect_min_rows_per_batch),
+               cfg.training_auto_resume_from_checkpoint ? 1 : 0,
+               cfg.training_checkpoint_data_dir.empty()
+                   ? "(unset: ./checkpoints under cwd — set training.checkpoint_data_dir, e.g. C:/q_mini_data)"
+                   : cfg.training_checkpoint_data_dir.c_str());
+        printf("[Training]   gf3_sycl_min_weight_cells=%zu gf3_sycl_submit_grid_log=%d (TOML training.gf3_sycl_*)\n",
+               cfg.gf3_sycl_min_weight_cells,
+               cfg.gf3_sycl_submit_grid_log ? 1 : 0);
+        printf("[Training]   gf3_ff_multislot_slots_chunk_max=%zu ignore_host_slot_budget=%d (TOML training.gf3_ff_multislot_*)\n",
+               cfg.gf3_ff_multislot_slots_chunk_max,
+               cfg.gf3_ff_multislot_ignore_host_slot_budget ? 1 : 0);
+        printf("[Training]   ff_multi_row_batch=%d ff_multi_row_slots_chunk=%u gf3_ff_batched_weight_mib=%zu "
+               "(SYCL throughput: ff_multi_row_batch=0 forces serial contrastive rows)\n",
+               cfg.ff_multi_row_batch ? 1 : 0,
+               static_cast<unsigned>(cfg.ff_multi_row_slots_chunk),
+               cfg.gf3_ff_batched_weight_mib);
+        printf("[Training]   gf3_ff_layers_per_batch=%u (0=all layers, >0=layer batching for deep networks)\n",
+               static_cast<unsigned>(cfg.gf3_ff_layers_per_batch));
 
         cfg.samples_per_epoch = static_cast<size_t>(samples_per_epoch_or_zero);
-        cfg.training_micro_batch_cap = static_cast<size_t>(training_micro_batch_cap);
+        cfg.training_micro_batch_cap = static_cast<size_t>(effective_micro_batch_cap);
         cfg.training_collect_floor = static_cast<size_t>(training_collect_floor);
         cfg.training_timing_to_stderr = training_timing_to_stderr;
-        cfg.training_serial_experts = training_serial_experts;
         cfg.training_sycl_route_mode =
             static_cast<q_mini_wasm_v2::core::moe::SyclRouteMode>(training_sycl_route_mode);
         cfg.sycl_trit_quant_min_moe_dim = static_cast<size_t>(training_sycl_trit_quant_min_moe_dim);
@@ -400,14 +835,19 @@ TRAINING_API int Training_InitSession(
                cfg.max_jsonl_local_samples,
                cfg.min_text_length,
                cfg.max_text_length);
-        printf("[Training]   micro_batch_cap=%zu collect_floor=%zu timing_to_stderr=%d serial_expert_train=%d sycl_route_mode=%u sycl_trit_quant_min_moe_dim=%zu goodness_log_level=%u\n",
+        printf("[Training]   micro_batch_cap=%zu collect_floor=%zu timing_to_stderr=%d sycl_route_mode=%u sycl_trit_quant_min_moe_dim=%zu goodness_log_level=%u\n",
                cfg.training_micro_batch_cap,
                cfg.training_collect_floor,
                training_timing_to_stderr ? 1 : 0,
-               training_serial_experts ? 1 : 0,
                static_cast<unsigned>(training_sycl_route_mode),
                cfg.sycl_trit_quant_min_moe_dim,
                static_cast<unsigned>(cfg.goodness_log_level));
+        printf("[Training]   effective_top_k=%zu collect_limit=%u target_routes_per_batch=%zu collect_min_rows_per_batch=%u ff_active_internal_layers=%zu\n",
+               cfg.moe_top_k,
+               static_cast<unsigned>(bounded_collect_limit),
+               cfg.target_routes_per_batch,
+               static_cast<unsigned>(cfg.collect_min_rows_per_batch),
+               cfg.moe_ff_active_internal_layers);
         cfg.enable_prefill_ring_buffer = true;
         cfg.prefill_target_samples = static_cast<size_t>(prefill_target_samples);
         cfg.prefill_timeout_ms = prefill_timeout_ms;
@@ -439,11 +879,15 @@ TRAINING_API int Training_InitSession(
         
         *session_id_out = session->id;
         g_sessions.push_back(std::move(session));
-        
+
+        qmini_training_breadcrumb("dll:InitSession:staged");
         return 0;
     } catch (const std::exception& e) {
-        printf("[Training] ERROR creating pipeline: %s\n", e.what());
+        printf("[Training] ERROR Training_InitSession: %s\n", e.what());
         return -1;
+    } catch (...) {
+        printf("[Training] ERROR Training_InitSession: non-std exception (native fault)\n");
+        return kTrainingApiNativeFault;
     }
 }
 
@@ -453,6 +897,7 @@ TRAINING_API int Training_StartTraining(
     const char* data_path,
     bool enable_data_accumulation
 ) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
     
     TrainingSession* session = nullptr;
@@ -486,15 +931,18 @@ TRAINING_API int Training_StartTraining(
     config.num_epochs = epochs;
 
     if (!session->pipeline_materialized) {
+        qmini_training_breadcrumb("dll:StartTraining:initialize");
         if (!session->pipeline->initialize(config)) {
             printf("[Training] ERROR: Pipeline initialization failed\n");
             return -3;
         }
         session->pipeline_materialized = true;
     } else {
+        qmini_training_breadcrumb("dll:StartTraining:apply_overrides");
         session->pipeline->apply_run_overrides(session->data_path, epochs);
     }
 
+    qmini_training_breadcrumb("dll:StartTraining:start_training");
     if (!session->pipeline->start_training()) {
         printf("[Training] ERROR: Pipeline start_training failed\n");
         return -4;
@@ -507,6 +955,13 @@ TRAINING_API int Training_StartTraining(
     printf("[Training]   - ForwardForward + MoE (%u experts)\n", session->num_experts);
     
     return 0;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_StartTraining: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        printf("[Training] ERROR Training_StartTraining: non-std exception\n");
+        return kTrainingApiNativeFault;
+    }
 }
 
 TRAINING_API int Training_GetProgress(
@@ -518,6 +973,7 @@ TRAINING_API int Training_GetProgress(
     bool* is_running_out,
     uint32_t* loop_count_out
 ) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
     
     TrainingSession* session = nullptr;
@@ -540,6 +996,9 @@ TRAINING_API int Training_GetProgress(
         auto state = session->pipeline->get_state();
         running = (state == PipelineState::TRAINING ||
                    state == PipelineState::ACQUIRING_DATA ||
+                   state == PipelineState::CHECKPOINTING ||
+                   state == PipelineState::EVALUATING_TOPOLOGY ||
+                   state == PipelineState::OPTIMIZING_GRAPH ||
                    state == PipelineState::PAUSED ||
                    state == PipelineState::INITIALIZING ||
                    state == PipelineState::STOPPING);
@@ -568,9 +1027,17 @@ TRAINING_API int Training_GetProgress(
     *loop_count_out = session->loop_count.load();
 
     return 0;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_GetProgress: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        printf("[Training] ERROR Training_GetProgress: non-std exception\n");
+        return kTrainingApiNativeFault;
+    }
 }
 
 TRAINING_API int Training_StopTraining(uint64_t session_id) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
     
     TrainingSession* session = nullptr;
@@ -593,9 +1060,16 @@ TRAINING_API int Training_StopTraining(uint64_t session_id) {
     printf("[Training] Session %llu: Training stopped\n", static_cast<unsigned long long>(session_id));
     
     return 0;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_StopTraining: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
 }
 
 TRAINING_API int Training_CleanupSession(uint64_t session_id) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
     
     auto it = std::remove_if(g_sessions.begin(), g_sessions.end(),
@@ -609,14 +1083,28 @@ TRAINING_API int Training_CleanupSession(uint64_t session_id) {
         }
         (*it)->active.store(false);
         g_sessions.erase(it, g_sessions.end());
+        if (g_sessions.empty()) {
+            std::string note;
+            const size_t after = q_mini_wasm_v2::sycl_kernels::reserve_sycl_device_memory_bytes(
+                0, 1, false, &note);
+            (void)after;
+            printf("[Training] Last session removed: SYCL USM pre-reserve released (%s)\n", note.c_str());
+        }
         printf("[Training] Session %llu: Cleaned up\n", static_cast<unsigned long long>(session_id));
         return 0;
     }
     
     return -1;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_CleanupSession: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
 }
 
 TRAINING_API int Training_ExportCheckpoint(uint64_t session_id, const char* path_utf8) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
 
     TrainingSession* session = nullptr;
@@ -639,9 +1127,16 @@ TRAINING_API int Training_ExportCheckpoint(uint64_t session_id, const char* path
         return -3;
     }
     return 0;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_ExportCheckpoint: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
 }
 
 TRAINING_API int Training_ImportCheckpoint(uint64_t session_id, const char* path_utf8) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
 
     TrainingSession* session = nullptr;
@@ -660,13 +1155,21 @@ TRAINING_API int Training_ImportCheckpoint(uint64_t session_id, const char* path
     if (!path_utf8 || path_utf8[0] == '\0') {
         return -4;
     }
-    if (!session->pipeline->import_model(path_utf8)) {
+    // Merge InitSession / live TOML throughput knobs over checkpoint blob (same as auto-resume).
+    // Without this, stale ff_multi_row_slots_chunk / gf3_ff_* from the file masks rebuilt DLL behavior.
+    if (!session->pipeline->import_model(path_utf8, &session->stored_config)) {
         session->pipeline_materialized = false;
         return -3;
     }
     session->stored_config = session->pipeline->get_config();
     session->pipeline_materialized = true;
     return 0;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_ImportCheckpoint: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
 }
 
 TRAINING_API void Training_GetVersion(char* version_out, size_t max_len) {
@@ -708,6 +1211,7 @@ TRAINING_API int Training_GetMetrics(
     char* pipeline_status_utf8_out,
     size_t pipeline_status_utf8_cap
 ) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
     
     TrainingSession* session = nullptr;
@@ -756,6 +1260,12 @@ TRAINING_API int Training_GetMetrics(
     }
 
     return 0;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_GetMetrics: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
 }
 
 TRAINING_API int Training_GetIngestionStats(
@@ -774,6 +1284,7 @@ TRAINING_API int Training_GetIngestionStats(
     uint64_t* ds_acq_blocked_pushes_out,
     uint64_t* ds_acq_blocked_wait_ms_out
 ) {
+    try {
     std::lock_guard<std::mutex> lock(g_sessions_mutex);
 
     TrainingSession* session = nullptr;
@@ -803,6 +1314,112 @@ TRAINING_API int Training_GetIngestionStats(
     *ds_acq_blocked_pushes_out = m.ds_acquisition_blocked_pushes;
     *ds_acq_blocked_wait_ms_out = m.ds_acquisition_blocked_wait_ms;
     return 0;
+    } catch (const std::exception& e) {
+        printf("[Training] ERROR Training_GetIngestionStats: %s\n", e.what());
+        return kTrainingApiNativeFault;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
+}
+
+/** SYCL device VRAM / kind probe for Go autoscale (before Training_InitSession). Returns 0 on success. */
+TRAINING_API int Training_SetPendingLiveParallelStart(uint64_t session_id, uint32_t parallel_batches_start) {
+    try {
+        std::lock_guard<std::mutex> lock(g_sessions_mutex);
+        TrainingSession* session = nullptr;
+        for (auto& s : g_sessions) {
+            if (s->id == session_id) {
+                session = s.get();
+                break;
+            }
+        }
+        if (!session || !session->pipeline) {
+            return -1;
+        }
+        session->pipeline->set_pending_live_parallel_start(static_cast<size_t>(parallel_batches_start));
+        return 0;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
+}
+
+TRAINING_API int Training_SetLiveParallelBatches(uint64_t session_id, uint32_t parallel_batches) {
+    try {
+        std::lock_guard<std::mutex> lock(g_sessions_mutex);
+        TrainingSession* session = nullptr;
+        for (auto& s : g_sessions) {
+            if (s->id == session_id) {
+                session = s.get();
+                break;
+            }
+        }
+        if (!session || !session->pipeline) {
+            return -1;
+        }
+        session->pipeline->set_live_parallel_batches(static_cast<size_t>(parallel_batches));
+        return 0;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
+}
+
+TRAINING_API int Training_GetLiveParallelBatches(
+    uint64_t session_id, uint32_t* live_out, uint32_t* ceiling_out) {
+    if (!live_out || !ceiling_out) {
+        return -1;
+    }
+    *live_out = 0;
+    *ceiling_out = 0;
+    try {
+        std::lock_guard<std::mutex> lock(g_sessions_mutex);
+        TrainingSession* session = nullptr;
+        for (auto& s : g_sessions) {
+            if (s->id == session_id) {
+                session = s.get();
+                break;
+            }
+        }
+        if (!session || !session->pipeline) {
+            return -2;
+        }
+        const size_t lv = session->pipeline->live_parallel_batches_value();
+        const size_t ce = session->pipeline->parallel_batches_ceiling_value();
+        *live_out = static_cast<uint32_t>(std::min<size_t>(lv, static_cast<size_t>(std::numeric_limits<uint32_t>::max())));
+        *ceiling_out = static_cast<uint32_t>(std::min<size_t>(ce, static_cast<size_t>(std::numeric_limits<uint32_t>::max())));
+        return 0;
+    } catch (...) {
+        return kTrainingApiNativeFault;
+    }
+}
+
+TRAINING_API int Training_ProbeSyclDevice(
+    int32_t gpu_device_index,
+    uint64_t* global_mem_bytes_out,
+    uint32_t* is_gpu_u32_out,
+    char* name_utf8_out,
+    size_t name_cap,
+    char* err_utf8_out,
+    size_t err_cap) {
+    if (!global_mem_bytes_out || !is_gpu_u32_out) {
+        return -1;
+    }
+    *global_mem_bytes_out = 0;
+    *is_gpu_u32_out = 0;
+    if (name_utf8_out && name_cap > 0) {
+        name_utf8_out[0] = '\0';
+    }
+    if (err_utf8_out && err_cap > 0) {
+        err_utf8_out[0] = '\0';
+    }
+    q_mini_wasm_v2::dll::common::qmini_dll_touch_sycl_device_once();
+    return q_mini_wasm_v2::sycl_kernels::gf3_sycl_probe_device_resources(
+        gpu_device_index,
+        global_mem_bytes_out,
+        is_gpu_u32_out,
+        name_utf8_out,
+        name_cap,
+        err_utf8_out,
+        err_cap);
 }
 
 } // extern "C"

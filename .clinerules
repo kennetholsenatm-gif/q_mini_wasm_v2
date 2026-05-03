@@ -33,8 +33,13 @@
 - MANDATED: Flash CIM hardware macros may ONLY be used under the "Hybrid Magic State Injection" paradigm.
 - Flash CIM acts as a non-linear "Magic State Generator". Its outputs must be distilled (e.g., Ternary Golay code) and injected into the Clifford tracking graph as non-Clifford resources to achieve chaotic MoE expressivity.
 
+[THROUGHPUT_SIZING_NO_HIDDEN_CAPS]
+- FORBIDDEN: Hard-coded "sanity" or repository-chosen ceilings on training throughput sizing (multi-row MoE slot chunks, batched FF width, queue depth, etc.) that are not expressed as InitSession / TOML fields or as overflow-safe arithmetic derived from explicit user hints (e.g. MiB budgets). Examples that must never return: magic `1 << 22`-style slot caps, undocumented `constexpr` maxima whose only justification is "OOM safety" without a config knob.
+- MANDATED: Programmers cloning the repo size work for their own machines via documented `training.*` keys (and related InitSession fields). When "unlimited" is intended, use `std::numeric_limits<size_t>::max()` (or equivalent) plus clear warnings in logs/docs — not a hidden constant.
+- ENFORCEMENT: `python scripts/check_no_throughput_hidden_caps.py .` (CI + ctest) scans native training/MoE/SYCL sources for the old regression patterns.
+
 [ENFORCEMENT]
-- Before generating any new C++, Go, or Python code, you MUST verify that it does not violate these five pillars.
+- Before generating any new C++, Go, or Python code, you MUST verify that it does not violate these architectural constraints (including throughput sizing rules above).
 - If a user requests a feature that violates these constraints (e.g., "Add a gRPC server to the Python agent" or "Use PPO for the router"), you MUST refuse the request and explain why it violates the Architectural Review.
 
 [TRINITY_LARGE_PREVIEW_RATE_LIMITING]

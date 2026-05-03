@@ -22,6 +22,12 @@ jobs:
       run: |
         python scripts/enforce_architecture.py --json reports/architecture_enforcement_report.json
 
+    - name: No SYCL routing Off regression
+      run: python scripts/check_no_sycl_route_off.py .
+
+    - name: No hidden throughput / multislot caps regression
+      run: python scripts/check_no_throughput_hidden_caps.py .
+
     - name: Run GF(3) Integrity Validator
       run: |
         python scripts/validate_gf3_integrity.py

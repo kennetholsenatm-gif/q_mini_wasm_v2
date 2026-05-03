@@ -1,0 +1,132 @@
+# =============================================================================
+# Single source of truth for C++ PipelineConfig::default_pipeline_config()
+# =============================================================================
+# The native build runs scripts/gen_pipeline_default_config.py (see CMake) to
+# regenerate core/training/autonomous_training_pipeline_defaults.gen.cpp.
+# Edit keys here — not in C++ — then rebuild or run the script manually.
+#
+# Field names MUST match PipelineConfig members in autonomous_training_pipeline.hpp
+# training_sycl_route_mode: "auto" | "on"
+# =============================================================================
+
+[pipeline_defaults]
+acquisition_threads = 4
+perturbation_threads = 2
+
+ff_num_layers = 3
+ff_layer_width = 128
+ff_learning_rate_step = 1
+learning_rate = 0.001
+
+moe_num_experts = 243
+moe_top_k = 3
+moe_input_dim = 64
+moe_output_dim = 64
+moe_hidden_dim = 128
+moe_expert_internal_layers = 2
+routing_qutrits = 16
+
+graph_initial_nodes = 64
+graph_initial_edges = 112
+betti_max_qutrits = 243
+betti_guidance_threshold = 15
+shadow_dim = 64
+
+batch_size = 32
+num_epochs = 100
+samples_per_epoch = 1000
+# 0 => collect_limit uses full batch_size (avoid micro_batch << batch_size GPU starvation).
+training_micro_batch_cap = 0
+training_collect_floor = 0
+training_timing_to_stderr = false
+training_sycl_route_mode = "auto"
+sycl_trit_quant_min_moe_dim = 128
+goodness_log_level = 0
+topology_evaluation_interval = 10
+checkpoint_interval = 10
+enable_prefill_ring_buffer = true
+# Saturate large UMA / shared-VRAM hosts: big prefill + deep staging queues (host RSS still per-sample sized).
+# 0 = minimal wait (first pair); frontier profiles often override in training_config.toml.
+prefill_target_samples = 0
+prefill_timeout_ms = 120000
+prefill_poll_ms = 5
+max_acquisition_queue_depth = 8388608
+max_raw_queue_depth = 8388608
+max_train_queue_depth = 16777216
+
+enable_betti_guidance = true
+enable_knowledge_engine = true
+enable_checkpoints = true
+enable_wui_streaming = true
+enable_continuous_mode = false
+enable_steane_correction = false
+enable_error_correction = false
+enable_flash_cim = false
+
+lazy_moe_experts = true
+moe_ff_active_internal_layers = 0
+
+prefer_local_data = true
+allow_generated_negatives = true
+
+directory_max_lines = 1000000000
+max_jsonl_local_samples = 5000000
+min_text_length = 50
+max_text_length = 100000
+
+checkpoint_async_queue_max = 24
+collect_empty_backoff_base_ms = 10
+collect_empty_backoff_max_shift = 10
+collect_empty_backoff_cap_ms = 1000
+# Also drives in-batch train / WUI / timing partial emit cadence when >0 (see AutonomousTrainingPipeline::process_batch).
+metrics_heartbeat_sec = 2
+
+training_parallel_contrastive_rows = true
+# Concurrent process_batch workers per training_loop tick (scale queues + target_routes with this; see TRAINING_THROUGHPUT.md).
+training_parallel_batches = 32
+# 0 = uncapped in default_pipeline_config(); production sets cap via InitSession / training.parallel_batches_runtime_cap.
+training_parallel_batches_runtime_cap = 0
+ff_expert_chunk_size = 0
+target_routes_per_batch = 0
+collect_window_ms = 5
+collect_min_rows_per_batch = 0
+
+# SYCL device memory pre-reserve (GiB). Pins separate malloc_device chunks (shows as Shared GPU memory in Task Manager).
+# Default 0: do not pre-pin RAM on iGPU; set 16-32 only when you intentionally want a warm UMA frontier (often dGPU).
+sycl_prereserve_gib = 0
+# MiB per malloc_device step while filling prereserve (larger = fewer allocations, faster ramp).
+sycl_prereserve_chunk_mib = 2048
+sycl_gpu_device_index = -1
+gf3_sycl_min_weight_cells = 0
+# When true, throttled stderr lines log batched GF3 SYCL parallel_for grid sizing (B, pack5 byte dims, range).
+gf3_sycl_submit_grid_log = false
+# Host MiB budget for batched SYCL FF: logged at init and used to size multi-slot FF chunks when ff_multi_row_slots_chunk=0
+# (see gf3_ff_multislot_host_budget_slots_cap). Larger MiB ⇒ larger slots_chunk_cap before host staging pressure. 0 = generated default.
+gf3_ff_batched_weight_mib = 65536
+ff_multi_row_batch = true
+# 0 = derive per-chunk slot cap from gf3_ff_batched_weight_mib; >=2 = hard cap (still clamped to budget cap).
+ff_multi_row_slots_chunk = 0
+# Extra ceiling on slots per multi-row SYCL FF chunk (0 = off). See training_config.toml for full knob list.
+gf3_ff_multislot_slots_chunk_max = 0
+# When true, skip host RAM estimate for multi-row chunk sizing (set slots_chunk_max / ff_multi_row_slots_chunk per machine).
+gf3_ff_multislot_ignore_host_slot_budget = false
+lazy_moe_resident_cap = 0
+# When true, start_training may auto-import the newest compatible checkpoint. When false, every run is fresh InitSession only.
+training_auto_resume_from_checkpoint = true
+
+# Timing / pacing (all explicit — no hidden C++ “safety” defaults)
+prefill_progress_log_interval_sec = 2
+prefill_stall_warn_sec = 8
+collect_first_sample_timeout_sec = 30
+collect_ff_coalesce_sleep_us = 10
+training_pause_poll_ms = 10
+training_idle_retry_ms = 1
+training_empty_batch_log_interval = 100
+training_empty_batch_metrics_interval = 25
+train_queue_resync_discard_slack = 64
+
+# Strings: leave empty; host/TOML overrides in production
+data_path = ""
+data_sources_toml_path = ""
+# Native training checkpoints: <this_dir>/checkpoints (keep outside the git repo; config lives under C:\q_mini_data with qminiwasm).
+training_checkpoint_data_dir = "C:/q_mini_data"

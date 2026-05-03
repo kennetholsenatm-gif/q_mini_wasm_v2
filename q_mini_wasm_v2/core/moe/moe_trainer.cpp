@@ -1,5 +1,6 @@
 #include "moe_trainer.hpp"
 #include "gf3_layers.hpp"
+#include "../ternary/packing.hpp"
 #include <random>
 #include <algorithm>
 #include <numeric>
@@ -7,6 +8,18 @@
 #include <fstream>
 
 namespace q_mini_wasm_v2::core::moe {
+
+namespace {
+
+void trits_to_ff_pack5(const std::vector<ternary::Trit>& trits, size_t input_dim, std::vector<uint8_t>& out) {
+    std::vector<int8_t> lanes(input_dim, 0);
+    for (size_t i = 0; i < trits.size() && i < input_dim; ++i) {
+        lanes[i] = static_cast<int8_t>(trits[i]);
+    }
+    q::ternary::pack_batch_t5(lanes, out);
+}
+
+} // namespace
 
 // ============================================================================
 // Constructor
@@ -169,9 +182,15 @@ MoETrainingMetrics MoETrainer::TrainBatch(
             // Get expert
             auto expert = GetExpert(expert_id);
             if (!expert) continue;
-            
+
+            const size_t in_d = expert->GetConfig().input_dim;
+            std::vector<uint8_t> pos_pack;
+            std::vector<uint8_t> neg_pack;
+            trits_to_ff_pack5(sample, in_d, pos_pack);
+            trits_to_ff_pack5(negative, in_d, neg_pack);
+
             // Train with Forward-Forward
-            int32_t delta = expert->TrainForwardForward(sample, negative);
+            int32_t delta = expert->TrainForwardForward(pos_pack, neg_pack);
             
             // Accumulate metrics (fixed-point)
             total_pos_goodness += expert->ComputeGoodness(expert->Forward(sample));
@@ -235,9 +254,7 @@ void MoETrainer::InitializeExperts(int seed) {
     for (auto& expert : experts_) {
         if (expert) {
             // Initialize with Forward-Forward learner if available
-            if (auto* gf3_expert = dynamic_cast<GF3MultiLayerExpert*>(expert.get())) {
-                gf3_expert->InitializeAllLayers(seed++);
-            }
+            static_cast<GF3MultiLayerExpert*>(expert.get())->InitializeAllLayers(seed++);
         }
     }
 }
@@ -261,13 +278,19 @@ void MoETrainer::TrainExpertsForwardForward(
         
         auto expert = GetExpert(expert_id);
         if (!expert) continue;
-        
+
+        const size_t in_d = expert->GetConfig().input_dim;
+        std::vector<uint8_t> pos_pack;
+        std::vector<uint8_t> neg_pack;
+        trits_to_ff_pack5(positive, in_d, pos_pack);
+        trits_to_ff_pack5(negative, in_d, neg_pack);
+
         // Scale learning by routing weight (fixed-point: weight is scale 1000)
         int32_t scaled_lr = (config_.learning_rate * weight) / 1000;
         if (scaled_lr == 0) scaled_lr = 1;
-        
+
         // Train
-        expert->TrainForwardForward(positive, negative);
+        expert->TrainForwardForward(pos_pack, neg_pack);
     }
 }
 

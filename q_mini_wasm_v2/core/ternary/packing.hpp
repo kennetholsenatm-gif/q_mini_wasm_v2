@@ -89,6 +89,64 @@ inline int8_t read_trit_t5_at(const uint8_t* p, size_t tri) {
     return unbalanced_to_trit(u);
 }
 
+/** SYCL batched GF3 layout: one global Pack5 stream over B×trits_per_row row-major trits (same as pack_batch_t5 on
+ *  concatenated int8 rows). Builds that stream from B independent per-row Pack5 blobs laid out contiguously
+ *  (row b at row_buffers_contiguous + b×row_pack_bytes). Avoids unpacking every row to int8. */
+inline void pack5_encode_global_batch_from_row_major_row_buffers(
+    const uint8_t* row_buffers_contiguous,
+    size_t batch_rows,
+    size_t row_pack_bytes,
+    size_t trits_per_row,
+    std::vector<uint8_t>& batch_packed_out) {
+    const size_t n_trits = batch_rows * trits_per_row;
+    const size_t out_bytes = (n_trits + TRITS_PER_BYTE_T5 - 1u) / TRITS_PER_BYTE_T5;
+    batch_packed_out.resize(out_bytes);
+    for (size_t bi = 0; bi < out_bytes; ++bi) {
+        int8_t t5[5];
+        for (unsigned lane = 0; lane < TRITS_PER_BYTE_T5; ++lane) {
+            const size_t T = bi * TRITS_PER_BYTE_T5 + static_cast<size_t>(lane);
+            if (T >= n_trits) {
+                t5[lane] = 0;
+            } else {
+                const size_t br = T / trits_per_row;
+                const size_t L = T % trits_per_row;
+                const uint8_t* row = row_buffers_contiguous + br * row_pack_bytes;
+                t5[lane] = read_trit_t5_at(row, L);
+            }
+        }
+        batch_packed_out[bi] = pack_5trits(t5);
+    }
+}
+
+/** Inverse of pack5_encode_global_batch_from_row_major_row_buffers: write each row's Pack5 from the global batch. */
+inline void pack5_decode_global_batch_to_row_major_row_buffers(
+    const uint8_t* batch_packed,
+    size_t batch_packed_bytes,
+    size_t batch_rows,
+    size_t row_pack_bytes,
+    size_t trits_per_row,
+    uint8_t* row_buffers_contiguous_out) {
+    const size_t n_trits = batch_rows * trits_per_row;
+    const size_t need_batch = (n_trits + TRITS_PER_BYTE_T5 - 1u) / TRITS_PER_BYTE_T5;
+    (void)batch_packed_bytes;
+    for (size_t br = 0; br < batch_rows; ++br) {
+        uint8_t* row = row_buffers_contiguous_out + br * row_pack_bytes;
+        for (size_t e_bi = 0; e_bi < row_pack_bytes; ++e_bi) {
+            int8_t t5[5];
+            for (unsigned lane = 0; lane < TRITS_PER_BYTE_T5; ++lane) {
+                const size_t L = e_bi * TRITS_PER_BYTE_T5 + static_cast<size_t>(lane);
+                if (L >= trits_per_row) {
+                    t5[lane] = 0;
+                } else {
+                    const size_t Tglob = br * trits_per_row + L;
+                    t5[lane] = read_trit_t5_at(batch_packed, Tglob);
+                }
+            }
+            row[e_bi] = pack_5trits(t5);
+        }
+    }
+}
+
 // Trit20: Pack 20 trits into 1 uint32 (i32)
 // Polynomial encoding: Σ(trit_unbalanced[i] × 3^i)
 // Maximum value: 3^20 - 1 = 3,486,784,401 (fits in uint32)
@@ -137,8 +195,8 @@ inline size_t packed_size_bytes(uint32_t trit_count, PackingScheme scheme) {
 void pack_batch_t5(const std::vector<int8_t>& trits, std::vector<uint8_t>& packed);
 void pack_batch_t20(const std::vector<int8_t>& trits, std::vector<uint32_t>& packed);
 
-// Batch unpack
-void unpack_batch_t5(const std::vector<uint8_t>& packed, std::vector<int8_t>& trits, uint32_t trit_count);
+// Batch unpack (trit_count may be B×layer_cells; must not truncate past 32 bits)
+void unpack_batch_t5(const std::vector<uint8_t>& packed, std::vector<int8_t>& trits, size_t trit_count);
 void unpack_batch_t20(const std::vector<uint32_t>& packed, std::vector<int8_t>& trits, uint32_t trit_count);
 
 } // namespace ternary

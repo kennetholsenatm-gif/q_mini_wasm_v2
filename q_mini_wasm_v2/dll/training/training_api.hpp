@@ -55,11 +55,10 @@ extern uint64_t g_next_session_id;
  * @param moe_expert_internal_layers - Layer count inside each expert FF stack
  * @param moe_ff_active_internal_layers - Cap internal FF layers per expert (0 = use full moe_expert_internal_layers)
  * @param samples_per_epoch_or_zero - Route-units per epoch (must be >= 1; from TOML training.samples_per_epoch)
- * @param training_micro_batch_cap - Micro-batch hard cap (must be >= 1; from TOML training.micro_batch_cap)
- * @param training_collect_floor - Minimum collect size after adaptive tier (must be >= 1; from TOML training.collect_floor)
+ * @param training_micro_batch_cap - Row cap per process_batch vs batch_size (0 = use batch_size; from TOML training.micro_batch_cap)
+ * @param training_collect_floor - Legacy ABI; stored on PipelineConfig but does not cap collect size (TOML training.collect_floor)
  * @param training_timing_to_stderr - Enable `[TrainingTiming]` stderr lines
- * @param training_serial_experts - When true, disable OpenMP parallel per-route experts
- * @param training_sycl_route_mode - 0=auto, 1=on, 2=off for symplectic routing logits (TOML training.sycl_route_mode)
+ * @param training_sycl_route_mode - 0=auto, 1=on for symplectic routing logits (TOML training.sycl_route_mode; both use SYCL when moe_experts>=8)
  * @param training_sycl_trit_quant_min_moe_dim - Minimum moe_input_dim to use SYCL float/int32/string->trit quant (TOML training.sycl_trit_quant_min_moe_dim); 0 means default 128 in the DLL
  * @param training_goodness_log_level - 0=off, 1=stderr batch FF goodness summary, 2=+ first rows (TOML training.goodness_log_level; higher values reserved / clamped in pipeline)
  * @param training_allow_generated_negatives - Nonzero = allow generated negatives (stable FFI: uint32, not bool — bool before uint64 misaligns on Win64 CGO/MSVC)
@@ -74,7 +73,17 @@ extern uint64_t g_next_session_id;
  * @param collect_empty_backoff_max_shift - Empty-queue backoff exponent cap (TOML)
  * @param collect_empty_backoff_cap_ms - Empty-queue backoff ceiling ms (TOML)
  * @param metrics_heartbeat_sec - Metrics emit interval while waiting for samples; 0=every poll (TOML)
- * @return 0 on success, negative error code on failure
+ * @param training_parallel_contrastive_rows - 0/1 OpenMP parallel rows (TOML training.parallel_contrastive_rows)
+ * @param ff_expert_chunk_size - Experts per FF progress chunk; 0 = whole route (TOML training.ff_expert_chunk_size)
+ * @param target_routes_per_batch - Route budget per batch (TOML training.target_routes_per_batch)
+ * @param collect_window_ms - Collect-phase time slice before compute (TOML training.collect_window_ms)
+ * @param collect_min_rows_per_batch - Minimum contrastive rows before timer can end collect (0 = derive to effective collect_limit; TOML training.collect_min_rows_per_batch)
+ * @param training_checkpoint_data_dir_utf8 - Parent dir for `<parent>/checkpoints`; empty uses ./checkpoints under cwd — prefer `C:/q_mini_data` (TOML training.checkpoint_data_dir)
+ * @return 0 on success, negative error code on failure (q_training.dll is always built with SYCL;
+ *         -18 no usable SYCL GPU queue when routing requires GPU,
+ *         -19 SYCL contrastive-negative probe failed (GPU mandatory),
+ *         -20 invalid training.sycl_gpu_device_index or training.ff_multi_row_slots_chunk,
+ *         -21 InitSession scalar ABI mismatch — rebuild qminiwasm.exe from the same commit as q_training.dll)
  */
 TRAINING_API int Training_InitSession(
     uint64_t* session_id_out,
@@ -111,7 +120,6 @@ TRAINING_API int Training_InitSession(
     uint32_t training_micro_batch_cap,
     uint32_t training_collect_floor,
     bool training_timing_to_stderr,
-    bool training_serial_experts,
     uint32_t training_sycl_route_mode,
     uint32_t training_sycl_trit_quant_min_moe_dim,
     uint32_t training_goodness_log_level,
@@ -126,7 +134,34 @@ TRAINING_API int Training_InitSession(
     uint32_t collect_empty_backoff_base_ms,
     uint32_t collect_empty_backoff_max_shift,
     uint32_t collect_empty_backoff_cap_ms,
-    uint32_t metrics_heartbeat_sec
+    uint32_t metrics_heartbeat_sec,
+    uint32_t training_parallel_contrastive_rows,
+    uint32_t training_parallel_batches,
+    uint32_t ff_expert_chunk_size,
+    uint32_t target_routes_per_batch,
+    uint32_t collect_window_ms,
+    uint32_t collect_min_rows_per_batch,
+    uint32_t training_sycl_prereserve_gib,
+    /** MiB per `malloc_device` chunk while pre-reserving; 0 = use pipeline_defaults / generated default. */
+    uint32_t training_sycl_prereserve_chunk_mib,
+    int32_t training_sycl_gpu_device_index,
+    uint64_t training_gf3_sycl_min_weight_cells,
+    /** 0/1: when 1, throttled stderr for batched GF3 SYCL `parallel_for` grid sizing (`training.gf3_sycl_submit_grid_log`). */
+    uint32_t training_gf3_sycl_submit_grid_log,
+    uint64_t training_gf3_ff_batched_weight_mib,
+    uint32_t training_ff_multi_row_batch,
+    uint32_t training_ff_multi_row_slots_chunk,
+    uint32_t training_gf3_ff_layers_per_batch,
+    uint64_t training_lazy_moe_resident_cap,
+    const char* training_checkpoint_data_dir_utf8,
+    /** 0 = off; else hard ceiling on slots per multi-row SYCL FF chunk (see training.gf3_ff_multislot_slots_chunk_max). */
+    uint64_t training_gf3_ff_multislot_slots_chunk_max,
+    /** 0/1: when 1, skip host RAM estimate for that ceiling (see training.gf3_ff_multislot_ignore_host_slot_budget). */
+    uint32_t training_gf3_ff_multislot_ignore_host_slot_budget,
+    /** 0/1: when 1, `start_training` may auto-import the newest compatible checkpoint (see training.auto_resume_from_checkpoint). */
+    uint32_t training_auto_resume_from_checkpoint,
+    /** 0 = no extra cap on concurrent process_batch workers; else min(live_parallel_batches, this). See training.parallel_batches_runtime_cap. */
+    uint32_t training_parallel_batches_runtime_cap
 );
 
 /**

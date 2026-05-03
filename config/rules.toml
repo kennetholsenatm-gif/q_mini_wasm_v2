@@ -127,7 +127,7 @@ reference_file_paths = true
 [architecture_rules.module_separation]
 core = "pure_cpp_quantum_operations"
 runtime = "async_orchestration"
-sycl = "gpu_acceleration_optional"
+sycl = "gpu_mandatory_native_training"
 dll = "api_exports_and_bindings"
 go = "gateway_and_services"
 wui = "visualization_interface"

@@ -1,8 +1,7 @@
 # =============================================================================
 # SMOKE: post-poll native path (binary search for silent exit / first process_batch)
-# - training.sycl_route_mode = "off"  (router symplectic logits on CPU; no SYCL device for route)
+# - training.sycl_route_mode = "auto" with moe_experts>=8 => SYCL symplectic routing; no host-CPU scorer
 # - Smaller MoE + microbatch + prefill + directory cap for faster repro
-# - training.serial_expert_train = true  (less OpenMP fan-out on first routes)
 # Use:  QMINI_TRAINING_CONFIG=training_config.smoke_postpoll.toml
 # Or copy/link under DataDir/config/
 # =============================================================================
@@ -16,9 +15,14 @@ samples_per_epoch = 65536
 micro_batch_cap = 256
 collect_floor = 128
 timing_to_stderr = true
-serial_expert_train = true
-sycl_route_mode = "off"
+sycl_route_mode = "auto"
 sycl_trit_quant_min_moe_dim = 1
+sycl_prereserve_gib = 0
+sycl_gpu_device_index = -1
+gf3_sycl_min_weight_cells = 0
+ff_multi_row_batch = true
+ff_multi_row_slots_chunk = 0
+lazy_moe_resident_cap = 0
 goodness_log_level = 0
 allow_generated_negatives = true
 max_jsonl_local_samples = 100000000

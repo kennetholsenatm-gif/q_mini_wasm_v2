@@ -24,7 +24,7 @@ This document maps the executable path from runtime task orchestration to SYCL-e
    - `q_mini_wasm_v2/core/qgnn/message_passing_sycl.hpp/.cpp`
 5. **Build-time SYCL enablement**
    - File: `q_mini_wasm_v2/CMakeLists.txt`
-   - Gate: `-DUSE_SYCL=ON`
+   - Gate: native CMake must find a SYCL toolchain (**icpx** / AdaptiveCpp / LLVM `-fsycl`)
    - Providers: IntelSYCL / AdaptiveCpp / oneAPI env fallback
 6. **WASM bridge interface**
    - File: `q_mini_wasm_v2/dll/wasm_bridge/wasm_api.cpp`
@@ -37,7 +37,7 @@ This document maps the executable path from runtime task orchestration to SYCL-e
 | Runtime orchestration | `runtime/orchestrator.*` | Implemented CPU thread pool | Task queue and worker loop are active in `orchestrator.cpp` |
 | SYCL kernel declarations | `sycl/tableau_kernels.*` | Implemented but mostly isolated | Primarily referenced by `tests/test_sycl_kernels.cpp` |
 | QGNN SYCL kernels | `core/qgnn/message_passing_sycl.*` | Implemented | Dedicated SYCL queue and kernels present |
-| Build integration | `CMakeLists.txt` | Implemented | `USE_SYCL` option and package detection in CMake |
+| Build integration | `CMakeLists.txt` | Implemented | Mandatory SYCL + IntelSYCL shim / AdaptiveCpp / LLVM `-fsycl` detection |
 | Runtime→SYCL wiring | Orchestrator to SYCL calls | Partial / weak coupling | `submit_*` methods in `runtime/orchestrator.cpp` call CPU lambdas/core APIs directly; no direct dispatch to `sycl_kernels::parallel_apply_*` |
 | WASM SYCL bridge | `dll/wasm_bridge/wasm_api.cpp` | Partial with CPU fallback dominance | Multiple explicit "CPU fallback" and future SYCL TODO-style notes |
 

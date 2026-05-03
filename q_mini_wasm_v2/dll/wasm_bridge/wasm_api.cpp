@@ -9,8 +9,7 @@
 
 // SYCL detection and includes
 #ifdef USE_SYCL
-#include <CL/sycl.hpp>
-namespace sycl = cl::sycl;
+#include <sycl/sycl.hpp>
 #endif
 
 // ============================================================================
@@ -19,7 +18,7 @@ namespace sycl = cl::sycl;
 
 namespace {
 
-// Device state with optional SYCL support
+// WASM-bridge device state (SYCL queue when present; host reference path is not native q_training)
 struct SYCLState {
     bool initialized = false;
     uint32_t deviceIndex = 0;
@@ -34,7 +33,7 @@ struct SYCLState {
     std::map<uint32_t, void*> memoryMappings;
     std::mutex stateMutex;
     
-    // CPU fallback buffers when SYCL not available
+    // Vector-backed host buffers for WASM bridge when no USM mapping
     std::map<uint32_t, std::vector<uint8_t>> cpuBuffers;
 };
 
@@ -79,8 +78,8 @@ struct GF3OperationParams {
 };
 #pragma pack(pop)
 
-// CPU fallback implementations
-namespace cpu_fallback {
+// Host reference math for WASM bridge only (not the GPU-mandatory native training stack)
+namespace wasm_host_reference {
     
     void gf3_multiply_batch(const uint8_t* a, const uint8_t* b, uint8_t* result, size_t count) {
         // GF(3) multiplication table
@@ -141,7 +140,7 @@ namespace cpu_fallback {
         }
     }
 
-} // namespace cpu_fallback
+} // namespace wasm_host_reference
 
 } // anonymous namespace
 
@@ -169,7 +168,7 @@ Q_GF3_WASM_API uint32_t Init_SYCL_Device(uint32_t device_index) {
         auto devices = sycl::device::get_devices();
         
         if (devices.empty()) {
-            std::cerr << "[SYCL] No devices found, using CPU fallback\n";
+            std::cerr << "[SYCL][WASM bridge] No devices enumerated; using host reference path (not native GPU training)\n";
             g_syclState.initialized = true;
             return 0;
         }
@@ -189,12 +188,13 @@ Q_GF3_WASM_API uint32_t Init_SYCL_Device(uint32_t device_index) {
         return 0;  // Success
         
     } catch (const std::exception& e) {
-        std::cerr << "[SYCL] Initialization failed: " << e.what() << ", using CPU fallback\n";
-        g_syclState.initialized = true;  // Still mark as initialized to use fallback
+        std::cerr << "[SYCL][WASM bridge] Initialization failed: " << e.what()
+                  << "; using host reference path (not native GPU training)\n";
+        g_syclState.initialized = true;  // Allow host reference path for bridge only
         return 0;
     }
 #else
-    std::cout << "[SYCL] Not compiled with SYCL support, using CPU fallback\n";
+    std::cout << "[SYCL][WASM bridge] Built without SYCL; host reference path only (native training requires USE_SYCL)\n";
     g_syclState.initialized = true;
     return 0;
 #endif
@@ -273,7 +273,7 @@ Q_GF3_WASM_API void* WASM_MapMemoryOffset(
         }
     } else {
 #endif
-        // CPU fallback
+        // WASM bridge host reference
         auto& cpu_buf = g_syclState.cpuBuffers[wasm_memory_offset];
         cpu_buf.resize(buffer_size);
         buffer = cpu_buf.data();
@@ -392,7 +392,8 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
                             break;
                     }
                 } catch (const std::exception& ex) {
-                    std::cerr << "[SYCL] Clifford gate kernel failed, CPU fallback: " << ex.what() << std::endl;
+                    std::cerr << "[SYCL][WASM bridge] Clifford SYCL kernel failed; host reference: " << ex.what()
+                              << std::endl;
                 }
             }
 #endif
@@ -401,7 +402,7 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
                     case 0:
                         if (auto it = g_syclState.memoryMappings.find(params.targetQubit);
                             it != g_syclState.memoryMappings.end() && it->second != nullptr) {
-                            cpu_fallback::tableau_apply_hadamard(
+                            wasm_host_reference::tableau_apply_hadamard(
                                 static_cast<uint8_t*>(it->second),
                                 static_cast<size_t>(num_qutrits),
                                 static_cast<size_t>(params.targetQubit));
@@ -410,7 +411,7 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
                     case 1:
                         if (auto it = g_syclState.memoryMappings.find(params.targetQubit);
                             it != g_syclState.memoryMappings.end() && it->second != nullptr) {
-                            cpu_fallback::tableau_apply_phase(
+                            wasm_host_reference::tableau_apply_phase(
                                 static_cast<uint8_t*>(it->second),
                                 static_cast<size_t>(num_qutrits),
                                 static_cast<size_t>(params.targetQubit));
@@ -419,7 +420,7 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
                     case 2:
                         if (auto it = g_syclState.memoryMappings.find(params.controlQubit);
                             it != g_syclState.memoryMappings.end() && it->second != nullptr) {
-                            cpu_fallback::tableau_apply_csum(
+                            wasm_host_reference::tableau_apply_csum(
                                 static_cast<uint8_t*>(it->second),
                                 static_cast<size_t>(num_qutrits),
                                 static_cast<size_t>(params.controlQubit),
@@ -439,10 +440,10 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
             }
             const auto* params = static_cast<const TableauUpdateParams*>(command_parameters);
             
-            // Execute tableau update using CPU fallback
+            // Execute tableau update via WASM host reference
             #ifdef USE_SYCL
             if (g_syclState.queue) {
-                // For now, use CPU fallback
+                // WASM host reference path
                 // Future: Implement proper SYCL kernel for tableau operations
             }
             #endif
@@ -496,11 +497,12 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
                             *g_syclState.queue, result, data_a, data_b, static_cast<size_t>(op_count));
                         break;
                     } catch (const std::exception& ex) {
-                        std::cerr << "[SYCL] GF3 multiply batch failed, CPU fallback: " << ex.what() << std::endl;
+                        std::cerr << "[SYCL][WASM bridge] GF3 multiply SYCL failed; host reference: " << ex.what()
+                                  << std::endl;
                     }
                 }
 #endif
-                cpu_fallback::gf3_multiply_batch(data_a, data_b, result, op_count);
+                wasm_host_reference::gf3_multiply_batch(data_a, data_b, result, op_count);
             } else {
 #ifdef USE_SYCL
                 if (g_syclState.queue && op_count > 0) {
@@ -509,18 +511,19 @@ Q_GF3_WASM_API uint32_t SYCL_DispatchCommand(
                             *g_syclState.queue, result, data_a, data_b, static_cast<size_t>(op_count));
                         break;
                     } catch (const std::exception& ex) {
-                        std::cerr << "[SYCL] GF3 add batch failed, CPU fallback: " << ex.what() << std::endl;
+                        std::cerr << "[SYCL][WASM bridge] GF3 add SYCL failed; host reference: " << ex.what()
+                                  << std::endl;
                     }
                 }
 #endif
-                cpu_fallback::gf3_add_batch(data_a, data_b, result, op_count);
+                wasm_host_reference::gf3_add_batch(data_a, data_b, result, op_count);
             }
 
             break;
         }
         
         case CommandType::RANK_CALCULATION: {
-            // Gaussian elimination for rank - CPU fallback for now
+            // Gaussian elimination for rank — WASM host reference
             break;
         }
         

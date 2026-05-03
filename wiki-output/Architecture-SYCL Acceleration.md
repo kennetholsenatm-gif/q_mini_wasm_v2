@@ -27,7 +27,7 @@ queue.submit([&](handler& h) {
 ## Build Configuration
 
 ```bash
-cmake -DUSE_SYCL=ON ..
+cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_sycl -DCMAKE_CXX_COMPILER=icpx ..
 cmake --build .
 ```
 

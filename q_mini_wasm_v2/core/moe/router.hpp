@@ -8,15 +8,62 @@
 #include <random>
 #include <algorithm>
 #include <iosfwd>
+#include <string>
+#include <optional>
+#if defined(USE_SYCL) && USE_SYCL
+#include "../../sycl/tableau_kernels.hpp"
+#endif
 
 namespace q_mini_wasm_v2::core::moe {
 
-/** Whether symplectic routing logits run on SYCL (GPU when available) vs CPU. */
-enum class SyclRouteMode : uint8_t {
-    Auto = 0,  // SYCL when USE_SYCL and expert count is large (>= 128)
-    On = 1,    // Prefer SYCL whenever USE_SYCL and E >= 8 (kernel minimum)
-    Off = 2    // Always CPU logits
+/**
+ * Options for @ref MoERouter::compute_routing_logits_result.
+ *
+ * When @c copy_scores_to_host is false and SYCL routing is active, symplectic scores remain in device USM
+ * (@ref SymplecticLogitsResult::scores_device) for follow-on kernels without an immediate full vector readback.
+ * Legacy @ref MoERouter::compute_routing_logits always behaves as copy_scores_to_host=true.
+ */
+struct SymplecticLogitsOptions {
+    bool copy_scores_to_host = true;
 };
+
+/** Symplectic routing logits: GPU SYCL only (host vector is readback / staging, not a CPU math path). */
+struct SymplecticLogitsResult {
+    /** Filled when SYCL returns host scores, or after readback from @c scores_device. */
+    std::vector<int8_t> scores_host;
+#if defined(USE_SYCL) && USE_SYCL
+    /** Present only when SYCL succeeded with copy_scores_to_host false; owns device USM until cleared/moved. */
+    std::optional<::q_mini_wasm_v2::sycl_kernels::SymplecticRoutingScoresDevice> scores_device;
+#endif
+    bool symplectic_computed_on_sycl = false;
+
+    /** Blocking read: returns host scores, copying from @c scores_device when @c scores_host is empty. */
+    std::vector<int8_t> scores_host_blocking() const;
+};
+
+/** Symplectic routing logits policy: Auto and On both use SYCL when E>=8 (kernel minimum). No CPU scorer. */
+enum class SyclRouteMode : uint8_t {
+    Auto = 0,  // Default: SYCL when USE_SYCL and E >= 8 (same effective routing path as On)
+    On = 1,    // Explicit: SYCL when USE_SYCL and E >= 8
+};
+// Do not add Off / CPU-only mode again — enforced by scripts/check_no_sycl_route_off.py (CI + ctest).
+
+/** SYCL routing logits selection from TOML (sycl_route_mode + expert count). */
+inline bool moe_routing_sycl_desired(size_t total_experts, SyclRouteMode mode) noexcept {
+    (void)mode;
+    if (total_experts < 8) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * When true, a SYCL submission failure for symplectic routing must abort (GPU mandatory; no substitute path).
+ * Matches @ref moe_routing_sycl_desired: if the policy would have used SYCL, a SYCL error is fatal.
+ */
+inline bool routing_sycl_failure_must_abort(SyclRouteMode mode, size_t total_experts) noexcept {
+    return moe_routing_sycl_desired(total_experts, mode);
+}
 
 /**
  * @brief Expert routing configuration
@@ -122,10 +169,19 @@ public:
     std::vector<size_t> route_topk_from_tritpack5(const std::vector<uint8_t>& input_packed, size_t input_trit_count);
 
     /**
+     * Top-K for many packed route inputs. `USE_SYCL=1`: batched SYCL when @ref moe_routing_sycl_desired; on failure throws.
+     * Per-row retry uses @ref route_topk_from_tritpack5 (GPU when routing policy selects SYCL).
+     */
+    std::vector<std::vector<size_t>> route_topk_many_from_tritpack5(
+        const std::vector<std::vector<uint8_t>>& inputs,
+        size_t input_trit_count);
+
+    /**
      * Whether the most recent dense or packed Top-K symplectic logits evaluation ran on SYCL.
      * Always false when built without USE_SYCL. Reset at each routing call.
      */
     bool symplectic_logits_last_used_sycl() const noexcept { return last_symplectic_logits_used_sycl_; }
+    const std::string& symplectic_logits_last_sycl_note() const noexcept { return last_symplectic_sycl_note_; }
 
     /**
      * @brief Compute routing logits using tropical inner product
@@ -133,6 +189,14 @@ public:
      * @return Routing logits for each expert
      */
     std::vector<int8_t> compute_routing_logits(const std::vector<ternary::Trit>& input);
+
+    /**
+     * @brief Symplectic routing logits with explicit host vs device residency policy (SYCL).
+     * @see SymplecticLogitsOptions
+     */
+    SymplecticLogitsResult compute_routing_logits_result(
+        const std::vector<ternary::Trit>& input,
+        const SymplecticLogitsOptions& opts = {});
     
     /**
      * @brief Apply entanglement-based routing via stabilizer tableau
@@ -594,15 +658,16 @@ private:
     void ensure_routing_weights_initialized();
 
     /** MoE routing matrix: E rows × R trits, each row TritPack5-packed (ceil(R/5) bytes per row). */
-    std::vector<uint8_t> pack_routing_weights_tritpack5_rowmajor() const;
-    std::vector<int8_t> symplectic_scores_cpu_from_tritpack5(const std::vector<uint8_t>& input_packed, size_t input_trit_count) const;
-    
+    const std::vector<uint8_t>& pack_routing_weights_tritpack5_rowmajor() const;
+
     // Expert weight matrices (ternary)
     std::vector<std::vector<std::vector<ternary::Trit>>> expert_weights_;
     
     // Routing weight matrix (ternary) - lazy initialized (67M elements!)
     std::vector<std::vector<ternary::Trit>> routing_weights_;
     bool routing_weights_initialized_;
+    mutable std::vector<uint8_t> routing_weights_t5_cache_;
+    mutable bool routing_weights_t5_cache_valid_ = false;
     bool entanglement_initialized_;
     bool advanced_selection_initialized_;
     
@@ -611,6 +676,8 @@ private:
     
     // Entanglement coupling matrix for correlated routing (scaled integer)
     std::vector<std::vector<int32_t>> entanglement_coupling_;
+    std::vector<int32_t> entanglement_coupling_flat_cache_;
+    bool entanglement_coupling_flat_cache_valid_ = false;
     
     // Tropical selection state (replaces RL)
     std::vector<std::vector<int32_t>> state_action_scores_;  // Tropical scores [state][action]
@@ -650,8 +717,9 @@ private:
     std::vector<size_t> expert_loads_;
     std::vector<size_t> expert_request_counts_;
 
-    /** Set per route_topk / route_topk_from_tritpack5 / compute_routing_logits call (SYCL vs CPU symplectic). */
+    /** Set per route_topk / route_topk_from_tritpack5 / compute_routing_logits call (true when SYCL ran). */
     bool last_symplectic_logits_used_sycl_ = false;
+    std::string last_symplectic_sycl_note_;
     
     // ========================================================================
     // Internal Helpers

@@ -39,13 +39,25 @@ jobs:
           languages: cpp
           queries: security-extended
 
+      - name: Install Intel oneAPI DPC++ (SYCL required by CMake)
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | sudo gpg --yes --dearmor --output /usr/share/keyrings/oneapi-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y ninja-build intel-oneapi-compiler-dpcpp-cpp
+        shell: bash
+
       - name: Build for analysis
         run: |
+          source /opt/intel/oneapi/setvars.sh
           cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTS=OFF \
-            -DUSE_SYCL=OFF
-          cmake --build q_mini_wasm_v2/build --config Release -j$(nproc)
+            -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_C_COMPILER=icx \
+            -DBUILD_TESTS=OFF
+          cmake --build q_mini_wasm_v2/build -j$(nproc)
+        shell: bash
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

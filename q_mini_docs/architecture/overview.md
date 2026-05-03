@@ -161,7 +161,7 @@ ForwardForwardLearner:
 | Flag | Default | Description |
 |---|---|---|
 | `BUILD_TESTS` | `ON` | Build test executables |
-| `USE_SYCL` | `OFF` | Enable SYCL acceleration |
+| *(native SYCL)* | *(always on)* | `q_mini_wasm_v2` requires Intel **icpx/icx** (or AdaptiveCpp / LLVM `-fsycl`); see **CONTRIBUTING.md** |
 | `BUILD_WASM` | `OFF` | Build WebAssembly target |
 | `BUILD_SHARED_LIBS` | `OFF` | Build shared library |
 

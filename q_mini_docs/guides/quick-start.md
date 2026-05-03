@@ -6,7 +6,7 @@ This guide will help you get started with the q_mini_wasm_v2 framework in minute
 
 Before you begin, ensure you have:
 
-- **C++17 Compiler**: GCC 7+, Clang 5+, or MSVC 2017+
+- **SYCL-capable C++ toolchain** for native `q_mini_wasm_v2`: Intel **oneAPI** (`icpx`/`icx`) or supported alternative (see **CONTRIBUTING.md**); not plain MSVC-only
 - **CMake**: Version 3.14 or higher
 - **Git**: For cloning the repository
 
@@ -16,36 +16,21 @@ Before you begin, ensure you have:
 
 ```bash
 git clone https://github.com/kennetholsenatm-gif/q_mini_wasm_v2.git
-cd q_mini_wasm_v2/q_mini_wasm_v2
+cd q_mini_wasm_v2
 ```
 
 ### 2. Build the Framework
 
-#### Option A: Basic Build (Recommended for Beginners)
+#### Native build (SYCL required)
+
+Use **[CONTRIBUTING.md](../../CONTRIBUTING.md)** (`scripts/build_qminiwasm.ps1` on Windows, or Linux oneAPI + Ninja as in **[building.md](building.md)**). Example (Linux):
 
 ```bash
-mkdir build
-cd build
-cmake ..
-cmake --build .
-```
-
-#### Option B: Build with Tests
-
-```bash
-mkdir build
-cd build
-cmake -DBUILD_TESTS=ON ..
-cmake --build .
-```
-
-#### Option C: Build with SYCL Acceleration (Advanced)
-
-```bash
-mkdir build
-cd build
-cmake -DUSE_SYCL=ON ..
-cmake --build .
+cd q_mini_wasm_v2
+source /opt/intel/oneapi/setvars.sh
+cmake -S . -B build_sycl -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_COMPILER=icpx -DCMAKE_C_COMPILER=icx -DBUILD_TESTS=ON
+cmake --build build_sycl -j"$(nproc)"
 ```
 
 ### 3. Verify Installation
@@ -53,7 +38,7 @@ cmake --build .
 Run the test suite to ensure everything is working:
 
 ```bash
-cd build
+cd q_mini_wasm_v2/build_sycl
 ctest --output-on-failure
 ```
 
@@ -111,9 +96,7 @@ int main() {
 ### Step 2: Compile the Program
 
 ```bash
-# Navigate to build directory if not already there
-cd build
-
+mkdir -p build_hello && cd build_hello
 # Compile (adjust include paths as needed)
 g++ -std=c++17 -I../q_mini_wasm_v2 -o hello_ternary ../hello_ternary.cpp
 ```
@@ -184,7 +167,7 @@ std::cout << "Selected " << selected_experts.size() << " experts" << std::endl;
 ### 3. Explore Advanced Features
 
 - **Forward-Forward Learning**: Train networks without backpropagation
-- **SYCL Acceleration**: Enable GPU acceleration for parallel operations
+- **SYCL**: Native `q_mini_wasm_v2` always links SYCL device code when built with **icpx/icx** (see CONTRIBUTING)
 - **Runtime Orchestration**: Use async task execution
 
 ## Troubleshooting
@@ -212,11 +195,11 @@ brew upgrade cmake
 
 #### Issue: "Tests fail"
 
-**Solution**: Ensure you built with tests enabled:
+**Solution**: Ensure you built with tests enabled (from repo root, after configuring `q_mini_wasm_v2/build_sycl` per **building.md**):
 ```bash
-cmake -DBUILD_TESTS=ON ..
-cmake --build .
-ctest --output-on-failure
+cmake -S q_mini_wasm_v2 -B q_mini_wasm_v2/build_sycl -DBUILD_TESTS=ON ...
+cmake --build q_mini_wasm_v2/build_sycl -j"$(nproc)"
+cd q_mini_wasm_v2/build_sycl && ctest --output-on-failure
 ```
 
 ## Getting Help

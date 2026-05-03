@@ -366,7 +366,7 @@ private:
  */
 inline bool train_with_betti_guidance(
     moe::MoERouter& router,
-    std::vector<std::unique_ptr<moe::ExpertNetwork>>& experts,
+    std::vector<std::unique_ptr<moe::GF3MultiLayerExpert>>& experts,
     qgnn::BettiExtractor& betti_extractor,
     qgnn::GraphTableau& graph_tableau,
     const std::vector<TrainingSample>& batch_samples,

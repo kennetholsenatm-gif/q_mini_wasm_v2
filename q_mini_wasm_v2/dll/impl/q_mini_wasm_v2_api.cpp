@@ -852,7 +852,7 @@ Q_MINI_WASM_V2_API void* training_pipeline_create(
     try {
         auto pipeline = std::make_unique<AutonomousTrainingPipeline>();
         
-        PipelineConfig config;
+        PipelineConfig config = q_mini_wasm_v2::core::training::default_pipeline_config();
         config.moe_num_experts = num_experts > 0 ? num_experts : 243;
         config.graph_initial_nodes = graph_nodes > 0 ? graph_nodes : 64;
         config.graph_initial_edges = config.graph_initial_nodes + config.graph_initial_nodes / 2;
@@ -1029,11 +1029,12 @@ Q_MINI_WASM_V2_API int training_pipeline_import(
     std::lock_guard<std::mutex> lock(g_pipeline_mutex);
     auto it = g_pipelines.find(handle);
     if (it == g_pipelines.end()) return Q_MINI_WASM_V2_ERROR_INVALID_HANDLE;
-    
-    if (!it->second->import_model(path)) {
+
+    const PipelineConfig live = it->second->get_config();
+    if (!it->second->import_model(path, &live)) {
         return Q_MINI_WASM_V2_ERROR_INTERNAL;
     }
-    
+
     return Q_MINI_WASM_V2_OK;
 }
 
